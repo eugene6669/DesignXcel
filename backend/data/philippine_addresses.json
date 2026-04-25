@@ -1,0 +1,78 @@
+{
+  "regions": [
+    {"code": "NCR", "name": "National Capital Region", "short": "NCR"},
+    {"code": "CAR", "name": "Cordillera Administrative Region", "short": "CAR"},
+    {"code": "01", "name": "Region I - Ilocos Region", "short": "Region I"},
+    {"code": "02", "name": "Region II - Cagayan Valley", "short": "Region II"},
+    {"code": "03", "name": "Region III - Central Luzon", "short": "Region III"},
+    {"code": "4A", "name": "Region IV-A - CALABARZON", "short": "Region IV-A"},
+    {"code": "4B", "name": "Region IV-B - MIMAROPA", "short": "Region IV-B"},
+    {"code": "05", "name": "Region V - Bicol Region", "short": "Region V"},
+    {"code": "06", "name": "Region VI - Western Visayas", "short": "Region VI"},
+    {"code": "07", "name": "Region VII - Central Visayas", "short": "Region VII"},
+    {"code": "08", "name": "Region VIII - Eastern Visayas", "short": "Region VIII"},
+    {"code": "09", "name": "Region IX - Zamboanga Peninsula", "short": "Region IX"},
+    {"code": "10", "name": "Region X - Northern Mindanao", "short": "Region X"},
+    {"code": "11", "name": "Region XI - Davao Region", "short": "Region XI"},
+    {"code": "12", "name": "Region XII - SOCCSKSARGEN", "short": "Region XII"},
+    {"code": "13", "name": "Region XIII - Caraga", "short": "Region XIII"},
+    {"code": "BARMM", "name": "Bangsamoro Autonomous Region in Muslim Mindanao", "short": "BARMM"}
+  ],
+  "locations": [
+    {"region": "NCR", "province": null, "city": "Metro Manila", "type": "Metropolitan Area", "postalCode": "1000-1800", "barangays": []},
+    {"region": "NCR", "province": null, "city": "Manila", "type": "City", "postalCode": "1000", "barangays": ["Ermita", "Malate", "Intramuros", "Quiapo", "Binondo", "Tondo", "Sampaloc"]},
+    {"region": "NCR", "province": null, "city": "Quezon City", "type": "City", "postalCode": "1100", "barangays": ["Commonwealth", "Diliman", "Fairview", "Kamuning", "Novaliches", "Project 4", "San Francisco del Monte"]},
+    {"region": "NCR", "province": null, "city": "Makati", "type": "City", "postalCode": "1200", "barangays": ["Poblacion", "Bel-Air", "San Lorenzo", "Urdaneta", "Guadalupe Nuevo", "Magallanes", "Forbes Park"]},
+    {"region": "NCR", "province": null, "city": "Pasig", "type": "City", "postalCode": "1600", "barangays": ["Kapitolyo", "Ugong", "Ortigas Center", "San Miguel", "Manggahan", "Rosario", "Sagad"]},
+    {"region": "NCR", "province": null, "city": "Taguig", "type": "City", "postalCode": "1630", "barangays": ["Bonifacio Global City", "Fort Bonifacio", "Western Bicutan", "Upper Bicutan", "Lower Bicutan", "Signal Village", "Maharlika Village"]},
+    {"region": "NCR", "province": null, "city": "Mandaluyong", "type": "City", "postalCode": "1550", "barangays": ["Poblacion", "Addition Hills", "Barangka", "Buayang Bato", "Highway Hills", "Mauway", "Namayan"]},
+    {"region": "NCR", "province": null, "city": "Pasay", "type": "City", "postalCode": "1300", "barangays": ["Malibay", "Villamor Air Base", "Bay City", "San Rafael", "San Roque", "Barangay 76"]},
+    {"region": "NCR", "province": null, "city": "Caloocan", "type": "City", "postalCode": "1400", "barangays": ["Bagumbong", "Camarin", "Bagong Silang", "Novaliches Proper", "Tala", "Grace Park"]},
+    {"region": "NCR", "province": null, "city": "Las Piñas", "type": "City", "postalCode": "1740", "barangays": ["Talon", "Almanza", "BF Homes", "Pulang Lupa", "Daniel Fajardo", "Pamplona"]},
+    {"region": "NCR", "province": null, "city": "Malabon", "type": "City", "postalCode": "1470", "barangays": ["Acacia", "Baritan", "Bayan-Bayanan", "Catmon", "Flores", "Longos", "Tinajeros"]},
+    {"region": "NCR", "province": null, "city": "Marikina", "type": "City", "postalCode": "1800", "barangays": ["Barangka", "Concepcion Uno", "Malanday", "Parang", "San Roque", "Santa Elena", "Tumana"]},
+    {"region": "NCR", "province": null, "city": "Muntinlupa", "type": "City", "postalCode": "1770", "barangays": ["Alabang", "Ayala Alabang", "Putatan", "Sucat", "Cupang", "Buli", "Tunasan"]},
+    {"region": "NCR", "province": null, "city": "Navotas", "type": "City", "postalCode": "1480", "barangays": ["Bagumbayan North", "Navotas East", "Navotas West", "San Jose", "Tangos"]},
+    {"region": "NCR", "province": null, "city": "Parañaque", "type": "City", "postalCode": "1700", "barangays": ["BF Homes", "Baclaran", "San Antonio", "San Dionisio", "Sun Valley", "Tambo", "Vitalez"]},
+    {"region": "NCR", "province": null, "city": "San Juan", "type": "City", "postalCode": "1500", "barangays": ["Addition Hills", "Balong-Bato", "Corazon de Jesus", "Ermitaño", "Greenhills", "Kabayanan", "Salapan"]},
+    {"region": "NCR", "province": null, "city": "Valenzuela", "type": "City", "postalCode": "1440", "barangays": ["Arkong Bato", "Bagbaguin", "Bignay", "Canumay", "Karuhatan", "Lingunan", "Marulas"]},
+    
+    {"region": "Region IV-A", "province": "Laguna", "city": "Santa Rosa", "type": "City", "postalCode": "4026", "barangays": ["Tagapo", "Balibago", "Aplaya", "Macabling", "Pulong Santa Cruz", "Don Jose", "Dita", "Market Area", "Sinalhan", "Labas"]},
+    {"region": "Region IV-A", "province": "Laguna", "city": "Biñan", "type": "City", "postalCode": "4024", "barangays": ["Biñan", "Bungahan", "Canlalay", "Casile", "De La Paz", "Ganado", "Langkiwa", "Loma", "Malaban", "Malamig"]},
+    {"region": "Region IV-A", "province": "Laguna", "city": "Calamba", "type": "City", "postalCode": "4027", "barangays": ["Parian", "Real", "Barandal", "Batino", "Burol", "Canlubang", "Halang", "Makiling", "Pansol", "Sucol"]},
+    {"region": "Region IV-A", "province": "Laguna", "city": "San Pedro", "type": "City", "postalCode": "4023", "barangays": ["Bagong Silang", "Calendola", "Chrysanthemum", "Estrella", "G.S.I.S.", "Landayan", "Laram", "Magsaysay", "Nueva", "Poblacion"]},
+    {"region": "Region IV-A", "province": "Laguna", "city": "Cabuyao", "type": "City", "postalCode": "4025", "barangays": ["Banaybanay", "Barangay Uno", "Bigaa", "Butong", "Casile", "Diezmo", "Gulod", "Mamatid", "Marinig", "Niugan"]},
+    {"region": "Region IV-A", "province": "Laguna", "city": "Los Baños", "type": "Municipality", "postalCode": "4030", "barangays": ["Anos", "Bagong Silang", "Bambang", "Batong Malake", "Bay", "Lalakay", "Maahas", "Malinta", "Mayondon", "Putho-Tuntungin"]},
+    {"region": "Region IV-A", "province": "Laguna", "city": "San Pablo", "type": "City", "postalCode": "4000", "barangays": ["San Anton", "San Buenaventura", "San Crispin", "San Cristobal", "San Diego", "San Francisco", "San Gabriel", "San Gregorio", "San Ignacio", "San Isidro"]},
+    
+    {"region": "Region IV-A", "province": "Cavite", "city": "Bacoor", "type": "City", "postalCode": "4102", "barangays": ["Alima", "Aniban", "Banalo", "Bayanan", "Queens Row", "Molino", "Niog", "Panapaan", "Salinas", "Zapote"]},
+    {"region": "Region IV-A", "province": "Cavite", "city": "Imus", "type": "City", "postalCode": "4103", "barangays": ["Alapan", "Anabu", "Bagong Silang", "Bayan Luma", "Bucandala", "Buhay na Tubig", "Cacarong Bata", "Dalaorao", "Magdalo", "Malagasang"]},
+    {"region": "Region IV-A", "province": "Cavite", "city": "Dasmariñas", "type": "City", "postalCode": "4114", "barangays": ["Burol", "San Agustin", "Paliparan", "Salawag", "Victoria Reyes", "Langkaan", "Emmanuel", "San Simon", "Sampaloc", "Zone"]},
+    {"region": "Region IV-A", "province": "Cavite", "city": "Cavite City", "type": "City", "postalCode": "4100", "barangays": ["Caridad", "Dalahican", "San Antonio", "San Roque", "Santa Cruz", "Sangley Point"]},
+    {"region": "Region IV-A", "province": "Cavite", "city": "Tagaytay", "type": "City", "postalCode": "4120", "barangays": ["Asisan", "Bagong Tubig", "Calabuso", "Dapdap East", "Francisco", "Guinhawa", "Iruhin", "Kaybagal", "Maharlika", "Sungay"]},
+    {"region": "Region IV-A", "province": "Cavite", "city": "General Trias", "type": "City", "postalCode": "4107", "barangays": ["Alingaro", "Arnaldo", "Bacao", "Biclatan", "Buenavista", "Corregidor", "Dulong Bayan", "Gov. Ferrer", "Manggahan", "Navarro"]},
+    
+    {"region": "Region IV-A", "province": "Rizal", "city": "Antipolo", "type": "City", "postalCode": "1870", "barangays": ["Bagong Nayon", "Beverly Hills", "Cupang", "Dela Paz", "Inarawan", "Mambugan", "Mayamot", "San Isidro", "San Jose", "San Roque"]},
+    {"region": "Region IV-A", "province": "Rizal", "city": "Cainta", "type": "Municipality", "postalCode": "1900", "barangays": ["San Andres", "San Isidro", "San Juan", "San Roque", "Santo Domingo", "Santo Niño"]},
+    {"region": "Region IV-A", "province": "Rizal", "city": "Taytay", "type": "Municipality", "postalCode": "1920", "barangays": ["Dolores", "Muzon", "San Isidro", "San Juan", "Santa Ana", "Santo Niño"]},
+    {"region": "Region IV-A", "province": "Rizal", "city": "Angono", "type": "Municipality", "postalCode": "1930", "barangays": ["Bagumbayan", "Kalayaan", "Mahabang Parang", "Poblacion Ibaba", "Poblacion Itaas", "San Isidro", "San Pedro", "San Roque", "Santa Cruz", "Santo Niño"]},
+    {"region": "Region IV-A", "province": "Rizal", "city": "Binangonan", "type": "Municipality", "postalCode": "1940", "barangays": ["Bilibiran", "Ginoong Sanay", "Kalumpang", "Layunan", "Libid", "Lunsad", "Mahabang Parang", "Malakaban", "Pag-Asa", "Pantok"]},
+    
+    {"region": "Region IV-A", "province": "Batangas", "city": "Batangas City", "type": "City", "postalCode": "4200", "barangays": ["Alangilan", "Balagtas", "Balete", "Banaba Center", "Bolbok", "Calicanto", "Cuta", "Kumintang Ibaba", "Libjo", "Poblacion"]},
+    {"region": "Region IV-A", "province": "Batangas", "city": "Lipa", "type": "City", "postalCode": "4217", "barangays": ["Bagong Pook", "Banaybanay", "Bolbok", "Bulaklakan", "Latag", "Lodlod", "Mataas na Lupa", "Marawoy", "Pagolingin Bata", "Poblacion"]},
+    {"region": "Region IV-A", "province": "Batangas", "city": "Tanauan", "type": "City", "postalCode": "4232", "barangays": ["Altura-Bata", "Altura-Matanda", "Bagumbayan", "Balele", "Banjo East", "Banjo West", "Boot", "Darasa", "Gonzales", "Hidalgo"]},
+    
+    {"region": "Region IV-A", "province": "Quezon", "city": "Lucena", "type": "City", "postalCode": "4301", "barangays": ["Barangay 1", "Barangay 2", "Cotta", "Dalahican", "Gulang-Gulang", "Ibabang Dupay", "Isabang", "Mayao Castillo", "Ransohan", "Talao-Talao"]},
+    
+    {"region": "Region III", "province": "Bulacan", "city": "Malolos", "type": "City", "postalCode": "3000", "barangays": ["Atlag", "Bagong Bayan", "Barasoain", "Bulihan", "Caingin", "Dakila", "Ligas", "Longos", "Mojon", "Pamarawan"]},
+    {"region": "Region III", "province": "Bulacan", "city": "Meycauayan", "type": "City", "postalCode": "3020", "barangays": ["Bagbaguin", "Bahay Pare", "Bancal", "Banga", "Bayugo", "Calvario", "Camalig", "Hulo", "Langka", "Lawa"]},
+    {"region": "Region III", "province": "Bulacan", "city": "San Jose del Monte", "type": "City", "postalCode": "3023", "barangays": ["Assumption", "Bagong Buhay", "Citrus", "Dulong Bayan", "Francisco Homes", "Gaya-Gaya", "Graceville", "Gumaoc", "Kaybanban", "Minuyan"]},
+    {"region": "Region III", "province": "Bulacan", "city": "Marilao", "type": "Municipality", "postalCode": "3019", "barangays": ["Abangan Norte", "Abangan Sur", "Ibayo", "Lambakin", "Lias", "Loma de Gato", "Nagbalon", "Patubig", "Poblacion", "Prenza"]},
+    
+    {"region": "Region III", "province": "Pampanga", "city": "Angeles", "type": "City", "postalCode": "2009", "barangays": ["Balibago", "Claro M. Recto", "Cutcut", "Lourdes North West", "Malabanias", "Pampang", "Pulung Maragul", "Sapangbato", "Santo Rosario", "Timog"]},
+    {"region": "Region III", "province": "Pampanga", "city": "San Fernando", "type": "City", "postalCode": "2000", "barangays": ["Alasas", "Baliti", "Bulaon", "Calulut", "Del Carmen", "Del Pilar", "Dolores", "Juliana", "Lara", "Magliman"]},
+    
+    {"region": "Region III", "province": "Tarlac", "city": "Tarlac City", "type": "City", "postalCode": "2300", "barangays": ["Aguso", "Alvindia", "Amucao", "Armenia", "Asturias", "Balanti", "Balingcanaway", "Banaba", "Bantog", "Baras-baras"]}
+  ]
+}
+

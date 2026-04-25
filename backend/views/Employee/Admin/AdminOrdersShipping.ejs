@@ -1,0 +1,2234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shipping Orders - Admin</title>
+    <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        /* Header Section */
+        .orders-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .orders-header h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin: 0;
+            letter-spacing: -0.02em;
+            font-family: var(--font-display);
+        }
+
+        .orders-count-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(240, 178, 27, 0.15);
+            color: var(--primary-dark);
+            padding: 0.5rem 1rem;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .orders-count-badge .icon svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: inherit;
+        }
+
+        .icon svg {
+            width: 1em;
+            height: 1em;
+            stroke: currentColor;
+            fill: none;
+        }
+
+        /* Filters Section */
+        .filters-section {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .filter-group label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-light);
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 0.625rem 0.875rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            background: #ffffff;
+            color: var(--text-dark);
+        }
+
+        .filter-group input:focus,
+        .filter-group select:focus {
+            outline: none;
+            border-color: #F0B21B;
+            box-shadow: 0 0 0 3px rgba(240, 178, 27, 0.1);
+        }
+
+        .filter-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+        }
+
+        .btn-filter {
+            padding: 0.625rem 1.25rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-filter-primary {
+            background: #F0B21B;
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(240, 178, 27, 0.2);
+        }
+
+        .btn-filter-primary:hover {
+            background: #e6a017;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(240, 178, 27, 0.3);
+        }
+
+        .btn-filter-secondary {
+            background: #ffffff;
+            color: #6b7280;
+            border: 1px solid #e5e7eb;
+        }
+
+        .btn-filter-secondary:hover {
+            border-color: #F0B21B;
+            color: #F0B21B;
+        }
+
+        /* Custom Confirmation Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            visibility: hidden;
+            opacity: 0;
+            transition: visibility 0s, opacity 0.3s ease;
+        }
+        .modal-overlay.show {
+            visibility: visible;
+            opacity: 1;
+        }
+        .modal-content {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.show .modal-content {
+            transform: scale(1);
+        }
+        .modal-content h3 {
+            margin-top: 0;
+            color: #333;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+        .modal-content p {
+            color: #555;
+            font-size: 1.1em;
+            margin-bottom: 30px;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+        .modal-button {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .modal-button.confirm {
+            background-color: #dc3545;
+            color: white;
+        }
+        .modal-button.confirm:hover {
+            background-color: #c82333;
+        }
+        .modal-button.cancel {
+            background-color: #f0f0f0;
+            color: #555;
+            border: 1px solid #ccc;
+        }
+        .modal-button.cancel:hover {
+            background-color: #e0e0e0;
+        }
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .sidebar-menu {
+            flex-grow: 1;
+        }
+        .logout-section {
+            padding: 40px;
+            border-top: 1px solid #ddd;
+            margin-top: auto;
+            text-align: center;
+        }
+        .logout-button {
+            display: inline-block;
+            width: auto;
+            padding: 12px 25px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .logout-button:hover {
+            background-color: #c82333;
+        }
+
+        .orders-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 24px;
+        }
+
+        .order-card {
+            background: #ffffff;
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 8px 24px rgba(148, 163, 184, 0.16);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+        }
+
+        .order-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 32px rgba(100, 116, 139, 0.2);
+        }
+
+        .order-card-summary {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 16px;
+            padding: 20px 20px 0 20px;
+            position: relative;
+            min-width: 0;
+            width: 100%;
+        }
+
+        .order-card.has-bulk-badge .order-card-summary {
+            padding-top: 48px;
+        }
+
+        .order-card-summary-main {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: 100%;
+            align-items: center;
+            text-align: center;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .order-card-title {
+            font-weight: 700;
+            font-size: 1.05rem;
+            color: #0f172a;
+            letter-spacing: 0.01em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-width: 0;
+            word-wrap: break-word;
+            width: 100%;
+        }
+
+        .order-card-title span,
+        .order-card-title {
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        .bulk-order-badge {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            background: linear-gradient(135deg, #f0b21b 0%, #d4a017 100%);
+            color: #ffffff;
+            padding: 5px 11px;
+            border-radius: 14px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            box-shadow: 0 2px 6px rgba(240, 178, 27, 0.35);
+            white-space: nowrap;
+            line-height: 1;
+            z-index: 10;
+            pointer-events: none;
+            max-width: 70px;
+        }
+
+        .bulk-order-badge-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 15px;
+            height: 15px;
+            flex-shrink: 0;
+            margin-top: -1px;
+        }
+
+        .bulk-order-badge-icon svg {
+            width: 100%;
+            height: 100%;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2.2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            display: block;
+        }
+
+        .bulk-order-badge span:not(.bulk-order-badge-icon) {
+            display: inline-block;
+            line-height: 1.2;
+            vertical-align: middle;
+        }
+
+
+        .order-card-meta {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #64748b;
+            width: 100%;
+        }
+
+        .order-card-customer {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #e2e8f0;
+            width: 100%;
+            align-items: center;
+            text-align: center;
+        }
+
+        .order-card-customer-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #0f172a;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 0;
+            margin: 0 auto;
+            max-width: 100%;
+        }
+
+        .order-card-customer-name span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .order-card-customer-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: 0.8rem;
+            color: #64748b;
+            min-width: 0;
+            width: 100%;
+            align-items: center;
+        }
+
+        .order-card-customer-info-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 0;
+            margin: 0 auto;
+            max-width: 100%;
+        }
+
+        .order-card-customer-info-item span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .order-card-customer-info-item svg {
+            width: 14px;
+            height: 14px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            flex-shrink: 0;
+        }
+
+        .order-card-customer-icon {
+            width: 16px;
+            height: 16px;
+            stroke: #64748b;
+            fill: none;
+            stroke-width: 2;
+            flex-shrink: 0;
+        }
+
+        .order-card-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 4px 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .status-shipping {
+            background: rgba(26, 188, 156, 0.16);
+            color: #047857;
+        }
+
+        .order-card-summary-secondary {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            width: 100%;
+            padding-top: 8px;
+            margin-top: 8px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .order-card-total-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .order-card-total-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .order-card-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+        }
+
+        .order-card-toggle {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 999px;
+            padding: 8px 16px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #475569;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .order-card-toggle:hover {
+            background: #e2e8f0;
+            border-color: #cbd5f5;
+            color: #1f2937;
+            transform: translateY(-1px);
+        }
+
+        .order-card-toggle .toggle-icon {
+            font-size: 0.95rem;
+            transition: transform 0.2s ease;
+        }
+
+        .order-card:not(.collapsed) .order-card-toggle .toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        .order-card-details {
+            padding: 0 20px 20px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .order-card.collapsed .order-card-details {
+            display: none;
+        }
+
+        .order-section {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .order-section-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #475569;
+            letter-spacing: 0.05em;
+        }
+
+        .order-section-body {
+            font-size: 0.9rem;
+            color: #475569;
+            line-height: 1.5;
+        }
+
+        .order-products {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .order-product-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 10px 12px;
+        }
+
+        .order-product-image {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #e2e8f0;
+            flex-shrink: 0;
+        }
+
+        .order-product-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .order-product-details {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1 1 auto;
+        }
+
+        .order-product-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #0f172a;
+        }
+
+        .order-product-meta {
+            font-size: 0.78rem;
+            color: #64748b;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .order-product-price {
+            font-weight: 700;
+            color: #0f172a;
+            font-size: 0.95rem;
+        }
+
+        .order-card-footer {
+            display: flex;
+            gap: 12px;
+            padding-top: 10px;
+        }
+
+        .order-card-action {
+            flex: 1 1 auto;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 16px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .order-card-action.proceed {
+            background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+            color: #ffffff;
+            box-shadow: 0 16px 30px -15px rgba(20, 184, 166, 0.55);
+        }
+
+        .order-card-action.proceed:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.03);
+            box-shadow: 0 18px 34px -14px rgba(20, 184, 166, 0.6);
+        }
+
+        .order-card-action.proceed:active {
+            transform: translateY(0);
+            filter: brightness(0.97);
+        }
+
+        .order-card-action.cancel {
+            background: linear-gradient(135deg, #f97316 0%, #ef4444 100%);
+            color: #ffffff;
+            box-shadow: 0 16px 30px -15px rgba(239, 68, 68, 0.6);
+        }
+
+        .order-card-action.cancel:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.04);
+            box-shadow: 0 18px 32px -14px rgba(239, 68, 68, 0.65);
+        }
+
+        .order-card-action.cancel:active {
+            transform: translateY(0);
+            filter: brightness(0.96);
+        }
+
+        .order-card-action:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+            transform: none;
+            filter: none;
+            box-shadow: none;
+        }
+
+        @media (max-width: 640px) {
+            .order-card-summary {
+                align-items: center;
+            }
+            .order-card-summary-secondary {
+                align-items: center;
+            }
+            .order-card-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .order-card-toggle {
+                width: 100%;
+                justify-content: center;
+            }
+            .order-card-footer {
+                flex-direction: column;
+            }
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-light);
+        }
+
+        .empty-state-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            opacity: 0.6;
+        }
+
+        .empty-state-icon svg {
+            width: 56px;
+            height: 56px;
+        }
+
+        .empty-state-text {
+            font-size: 1.125rem;
+            font-weight: 500;
+        }
+
+        /* Modal Styles */
+        .order-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1050;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+
+        .order-modal-content {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 2rem;
+            min-width: 400px;
+            max-width: 90vw;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+        }
+
+        .order-modal-content h4 {
+            margin: 0 0 1rem 0;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #111827;
+        }
+
+        .order-modal-content p {
+            margin: 0 0 1.5rem 0;
+            color: #6b7280;
+            line-height: 1.6;
+        }
+
+        .modal-btns {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Payment Modal Styles */
+        .payment-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+
+        .payment-modal-overlay.show {
+            display: flex;
+        }
+
+        .payment-modal-content {
+            background: #ffffff;
+            border-radius: 12px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .payment-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f8f9fa;
+        }
+
+        .payment-modal-header h3 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #111827;
+        }
+
+        .payment-modal-close {
+            background: none;
+            border: none;
+            font-size: 2rem;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .payment-modal-close:hover {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .payment-modal-body {
+            padding: 2rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .payment-modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            padding: 1rem 2rem;
+            border-top: 1px solid #e5e7eb;
+            background: #f8f9fa;
+        }
+
+        .payment-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .payment-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .payment-section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .payment-info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        .payment-info-row:last-child {
+            border-bottom: none;
+        }
+
+        .payment-info-label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #6b7280;
+        }
+
+        .payment-info-value {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #111827;
+            text-align: right;
+        }
+
+        .payment-info-value.amount {
+            font-size: 1rem;
+            color: #059669;
+            font-weight: 700;
+        }
+
+        .payment-info-value.status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .payment-info-value.status.paid {
+            background: rgba(16, 185, 129, 0.1);
+            color: #047857;
+        }
+
+        .payment-info-value.status.pending {
+            background: rgba(251, 191, 36, 0.1);
+            color: #d97706;
+        }
+
+        .payment-info-value.status.failed {
+            background: rgba(239, 68, 68, 0.1);
+            color: #b91c1c;
+        }
+
+        .stripe-details-section {
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="sidebar">
+            <%- include('partials/sidebar', { activePage: 'orders-shipping' }) %>
+        </div>
+        <div class="main-content">
+            <div class="header orders-header">
+                <div>
+                    <h2>Shipping Orders</h2>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                        <div class="orders-count-badge">
+                            <span class="icon icon-box" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                    <polyline points="3.27 6.96 12 12 20.73 6.96"></polyline>
+                                    <line x1="12" y1="22" x2="12" y2="12"></line>
+                                </svg>
+                            </span>
+                            <span id="ordersCount"><%= orders ? orders.length : 0 %> Orders</span>
+                        </div>
+                        <div class="orders-count-badge" style="background: rgba(139, 92, 246, 0.15); color: #7c3aed;">
+                            <span class="icon icon-box" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                </svg>
+                            </span>
+                            <span id="bulkOrdersCount">
+                                <% 
+                                    const bulkCount = orders ? orders.filter(o => o.IsBulkOrder).length : 0;
+                                %>
+                                <%= bulkCount %> Bulk Orders
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="content-area">
+                <!-- Filters Section -->
+                <div class="filters-section">
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label for="searchFilter">Search</label>
+                            <input type="text" id="searchFilter" placeholder="Order ID, Customer, Email, Phone, Address, Products...">
+                        </div>
+                        <div class="filter-group">
+                            <label for="startDateFilter">Start Date</label>
+                            <input type="date" id="startDateFilter">
+                        </div>
+                        <div class="filter-group">
+                            <label for="endDateFilter">End Date</label>
+                            <input type="date" id="endDateFilter">
+                        </div>
+                        <div class="filter-group">
+                            <label for="paymentFilter">Payment Method</label>
+                            <select id="paymentFilter">
+                                <option value="">All Methods</option>
+                                <option value="e-wallet">E-Wallet</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="amountFilter">Amount Range</label>
+                            <select id="amountFilter">
+                                <option value="">All Amounts</option>
+                                <option value="0-1000">₱0 - ₱1,000</option>
+                                <option value="1000-5000">₱1,000 - ₱5,000</option>
+                                <option value="5000-10000">₱5,000 - ₱10,000</option>
+                                <option value="10000+">₱10,000+</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="deliveryTypeFilter">Delivery Type</label>
+                            <select id="deliveryTypeFilter">
+                                <option value="">All Types</option>
+                                <option value="pickup">Pick up</option>
+                                <option value="delivery">Delivery</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="btn-filter btn-filter-secondary" onclick="clearFilters()">Clear Filters</button>
+                        <button class="btn-filter btn-filter-primary" onclick="applyFilters()">Apply Filters</button>
+                    </div>
+                </div>
+
+                <!-- View Toggle and Pagination Info -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">View:</span>
+                        <div style="display: flex; background: #f3f4f6; border-radius: 8px; padding: 2px;">
+                            <button id="viewCardsBtn" class="view-toggle-btn active" onclick="switchView('cards')" style="padding: 0.5rem 1rem; border: none; background: #F0B21B; color: white; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;">
+                                Cards
+                            </button>
+                            <button id="viewTableBtn" class="view-toggle-btn" onclick="switchView('table')" style="padding: 0.5rem 1rem; border: none; background: transparent; color: #6b7280; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;">
+                                Table
+                            </button>
+                        </div>
+                    </div>
+                    <% if (pagination && pagination.totalOrders > 0) { %>
+                        <div style="font-size: 0.875rem; color: #6b7280;">
+                            Showing <%= pagination.offset + 1 %>-<%= Math.min(pagination.offset + pagination.limit, pagination.totalOrders) %> of <%= pagination.totalOrders %> orders
+                        </div>
+                    <% } %>
+                </div>
+
+                <!-- Loading Spinner -->
+                <div id="orders-loading-spinner" class="admin-loading-spinner hidden">
+                    <div class="admin-loading-spinner__container">
+                        <div class="admin-loading-spinner__spinner"></div>
+                        <div class="admin-loading-spinner__text">Loading orders...</div>
+                    </div>
+                </div>
+
+                <% if (orders && orders.length > 0) { %>
+                    <div class="orders-grid" id="ordersGrid">
+                        <% orders.forEach(function(order) { %>
+                            <div
+                                class="order-card collapsed <%= order.IsBulkOrder ? 'has-bulk-badge' : '' %>"
+                                data-order-id="<%= order.OrderID %>"
+                                data-reference-number="<%= (order.ReferenceNumber || '').toLowerCase() %>"
+                                data-customer="<%= (order.CustomerName || '').toLowerCase() %>"
+                                data-email="<%= (order.CustomerEmail || '').toLowerCase() %>"
+                                data-phone="<%= (order.CustomerPhone || '').toLowerCase().replace(/\s+/g, '') %>"
+                                data-address="<%= [
+                                    order.AddressLabel || '',
+                                    order.HouseNumber || '',
+                                    order.Street || '',
+                                    order.Barangay || '',
+                                    order.City || '',
+                                    order.Province || '',
+                                    order.PostalCode || '',
+                                    order.Country || ''
+                                ].filter(Boolean).join(' ').toLowerCase() %>"
+                                data-products="<%= order.items ? order.items.map(item => (item.ProductName || item.Name || '').toLowerCase()).join(' ') : '' %>"
+                                data-status="<%= (order.Status || '').toLowerCase() %>"
+                                data-payment="<%= (order.PaymentMethod || '').toLowerCase() %>"
+                                data-amount="<%= order.TotalAmount || 0 %>"
+                                data-date="<%= new Date(order.OrderDate).toISOString().split('T')[0] %>"
+                                data-delivery-type="<%= (order.DeliveryType === 'pickup' || order.DeliveryTypeName === 'Pick up') ? 'pickup' : 'delivery' %>"
+                                data-bulk-order="<%= order.IsBulkOrder ? 'yes' : 'no' %>"
+                                data-notes="<%= (order.Notes || order.SpecialInstructions || '').toLowerCase() %>"
+                            >
+                                <% if (order.IsBulkOrder) { %>
+                                    <span class="bulk-order-badge">
+                                        <span class="bulk-order-badge-icon">
+                                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                            </svg>
+                                        </span>
+                                        <span>Bulk</span>
+                                    </span>
+                                <% } %>
+                                <div class="order-card-summary">
+                                    <div class="order-card-summary-main">
+                                        <div class="order-card-title">
+                                            <%= order.ReferenceNumber ? `Order ${order.ReferenceNumber}` : 'Order' %>
+                                        </div>
+                                        <div class="order-card-meta">
+                                            <span class="order-card-status status-shipping">Shipping</span>
+                                            <span>Placed: <%= order.FormattedOrderDate || new Date(order.OrderDate).toLocaleString('en-US') %></span>
+                                        </div>
+                                        <div class="order-card-customer">
+                                            <div class="order-card-customer-name">
+                                                <svg class="order-card-customer-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                                    <circle cx="12" cy="7" r="4"></circle>
+                                                </svg>
+                                                <span><%= order.CustomerName || 'N/A' %></span>
+                                            </div>
+                                            <div class="order-card-customer-info">
+                                                <% if (order.CustomerEmail) { %>
+                                                    <div class="order-card-customer-info-item">
+                                                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                                            <polyline points="22,6 12,13 2,6"></polyline>
+                                                        </svg>
+                                                        <span><%= order.CustomerEmail %></span>
+                                                    </div>
+                                                <% } %>
+                                                <% if (order.CustomerPhone) { %>
+                                                    <div class="order-card-customer-info-item">
+                                                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                                                        </svg>
+                                                        <span><%= order.CustomerPhone %></span>
+                                                    </div>
+                                                <% } %>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="order-card-summary-secondary">
+                                        <span class="order-card-total-label">Total</span>
+                                        <span class="order-card-total-value">₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></span>
+                                    </div>
+                                </div>
+
+                                <div class="order-card-controls">
+                                    <button
+                                        class="order-card-toggle"
+                                        type="button"
+                                        data-toggle-target="<%= order.OrderID %>"
+                                        aria-expanded="false"
+                                    >
+                                        <span class="toggle-icon">⌄</span>
+                                        <span class="toggle-label">View Details</span>
+                                    </button>
+                                </div>
+
+                                <div class="order-card-details" id="order-details-<%= order.OrderID %>">
+                                    <div class="order-section">
+                                        <span class="order-section-title">Customer</span>
+                                        <div class="order-section-body">
+                                            <strong><%= order.CustomerName %></strong><br/>
+                                            <%= order.CustomerEmail %><br/>
+                                            Phone: <%= order.CustomerPhone %>
+                                        </div>
+                                    </div>
+
+                                    <% if (order.DeliveryType !== 'pickup' && order.DeliveryTypeName !== 'Pick up') { %>
+                                    <div class="order-section">
+                                        <span class="order-section-title">Shipping Address</span>
+                                        <div class="order-section-body">
+                                            <%= order.AddressLabel ? order.AddressLabel + ': ' : '' %>
+                                            <%= [order.HouseNumber, order.Street, order.Barangay, order.City, order.Province, order.PostalCode, order.Country].filter(Boolean).join(', ') %>
+                                        </div>
+                                    </div>
+                                    <% } %>
+
+                                    <div class="order-section">
+                                        <span class="order-section-title">Products (<%= order.items ? order.items.length : 0 %>)</span>
+                                        <div class="order-products">
+                                            <% if (order.items && order.items.length > 0) { %>
+                                                <% order.items.forEach(function(item) { %>
+                                                    <div class="order-product-item">
+                                                        <div class="order-product-image">
+                                                            <% if (item.VariationImageURL) { %>
+                                                                <img src="<%= item.VariationImageURL %>" alt="<%= item.VariationName || item.Name %>">
+                                                            <% } else if (item.ImageURL) { %>
+                                                                <img src="<%= item.ImageURL %>" alt="<%= item.Name %>">
+                                                            <% } else { %>
+                                                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem;">🖼️</div>
+                                                            <% } %>
+                                                        </div>
+                                                        <div class="order-product-details">
+                                                            <span class="order-product-name"><%= item.Name %></span>
+                                                            <div class="order-product-meta">
+                                                                <% if (item.VariationName) { %>
+                                                                    <span>Variation: <%= item.VariationName %></span>
+                                                                <% } %>
+                                                                <% if (item.Color) { %>
+                                                                    <span>Color: <%= item.Color %></span>
+                                                                <% } %>
+                                                                <span>Qty: <%= item.Quantity %></span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="order-product-price">₱<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
+                                                    </div>
+                                                <% }); %>
+                                            <% } else { %>
+                                                <span class="order-section-body">No products found.</span>
+                                            <% } %>
+                                        </div>
+                                    </div>
+
+                                    <div class="order-section">
+                                        <span class="order-section-title">Payment & Delivery</span>
+                                        <div class="order-section-body" style="display:flex;flex-direction:column;gap:0.5rem;">
+                                            <div>
+                                                Payment Method:
+                                                <strong><%= order.PaymentMethod || 'N/A' %></strong>
+                                                <% if (order.StripeSessionID) { %>
+                                                    <button
+                                                        type="button"
+                                                        class="btn-filter btn-filter-primary js-check-payment"
+                                                        style="padding:0.35rem 0.65rem;font-size:0.7rem;margin-left:0.5rem;"
+                                                        data-order-id="<%= order.OrderID %>"
+                                                    >
+                                                        Check Payment
+                                                    </button>
+                                                <% } %>
+                                            </div>
+                                            <% if (order.TransactionID) { %>
+                                            <div>Transaction ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                            <% } %>
+                                            <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
+                                            <div>Delivery Cost: <strong>₱<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
+                                            <% 
+                                                const extraFee = typeof order.ExtraDeliveryFee !== 'undefined' && order.ExtraDeliveryFee !== null 
+                                                    ? Number(order.ExtraDeliveryFee) 
+                                                    : 0;
+                                            %>
+                                            <% if (extraFee > 0) { %>
+                                            <div>Extra Delivery Fee (Qty &gt; 4): <strong>₱<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
+                                            <% } %>
+                                            <% if (order.EstimatedDeliveryDateFormatted) { %>
+                                            <div style="margin-top: 0.5rem; padding: 0.75rem; background: linear-gradient(135deg, #F0B21B 0%, #e0a10b 100%); border-radius: 6px; text-align: center;">
+                                                <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #1f2937; margin-bottom: 0.25rem;">Estimated Date of Arrival</div>
+                                                <div style="font-size: 1.1rem; font-weight: 700; color: #1f2937;"><%= order.EstimatedDeliveryDateFormatted %></div>
+                                            </div>
+                                            <% } %>
+                                        </div>
+                                    </div>
+
+                                    <div class="order-card-footer">
+                                        <button
+                                            class="order-card-action proceed js-open-order-modal"
+                                            type="button"
+                                            data-order-id="<%= order.OrderID %>"
+                                            data-action="proceed"
+                                        >
+                                            Proceed to Delivery
+                                        </button>
+                                        <button
+                                            class="order-card-action cancel js-open-order-modal"
+                                            type="button"
+                                            data-order-id="<%= order.OrderID %>"
+                                            data-action="cancel"
+                                        >
+                                            Cancel Order
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                        <% }); %>
+                    </div>
+
+                    <!-- Modals (Outside grid for table view access) -->
+                    <% orders.forEach(function(order) { %>
+                        <div id="modal-<%= order.OrderID %>-proceed" class="order-modal-overlay">
+                            <div class="order-modal-content">
+                                <h4>Proceed to Next Process?</h4>
+                                <p>Proceed order <strong><%= order.ReferenceNumber || order.OrderID %></strong> to <strong>Delivery</strong>?<br>This action cannot be undone.</p>
+                                <div class="modal-btns">
+                                    <button class="btn-filter btn-filter-secondary js-close-order-modal"
+                                        data-order-id="<%= order.OrderID %>"
+                                        data-action="proceed">Cancel</button>
+                                    <button class="btn-filter btn-filter-primary confirm-btn js-confirm-order-action"
+                                        data-order-id="<%= order.OrderID %>"
+                                        data-action="proceed">Proceed</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="modal-<%= order.OrderID %>-cancel" class="order-modal-overlay">
+                            <div class="order-modal-content">
+                                <h4>Cancel Order?</h4>
+                                <p>Are you sure you want to cancel order <strong><%= order.ReferenceNumber || order.OrderID %></strong>?<br>This action will restore inventory and cannot be undone.</p>
+                                <div class="modal-btns">
+                                    <button class="btn-filter btn-filter-secondary js-close-order-modal"
+                                        data-order-id="<%= order.OrderID %>"
+                                        data-action="cancel">No, Go Back</button>
+                                    <button class="btn-filter confirm-btn js-confirm-order-action"
+                                        style="background: #ef4444; color: white;"
+                                        data-order-id="<%= order.OrderID %>"
+                                        data-action="cancel">Cancel Order</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Payment Modal -->
+                        <div id="payment-modal-<%= order.OrderID %>" class="payment-modal-overlay">
+                            <div class="payment-modal-content">
+                                <div class="payment-modal-header">
+                                    <h3>Payment Details</h3>
+                                    <button class="payment-modal-close" onclick="closePaymentModal(<%= order.OrderID %>)">×</button>
+                                </div>
+                                <div class="payment-modal-body" id="payment-modal-body-<%= order.OrderID %>">
+                                    <div style="text-align: center; padding: 2rem;">
+                                        <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #F0B21B; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                                        <p style="margin-top: 1rem; color: #6b7280;">Loading payment details...</p>
+                                    </div>
+                                </div>
+                                <div class="payment-modal-footer">
+                                    <button class="btn-filter btn-filter-secondary" onclick="closePaymentModal(<%= order.OrderID %>)">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    <% }); %>
+
+                    <!-- Orders Table (Hidden by default) -->
+                    <div id="ordersTable" style="display: none; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead style="background: #f8f9fa; border-bottom: 2px solid #e5e7eb;">
+                                <tr>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Order #</th>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Customer</th>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Date</th>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Status</th>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Payment</th>
+                                    <th style="padding: 1rem; text-align: right; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Total</th>
+                                    <th style="padding: 1rem; text-align: center; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% orders.forEach(function(order) { %>
+                                    <tr class="table-order-row" 
+                                        data-order-id="<%= order.OrderID %>"
+                                        data-reference-number="<%= (order.ReferenceNumber || '').toLowerCase() %>"
+                                        data-customer="<%= (order.CustomerName || '').toLowerCase() %>"
+                                        data-email="<%= (order.CustomerEmail || '').toLowerCase() %>"
+                                        data-phone="<%= (order.CustomerPhone || '').toLowerCase().replace(/\s+/g, '') %>"
+                                        data-address="<%= [
+                                            order.AddressLabel || '',
+                                            order.HouseNumber || '',
+                                            order.Street || '',
+                                            order.Barangay || '',
+                                            order.City || '',
+                                            order.Province || '',
+                                            order.PostalCode || '',
+                                            order.Country || ''
+                                         ].filter(Boolean).join(' ').toLowerCase() %>"
+                                        data-products="<%= order.items ? order.items.map(item => (item.ProductName || item.Name || '').toLowerCase()).join(' ') : '' %>"
+                                        data-status="<%= (order.Status || '').toLowerCase() %>"
+                                        data-payment="<%= (order.PaymentMethod || '').toLowerCase() %>"
+                                        data-amount="<%= order.TotalAmount || 0 %>"
+                                        data-date="<%= new Date(order.OrderDate).toISOString().split('T')[0] %>"
+                                        data-delivery-type="<%= (order.DeliveryType === 'pickup' || order.DeliveryTypeName === 'Pick up') ? 'pickup' : 'delivery' %>"
+                                        data-bulk-order="<%= order.IsBulkOrder ? 'yes' : 'no' %>"
+                                        data-notes="<%= (order.Notes || order.SpecialInstructions || '').toLowerCase() %>"
+                                        style="border-bottom: 1px solid #e5e7eb; transition: background 0.2s;" 
+                                        onmouseover="this.style.background='#f9fafb'" 
+                                        onmouseout="this.style.background='#ffffff'">
+                                        <td style="padding: 1rem; font-weight: 600; color: #111827;">
+                                            <%= order.ReferenceNumber || '#' + order.OrderID %>
+                                            <% if (order.IsBulkOrder) { %>
+                                                <span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 0.5rem; background: linear-gradient(135deg, #f0b21b 0%, #d4a017 100%); color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase;">Bulk</span>
+                                            <% } %>
+                                        </td>
+                                        <td style="padding: 1rem;">
+                                            <div style="font-weight: 600; color: #111827; margin-bottom: 0.25rem;"><%= order.CustomerName || 'N/A' %></div>
+                                            <div style="font-size: 0.875rem; color: #6b7280;"><%= order.CustomerEmail || '' %></div>
+                                        </td>
+                                        <td style="padding: 1rem; font-size: 0.875rem; color: #6b7280;">
+                                            <%= order.FormattedOrderDate || new Date(order.OrderDate).toLocaleString('en-US') %>
+                                        </td>
+                                        <td style="padding: 1rem;">
+                                            <% 
+                                                const status = (order.Status || 'Shipping').toString().toLowerCase();
+                                                const statusClass = status === 'pending' ? 'status-pending' : 
+                                                                    status === 'processing' ? 'status-processing' :
+                                                                    status === 'shipping' ? 'status-shipping' :
+                                                                    status === 'delivery' ? 'status-delivery' :
+                                                                    status === 'received' || status === 'receive' ? 'status-receive' :
+                                                                    status === 'completed' ? 'status-completed' :
+                                                                    status === 'cancelled' ? 'status-cancelled' : 'status-shipping';
+                                                const statusDisplay = order.Status || 'Shipping';
+                                            %>
+                                            <span class="order-card-status <%= statusClass %>" style="display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;"><%= statusDisplay %></span>
+                                        </td>
+                                        <td style="padding: 1rem; font-size: 0.875rem; color: #6b7280;">
+                                            <%= order.PaymentMethod || 'N/A' %>
+                                        </td>
+                                        <td style="padding: 1rem; text-align: right; font-weight: 700; color: #111827;">
+                                            ₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
+                                        </td>
+                                        <td style="padding: 1rem; text-align: center;">
+                                            <button class="order-card-toggle" type="button" data-toggle-target="<%= order.OrderID %>" style="background: #F0B21B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; margin-right: 0.5rem;" onclick="toggleOrderDetails(<%= order.OrderID %>)">View</button>
+                                            <button class="order-card-action proceed js-open-order-modal" type="button" data-order-id="<%= order.OrderID %>" data-action="proceed" style="background: #10b981; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; margin-right: 0.5rem;">Proceed</button>
+                                            <button class="order-card-action cancel js-open-order-modal" type="button" data-order-id="<%= order.OrderID %>" data-action="cancel" style="background: #ef4444; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem;">Cancel</button>
+                                        </td>
+                                    </tr>
+                                    <!-- Order Details Row (Hidden by default) -->
+                                    <tr id="table-details-<%= order.OrderID %>" style="display: none; background: #f9fafb;">
+                                        <td colspan="7" style="padding: 1.5rem;">
+                                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+                                                <!-- Customer Section -->
+                                                <div>
+                                                    <h4 style="font-size: 0.875rem; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 0.75rem; letter-spacing: 0.05em;">Customer</h4>
+                                                    <div style="font-size: 0.875rem; color: #111827; line-height: 1.6;">
+                                                        <div><strong><%= order.CustomerName %></strong></div>
+                                                        <div style="margin-top: 0.25rem;"><%= order.CustomerEmail %></div>
+                                                        <div style="margin-top: 0.25rem;">Phone: <%= order.CustomerPhone %></div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Shipping Address Section -->
+                                                <% if (order.DeliveryType !== 'pickup' && order.DeliveryTypeName !== 'Pick up') { %>
+                                                <div>
+                                                    <h4 style="font-size: 0.875rem; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 0.75rem; letter-spacing: 0.05em;">Shipping Address</h4>
+                                                    <div style="font-size: 0.875rem; color: #111827; line-height: 1.6;">
+                                                        <%= order.AddressLabel ? order.AddressLabel + ': ' : '' %>
+                                                        <%= [order.HouseNumber, order.Street, order.Barangay, order.City, order.Province, order.PostalCode, order.Country].filter(Boolean).join(', ') %>
+                                                    </div>
+                                                </div>
+                                                <% } %>
+
+                                                <!-- Products Section -->
+                                                <div style="grid-column: 1 / -1;">
+                                                    <h4 style="font-size: 0.875rem; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 0.75rem; letter-spacing: 0.05em;">Products (<%= order.items ? order.items.length : 0 %>)</h4>
+                                                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                                        <% if (order.items && order.items.length > 0) { %>
+                                                            <% order.items.forEach(function(item) { %>
+                                                                <div style="display: flex; align-items: center; gap: 1rem; padding: 0.75rem; background: #ffffff; border-radius: 8px; border: 1px solid #e5e7eb;">
+                                                                    <div style="width: 60px; height: 60px; flex-shrink: 0; border-radius: 6px; overflow: hidden; background: #f3f4f6; display: flex; align-items: center; justify-content: center;">
+                                                                        <% if (item.VariationImageURL) { %>
+                                                                            <img src="<%= item.VariationImageURL %>" alt="<%= item.VariationName || item.Name %>" style="width: 100%; height: 100%; object-fit: cover;">
+                                                                        <% } else if (item.ImageURL) { %>
+                                                                            <img src="<%= item.ImageURL %>" alt="<%= item.Name %>" style="width: 100%; height: 100%; object-fit: cover;">
+                                                                        <% } else { %>
+                                                                            <div style="color: #94a3b8; font-size: 1.5rem;">🖼️</div>
+                                                                        <% } %>
+                                                                    </div>
+                                                                    <div style="flex: 1; min-width: 0;">
+                                                                        <div style="font-weight: 600; color: #111827; margin-bottom: 0.25rem;"><%= item.Name %></div>
+                                                                        <div style="display: flex; flex-wrap: gap: 0.5rem; font-size: 0.8rem; color: #6b7280;">
+                                                                            <% if (item.VariationName) { %>
+                                                                                <span>Variation: <%= item.VariationName %></span>
+                                                                            <% } %>
+                                                                            <% if (item.Color) { %>
+                                                                                <span>Color: <%= item.Color %></span>
+                                                                            <% } %>
+                                                                            <span>Qty: <%= item.Quantity %></span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div style="font-weight: 700; color: #111827; font-size: 0.9rem;">
+                                                                        ₱<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
+                                                                    </div>
+                                                                </div>
+                                                            <% }); %>
+                                                        <% } else { %>
+                                                            <div style="padding: 1rem; text-align: center; color: #6b7280;">No products found.</div>
+                                                        <% } %>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Payment & Delivery Section -->
+                                                <div>
+                                                    <h4 style="font-size: 0.875rem; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 0.75rem; letter-spacing: 0.05em;">Payment & Delivery</h4>
+                                                    <div style="font-size: 0.875rem; color: #111827; line-height: 1.6; display: flex; flex-direction: column; gap: 0.5rem;">
+                                                        <div>
+                                                            Payment Method: <strong><%= order.PaymentMethod || 'N/A' %></strong>
+                                                            <% if (order.StripeSessionID) { %>
+                                                                <button type="button" class="btn-filter btn-filter-primary js-check-payment" style="padding:0.35rem 0.65rem;font-size:0.7rem;margin-left:0.5rem;" data-order-id="<%= order.OrderID %>">Check Payment</button>
+                                                            <% } %>
+                                                        </div>
+                                                        <% if (order.TransactionID) { %>
+                                                        <div>Transaction ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                                        <% } %>
+                                                        <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
+                                                        <% if ((order.DeliveryTypeName === 'Pick up' || order.DeliveryType === 'pickup') && order.PickupDate) { %>
+                                                        <div>
+                                                            Pickup Date: <strong><%= new Date(order.PickupDate).toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) %></strong>
+                                                        </div>
+                                                        <% } %>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Order Summary Section -->
+                                                <div>
+                                                    <h4 style="font-size: 0.875rem; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 0.75rem; letter-spacing: 0.05em;">Order Summary</h4>
+                                                    <div style="font-size: 0.875rem; color: #111827; display: flex; flex-direction: column; gap: 0.5rem;">
+                                                        <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
+                                                            <span>Subtotal:</span>
+                                                            <strong>₱<%= Number(order.Subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                        </div>
+                                                        <% if (!order.IsBulkOrder) { %>
+                                                        <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
+                                                            <span>Shipping Fee:</span>
+                                                            <strong>₱<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                        </div>
+                                                        <% } %>
+                                                        <% 
+                                                            let extraFee = 0;
+                                                            if (order.ExtraDeliveryFee !== undefined && order.ExtraDeliveryFee !== null) {
+                                                                extraFee = parseFloat(order.ExtraDeliveryFee) || 0;
+                                                            }
+                                                            if (extraFee === 0 || isNaN(extraFee)) {
+                                                                const subtotal = parseFloat(order.Subtotal || 0);
+                                                                const shipping = parseFloat(order.DeliveryCost || 0);
+                                                                const total = parseFloat(order.TotalAmount || 0);
+                                                                const calculatedSum = subtotal + shipping;
+                                                                const difference = total - calculatedSum;
+                                                                if (difference > 1) {
+                                                                    extraFee = difference;
+                                                                }
+                                                            }
+                                                        %>
+                                                        <% if (extraFee > 0) { %>
+                                                        <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
+                                                            <span>Extra Delivery Fee (Qty &gt; 4):</span>
+                                                            <strong>₱<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                        </div>
+                                                        <% } %>
+                                                        <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; margin-top: 0.5rem; border-top: 2px solid #0f172a;">
+                                                            <span style="font-weight: 700; font-size: 1.05rem;">Total:</span>
+                                                            <strong style="font-weight: 700; font-size: 1.05rem; color: #0f172a;">₱<%= Number(order.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <% }); %>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination Controls -->
+                    <% if (pagination && pagination.totalPages > 1) { %>
+                        <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 2rem; flex-wrap: wrap;">
+                            <button onclick="goToPage(<%= pagination.currentPage - 1 %>)" 
+                                    <%= pagination.currentPage === 1 ? 'disabled' : '' %>
+                                    style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= pagination.currentPage === 1 ? '#f3f4f6' : '#ffffff' %>; color: <%= pagination.currentPage === 1 ? '#9ca3af' : '#374151' %>; border-radius: 6px; cursor: <%= pagination.currentPage === 1 ? 'not-allowed' : 'pointer' %>; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;"
+                                    <%= pagination.currentPage === 1 ? 'onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'#f3f4f6\'"' : 'onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'#ffffff\'"' %>>
+                                Previous
+                            </button>
+                            
+                            <% for (let i = Math.max(1, pagination.currentPage - 2); i <= Math.min(pagination.totalPages, pagination.currentPage + 2); i++) { %>
+                                <button onclick="goToPage(<%= i %>)" 
+                                        style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= i === pagination.currentPage ? '#F0B21B' : '#ffffff' %>; color: <%= i === pagination.currentPage ? '#ffffff' : '#374151' %>; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: all 0.2s; min-width: 40px;"
+                                        onmouseover="<%= i === pagination.currentPage ? '' : 'this.style.background=\'#f9fafb\'' %>"
+                                        onmouseout="<%= i === pagination.currentPage ? '' : 'this.style.background=\'#ffffff\'' %>">
+                                    <%= i %>
+                                </button>
+                            <% } %>
+                            
+                            <button onclick="goToPage(<%= pagination.currentPage + 1 %>)" 
+                                    <%= pagination.currentPage === pagination.totalPages ? 'disabled' : '' %>
+                                    style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= pagination.currentPage === pagination.totalPages ? '#f3f4f6' : '#ffffff' %>; color: <%= pagination.currentPage === pagination.totalPages ? '#9ca3af' : '#374151' %>; border-radius: 6px; cursor: <%= pagination.currentPage === pagination.totalPages ? 'not-allowed' : 'pointer' %>; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;"
+                                    <%= pagination.currentPage === pagination.totalPages ? 'onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'#f3f4f6\'"' : 'onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'#ffffff\'"' %>>
+                                Next
+                            </button>
+                        </div>
+                    <% } %>
+                <% } else { %>
+                    <div class="empty-state">
+                        <div class="empty-state-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                <polyline points="3.27 6.96 12 12 20.73 6.96"></polyline>
+                                <line x1="12" y1="22" x2="12" y2="12"></line>
+                            </svg>
+                        </div>
+                        <div class="empty-state-text">No shipping orders found.</div>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+    <div id="order-success-popup"></div>
+
+    <!-- Loading Spinner Utility -->
+    <script src="/js/Employee/Admin/admin-loading-spinner.js"></script>
+    
+    <script>
+        // Loading Spinner Helper (if utility not loaded)
+        if (typeof showLoadingSpinner === 'undefined') {
+            function showLoadingSpinner(spinnerId = 'orders-loading-spinner', text = 'Loading...') {
+                const spinner = document.getElementById(spinnerId);
+                if (spinner) {
+                    const textElement = spinner.querySelector('.admin-loading-spinner__text');
+                    if (textElement && text) textElement.textContent = text;
+                    spinner.classList.remove('hidden');
+                    spinner.style.display = 'flex';
+                }
+            }
+            function hideLoadingSpinner(spinnerId = 'orders-loading-spinner') {
+                const spinner = document.getElementById(spinnerId);
+                if (spinner) {
+                    spinner.classList.add('hidden');
+                    spinner.style.display = 'none';
+                }
+            }
+        }
+        
+        // View Toggle Functions
+        let currentView = 'cards';
+        
+        function switchView(view) {
+            currentView = view;
+            const cardsView = document.getElementById('ordersGrid');
+            const tableView = document.getElementById('ordersTable');
+            const cardsBtn = document.getElementById('viewCardsBtn');
+            const tableBtn = document.getElementById('viewTableBtn');
+            
+            if (view === 'cards') {
+                if (cardsView) cardsView.style.display = 'grid';
+                if (tableView) tableView.style.display = 'none';
+                if (cardsBtn) {
+                    cardsBtn.style.background = '#F0B21B';
+                    cardsBtn.style.color = 'white';
+                }
+                if (tableBtn) {
+                    tableBtn.style.background = 'transparent';
+                    tableBtn.style.color = '#6b7280';
+                }
+            } else {
+                if (cardsView) cardsView.style.display = 'none';
+                if (tableView) tableView.style.display = 'block';
+                if (cardsBtn) {
+                    cardsBtn.style.background = 'transparent';
+                    cardsBtn.style.color = '#6b7280';
+                }
+                if (tableBtn) {
+                    tableBtn.style.background = '#F0B21B';
+                    tableBtn.style.color = 'white';
+                }
+            }
+        }
+        
+        // Pagination Function
+        function goToPage(page) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('page', page);
+            window.location.href = url.toString();
+        }
+        
+        // Toggle Order Details in Table View
+        function toggleOrderDetails(orderId) {
+            const detailsRow = document.getElementById(`table-details-${orderId}`);
+            if (detailsRow) {
+                detailsRow.style.display = detailsRow.style.display === 'none' ? 'table-row' : 'none';
+            }
+        }
+        
+        // Filter Functions
+        function applyFilters() {
+            const searchTerm = document.getElementById('searchFilter').value.toLowerCase();
+            const startDateFilter = document.getElementById('startDateFilter').value;
+            const endDateFilter = document.getElementById('endDateFilter').value;
+            const paymentFilter = document.getElementById('paymentFilter').value.toLowerCase();
+            const amountFilter = document.getElementById('amountFilter').value;
+            const deliveryTypeFilter = document.getElementById('deliveryTypeFilter').value;
+
+            const orderCards = document.querySelectorAll('.order-card');
+            let visibleCount = 0;
+
+            orderCards.forEach(card => {
+                const orderId = card.getAttribute('data-order-id');
+                const customer = card.getAttribute('data-customer');
+                const email = card.getAttribute('data-email');
+                const payment = (card.getAttribute('data-payment') || '').toLowerCase();
+                const amount = parseFloat(card.getAttribute('data-amount'));
+                const date = card.getAttribute('data-date');
+                const deliveryType = card.getAttribute('data-delivery-type');
+
+                let shouldShow = true;
+
+                // Comprehensive search filter
+                if (searchTerm) {
+                    const referenceNumber = (card.getAttribute('data-reference-number') || '').toLowerCase();
+                    const phone = (card.getAttribute('data-phone') || '');
+                    const address = (card.getAttribute('data-address') || '');
+                    const products = (card.getAttribute('data-products') || '');
+                    const status = (card.getAttribute('data-status') || '');
+                    const notes = (card.getAttribute('data-notes') || '');
+                    const bulkOrder = (card.getAttribute('data-bulk-order') || '');
+                    
+                    shouldShow = shouldShow && (
+                        orderId.includes(searchTerm) ||
+                        referenceNumber.includes(searchTerm) ||
+                        customer.includes(searchTerm) ||
+                        email.includes(searchTerm) ||
+                        phone.includes(searchTerm) ||
+                        address.includes(searchTerm) ||
+                        products.includes(searchTerm) ||
+                        status.includes(searchTerm) ||
+                        notes.includes(searchTerm) ||
+                        (searchTerm === 'bulk' && bulkOrder === 'yes') ||
+                        (searchTerm === 'bulk order' && bulkOrder === 'yes')
+                    );
+                }
+
+                // Date range filter
+                if (startDateFilter || endDateFilter) {
+                    const orderDate = new Date(date);
+                    if (startDateFilter) {
+                        const startDate = new Date(startDateFilter);
+                        startDate.setHours(0, 0, 0, 0);
+                        if (orderDate < startDate) {
+                            shouldShow = false;
+                        }
+                    }
+                    if (endDateFilter) {
+                        const endDate = new Date(endDateFilter);
+                        endDate.setHours(23, 59, 59, 999);
+                        if (orderDate > endDate) {
+                            shouldShow = false;
+                        }
+                    }
+                }
+
+                // Payment filter (case-insensitive, supports e-wallet variations)
+                if (paymentFilter) {
+                    const paymentLower = payment;
+                    const matchesEwallet = paymentFilter === 'e-wallet' && (
+                        paymentLower.includes('e-wallet') ||
+                        paymentLower.includes('ewallet') ||
+                        paymentLower.includes('e wallet') ||
+                        paymentLower === 'wallet'
+                    );
+                    const matchesOther = paymentFilter !== 'e-wallet' && paymentLower.includes(paymentFilter);
+                    
+                    if (!matchesEwallet && !matchesOther) {
+                        shouldShow = false;
+                    }
+                }
+
+                // Amount filter
+                if (amountFilter) {
+                    const [min, max] = amountFilter === '10000+' 
+                        ? [10000, Infinity]
+                        : amountFilter.split('-').map(v => v.replace(/[₱,]/g, ''));
+                    if (amount < parseFloat(min) || (max !== 'Infinity' && amount > parseFloat(max))) {
+                        shouldShow = false;
+                    }
+                }
+
+                // Delivery type filter
+                if (deliveryTypeFilter && deliveryType !== deliveryTypeFilter) {
+                    shouldShow = false;
+                }
+
+                card.style.display = shouldShow ? 'flex' : 'none';
+                if (shouldShow) visibleCount++;
+            });
+
+            // Filter table rows
+            const tableRows = document.querySelectorAll('.table-order-row');
+            let tableVisibleCount = 0;
+
+            tableRows.forEach(row => {
+                const orderId = row.getAttribute('data-order-id');
+                const customer = row.getAttribute('data-customer');
+                const email = row.getAttribute('data-email');
+                const payment = (row.getAttribute('data-payment') || '').toLowerCase();
+                const amount = parseFloat(row.getAttribute('data-amount'));
+                const date = row.getAttribute('data-date');
+                const deliveryType = row.getAttribute('data-delivery-type');
+
+                let shouldShow = true;
+
+                // Comprehensive search filter
+                if (searchTerm) {
+                    const referenceNumber = (row.getAttribute('data-reference-number') || '').toLowerCase();
+                    const phone = (row.getAttribute('data-phone') || '');
+                    const address = (row.getAttribute('data-address') || '');
+                    const products = (row.getAttribute('data-products') || '');
+                    const status = (row.getAttribute('data-status') || '');
+                    const notes = (row.getAttribute('data-notes') || '');
+                    const bulkOrder = (row.getAttribute('data-bulk-order') || '');
+                    
+                    shouldShow = shouldShow && (
+                        orderId.includes(searchTerm) ||
+                        referenceNumber.includes(searchTerm) ||
+                        customer.includes(searchTerm) ||
+                        email.includes(searchTerm) ||
+                        phone.includes(searchTerm) ||
+                        address.includes(searchTerm) ||
+                        products.includes(searchTerm) ||
+                        status.includes(searchTerm) ||
+                        notes.includes(searchTerm) ||
+                        (searchTerm === 'bulk' && bulkOrder === 'yes') ||
+                        (searchTerm === 'bulk order' && bulkOrder === 'yes')
+                    );
+                }
+
+                // Date range filter
+                if (startDateFilter || endDateFilter) {
+                    const orderDate = new Date(date);
+                    if (startDateFilter) {
+                        const startDate = new Date(startDateFilter);
+                        startDate.setHours(0, 0, 0, 0);
+                        if (orderDate < startDate) {
+                            shouldShow = false;
+                        }
+                    }
+                    if (endDateFilter) {
+                        const endDate = new Date(endDateFilter);
+                        endDate.setHours(23, 59, 59, 999);
+                        if (orderDate > endDate) {
+                            shouldShow = false;
+                        }
+                    }
+                }
+
+                // Payment filter (case-insensitive, supports e-wallet variations)
+                if (paymentFilter) {
+                    const paymentLower = payment;
+                    const matchesEwallet = paymentFilter === 'e-wallet' && (
+                        paymentLower.includes('e-wallet') ||
+                        paymentLower.includes('ewallet') ||
+                        paymentLower.includes('e wallet') ||
+                        paymentLower === 'wallet'
+                    );
+                    const matchesOther = paymentFilter !== 'e-wallet' && paymentLower.includes(paymentFilter);
+                    
+                    if (!matchesEwallet && !matchesOther) {
+                        shouldShow = false;
+                    }
+                }
+
+                // Amount filter
+                if (amountFilter) {
+                    const [min, max] = amountFilter === '10000+' 
+                        ? [10000, Infinity]
+                        : amountFilter.split('-').map(v => v.replace(/[₱,]/g, ''));
+                    if (amount < parseFloat(min) || (max !== 'Infinity' && amount > parseFloat(max))) {
+                        shouldShow = false;
+                    }
+                }
+
+                // Delivery type filter
+                if (deliveryTypeFilter && deliveryType !== deliveryTypeFilter) {
+                    shouldShow = false;
+                }
+
+                row.style.display = shouldShow ? '' : 'none';
+                // Also hide the details row if the main row is hidden
+                const detailsRow = document.getElementById(`table-details-${orderId}`);
+                if (detailsRow) {
+                    detailsRow.style.display = shouldShow ? detailsRow.style.display : 'none';
+                }
+                if (shouldShow) tableVisibleCount++;
+            });
+
+            // Update count based on current view
+            const cardsView = document.getElementById('ordersGrid');
+            const currentView = cardsView && cardsView.style.display !== 'none' ? 'cards' : 'table';
+            if (currentView === 'cards') {
+                document.getElementById('ordersCount').textContent = `${visibleCount} Orders`;
+            } else {
+                document.getElementById('ordersCount').textContent = `${tableVisibleCount} Orders`;
+            }
+            
+            // Update bulk orders count
+            const visibleBulkCount = Array.from(orderCards).filter(card => {
+                return card.style.display !== 'none' && card.getAttribute('data-bulk-order') === 'yes';
+            }).length;
+            const bulkCountElement = document.getElementById('bulkOrdersCount');
+            if (bulkCountElement) {
+                bulkCountElement.textContent = `${visibleBulkCount} Bulk Orders`;
+            }
+        }
+
+        function clearFilters() {
+            document.getElementById('searchFilter').value = '';
+            document.getElementById('startDateFilter').value = '';
+            document.getElementById('endDateFilter').value = '';
+            document.getElementById('paymentFilter').value = '';
+            document.getElementById('amountFilter').value = '';
+            document.getElementById('deliveryTypeFilter').value = '';
+            
+            const orderCards = document.querySelectorAll('.order-card');
+            orderCards.forEach(card => card.style.display = 'flex');
+            document.getElementById('ordersCount').textContent = '<%= orders ? orders.length : 0 %> Orders';
+            
+            // Reset bulk orders count
+            const bulkCountElement = document.getElementById('bulkOrdersCount');
+            if (bulkCountElement) {
+                const allCards = document.querySelectorAll('.order-card');
+                const bulkCount = Array.from(allCards).filter(card => card.getAttribute('data-bulk-order') === 'yes').length;
+                bulkCountElement.textContent = `${bulkCount} Bulk Orders`;
+            }
+        }
+
+        // Date validation: Set minimum date for end date based on start date
+        document.getElementById('startDateFilter').addEventListener('change', function() {
+            const startDate = this.value;
+            const endDateInput = document.getElementById('endDateFilter');
+            if (startDate) {
+                endDateInput.setAttribute('min', startDate);
+                // If end date is before start date, clear it
+                if (endDateInput.value && endDateInput.value < startDate) {
+                    endDateInput.value = '';
+                    endDateInput.setCustomValidity('');
+                }
+            } else {
+                endDateInput.removeAttribute('min');
+            }
+            applyFilters();
+        });
+
+        document.getElementById('endDateFilter').addEventListener('change', function() {
+            const startDate = document.getElementById('startDateFilter').value;
+            const endDate = this.value;
+            if (startDate && endDate && endDate < startDate) {
+                this.setCustomValidity('End date cannot be before start date');
+                this.reportValidity();
+                this.value = '';
+            } else {
+                this.setCustomValidity('');
+                applyFilters();
+            }
+        });
+
+        // Search on input
+        document.getElementById('searchFilter').addEventListener('input', applyFilters);
+        document.getElementById('paymentFilter').addEventListener('change', applyFilters);
+        document.getElementById('amountFilter').addEventListener('change', applyFilters);
+        document.getElementById('deliveryTypeFilter').addEventListener('change', applyFilters);
+
+        // Collapsible card toggles
+        document.querySelectorAll('.order-card-toggle').forEach(toggle => {
+            toggle.addEventListener('click', () => {
+                const card = toggle.closest('.order-card');
+                if (!card) return;
+
+                const collapsed = card.classList.toggle('collapsed');
+                toggle.setAttribute('aria-expanded', (!collapsed).toString());
+
+                const label = toggle.querySelector('.toggle-label');
+                if (label) {
+                    label.textContent = collapsed ? 'View Details' : 'Hide Details';
+                }
+            });
+        });
+
+        // Modal Functions
+        function showModal(orderId, action) {
+            const modal = document.getElementById('modal-' + orderId + '-' + action);
+            if (!modal) return;
+            modal.style.display = 'flex';
+        }
+
+        function closeModal(orderId, action) {
+            const modal = document.getElementById('modal-' + orderId + '-' + action);
+            if (modal) modal.style.display = 'none';
+        }
+
+        // Close modal on overlay click
+        document.querySelectorAll('.order-modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) {
+                    overlay.style.display = 'none';
+                }
+            });
+        });
+
+        document.addEventListener('click', function(event) {
+            const openTrigger = event.target.closest('.js-open-order-modal');
+            if (openTrigger) {
+                const orderId = openTrigger.getAttribute('data-order-id');
+                const action = openTrigger.getAttribute('data-action');
+                if (orderId && action) {
+                    showModal(orderId, action);
+                }
+                return;
+            }
+
+            const closeTrigger = event.target.closest('.js-close-order-modal');
+            if (closeTrigger) {
+                const orderId = closeTrigger.getAttribute('data-order-id');
+                const action = closeTrigger.getAttribute('data-action');
+                if (orderId && action) {
+                    closeModal(orderId, action);
+                }
+                return;
+            }
+
+            const confirmTrigger = event.target.closest('.js-confirm-order-action');
+            if (confirmTrigger) {
+                const orderId = confirmTrigger.getAttribute('data-order-id');
+                const action = confirmTrigger.getAttribute('data-action');
+                if (orderId && action) {
+                    handleAction(orderId, action);
+                }
+                return;
+            }
+
+            const paymentTrigger = event.target.closest('.js-check-payment');
+            if (paymentTrigger) {
+                const orderId = paymentTrigger.getAttribute('data-order-id');
+                if (orderId) {
+                    checkPaymentStatus(orderId);
+                }
+            }
+        });
+
+        // Success Popup
+        function showOrderSuccess(message) {
+            const popup = document.getElementById('order-success-popup');
+            popup.textContent = message;
+            popup.style.display = 'block';
+            setTimeout(() => {
+                popup.style.opacity = '0';
+                setTimeout(() => popup.style.display = 'none', 300);
+            }, 2000);
+        }
+
+        // Payment Status Check
+        async function checkPaymentStatus(orderId) {
+            const modal = document.getElementById(`payment-modal-${orderId}`);
+            const modalBody = document.getElementById(`payment-modal-body-${orderId}`);
+            
+            if (!modal || !modalBody) {
+                console.error('Payment modal not found for order:', orderId);
+                return;
+            }
+            
+            // Show modal with loading state
+            modal.classList.add('show');
+            modalBody.innerHTML = `
+                <div style="text-align: center; padding: 2rem;">
+                    <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #F0B21B; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <p style="margin-top: 1rem; color: #6b7280;">Loading payment details...</p>
+                </div>
+            `;
+            
+            try {
+                const response = await fetch(`/api/admin/payment-status/${orderId}`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const details = result.paymentDetails;
+                    const paymentStatus = (details.PaymentStatus || 'Unknown').toLowerCase();
+                    const statusClass = paymentStatus === 'paid' || paymentStatus === 'completed' ? 'paid' : 
+                                      paymentStatus === 'pending' ? 'pending' : 'failed';
+                    
+                    let html = `
+                        <div class="payment-section">
+                            <div class="payment-section-title">Payment Information</div>
+                            <div class="payment-info-row">
+                                <span class="payment-info-label">Payment Method</span>
+                                <span class="payment-info-value">${details.PaymentMethod || 'N/A'}</span>
+                            </div>
+                            <div class="payment-info-row">
+                                <span class="payment-info-label">Payment Status</span>
+                                <span class="payment-info-value status ${statusClass}">${details.PaymentStatus || 'Unknown'}</span>
+                            </div>
+                            <div class="payment-info-row">
+                                <span class="payment-info-label">Total Amount</span>
+                                <span class="payment-info-value amount">₱${Number(details.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div class="payment-info-row">
+                                <span class="payment-info-label">Order Date</span>
+                                <span class="payment-info-value">${new Date(details.OrderDate).toLocaleString('en-US', { 
+                                    year: 'numeric', 
+                                    month: 'long', 
+                                    day: 'numeric', 
+                                    hour: '2-digit', 
+                                    minute: '2-digit' 
+                                })}</span>
+                            </div>
+                    `;
+                    
+                    if (details.StripeSessionID) {
+                        html += `
+                            <div class="payment-info-row">
+                                <span class="payment-info-label">Stripe Session ID</span>
+                                <span class="payment-info-value" style="font-size: 0.75rem; word-break: break-all;">${details.StripeSessionID}</span>
+                            </div>
+                        `;
+                    }
+                    
+                    html += `</div>`;
+                    
+                    if (details.stripeDetails) {
+                        const stripeStatus = (details.stripeDetails.payment_status || 'unknown').toLowerCase();
+                        const stripeStatusClass = stripeStatus === 'paid' || stripeStatus === 'complete' ? 'paid' : 
+                                                  stripeStatus === 'pending' || stripeStatus === 'unpaid' ? 'pending' : 'failed';
+                        
+                        html += `
+                            <div class="payment-section">
+                                <div class="payment-section-title">Stripe Details</div>
+                                <div class="stripe-details-section">
+                                    <div class="payment-info-row">
+                                        <span class="payment-info-label">Payment Status</span>
+                                        <span class="payment-info-value status ${stripeStatusClass}">${details.stripeDetails.payment_status || 'Unknown'}</span>
+                                    </div>
+                                    <div class="payment-info-row">
+                                        <span class="payment-info-label">Amount Paid</span>
+                                        <span class="payment-info-value amount">₱${(details.stripeDetails.amount_total / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div class="payment-info-row">
+                                        <span class="payment-info-label">Currency</span>
+                                        <span class="payment-info-value">${(details.stripeDetails.currency || 'php').toUpperCase()}</span>
+                                    </div>
+                                    <div class="payment-info-row">
+                                        <span class="payment-info-label">Customer Email</span>
+                                        <span class="payment-info-value">${details.stripeDetails.customer_email || 'N/A'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    modalBody.innerHTML = html;
+                } else {
+                    modalBody.innerHTML = `
+                        <div style="text-align: center; padding: 2rem;">
+                            <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+                            <p style="color: #6b7280; font-size: 1rem;">${result.message || 'Failed to retrieve payment details'}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error checking payment status:', error);
+                modalBody.innerHTML = `
+                    <div style="text-align: center; padding: 2rem;">
+                        <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+                        <p style="color: #6b7280; font-size: 1rem;">Error checking payment status. Please try again.</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Close Payment Modal
+        function closePaymentModal(orderId) {
+            const modal = document.getElementById(`payment-modal-${orderId}`);
+            if (modal) {
+                modal.classList.remove('show');
+            }
+        }
+
+        // Close modal when clicking outside
+        document.addEventListener('click', function(event) {
+            if (event.target.classList.contains('payment-modal-overlay')) {
+                event.target.classList.remove('show');
+            }
+        });
+
+        // Handle Actions
+        function handleAction(orderId, action) {
+            const url = action === 'proceed'
+                ? `/Employee/Admin/OrdersShipping/Proceed/${orderId}`
+                : `/Employee/Admin/OrdersShipping/Cancel/${orderId}`;
+            
+            // Show loading spinner
+            showLoadingSpinner('orders-loading-spinner', action === 'proceed' ? 'Processing order...' : 'Cancelling order...');
+            
+            fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        closeModal(orderId, action);
+                        showOrderSuccess(action === 'proceed' ? '✓ Order proceeded to Delivery!' : '✓ Order cancelled successfully!');
+                        if (action === 'proceed') {
+                            // Keep spinner visible during redirect
+                            setTimeout(() => {
+                                window.location.href = '/Employee/Admin/OrdersDelivery';
+                            }, 1500);
+                        } else {
+                            setTimeout(() => {
+                                hideLoadingSpinner('orders-loading-spinner');
+                                location.reload();
+                            }, 2000);
+                        }
+                    } else {
+                        hideLoadingSpinner('orders-loading-spinner');
+                        alert(data.message || 'Action failed.');
+                    }
+                })
+                .catch(() => {
+                    hideLoadingSpinner('orders-loading-spinner');
+                    alert('Action failed. Please try again.');
+                });
+        }
+
+        // Logout Handler
+        async function handleLogout(event) {
+            event.preventDefault();
+            if (confirm('Are you sure you want to logout?')) {
+                try {
+                    const response = await fetch('/logout', { method: 'POST' });
+                    if (response.ok) {
+                        window.location.href = '/login';
+                    }
+                } catch (error) {
+                    console.error('Logout error:', error);
+                }
+            }
+        }
+    </script>
+
+</body>
+</html>

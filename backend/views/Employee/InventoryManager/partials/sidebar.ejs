@@ -1,0 +1,310 @@
+<% const active=typeof activePage !=='undefined' ? activePage : '' ; const
+    inventoryPages=['products', 'product-inventory' , 'raw-materials' , 'alerts' , 'archived' ]; const
+    transactionsPages=['bulk-orders', 'delivery-rates' , 'walk-in' ]; const
+    ordersPages=['orders-pending', 'orders-processing' , 'orders-shipping' , 'orders-delivery' , 'orders-receive'
+    , 'orders-cancelled' , 'orders-returned' , 'orders-completed' , 'orders-completed-returned' ]; const
+    userPages=['manage-users']; const reviewPages=['reviews']; const supportPages=['chat-support', 'messages' ]; const
+    contentPages=['cms', 'logs' ]; %>
+    <div class="sidebar-header">
+        <h3>Inventory Manager Panel</h3>
+    </div>
+    <ul class="sidebar-menu">
+        <li><a href="/Employee/InventoryManager" <%=active==='dashboard' ? 'class="active"' : '' %>>
+                <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7" />
+                    <rect x="14" y="3" width="7" height="7" />
+                    <rect x="14" y="14" width="7" height="7" />
+                    <rect x="3" y="14" width="7" height="7" />
+                </svg>
+                Dashboard
+            </a></li>
+        <li><a href="/Employee/InventoryManager/InventoryReports" <%=active==='reports' ? 'class="active"' : '' %>>
+                <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14,2 14,8 20,8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10,9 9,9 8,9" />
+                </svg>
+                Reports
+            </a></li>
+        <li class="sidebar-section-label <%= inventoryPages.includes(active) ? 'active' : '' %>">Inventory</li>
+        <ul class="sidebar-submenu">
+            <li><a href="/Employee/InventoryManager/Products" <%=active==='products' ? 'class="active"' : ''
+                    %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                        <line x1="3" y1="6" x2="21" y2="6" />
+                        <path d="M16 10a4 4 0 0 1-8 0" />
+                    </svg>
+                    Products
+                </a></li>
+            <li><a href="/Employee/InventoryManager/ProductInventory" <%=active==='product-inventory'
+                    ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <line x1="3" y1="9" x2="21" y2="9" />
+                        <line x1="9" y1="21" x2="9" y2="9" />
+                    </svg>
+                    Product Inventory
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryMaterials" <%=active==='raw-materials' ? 'class="active"'
+                    : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                        <polyline points="3.27,6.96 12,12.01 20.73,6.96" />
+                    </svg>
+                    Raw Materials
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryAlerts" <%=active==='alerts' ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    Alerts
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryArchived" <%=active==='archived' ? 'class="active"' : ''
+                    %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                    Archived items
+                </a></li>
+        </ul>
+        <li class="sidebar-section-label <%= transactionsPages.includes(active) ? 'active' : '' %>">Transactions</li>
+        <ul class="sidebar-submenu">
+            <li><a href="/Employee/InventoryManager/InventoryBulkOrders" <%=active==='bulk-orders' ? 'class="active"'
+                    : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                        <polyline points="3.27,6.96 12,12.01 20.73,6.96" />
+                    </svg>
+                    Bulk Orders
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryRates" <%=active==='delivery-rates' ? 'class="active"' : ''
+                    %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                        <circle cx="12" cy="10" r="3" />
+                    </svg>
+                    Delivery Rates
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryWalkIn" <%=active==='walk-in' ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                    </svg>
+                    Walk In
+                </a></li>
+        </ul>
+        <li class="sidebar-section-label <%= ordersPages.includes(active) ? 'active' : '' %>">Orders Section</li>
+        <ul class="sidebar-submenu">
+            <li><a href="/Employee/InventoryManager/InventoryOrdersPending" <%=active==='orders-pending'
+                    ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12,6 12,12 16,14" />
+                    </svg>
+                    Orders Pending
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryOrdersProcessing" <%=active==='orders-processing'
+                    ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                        <polyline points="3.27,6.96 12,12.01 20.73,6.96" />
+                    </svg>
+                    Orders Processing
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryOrdersShipping" <%=active==='orders-shipping'
+                    ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="1" y="3" width="15" height="13" />
+                        <polygon points="16,8 20,8 23,11 23,16 16,16" />
+                        <circle cx="5.5" cy="18.5" r="2.5" />
+                        <circle cx="18.5" cy="18.5" r="2.5" />
+                    </svg>
+                    Orders Shipping
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryOrdersDelivery" <%=active==='orders-delivery'
+                    ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="1" y="3" width="15" height="13" />
+                        <polygon points="16,8 20,8 23,11 23,16 16,16" />
+                        <circle cx="5.5" cy="18.5" r="2.5" />
+                        <circle cx="18.5" cy="18.5" r="2.5" />
+                    </svg>
+                    Orders Delivery
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryOrdersReceive" <%=active==='orders-receive'
+                    ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22,4 12,14.01 9,11.01" />
+                    </svg>
+                    Orders Receive
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryCancelledOrders" <%=active==='orders-cancelled' ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                    Cancelled Orders
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryReturnedOrders" <%=active==='orders-returned' ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                        <polyline points="9 22 9 12 15 12 15 22" />
+                    </svg>
+                    Returned Orders
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryCompletedReturned" <%=active==='orders-completed-returned' ? 'class="active"'
+                    : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22,4 12,14.01 9,11.01" />
+                    </svg>
+                    Completed Returned
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryCompletedOrders" <%=active==='orders-completed' ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22,4 12,14.01 9,11.01" />
+                    </svg>
+                    Completed Orders
+                </a></li>
+        </ul>
+        <li class="sidebar-section-label <%= userPages.includes(active) ? 'active' : '' %>">User Management</li>
+        <ul class="sidebar-submenu">
+            <li><a href="/Employee/InventoryManager/InventoryManageUsers" <%=active==='manage-users' ? 'class="active"'
+                    : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                    </svg>
+                    Manage Users
+                </a></li>
+        </ul>
+        <li class="sidebar-section-label <%= reviewPages.includes(active) ? 'active' : '' %>">Customer Reviews</li>
+        <ul class="sidebar-submenu">
+            <li><a href="/Employee/InventoryManager/InventoryReviews" <%=active==='reviews' ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+                    </svg>
+                    Reviews
+                </a></li>
+        </ul>
+        <li class="sidebar-section-label <%= supportPages.includes(active) ? 'active' : '' %>">Support & Communication
+        </li>
+        <ul class="sidebar-submenu">
+            <li><a href="/Employee/InventoryManager/InventoryChatSupport" <%=active==='chat-support' ? 'class="active"'
+                    : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                    Chat Support
+                </a></li>
+            <li><a href="/Employee/InventoryManager/Messages" <%=active==='messages' ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        <line x1="9" y1="10" x2="15" y2="10" />
+                        <line x1="9" y1="14" x2="13" y2="14" />
+                    </svg>
+                    Messages
+                </a></li>
+        </ul>
+        <li class="sidebar-section-label <%= contentPages.includes(active) ? 'active' : '' %>">Content & System</li>
+        <ul class="sidebar-submenu">
+            <li><a href="/Employee/InventoryManager/InventoryCMS" <%=active==='cms' ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3" />
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                    Content Management
+                </a></li>
+            <li><a href="/Employee/InventoryManager/InventoryLogs" <%=active==='logs' ? 'class="active"' : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14,2 14,8 20,8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                        <polyline points="10,9 9,9 8,9" />
+                    </svg>
+                    Activity Logs
+                </a></li>
+        </ul>
+    </ul>
+    <div class="logout-section">
+        <a href="/logout" class="logout-button" onclick="handleLogout(event)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16,17 21,12 16,7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            Logout
+        </a>
+    </div>
+
+    <script>
+        (function () {
+            if (typeof window === 'undefined') return;
+
+            document.addEventListener('DOMContentLoaded', function () {
+                var currentPath = window.location.pathname.replace(/\/+$/, '');
+                if (!currentPath) currentPath = '/';
+
+                var links = document.querySelectorAll('.sidebar a[href]');
+
+                links.forEach(function (link) {
+                    var href = link.getAttribute('href');
+                    if (!href) return;
+
+                    var normalizedHref = href.replace(/\/+$/, '') || '/';
+
+                    if (currentPath === normalizedHref || (normalizedHref !== '/' && currentPath.startsWith(normalizedHref + '/'))) {
+                        link.classList.add('active');
+
+                        var sectionLabel = link.closest('.sidebar-submenu');
+                        if (sectionLabel && sectionLabel.previousElementSibling && sectionLabel.previousElementSibling.classList.contains('sidebar-section-label')) {
+                            sectionLabel.previousElementSibling.classList.add('active');
+                        }
+                    }
+                });
+            });
+        })();
+    </script>

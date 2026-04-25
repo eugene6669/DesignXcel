@@ -1,0 +1,48 @@
+.notification-icon-btn {
+  position: relative;
+  cursor: pointer;
+  border: none;
+  background: none !important;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.notification-icon-btn:hover {
+  background: transparent !important;
+  color: inherit !important;
+}
+
+.notification-icon-btn:focus {
+  outline: none;
+  background: transparent !important;
+}
+
+.notification-icon-btn .icon-circle {
+  transition: background-color 0.2s ease;
+}
+
+.notification-icon-btn:hover .icon-circle {
+  background-color: #e5e5e5 !important;
+}
+
+.notification-badge {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.9;
+  }
+}
+

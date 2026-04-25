@@ -1,0 +1,475 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delivery Rates - Order Support</title>
+    <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Custom Confirmation Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            visibility: hidden;
+            opacity: 0;
+            transition: visibility 0s, opacity 0.3s ease;
+        }
+        .modal-overlay.show {
+            visibility: visible;
+            opacity: 1;
+        }
+        .modal-content {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.show .modal-content {
+            transform: scale(1);
+        }
+        .modal-content h3 {
+            margin-top: 0;
+            color: #333;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+        .modal-content p {
+            color: #555;
+            font-size: 1.1em;
+            margin-bottom: 30px;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+        .modal-button {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .modal-button.confirm {
+            background-color: #dc3545;
+            color: white;
+        }
+        .modal-button.confirm:hover {
+            background-color: #c82333;
+        }
+        .modal-button.cancel {
+            background-color: #f0f0f0;
+            color: #555;
+            border: 1px solid #ccc;
+        }
+        .modal-button.cancel:hover {
+            background-color: #e0e0e0;
+        }
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .sidebar-menu {
+            flex-grow: 1;
+        }
+        .logout-section {
+            padding: 40px;
+            border-top: 1px solid #ddd;
+            margin-top: auto;
+            text-align: center;
+        }
+        .logout-button {
+            display: inline-block;
+            width: auto;
+            padding: 12px 25px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .logout-button:hover {
+            background-color: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="sidebar">
+            <%- include('partials/sidebar', { activePage: 'delivery-rates' }) %>
+        </div>
+        <div class="main-content">
+            <div class="header">
+                <h2>Delivery Rates Management</h2>
+            </div>
+            <div class="content-area">
+                <% if (error) { %>
+                    <div class="error-message"><%= error %></div>
+                <% } %>
+
+                <!-- Region-Based Rates Tab -->
+                <div id="region-tab-content">
+
+                    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:14px;">
+                        <h3 style="margin-top:0;">Add New Location Rate</h3>
+                        <form id="addRegionRateForm" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+                            <div>
+                                <label style="display:block;margin-bottom:4px;font-weight:500;">Region <span style="color:red;">*</span></label>
+                                <input type="text" id="region" name="region" required placeholder="e.g., NCR, Region IV-A" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+                            </div>
+                            <div>
+                                <label style="display:block;margin-bottom:4px;font-weight:500;">Province (Optional)</label>
+                                <input type="text" id="province" name="province" placeholder="e.g., Laguna, Cavite" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+                            </div>
+                            <div>
+                                <label style="display:block;margin-bottom:4px;font-weight:500;">City <span style="color:red;">*</span></label>
+                                <input type="text" id="city" name="city" required placeholder="e.g., Metro Manila, Santa Rosa" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+                            </div>
+                            <div>
+                                <label style="display:block;margin-bottom:4px;font-weight:500;">Price (â‚±) <span style="color:red;">*</span></label>
+                                <input type="number" id="price" name="price" step="0.01" min="0" required placeholder="300.00" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+                            </div>
+                            <div>
+                                <label style="display:block;margin-bottom:4px;font-weight:500;">Service Type (Optional)</label>
+                                <input type="text" id="serviceType" name="serviceType" placeholder="Standard Delivery" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+                            </div>
+                            <div style="grid-column:1/-1;">
+                                <label style="display:block;margin-bottom:4px;font-weight:500;">Notes (Optional)</label>
+                                <input type="text" id="notes" name="notes" placeholder="Coverage area details..." style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
+                            </div>
+                            <div style="grid-column:1/-1;display:flex;gap:8px;">
+                                <button type="submit" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:10px 24px;font-weight:600;cursor:pointer;">Add Rate</button>
+                                <button type="button" onclick="document.getElementById('addRegionRateForm').reset()" style="background:#6b7280;color:#fff;border:none;border-radius:6px;padding:10px 24px;font-weight:600;cursor:pointer;">Clear</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <h3 style="margin:0;">Location-Based Delivery Rates</h3>
+                            <div style="display:flex;gap:8px;">
+                                <input type="text" id="searchRegion" placeholder="Search location..." style="padding:8px;border:1px solid #ccc;border-radius:4px;">
+                                <button id="reloadRegionRates" style="background:#10b981;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:600;cursor:pointer;">Reload</button>
+                            </div>
+                        </div>
+                        <div id="regionRatesContainer" style="overflow:auto;max-height:600px;">
+                            <table style="width:100%;border-collapse:collapse;">
+                                <thead style="position:sticky;top:0;background:#f9fafb;">
+                                    <tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;">
+                                        <th style="text-align:left;padding:10px;">Region</th>
+                                        <th style="text-align:left;padding:10px;">Province</th>
+                                        <th style="text-align:left;padding:10px;">City</th>
+                                        <th style="text-align:right;padding:10px;">Price</th>
+                                        <th style="text-align:left;padding:10px;">Service Type</th>
+                                        <th style="text-align:center;padding:10px;">Active</th>
+                                        <th style="text-align:center;padding:10px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="regionRatesRows"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <script>
+    // Popup helper
+    let popup = document.getElementById('ratesPopup');
+    if(!popup){
+        popup = document.createElement('div');
+        popup.id = 'ratesPopup';
+        popup.style.cssText = 'display:none;position:fixed;top:24px;right:24px;background:#10b981;color:#fff;padding:12px 18px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);font-weight:600;z-index:3000;';
+        popup.textContent = 'Saved!';
+        document.body.appendChild(popup);
+    }
+    function showPopup(msg, isError){
+        popup.textContent = msg || (isError ? 'Failed' : 'Saved!');
+        popup.style.background = isError ? '#dc2626' : '#10b981';
+        popup.style.display = 'block';
+        setTimeout(()=>{ popup.style.display='none'; }, 1800);
+    }
+
+    function fmt(n){ return 'â‚±' + Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2}); }
+    function dateFmt(d){ try { return new Date(d).toLocaleString(); } catch(e){ return d; } }
+
+    // ===== REGION-BASED RATES =====
+    const regionRatesRows = document.getElementById('regionRatesRows');
+    const reloadRegionBtn = document.getElementById('reloadRegionRates');
+    const addRegionForm = document.getElementById('addRegionRateForm');
+    const searchRegion = document.getElementById('searchRegion');
+    
+    let allRegionRates = [];
+
+    async function loadRegionRates(){
+        regionRatesRows.innerHTML = '<tr><td colspan="7" style="padding:12px;color:#666;text-align:center;">Loading...</td></tr>';
+        try {
+            const r = await fetch('/api/admin/region-delivery-rates');
+            const j = await r.json();
+            if(!j.success){ 
+                regionRatesRows.innerHTML = `<tr><td colspan="7" style="padding:12px;color:#c00;text-align:center;">${j.message||'Failed to load'}</td></tr>`; 
+                return; 
+            }
+            allRegionRates = j.rates||[];
+            displayRegionRates(allRegionRates);
+        } catch(e){
+            regionRatesRows.innerHTML = '<tr><td colspan="7" style="padding:12px;color:#c00;text-align:center;">Error loading</td></tr>';
+        }
+    }
+
+    function displayRegionRates(rates) {
+        if(!rates.length){ 
+            regionRatesRows.innerHTML = '<tr><td colspan="7" style="padding:12px;color:#666;text-align:center;">No region-based delivery rates yet. Add one above!</td></tr>'; 
+            return; 
+        }
+        regionRatesRows.innerHTML = rates.map(rt=>{
+            return `<tr data-id="${rt.RegionRateID}" style="border-bottom:1px solid #e5e7eb;">
+                <td style="padding:10px;"><input class="region" value="${rt.Region||''}" placeholder="-" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;"></td>
+                <td style="padding:10px;"><input class="province" value="${rt.Province||''}" placeholder="-" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;"></td>
+                <td style="padding:10px;"><input class="city" value="${rt.City}" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;"></td>
+                <td style="padding:10px;text-align:right;"><input class="price" type="number" step="0.01" min="0" value="${Number(rt.Price).toFixed(2)}" style="width:100px;padding:6px;border:1px solid #ddd;border-radius:4px;text-align:right;"></td>
+                <td style="padding:10px;"><input class="serviceType" value="${rt.ServiceType||''}" placeholder="-" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;"></td>
+                <td style="padding:10px;text-align:center;"><input class="active" type="checkbox" ${rt.IsActive? 'checked':''}></td>
+                <td style="padding:10px;text-align:center;">
+                    <button class="update-region" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:600;cursor:pointer;margin-right:4px;">Update</button>
+                    <button class="delete-region" style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:600;cursor:pointer;">Delete</button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    // Search functionality
+    if(searchRegion) {
+        searchRegion.addEventListener('input', (e) => {
+            const search = e.target.value.toLowerCase();
+            const filtered = allRegionRates.filter(rt => {
+                return (rt.Region||'').toLowerCase().includes(search) ||
+                       (rt.Province||'').toLowerCase().includes(search) ||
+                       (rt.City||'').toLowerCase().includes(search) ||
+                       (rt.ServiceType||'').toLowerCase().includes(search);
+            });
+            displayRegionRates(filtered);
+        });
+    }
+
+    // Add region rate
+    if(addRegionForm){
+        addRegionForm.addEventListener('submit', async function(ev){
+            ev.preventDefault();
+            const formData = new FormData(addRegionForm);
+            const region = formData.get('region')?.trim();
+            if(!region){
+                showPopup('Region is required', true);
+                return;
+            }
+            const payload = {
+                region: region,
+                province: formData.get('province') || null,
+                city: formData.get('city'),
+                price: formData.get('price'),
+                serviceType: formData.get('serviceType') || null,
+                notes: formData.get('notes') || null
+            };
+            try {
+                const res = await fetch('/api/admin/region-delivery-rates', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type':'application/json' }, 
+                    body: JSON.stringify(payload) 
+                });
+                const j = await res.json();
+                if(j.success){
+                    addRegionForm.reset();
+                    showPopup('Region rate added successfully!');
+                    loadRegionRates();
+                } else {
+                    showPopup(j.message||'Failed to add rate', true);
+                }
+            } catch(err){
+                showPopup('Failed to add rate', true);
+            }
+        });
+    }
+
+    // Handle checkbox change for active/inactive (archiving)
+    regionRatesRows.addEventListener('change', async (e)=>{
+        if(e.target && e.target.classList.contains('active')){
+            const tr = e.target.closest('tr');
+            const id = tr?.getAttribute('data-id');
+            const isActive = e.target.checked;
+            
+            if(!id) return;
+            
+            // Get current values to preserve them
+            const region = tr.querySelector('.region').value.trim();
+            if(!region){
+                e.target.checked = !isActive;
+                showPopup('Region is required', true);
+                return;
+            }
+            const province = tr.querySelector('.province').value.trim() || null;
+            const city = tr.querySelector('.city').value.trim();
+            const price = tr.querySelector('.price').value;
+            const serviceType = tr.querySelector('.serviceType').value.trim() || null;
+            
+            try {
+                const res = await fetch(`/api/admin/region-delivery-rates/${id}`, {
+                    method:'PUT', 
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ region, province, city, price, serviceType, isActive })
+                });
+                const j = await res.json();
+                if(j.success){ 
+                    showPopup(isActive ? 'Rate activated successfully!' : 'Rate archived successfully!'); 
+                    // Don't reload to keep the checkbox state
+                } else { 
+                    // Revert checkbox on error
+                    e.target.checked = !isActive;
+                    showPopup(j.message||'Update failed', true); 
+                }
+            } catch(err) {
+                // Revert checkbox on error
+                e.target.checked = !isActive;
+                showPopup('Failed to update rate status', true);
+            }
+        }
+    });
+
+    // Update/Delete region rates
+    regionRatesRows.addEventListener('click', async (e)=>{
+        const tr = e.target.closest('tr');
+        const id = tr?.getAttribute('data-id');
+        
+        if(e.target && e.target.classList.contains('update-region')){
+            const region = tr.querySelector('.region').value.trim();
+            if(!region){
+                showPopup('Region is required', true);
+                return;
+            }
+            const province = tr.querySelector('.province').value.trim() || null;
+            const city = tr.querySelector('.city').value.trim();
+            const price = tr.querySelector('.price').value;
+            const serviceType = tr.querySelector('.serviceType').value.trim() || null;
+            const active = tr.querySelector('.active').checked;
+            
+            const res = await fetch(`/api/admin/region-delivery-rates/${id}`, {
+                method:'PUT', 
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ region, province, city, price, serviceType, isActive: active })
+            });
+            const j = await res.json();
+            if(j.success){ 
+                showPopup('Rate updated successfully!'); 
+                loadRegionRates(); 
+            } else { 
+                showPopup(j.message||'Update failed', true); 
+            }
+        }
+        
+        if(e.target && e.target.classList.contains('delete-region')){
+            if(!confirm('Are you sure you want to delete this delivery rate?')) return;
+            
+            const res = await fetch(`/api/admin/region-delivery-rates/${id}`, {
+                method:'DELETE'
+            });
+            const j = await res.json();
+            if(j.success){ 
+                showPopup('Rate deleted successfully!'); 
+                loadRegionRates(); 
+            } else { 
+                showPopup(j.message||'Delete failed', true); 
+            }
+        }
+    });
+
+    if(reloadRegionBtn){ reloadRegionBtn.onclick = loadRegionRates; }
+
+    // Load region rates on page load
+    loadRegionRates();
+    </script>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="logoutConfirmModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Confirm Logout</h3>
+            <p>Are you sure you want to log out?</p>
+            <div class="modal-buttons">
+                <button class="modal-button confirm" id="confirmLogoutBtn">Logout</button>
+                <button class="modal-button cancel" id="cancelLogoutBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Custom Logout Modal Logic
+        const logoutConfirmModal = document.getElementById('logoutConfirmModal');
+        const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
+        const cancelLogoutBtn = document.getElementById('cancelLogoutBtn');
+
+        async function handleLogout(event) {
+            event.preventDefault();
+            logoutConfirmModal.classList.add('show');
+        }
+
+        confirmLogoutBtn.addEventListener('click', async () => {
+            logoutConfirmModal.classList.remove('show');
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                } else {
+                    console.error('Logout failed');
+                    alert('Failed to logout. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error during logout:', error);
+                alert('An error occurred during logout. Please try again.');
+            }
+        });
+
+        cancelLogoutBtn.addEventListener('click', () => {
+            logoutConfirmModal.classList.remove('show');
+        });
+
+        // Close modal if clicked outside content
+        logoutConfirmModal.addEventListener('click', (event) => {
+            if (event.target === logoutConfirmModal) {
+                logoutConfirmModal.classList.remove('show');
+            }
+        });
+    </script>
+
+</body>
+</html>
+

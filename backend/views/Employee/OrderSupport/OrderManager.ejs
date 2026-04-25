@@ -1,0 +1,2444 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Support Dashboard - Design Excellence</title>
+    <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+
+    <style>
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-menu {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .logout-section {
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            margin-top: 20px;
+            text-align: center;
+            position: relative;
+        }
+        .logout-button {
+            display: inline-block;
+            width: auto;
+            padding: 12px 25px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .logout-button:hover {
+            background-color: #c82333;
+        }
+
+        /* Custom Confirmation Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            visibility: hidden; /* Hidden by default */
+            opacity: 0;
+            transition: visibility 0s, opacity 0.3s ease;
+        }
+
+        .modal-overlay.show {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .modal-content {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+
+        .modal-overlay.show .modal-content {
+            transform: scale(1);
+        }
+
+        .modal-content h3 {
+            margin-top: 0;
+            color: #333;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+
+        .modal-content p {
+            color: #555;
+            font-size: 1.1em;
+            margin-bottom: 30px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .modal-button {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .modal-button.confirm {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .modal-button.confirm:hover {
+            background-color: #c82333;
+        }
+
+        .modal-button.cancel {
+            background-color: #f0f0f0;
+            color: #555;
+            border: 1px solid #ccc;
+        }
+
+        .modal-button.cancel:hover {
+            background-color: #e0e0e0;
+        }
+
+        /* Products Modal Styles */
+        .products-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .products-modal-overlay.show {
+            display: flex;
+            opacity: 1;
+        }
+
+        .products-modal-content {
+            background: var(--white);
+            border-radius: 14px;
+            padding: 0;
+            max-width: 800px;
+            width: 90%;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            transform: scale(0.95);
+            transition: transform 0.3s ease;
+        }
+
+        .products-modal-overlay.show .products-modal-content {
+            transform: scale(1);
+        }
+
+        .products-modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .products-modal-header h3 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .products-modal-header h3 i {
+            color: var(--primary-color);
+        }
+
+        .products-modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--text-light);
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .products-modal-close:hover {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--text-dark);
+        }
+
+        .products-modal-stats {
+            padding: 1rem 1.5rem;
+            background: rgba(240, 178, 27, 0.05);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .products-modal-stat {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .products-modal-stat-label {
+            font-size: 0.8rem;
+            color: var(--text-light);
+        }
+
+        .products-modal-stat-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .products-modal-body {
+            padding: 1.5rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .products-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .products-list-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.875rem;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--white);
+            transition: all 0.2s ease;
+        }
+
+        .products-list-item:hover {
+            border-color: var(--primary-color);
+            background: rgba(240, 178, 27, 0.03);
+        }
+
+        .products-list-item-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .products-list-item-name {
+            font-weight: 500;
+            color: var(--text-dark);
+            font-size: 0.95rem;
+        }
+
+        .products-list-item-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.8rem;
+            color: var(--text-light);
+        }
+
+        .products-list-item-meta span {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .products-list-item-stock {
+            padding: 0.375rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .products-list-item-stock.in-stock {
+            background: rgba(34, 197, 94, 0.1);
+            color: #16a34a;
+        }
+
+        .products-list-item-stock.low-stock {
+            background: rgba(245, 158, 11, 0.1);
+            color: #d97706;
+        }
+
+        .products-list-item-stock.out-stock {
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+        }
+
+        .products-modal-empty {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-light);
+        }
+
+        .products-modal-loading {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-light);
+        }
+
+        /* Generic Modal Styles (reused for all modals) */
+        .dashboard-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .dashboard-modal-overlay.show {
+            display: flex;
+            opacity: 1;
+        }
+
+        .dashboard-modal-content {
+            background: var(--white);
+            border-radius: 14px;
+            padding: 0;
+            max-width: 800px;
+            width: 90%;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            transform: scale(0.95);
+            transition: transform 0.3s ease;
+        }
+
+        .dashboard-modal-overlay.show .dashboard-modal-content {
+            transform: scale(1);
+        }
+
+        .dashboard-modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .dashboard-modal-header h3 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .dashboard-modal-header h3 i {
+            color: var(--primary-color);
+        }
+
+        .dashboard-modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: var(--text-light);
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .dashboard-modal-close:hover {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--text-dark);
+        }
+
+        .dashboard-modal-stats {
+            padding: 1rem 1.5rem;
+            background: rgba(240, 178, 27, 0.05);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .dashboard-modal-stat {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .dashboard-modal-stat-label {
+            font-size: 0.8rem;
+            color: var(--text-light);
+        }
+
+        .dashboard-modal-stat-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        .dashboard-modal-body {
+            padding: 1.5rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .dashboard-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .dashboard-list-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.875rem;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--white);
+            transition: all 0.2s ease;
+        }
+
+        .dashboard-list-item:hover {
+            border-color: var(--primary-color);
+            background: rgba(240, 178, 27, 0.03);
+        }
+
+        .dashboard-list-item-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .dashboard-list-item-name {
+            font-weight: 500;
+            color: var(--text-dark);
+            font-size: 0.95rem;
+        }
+
+        .dashboard-list-item-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.8rem;
+            color: var(--text-light);
+        }
+
+        .dashboard-list-item-meta span {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .dashboard-modal-empty {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-light);
+        }
+
+        .dashboard-modal-loading {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-light);
+        }
+
+        .order-status-badge {
+            padding: 0.375rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .order-status-badge.pending {
+            background: rgba(245, 158, 11, 0.1);
+            color: #d97706;
+        }
+
+        .order-status-badge.cancelled {
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+        }
+
+        .alert-status-badge {
+            padding: 0.375rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .alert-status-badge.low {
+            background: rgba(245, 158, 11, 0.1);
+            color: #d97706;
+        }
+
+        .alert-status-badge.critical {
+            background: rgba(249, 115, 22, 0.1);
+            color: #f97316;
+        }
+
+        .alert-status-badge.out {
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+        }
+
+        /* Dashboard Styles */
+        .dashboard-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1.75rem;
+            flex-wrap: wrap;
+        }
+
+        .dashboard-header h2 {
+            font-size: 1.85rem;
+            margin: 0;
+            font-weight: 600;
+            color: var(--text-dark);
+            font-family: var(--font-display);
+        }
+
+        .header-subtitle {
+            margin: 0.25rem 0 0 0;
+            font-size: 0.93rem;
+            color: var(--text-light);
+            font-family: var(--font-primary);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .header-alerts-container {
+            position: relative;
+        }
+
+        .header-alerts-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background: var(--white);
+            color: var(--text-dark);
+            font-size: 1.25rem;
+            cursor: pointer;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .header-alerts-button:hover {
+            background: rgba(240, 178, 27, 0.12);
+            border-color: var(--primary-color);
+            color: var(--primary-dark);
+        }
+
+        #alertsBellDot {
+            display: none;
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 10px;
+            height: 10px;
+            background: #dc2626;
+            border-radius: 999px;
+            border: 2px solid var(--white);
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 2rem;
+        }
+
+        .metric-card {
+            background: var(--white);
+            border-radius: 14px;
+            padding: 1.25rem;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .metric-icon {
+            width: 46px;
+            height: 46px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            color: var(--primary-dark);
+            background: rgba(240, 178, 27, 0.15);
+        }
+
+        .metric-content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .metric-number {
+            font-size: 1.85rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin: 0;
+            font-family: var(--font-display);
+        }
+
+        .metric-label {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: var(--text-dark);
+            font-family: var(--font-primary);
+        }
+
+        .metric-description {
+            font-size: 0.8rem;
+            color: var(--text-light);
+        }
+
+        .dashboard-sections {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-top: 1.75rem;
+        }
+
+        @media (max-width: 1200px) {
+            .dashboard-sections {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-sections {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .section-card {
+            background: var(--white);
+            border-radius: 14px;
+            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.85rem;
+            margin-bottom: 1rem;
+        }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin: 0;
+            font-family: var(--font-display);
+        }
+
+        .section-title .title-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            color: var(--primary-dark);
+            background: rgba(240, 178, 27, 0.18);
+        }
+
+        .alerts-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+        }
+
+        .alert-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.85rem 1rem;
+            border-radius: 12px;
+            border: 1px solid rgba(240, 178, 27, 0.35);
+            background: rgba(240, 178, 27, 0.08);
+        }
+
+        .alert-item.low {
+            border-color: rgba(240, 178, 27, 0.45);
+        }
+
+        .alert-item.critical {
+            border-color: rgba(240, 178, 27, 0.6);
+        }
+
+        .alert-item.out {
+            border-color: rgba(220, 38, 38, 0.3);
+            background: rgba(248, 113, 113, 0.08);
+        }
+
+        .alert-item .alert-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            color: var(--primary-dark);
+            background: rgba(240, 178, 27, 0.18);
+            flex-shrink: 0;
+        }
+
+        .alert-item.low .alert-icon {
+            color: #f59e0b;
+            background: rgba(245, 158, 11, 0.18);
+        }
+
+        .alert-item.critical .alert-icon {
+            color: #f97316;
+            background: rgba(249, 115, 22, 0.18);
+        }
+
+        .alert-item.out .alert-icon {
+            color: #b91c1c;
+            background: rgba(248, 113, 113, 0.18);
+        }
+
+        .alert-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+
+        .alert-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin: 0;
+            font-family: var(--font-primary);
+        }
+
+        .alert-description {
+            margin: 0;
+            font-size: 0.82rem;
+            color: var(--text-light);
+            line-height: 1.35;
+        }
+
+        .alert-status {
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: var(--primary-dark);
+            font-family: var(--font-primary);
+        }
+
+        .alert-item.out .alert-status {
+            color: #b91c1c;
+        }
+
+        .log-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+        }
+
+        .log-item {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-start;
+            padding-bottom: 0.85rem;
+            border-bottom: 1px solid #f1f2f4;
+        }
+
+        .log-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .log-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            background: rgba(240, 178, 27, 0.15);
+            color: var(--primary-dark);
+        }
+
+        .log-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .log-action {
+            font-weight: 600;
+            color: var(--text-dark);
+            font-size: 0.92rem;
+            margin: 0;
+            font-family: var(--font-primary);
+        }
+
+        .log-user {
+            font-size: 0.8rem;
+            color: var(--text-light);
+        }
+
+        .log-time {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            font-weight: 600;
+            margin-left: auto;
+        }
+
+        .no-alerts,
+        .no-logs {
+            text-align: center;
+            color: #6b7280;
+            font-style: italic;
+            padding: 2rem 1rem;
+        }
+
+        .welcome-section {
+            background: rgba(240, 178, 27, 0.1);
+            color: var(--text-dark);
+            padding: 1.75rem;
+            border-radius: 16px;
+            margin-bottom: 2rem;
+        }
+
+        .welcome-content {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .welcome-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 12px;
+            background: rgba(240, 178, 27, 0.2);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            color: var(--primary-dark);
+        }
+
+        .welcome-text {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .welcome-section h2 {
+            margin: 0;
+            font-size: 1.6rem;
+            font-weight: 600;
+            font-family: var(--font-display);
+        }
+
+        .welcome-section p {
+            margin: 0;
+            font-size: 0.92rem;
+            color: var(--text-light);
+            font-family: var(--font-primary);
+        }
+
+        .alerts-dropdown {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: calc(100% + 10px);
+            background: var(--white);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 16px 35px rgba(15, 23, 42, 0.12);
+            min-width: 280px;
+            max-width: 360px;
+            z-index: 3000;
+            overflow: hidden;
+            animation: dropdownFade 0.15s ease;
+        }
+
+        .alerts-dropdown-header {
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid #f1f2f4;
+            font-weight: 600;
+            color: var(--text-dark);
+            font-size: 0.9rem;
+            background: var(--white);
+            font-family: var(--font-primary);
+        }
+
+        .alerts-dropdown-content {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .alerts-dropdown-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.65rem;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #f4f5f7;
+        }
+
+        .alerts-dropdown-row:last-child {
+            border-bottom: none;
+        }
+
+        .alerts-dropdown-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            background: rgba(240, 178, 27, 0.18);
+            color: var(--primary-dark);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+
+        .alerts-dropdown-row.low .alerts-dropdown-icon {
+            background: rgba(245, 158, 11, 0.18);
+            color: #f59e0b;
+        }
+
+        .alerts-dropdown-row.critical .alerts-dropdown-icon {
+            background: rgba(249, 115, 22, 0.18);
+            color: #f97316;
+        }
+
+        .alerts-dropdown-status {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            margin-left: auto;
+            color: var(--primary-dark);
+            font-family: var(--font-primary);
+        }
+
+        .alerts-dropdown-row.low .alerts-dropdown-status,
+        .alerts-dropdown-row.critical .alerts-dropdown-status {
+            color: var(--primary-dark);
+        }
+
+        .alerts-dropdown-details {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .alerts-dropdown-name {
+            font-weight: 600;
+            color: var(--text-dark);
+            font-size: 0.9rem;
+            font-family: var(--font-primary);
+        }
+
+        .alerts-dropdown-description {
+            font-size: 0.78rem;
+            color: var(--text-light);
+            line-height: 1.25;
+            font-family: var(--font-primary);
+        }
+
+        .alerts-dropdown-section-title {
+            padding: 0.6rem 1rem 0.3rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-light);
+            background: #f8f9fa;
+            font-family: var(--font-primary);
+        }
+
+        .alerts-dropdown-section-title:not(:first-child) {
+            margin-top: 0.25rem;
+        }
+
+        .alerts-dropdown-row.out .alerts-dropdown-icon {
+            background: rgba(248, 113, 113, 0.2);
+            color: #b91c1c;
+        }
+
+        .alerts-dropdown-status.out {
+            color: #b91c1c;
+        }
+
+        .alerts-dropdown-footer {
+            display: block;
+            text-align: center;
+            padding: 0.75rem 1rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--primary-dark);
+            text-decoration: none;
+            border-top: 1px solid #f4f5f7;
+            transition: background 0.15s ease;
+            font-family: var(--font-primary);
+        }
+
+        .alerts-dropdown-footer:hover {
+            background: rgba(240, 178, 27, 0.12);
+        }
+
+        .alerts-dropdown-empty {
+            color: var(--text-light);
+            text-align: center;
+            padding: 1.1rem;
+            font-size: 0.85rem;
+        }
+
+        @keyframes dropdownFade {
+            from {
+                opacity: 0;
+                transform: translateY(-8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-sections {
+                grid-template-columns: 1fr;
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            }
+
+            .alerts-dropdown {
+                position: static;
+                width: 100%;
+                box-shadow: 0 16px 35px rgba(15, 23, 42, 0.12);
+            }
+        }
+
+        .recent-orders-list-compact {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(240, 178, 27, 0.3) transparent;
+        }
+
+        .recent-orders-list-compact::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .recent-orders-list-compact::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .recent-orders-list-compact::-webkit-scrollbar-thumb {
+            background: rgba(240, 178, 27, 0.3);
+            border-radius: 3px;
+        }
+
+        .recent-orders-list-compact::-webkit-scrollbar-thumb:hover {
+            background: rgba(240, 178, 27, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="sidebar">
+            <%- include('partials/sidebar', { activePage: 'dashboard' }) %>
+        </div>
+        <div class="main-content">
+            <div class="dashboard-header">
+                <div>
+                    <h2>Dashboard Overview</h2>
+                    <p class="header-subtitle">Stay on top of orders, inventory, and activity</p>
+                </div>
+                <div class="header-actions">
+                    <div class="header-alerts-container" id="alertsBellContainer">
+                        <button type="button" id="alertsBellBtn" class="header-alerts-button" aria-label="Toggle alerts panel" aria-controls="alertsDropdown" aria-expanded="false">
+                            <i class="fa-regular fa-bell"></i>
+                            <span id="alertsBellDot"></span>
+                        </button>
+                        <div id="alertsDropdown" class="alerts-dropdown" style="display: none;">
+                            <div class="alerts-dropdown-header">Low &amp; Out of Stock Alerts</div>
+                            <div id="alertsDropdownContent" class="alerts-dropdown-content"></div>
+                            <a href="/Employee/Admin/Alerts" id="alertsDropdownFooter" class="alerts-dropdown-footer">Go to Alerts</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="content-area">
+                <!-- Welcome Section -->
+                <div class="welcome-section">
+                    <div class="welcome-content">
+                        <span class="welcome-icon">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        </span>
+                        <div class="welcome-text">
+                            <h2>Welcome back, <%= user.fullName %>!</h2>
+                            <p>Here's what's happening in your system today</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metrics Grid -->
+                <div class="dashboard-grid">
+                    <div class="metric-card products" style="cursor: pointer; transition: all 0.2s ease;" onclick="showProductsModal()" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.4)'; this.style.background='rgba(240, 178, 27, 0.03)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.background='var(--white)';">
+                        <div class="metric-icon">
+                            <i class="fa-solid fa-box-open"></i>
+                        </div>
+                        <div class="metric-content">
+                            <span class="metric-label">Total Products</span>
+                            <span class="metric-number" id="totalProducts">-</span>
+                            <span class="metric-description">Active products in inventory</span>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card materials" style="cursor: pointer; transition: all 0.2s ease;" onclick="showMaterialsModal()" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.4)'; this.style.background='rgba(240, 178, 27, 0.03)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.background='var(--white)';">
+                        <div class="metric-icon">
+                            <i class="fa-solid fa-cubes"></i>
+                        </div>
+                        <div class="metric-content">
+                            <span class="metric-label">Raw Materials</span>
+                            <span class="metric-number" id="totalMaterials">-</span>
+                            <span class="metric-description">Available materials</span>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card pending-orders" style="cursor: pointer; transition: all 0.2s ease;" onclick="showPendingOrdersModal()" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.6)'; this.style.background='rgba(240, 178, 27, 0.05)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.background='var(--white)';">
+                        <div class="metric-icon" style="background: rgba(240, 178, 27, 0.2);">
+                            <i class="fa-solid fa-shopping-cart"></i>
+                        </div>
+                        <div class="metric-content">
+                            <span class="metric-label">Pending Orders</span>
+                            <span class="metric-number" id="pendingOrdersCount"><%= typeof pendingOrdersCount !== 'undefined' ? pendingOrdersCount : 0 %></span>
+                            <span class="metric-description">Awaiting processing</span>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card alerts" style="cursor: pointer; transition: all 0.2s ease;" onclick="showAlertsModal()" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.4)'; this.style.background='rgba(240, 178, 27, 0.03)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.background='var(--white)';">
+                        <div class="metric-icon">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                        <div class="metric-content">
+                            <span class="metric-label">Active Alerts</span>
+                            <span class="metric-number" id="totalAlerts">-</span>
+                            <span class="metric-description">Requires attention</span>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card logs" style="cursor: pointer; transition: all 0.2s ease;" onclick="showLogsModal()" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.4)'; this.style.background='rgba(240, 178, 27, 0.03)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.background='var(--white)';">
+                        <div class="metric-icon">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                        </div>
+                        <div class="metric-content">
+                            <span class="metric-label">Recent Activities</span>
+                            <span class="metric-number" id="recentLogs">-</span>
+                            <span class="metric-description">Last 24 hours</span>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card canceled-orders" style="cursor: pointer; transition: all 0.2s ease;" onclick="showCanceledOrdersModal()" onmouseover="this.style.borderColor='rgba(220, 38, 38, 0.4)'; this.style.background='rgba(220, 38, 38, 0.03)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.background='var(--white)';">
+                        <div class="metric-icon" style="background: rgba(220, 38, 38, 0.15); color: #dc2626;">
+                            <i class="fa-solid fa-ban"></i>
+                        </div>
+                        <div class="metric-content">
+                            <span class="metric-label">Canceled Orders</span>
+                            <span class="metric-number" id="canceledOrdersCount">-</span>
+                            <span class="metric-description">Cancelled orders</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dashboard Sections -->
+                <div class="dashboard-sections">
+                    <!-- Recent Orders Notification Section -->
+                    <div class="section-card recent-orders-section" style="cursor: pointer; transition: all 0.2s ease;" onclick="window.location.href='/Employee/Admin/OrdersPending'" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.4)'; this.style.boxShadow='0 2px 8px rgba(240, 178, 27, 0.15)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';">
+                        <div class="section-header">
+                            <h3 class="section-title">
+                                <span class="title-icon"><i class="fa-solid fa-shopping-cart"></i></span>
+                                Recent Orders
+                            </h3>
+                        </div>
+                        <div class="recent-orders-list-compact" style="display: flex; flex-direction: column; gap: 0.85rem; max-height: 400px; overflow-y: auto;">
+                            <% if (typeof recentOrders !== 'undefined' && recentOrders && recentOrders.length > 0) { %>
+                                <% if (typeof recentOrders !== 'undefined' && recentOrders) { recentOrders.forEach((order, index) => { %>
+                                <div class="order-notification-item-compact log-item" style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                                    <div class="log-icon" style="background: rgba(240, 178, 27, 0.15); color: var(--primary-dark);">
+                                        <i class="fa-solid fa-receipt"></i>
+                                    </div>
+                                    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem;">
+                                        <div class="log-action" style="font-size: 0.92rem;">
+                                            Order #<%= order.ReferenceNumber %>
+                                        </div>
+                                        <div class="log-user" style="font-size: 0.8rem;">
+                                            <%= order.CustomerName.length > 25 ? order.CustomerName.substring(0, 25) + '...' : order.CustomerName %> &bull; â‚±<%= parseFloat(order.TotalAmount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 }) %>
+                                        </div>
+                                    </div>
+                                    <div class="log-time" style="font-size: 0.75rem; color: var(--primary-dark); font-weight: 600; white-space: nowrap;">
+                                        Pending
+                                    </div>
+                                </div>
+                                <% }); } %>
+                            <% } else { %>
+                                <div class="no-logs" style="text-align: center; color: #6b7280; font-style: italic; padding: 2rem 1rem;">
+                                    No pending orders found.
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+
+                    <!-- Alerts Section -->
+                    <div class="section-card alerts-section" style="cursor: pointer; transition: all 0.2s ease;" onclick="window.location.href='/Employee/Admin/Alerts'" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.4)'; this.style.boxShadow='0 2px 8px rgba(240, 178, 27, 0.15)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';">
+                        <div class="section-header">
+                            <h3 class="section-title">
+                                <span class="title-icon"><i class="fa-solid fa-bolt"></i></span>
+                                Priority Alerts
+                            </h3>
+                        </div>
+                        <div id="alertsContainer" class="alerts-list">
+                            <div class="no-alerts">Loading alerts...</div>
+                        </div>
+                    </div>
+
+                    <!-- Canceled Orders Notification Section -->
+                    <div class="section-card canceled-orders-section" style="cursor: pointer; transition: all 0.2s ease;" onclick="window.location.href='/Employee/Admin/CancelledOrders'" onmouseover="this.style.borderColor='rgba(220, 38, 38, 0.4)'; this.style.boxShadow='0 2px 8px rgba(220, 38, 38, 0.15)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';">
+                        <div class="section-header">
+                            <h3 class="section-title">
+                                <span class="title-icon" style="background: rgba(220, 38, 38, 0.18); color: #dc2626;"><i class="fa-solid fa-xmark-circle"></i></span>
+                                Canceled Orders
+                            </h3>
+                        </div>
+                        <div class="recent-orders-list-compact" style="display: flex; flex-direction: column; gap: 0.85rem; max-height: 400px; overflow-y: auto;">
+                            <% if (typeof canceledOrders !== 'undefined' && canceledOrders && canceledOrders.length > 0) { %>
+                                <% canceledOrders.forEach((order, index) => { %>
+                                <div class="order-notification-item-compact log-item" style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                                    <div class="log-icon" style="background: rgba(220, 38, 38, 0.15); color: #dc2626;">
+                                        <i class="fa-solid fa-ban"></i>
+                                    </div>
+                                    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem;">
+                                        <div class="log-action" style="font-size: 0.92rem;">
+                                            Order #<%= order.ReferenceNumber %>
+                                        </div>
+                                        <div class="log-user" style="font-size: 0.8rem;">
+                                            <%= order.CustomerName.length > 25 ? order.CustomerName.substring(0, 25) + '...' : order.CustomerName %> &bull; â‚±<%= parseFloat(order.TotalAmount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 }) %>
+                                        </div>
+                                    </div>
+                                    <div class="log-time" style="font-size: 0.75rem; color: #dc2626; font-weight: 600; white-space: nowrap;">
+                                        Canceled
+                                    </div>
+                                </div>
+                                <% }); %>
+                            <% } else { %>
+                                <div class="no-logs" style="text-align: center; color: #6b7280; font-style: italic; padding: 2rem 1rem;">
+                                    No canceled orders found.
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+
+                    <!-- Recent Logs Section -->
+                    <div class="section-card recent-logs-section logs" style="cursor: pointer; transition: all 0.2s ease;" onclick="window.location.href='/Employee/Admin/Logs'" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.4)'; this.style.boxShadow='0 2px 8px rgba(240, 178, 27, 0.15)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';">
+                        <div class="section-header">
+                            <h3 class="section-title">
+                                <span class="title-icon"><i class="fa-solid fa-clipboard-list"></i></span>
+                                Recent Activity Logs
+                            </h3>
+                        </div>
+                        <div id="recentLogsContainer" class="log-list">
+                            <div class="no-logs">Loading recent logs...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="logoutConfirmModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Confirm Logout</h3>
+            <p>Are you sure you want to log out?</p>
+            <div class="modal-buttons">
+                <button class="modal-button confirm" id="confirmLogoutBtn">Logout</button>
+                <button class="modal-button cancel" id="cancelLogoutBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // Improved dropdown functionality
+        document.querySelectorAll('.dropdown-toggle').forEach(item => {
+            item.addEventListener('click', event => {
+                event.preventDefault();
+                const dropdownMenu = item.nextElementSibling;
+                const isVisible = dropdownMenu.style.display === 'block';
+                
+                // Close all other dropdowns first
+                document.querySelectorAll('.dropdown-menu').forEach(menu => {
+                    menu.style.display = 'none';
+                });
+                
+                // Toggle the clicked dropdown
+                dropdownMenu.style.display = isVisible ? 'none' : 'block';
+            });
+        });
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function(event) {
+            const dropdowns = document.querySelectorAll('.dropdown');
+            dropdowns.forEach(dropdown => {
+                if (!dropdown.contains(event.target)) {
+                    const dropdownMenu = dropdown.querySelector('.dropdown-menu');
+                    if (dropdownMenu) {
+                        dropdownMenu.style.display = 'none';
+                    }
+                }
+            });
+        });
+
+        // Handle regular link clicks (non-dropdown toggles)
+        document.querySelectorAll('.sidebar-menu a:not(.dropdown-toggle)').forEach(link => {
+            link.addEventListener('click', event => {
+                // Allow the default link behavior
+                return true;
+            });
+        });
+
+        // Dashboard Data Loading Functions
+        async function loadDashboardData() {
+            try {
+                // Load metrics
+                await Promise.all([
+                    loadMetrics(),
+                    loadAlerts(),
+                    loadRecentLogs()
+                ]);
+            } catch (error) {
+                console.error('Error loading dashboard data:', error);
+            }
+        }
+
+        async function loadMetrics() {
+            try {
+                // Fetch total products
+                const productsResponse = await fetch('/api/dashboard/products-count');
+                const productsData = await productsResponse.json();
+                document.getElementById('totalProducts').textContent = productsData.count || 0;
+
+                // Fetch total materials
+                const materialsResponse = await fetch('/api/dashboard/materials-count');
+                const materialsData = await materialsResponse.json();
+                document.getElementById('totalMaterials').textContent = materialsData.count || 0;
+
+                // Fetch alerts count
+                const alertsResponse = await fetch('/Employee/Admin/Alerts/Data');
+                const alertsData = await alertsResponse.json();
+                const totalAlerts = (alertsData.products?.length || 0) + (alertsData.rawMaterials?.length || 0);
+                document.getElementById('totalAlerts').textContent = totalAlerts;
+
+                // Fetch recent logs count
+                const logsResponse = await fetch('/Employee/Admin/Logs/Data');
+                const logsData = await logsResponse.json();
+                const recentLogsCount = logsData.logs?.slice(0, 5).length || 0;
+                document.getElementById('recentLogs').textContent = recentLogsCount;
+
+                // Fetch canceled orders count
+                const canceledOrdersResponse = await fetch('/api/dashboard/canceled-orders-count');
+                const canceledOrdersData = await canceledOrdersResponse.json();
+                document.getElementById('canceledOrdersCount').textContent = canceledOrdersData.count || 0;
+
+            } catch (error) {
+                console.error('Error loading metrics:', error);
+                // Set default values on error
+                document.getElementById('totalProducts').textContent = '0';
+                document.getElementById('totalMaterials').textContent = '0';
+                document.getElementById('totalAlerts').textContent = '0';
+                document.getElementById('recentLogs').textContent = '0';
+                document.getElementById('canceledOrdersCount').textContent = '0';
+            }
+        }
+
+        async function getSafetyStockValue() {
+            const res = await fetch('/api/safety-stock-value');
+            const data = await res.json();
+            return data.value || 10;
+        }
+
+        function getStockStatus(quantity, safetyStock) {
+            if (quantity === 0) return { label: 'Out of Stock', class: 'alerts-status-out' };
+            if (quantity > 0 && quantity <= safetyStock) return { label: 'Critical Stock', class: 'alerts-status-critical' };
+            if (quantity > safetyStock && quantity <= safetyStock * 2) return { label: 'Low Stock', class: 'alerts-status-low' };
+            return { label: '', class: '' };
+        }
+
+        function getStatusIcon(label) {
+            switch (label) {
+                case 'Out of Stock':
+                    return 'fa-circle-xmark';
+                case 'Critical Stock':
+                    return 'fa-triangle-exclamation';
+                case 'Low Stock':
+                    return 'fa-exclamation-circle';
+                default:
+                    return 'fa-circle-info';
+            }
+        }
+
+        async function loadAlerts() {
+            try {
+                const [alertsRes, safetyRes] = await Promise.all([
+                    fetch('/Employee/Admin/Alerts/Data'),
+                    fetch('/api/safety-stock-value')
+                ]);
+                const data = await alertsRes.json();
+                const safetyStock = (await safetyRes.json()).value || 10;
+                const alertsContainer = document.getElementById('alertsContainer');
+                if (data.success && (data.products?.length > 0 || data.rawMaterials?.length > 0)) {
+                    const alertItems = [];
+                    if (data.products && data.products.length > 0) {
+                        data.products.forEach(product => {
+                            const status = getStockStatus(product.StockQuantity, safetyStock);
+                            if (!status.label) return;
+                            const statusClass = status.class.replace('alerts-status-', '');
+                            const statusIcon = getStatusIcon(status.label);
+                            const productId = product.ProductID ?? product.ReferenceNumber ?? 'N/A';
+                            const stockQty = product.StockQuantity ?? 0;
+                            alertItems.push(`
+                                <div class="alert-item ${statusClass}">
+                                    <div class="alert-icon">
+                                        <i class="fa-solid ${statusIcon}"></i>
+                                    </div>
+                                    <div class="alert-content">
+                                        <span class="alert-status">${status.label}</span>
+                                        <div class="alert-title">${product.Name}</div>
+                                        <p class="alert-description">Product ID: ${productId} &bull; Current Stock: ${stockQty}</p>
+                                    </div>
+                                </div>
+                            `);
+                        });
+                    }
+                    if (data.rawMaterials && data.rawMaterials.length > 0) {
+                        data.rawMaterials.forEach(material => {
+                            const status = getStockStatus(material.QuantityAvailable, safetyStock);
+                            if (!status.label) return;
+                            const statusClass = status.class.replace('alerts-status-', '');
+                            const statusIcon = getStatusIcon(status.label);
+                            const materialId = material.MaterialID ?? 'N/A';
+                            const quantityAvailable = material.QuantityAvailable ?? 0;
+                            const unitLabel = material.Unit || 'units';
+                            alertItems.push(`
+                                <div class="alert-item ${statusClass}">
+                                    <div class="alert-icon">
+                                        <i class="fa-solid ${statusIcon}"></i>
+                                    </div>
+                                    <div class="alert-content">
+                                        <span class="alert-status">${status.label}</span>
+                                        <div class="alert-title">${material.Name}</div>
+                                        <p class="alert-description">Material ID: ${materialId} &bull; Available: ${quantityAvailable} ${unitLabel}</p>
+                                    </div>
+                                </div>
+                            `);
+                        });
+                    }
+                    alertsContainer.innerHTML = alertItems.join('') || '<div class="no-alerts">No active alerts at the moment. All systems are running smoothly!</div>';
+                    if (typeof alertsBellDot !== 'undefined' && alertsBellDot) {
+                        alertsBellDot.style.display = alertItems.length > 0 ? 'block' : 'none';
+                    }
+                } else {
+                    alertsContainer.innerHTML = '<div class="no-alerts">No active alerts at the moment. All systems are running smoothly!</div>';
+                    if (typeof alertsBellDot !== 'undefined' && alertsBellDot) {
+                        alertsBellDot.style.display = 'none';
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading alerts:', error);
+                document.getElementById('alertsContainer').innerHTML = '<div class="no-alerts">Unable to load alerts at the moment.</div>';
+                if (typeof alertsBellDot !== 'undefined' && alertsBellDot) {
+                    alertsBellDot.style.display = 'none';
+                }
+            }
+        }
+
+        function formatTimeWithAMPM(timeString) {
+            const [hours, minutes, seconds] = timeString.split(':');
+            const formattedTime = `${hours % 12 || 12}:${minutes}:${seconds} ${hours >= 12 ? 'PM' : 'AM'}`;
+            return formattedTime;
+        }
+
+        function getLogIcon(action = '') {
+            const normalized = action.toLowerCase();
+            if (normalized.includes('delete') || normalized.includes('remove')) return 'fa-trash-can';
+            if (normalized.includes('update') || normalized.includes('edit')) return 'fa-pen-to-square';
+            if (normalized.includes('create') || normalized.includes('add') || normalized.includes('insert')) return 'fa-circle-plus';
+            if (normalized.includes('login') || normalized.includes('access')) return 'fa-right-to-bracket';
+            if (normalized.includes('logout')) return 'fa-right-from-bracket';
+            return 'fa-clipboard-list';
+        }
+
+        async function loadRecentLogs() {
+            try {
+                const response = await fetch('/Employee/Admin/Logs/Data');
+                const data = await response.json();
+                
+                const logsContainer = document.getElementById('recentLogsContainer');
+                
+                if (data.success && data.logs && data.logs.length > 0) {
+                    const recentLogs = data.logs.slice(0, 5); // Get top 5 logs
+                    let logsHTML = '';
+                    
+                    recentLogs.forEach(log => {
+                        const dbTimestamp = new Date(log.Timestamp);
+                        // Display the time exactly as it appears in the database
+                        const timeString = dbTimestamp.toLocaleTimeString('en-US', { 
+                            hour12: false 
+                        });
+                        const formattedTime = formatTimeWithAMPM(timeString);
+                        const logIcon = getLogIcon(log.Action || '');
+                        logsHTML += `
+                            <div class="log-item">
+                                <div class="log-icon">
+                                    <i class="fa-solid ${logIcon}"></i>
+                                </div>
+                                <div class="log-info">
+                                    <div class="log-action">${log.Action} - ${log.TableAffected}</div>
+                                    <div class="log-user">${log.FullName} (${log.RoleName})</div>
+                                </div>
+                                <div class="log-time">${formattedTime}</div>
+                            </div>
+                        `;
+                    });
+                    
+                    logsContainer.innerHTML = logsHTML;
+                } else {
+                    logsContainer.innerHTML = '<div class="no-logs">No recent activity logs found.</div>';
+                }
+            } catch (error) {
+                console.error('Error loading recent logs:', error);
+                document.getElementById('recentLogsContainer').innerHTML = '<div class="no-logs">Unable to load recent logs at the moment.</div>';
+            }
+        }
+
+        // Load dashboard data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDashboardData();
+        });
+
+        // Custom Logout Modal Logic
+        const logoutConfirmModal = document.getElementById('logoutConfirmModal');
+        const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
+        const cancelLogoutBtn = document.getElementById('cancelLogoutBtn');
+
+        async function handleLogout(event) {
+            event.preventDefault();
+            logoutConfirmModal.classList.add('show');
+        }
+
+        confirmLogoutBtn.addEventListener('click', async () => {
+            logoutConfirmModal.classList.remove('show');
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                } else {
+                    console.error('Logout failed');
+                    alert('Failed to logout. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error during logout:', error);
+                alert('An error occurred during logout. Please try again.');
+            }
+        });
+
+        cancelLogoutBtn.addEventListener('click', () => {
+            logoutConfirmModal.classList.remove('show');
+        });
+
+        // Close modal if clicked outside content
+        logoutConfirmModal.addEventListener('click', (event) => {
+            if (event.target === logoutConfirmModal) {
+                logoutConfirmModal.classList.remove('show');
+            }
+        });
+
+        // Bell icon dropdown for alerts
+        const alertsBellBtn = document.getElementById('alertsBellBtn');
+        const alertsDropdown = document.getElementById('alertsDropdown');
+        const alertsDropdownContent = document.getElementById('alertsDropdownContent');
+        const alertsBellDot = document.getElementById('alertsBellDot');
+
+        // Function to update bell dot indicator
+        async function updateAlertsBellDot() {
+            try {
+                const response = await fetch('/Employee/Admin/Alerts/Data');
+                const data = await response.json();
+                if ((data.products && data.products.length > 0) || (data.rawMaterials && data.rawMaterials.length > 0)) {
+                    alertsBellDot.style.display = 'block';
+                } else {
+                    alertsBellDot.style.display = 'none';
+                }
+            } catch (err) {
+                alertsBellDot.style.display = 'none';
+            }
+        }
+        // Update on page load
+        document.addEventListener('DOMContentLoaded', updateAlertsBellDot);
+        // Also update when bell is clicked (in case alerts change)
+        alertsBellBtn.addEventListener('click', updateAlertsBellDot);
+
+        alertsBellBtn.addEventListener('click', async function(e) {
+            e.stopPropagation();
+            if (alertsDropdown.style.display === 'block') {
+                alertsDropdown.style.display = 'none';
+                alertsBellBtn.setAttribute('aria-expanded', 'false');
+                return;
+            }
+            alertsDropdown.style.display = 'block';
+            alertsBellBtn.setAttribute('aria-expanded', 'true');
+            alertsDropdownContent.innerHTML = '<div class="alerts-dropdown-empty">Loading...</div>';
+            try {
+                const [alertsRes, safetyRes] = await Promise.all([
+                    fetch('/Employee/Admin/Alerts/Data'),
+                    fetch('/api/safety-stock-value')
+                ]);
+                const alertsData = await alertsRes.json();
+                const safetyStock = (await safetyRes.json()).value || 10;
+                const sections = [];
+                if ((alertsData.products && alertsData.products.length > 0) || (alertsData.rawMaterials && alertsData.rawMaterials.length > 0)) {
+                    const productRows = [];
+                    if (alertsData.products && alertsData.products.length > 0) {
+                        alertsData.products.forEach(product => {
+                            const status = getStockStatus(product.StockQuantity, safetyStock);
+                            if (!status.label) return;
+                            const statusClass = status.class.replace('alerts-status-', '');
+                            const statusIcon = getStatusIcon(status.label);
+                            const productId = product.ProductID ?? product.ReferenceNumber ?? 'N/A';
+                            const stockQty = product.StockQuantity ?? 0;
+                            productRows.push(`
+                                <div class="alerts-dropdown-row ${statusClass}">
+                                    <span class="alerts-dropdown-icon"><i class="fa-solid ${statusIcon}"></i></span>
+                                    <div class="alerts-dropdown-details">
+                                        <div class="alerts-dropdown-name">${product.Name}</div>
+                                        <div class="alerts-dropdown-description">Product ID: ${productId} &bull; Stock: ${stockQty}</div>
+                                    </div>
+                                    <span class="alerts-dropdown-status ${statusClass}">${status.label}</span>
+                                </div>
+                            `);
+                        });
+                        if (productRows.length > 0) {
+                            sections.push(`<div class="alerts-dropdown-section-title">Products</div>`);
+                            sections.push(productRows.join(''));
+                        }
+                    }
+                    const materialRows = [];
+                    if (alertsData.rawMaterials && alertsData.rawMaterials.length > 0) {
+                        alertsData.rawMaterials.forEach(material => {
+                            const status = getStockStatus(material.QuantityAvailable, safetyStock);
+                            if (!status.label) return;
+                            const statusClass = status.class.replace('alerts-status-', '');
+                            const statusIcon = getStatusIcon(status.label);
+                            const materialId = material.MaterialID ?? 'N/A';
+                            const quantityAvailable = material.QuantityAvailable ?? 0;
+                            const unitLabel = material.Unit || 'units';
+                            materialRows.push(`
+                                <div class="alerts-dropdown-row ${statusClass}">
+                                    <span class="alerts-dropdown-icon"><i class="fa-solid ${statusIcon}"></i></span>
+                                    <div class="alerts-dropdown-details">
+                                        <div class="alerts-dropdown-name">${material.Name}</div>
+                                        <div class="alerts-dropdown-description">Material ID: ${materialId} &bull; Available: ${quantityAvailable} ${unitLabel}</div>
+                                    </div>
+                                    <span class="alerts-dropdown-status ${statusClass}">${status.label}</span>
+                                </div>
+                            `);
+                        });
+                        if (materialRows.length > 0) {
+                            sections.push(`<div class="alerts-dropdown-section-title">Raw Materials</div>`);
+                            sections.push(materialRows.join(''));
+                        }
+                    }
+                } else {
+                    sections.push('<div class="alerts-dropdown-empty">No low, critical, or out of stock alerts.</div>');
+                }
+                alertsDropdownContent.innerHTML = sections.join('') || '<div class="alerts-dropdown-empty">No low, critical, or out of stock alerts.</div>';
+            } catch (err) {
+                alertsDropdownContent.innerHTML = '<div class="alerts-dropdown-empty" style="color:#dc2626;">Failed to load alerts.</div>';
+            }
+        });
+        // Hide dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!alertsDropdown.contains(e.target) && e.target !== alertsBellBtn) {
+                alertsDropdown.style.display = 'none';
+                alertsBellBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                alertsDropdown.style.display = 'none';
+                alertsBellBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+
+        // Products Modal Functions
+        async function showProductsModal() {
+            const modal = document.getElementById('productsModal');
+            if (!modal) return;
+            
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+            
+            // Show loading state
+            const modalBody = document.getElementById('productsModalBody');
+            modalBody.innerHTML = '<div class="products-modal-loading">Loading products...</div>';
+            
+            try {
+                const response = await fetch('/api/dashboard/products-list');
+                const data = await response.json();
+                
+                if (data.success && data.products && data.products.length > 0) {
+                    renderProductsList(data.products);
+                    updateProductsStats(data.products);
+                } else {
+                    modalBody.innerHTML = '<div class="products-modal-empty">No products found.</div>';
+                }
+            } catch (error) {
+                console.error('Error loading products:', error);
+                modalBody.innerHTML = '<div class="products-modal-empty" style="color:#dc2626;">Failed to load products. Please try again.</div>';
+            }
+        }
+
+        function closeProductsModal() {
+            const modal = document.getElementById('productsModal');
+            if (modal) {
+                modal.classList.remove('show');
+                document.body.style.overflow = '';
+            }
+        }
+
+        function renderProductsList(products) {
+            const modalBody = document.getElementById('productsModalBody');
+            const productsList = document.createElement('div');
+            productsList.className = 'products-list';
+            
+            products.forEach(product => {
+                const stockQty = product.StockQuantity || 0;
+                let stockClass = 'in-stock';
+                let stockText = `${stockQty} in stock`;
+                
+                if (stockQty === 0) {
+                    stockClass = 'out-stock';
+                    stockText = 'Out of stock';
+                } else if (stockQty <= 10) {
+                    stockClass = 'low-stock';
+                    stockText = `${stockQty} (Low)`;
+                }
+                
+                const price = product.Price ? `â‚±${Number(product.Price).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'N/A';
+                const category = product.Category || 'Uncategorized';
+                const sku = product.SKU || 'N/A';
+                
+                const item = document.createElement('div');
+                item.className = 'products-list-item';
+                item.innerHTML = `
+                    <div class="products-list-item-info">
+                        <div class="products-list-item-name">${product.Name || 'Unnamed Product'}</div>
+                        <div class="products-list-item-meta">
+                            <span><i class="fa-solid fa-tag"></i> ${sku}</span>
+                            <span><i class="fa-solid fa-folder"></i> ${category}</span>
+                            <span><i class="fa-solid fa-peso-sign"></i> ${price}</span>
+                        </div>
+                    </div>
+                    <div class="products-list-item-stock ${stockClass}">${stockText}</div>
+                `;
+                productsList.appendChild(item);
+            });
+            
+            modalBody.innerHTML = '';
+            modalBody.appendChild(productsList);
+        }
+
+        function updateProductsStats(products) {
+            const totalProducts = products.length;
+            const totalStock = products.reduce((sum, p) => sum + (p.StockQuantity || 0), 0);
+            const outOfStock = products.filter(p => (p.StockQuantity || 0) === 0).length;
+            const lowStock = products.filter(p => {
+                const qty = p.StockQuantity || 0;
+                return qty > 0 && qty <= 10;
+            }).length;
+            
+            document.getElementById('productsModalTotal').textContent = totalProducts;
+            document.getElementById('productsModalStock').textContent = totalStock;
+            document.getElementById('productsModalOutOfStock').textContent = outOfStock;
+            document.getElementById('productsModalLowStock').textContent = lowStock;
+        }
+
+        // Close modal on overlay click
+        document.addEventListener('click', function(e) {
+            const modal = document.getElementById('productsModal');
+            if (modal && e.target === modal) {
+                closeProductsModal();
+            }
+        });
+
+        // Generic Modal Functions
+        function closeDashboardModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.classList.remove('show');
+                document.body.style.overflow = '';
+            }
+        }
+
+        // Materials Modal
+        async function showMaterialsModal() {
+            const modal = document.getElementById('materialsModal');
+            if (!modal) return;
+            
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+            
+            const modalBody = document.getElementById('materialsModalBody');
+            modalBody.innerHTML = '<div class="dashboard-modal-loading">Loading materials...</div>';
+            
+            try {
+                const response = await fetch('/api/dashboard/materials-list');
+                const data = await response.json();
+                
+                if (data.success && data.materials && data.materials.length > 0) {
+                    renderMaterialsList(data.materials);
+                    updateMaterialsStats(data.materials);
+                } else {
+                    modalBody.innerHTML = '<div class="dashboard-modal-empty">No materials found.</div>';
+                }
+            } catch (error) {
+                console.error('Error loading materials:', error);
+                modalBody.innerHTML = '<div class="dashboard-modal-empty" style="color:#dc2626;">Failed to load materials. Please try again.</div>';
+            }
+        }
+
+        function renderMaterialsList(materials) {
+            const modalBody = document.getElementById('materialsModalBody');
+            const materialsList = document.createElement('div');
+            materialsList.className = 'dashboard-list';
+            
+            materials.forEach(material => {
+                const qty = material.QuantityAvailable || 0;
+                const unit = material.Unit || 'units';
+                
+                const item = document.createElement('div');
+                item.className = 'dashboard-list-item';
+                item.innerHTML = `
+                    <div class="dashboard-list-item-info">
+                        <div class="dashboard-list-item-name">${material.Name || 'Unnamed Material'}</div>
+                        <div class="dashboard-list-item-meta">
+                            <span><i class="fa-solid fa-hashtag"></i> ID: ${material.MaterialID || 'N/A'}</span>
+                            <span><i class="fa-solid fa-box"></i> ${qty} ${unit}</span>
+                        </div>
+                    </div>
+                `;
+                materialsList.appendChild(item);
+            });
+            
+            modalBody.innerHTML = '';
+            modalBody.appendChild(materialsList);
+        }
+
+        function updateMaterialsStats(materials) {
+            const totalMaterials = materials.length;
+            const totalQuantity = materials.reduce((sum, m) => sum + (m.QuantityAvailable || 0), 0);
+            
+            document.getElementById('materialsModalTotal').textContent = totalMaterials;
+            document.getElementById('materialsModalQuantity').textContent = totalQuantity;
+        }
+
+        // Pending Orders Modal
+        async function showPendingOrdersModal() {
+            const modal = document.getElementById('pendingOrdersModal');
+            if (!modal) return;
+            
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+            
+            const modalBody = document.getElementById('pendingOrdersModalBody');
+            modalBody.innerHTML = '<div class="dashboard-modal-loading">Loading pending orders...</div>';
+            
+            try {
+                const response = await fetch('/api/dashboard/pending-orders-list');
+                const data = await response.json();
+                
+                if (data.success && data.orders && data.orders.length > 0) {
+                    renderOrdersList(data.orders, 'pending');
+                    updatePendingOrdersStats(data.orders);
+                } else {
+                    modalBody.innerHTML = '<div class="dashboard-modal-empty">No pending orders found.</div>';
+                }
+            } catch (error) {
+                console.error('Error loading pending orders:', error);
+                modalBody.innerHTML = '<div class="dashboard-modal-empty" style="color:#dc2626;">Failed to load pending orders. Please try again.</div>';
+            }
+        }
+
+        function renderOrdersList(orders, type) {
+            const modalBody = document.getElementById(type === 'pending' ? 'pendingOrdersModalBody' : 'canceledOrdersModalBody');
+            const ordersList = document.createElement('div');
+            ordersList.className = 'dashboard-list';
+            
+            orders.forEach(order => {
+                const orderDate = order.OrderDate ? new Date(order.OrderDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
+                const totalAmount = order.TotalAmount ? `â‚±${Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'N/A';
+                const deliveryType = order.DeliveryType || 'N/A';
+                
+                const item = document.createElement('div');
+                item.className = 'dashboard-list-item';
+                item.innerHTML = `
+                    <div class="dashboard-list-item-info">
+                        <div class="dashboard-list-item-name">Order #${order.ReferenceNumber || order.OrderID || 'N/A'}</div>
+                        <div class="dashboard-list-item-meta">
+                            <span><i class="fa-solid fa-user"></i> ${order.CustomerName || 'N/A'}</span>
+                            <span><i class="fa-solid fa-peso-sign"></i> ${totalAmount}</span>
+                            <span><i class="fa-solid fa-calendar"></i> ${orderDate}</span>
+                            <span><i class="fa-solid fa-truck"></i> ${deliveryType}</span>
+                        </div>
+                    </div>
+                    <div class="order-status-badge ${type === 'pending' ? 'pending' : 'cancelled'}">${type === 'pending' ? 'Pending' : 'Cancelled'}</div>
+                `;
+                ordersList.appendChild(item);
+            });
+            
+            modalBody.innerHTML = '';
+            modalBody.appendChild(ordersList);
+        }
+
+        function updatePendingOrdersStats(orders) {
+            const totalOrders = orders.length;
+            const totalAmount = orders.reduce((sum, o) => sum + (parseFloat(o.TotalAmount) || 0), 0);
+            
+            document.getElementById('pendingOrdersModalTotal').textContent = totalOrders;
+            document.getElementById('pendingOrdersModalAmount').textContent = `â‚±${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+        }
+
+        // Alerts Modal
+        async function showAlertsModal() {
+            const modal = document.getElementById('alertsModal');
+            if (!modal) return;
+            
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+            
+            const modalBody = document.getElementById('alertsModalBody');
+            modalBody.innerHTML = '<div class="dashboard-modal-loading">Loading alerts...</div>';
+            
+            try {
+                const [alertsRes, safetyRes] = await Promise.all([
+                    fetch('/Employee/Admin/Alerts/Data'),
+                    fetch('/api/safety-stock-value')
+                ]);
+                const alertsData = await alertsRes.json();
+                const safetyStock = (await safetyRes.json()).value || 10;
+                
+                if ((alertsData.products && alertsData.products.length > 0) || (alertsData.rawMaterials && alertsData.rawMaterials.length > 0)) {
+                    renderAlertsList(alertsData, safetyStock);
+                    updateAlertsStats(alertsData);
+                } else {
+                    modalBody.innerHTML = '<div class="dashboard-modal-empty">No alerts found.</div>';
+                }
+            } catch (error) {
+                console.error('Error loading alerts:', error);
+                modalBody.innerHTML = '<div class="dashboard-modal-empty" style="color:#dc2626;">Failed to load alerts. Please try again.</div>';
+            }
+        }
+
+        function renderAlertsList(alertsData, safetyStock) {
+            const modalBody = document.getElementById('alertsModalBody');
+            const alertsList = document.createElement('div');
+            alertsList.className = 'dashboard-list';
+            
+            if (alertsData.products && alertsData.products.length > 0) {
+                alertsData.products.forEach(product => {
+                    const status = getStockStatus(product.StockQuantity, safetyStock);
+                    if (!status.label) return;
+                    const statusClass = status.class.replace('alerts-status-', '');
+                    const statusIcon = getStatusIcon(status.label);
+                    const stockQty = product.StockQuantity || 0;
+                    
+                    const item = document.createElement('div');
+                    item.className = 'dashboard-list-item';
+                    item.innerHTML = `
+                        <div class="dashboard-list-item-info">
+                            <div class="dashboard-list-item-name">${product.Name || 'Unnamed Product'}</div>
+                            <div class="dashboard-list-item-meta">
+                                <span><i class="fa-solid fa-hashtag"></i> ID: ${product.ProductID || 'N/A'}</span>
+                                <span><i class="fa-solid fa-box"></i> Stock: ${stockQty}</span>
+                            </div>
+                        </div>
+                        <div class="alert-status-badge ${statusClass}">
+                            <i class="fa-solid ${statusIcon}"></i> ${status.label}
+                        </div>
+                    `;
+                    alertsList.appendChild(item);
+                });
+            }
+            
+            if (alertsData.rawMaterials && alertsData.rawMaterials.length > 0) {
+                alertsData.rawMaterials.forEach(material => {
+                    const status = getStockStatus(material.QuantityAvailable, safetyStock);
+                    if (!status.label) return;
+                    const statusClass = status.class.replace('alerts-status-', '');
+                    const statusIcon = getStatusIcon(status.label);
+                    const qty = material.QuantityAvailable || 0;
+                    const unit = material.Unit || 'units';
+                    
+                    const item = document.createElement('div');
+                    item.className = 'dashboard-list-item';
+                    item.innerHTML = `
+                        <div class="dashboard-list-item-info">
+                            <div class="dashboard-list-item-name">${material.Name || 'Unnamed Material'}</div>
+                            <div class="dashboard-list-item-meta">
+                                <span><i class="fa-solid fa-hashtag"></i> ID: ${material.MaterialID || 'N/A'}</span>
+                                <span><i class="fa-solid fa-box"></i> ${qty} ${unit}</span>
+                            </div>
+                        </div>
+                        <div class="alert-status-badge ${statusClass}">
+                            <i class="fa-solid ${statusIcon}"></i> ${status.label}
+                        </div>
+                    `;
+                    alertsList.appendChild(item);
+                });
+            }
+            
+            modalBody.innerHTML = '';
+            if (alertsList.children.length > 0) {
+                modalBody.appendChild(alertsList);
+            } else {
+                modalBody.innerHTML = '<div class="dashboard-modal-empty">No alerts found.</div>';
+            }
+        }
+
+        function updateAlertsStats(alertsData) {
+            const productAlerts = alertsData.products?.length || 0;
+            const materialAlerts = alertsData.rawMaterials?.length || 0;
+            const totalAlerts = productAlerts + materialAlerts;
+            
+            document.getElementById('alertsModalTotal').textContent = totalAlerts;
+            document.getElementById('alertsModalProducts').textContent = productAlerts;
+            document.getElementById('alertsModalMaterials').textContent = materialAlerts;
+        }
+
+        // Logs Modal
+        async function showLogsModal() {
+            const modal = document.getElementById('logsModal');
+            if (!modal) return;
+            
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+            
+            const modalBody = document.getElementById('logsModalBody');
+            modalBody.innerHTML = '<div class="dashboard-modal-loading">Loading recent activities...</div>';
+            
+            try {
+                const response = await fetch('/Employee/Admin/Logs/Data');
+                const data = await response.json();
+                
+                if (data.success && data.logs && data.logs.length > 0) {
+                    renderLogsList(data.logs);
+                    updateLogsStats(data.logs);
+                } else {
+                    modalBody.innerHTML = '<div class="dashboard-modal-empty">No recent activities found.</div>';
+                }
+            } catch (error) {
+                console.error('Error loading logs:', error);
+                modalBody.innerHTML = '<div class="dashboard-modal-empty" style="color:#dc2626;">Failed to load activities. Please try again.</div>';
+            }
+        }
+
+        function renderLogsList(logs) {
+            const modalBody = document.getElementById('logsModalBody');
+            const logsList = document.createElement('div');
+            logsList.className = 'dashboard-list';
+            
+            const recentLogs = logs.slice(0, 50);
+            
+            recentLogs.forEach(log => {
+                const dbTimestamp = new Date(log.Timestamp);
+                const timeString = dbTimestamp.toLocaleTimeString('en-US', { hour12: false });
+                const formattedTime = formatTimeWithAMPM(timeString);
+                const dateString = dbTimestamp.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                const logIcon = getLogIcon(log.Action || '');
+                
+                const item = document.createElement('div');
+                item.className = 'dashboard-list-item';
+                item.innerHTML = `
+                    <div class="dashboard-list-item-info">
+                        <div class="dashboard-list-item-name">${log.Action || 'Activity'} - ${log.TableAffected || 'N/A'}</div>
+                        <div class="dashboard-list-item-meta">
+                            <span><i class="fa-solid fa-user"></i> ${log.UserName || 'System'}</span>
+                            <span><i class="fa-solid fa-calendar"></i> ${dateString}</span>
+                            <span><i class="fa-solid fa-clock"></i> ${formattedTime}</span>
+                        </div>
+                    </div>
+                    <div style="font-size: 1.2rem; color: var(--primary-color);">
+                        <i class="fa-solid ${logIcon}"></i>
+                    </div>
+                `;
+                logsList.appendChild(item);
+            });
+            
+            modalBody.innerHTML = '';
+            modalBody.appendChild(logsList);
+        }
+
+        function updateLogsStats(logs) {
+            const totalLogs = logs.length;
+            const last24Hours = logs.filter(log => {
+                const logTime = new Date(log.Timestamp);
+                const now = new Date();
+                const diffHours = (now - logTime) / (1000 * 60 * 60);
+                return diffHours <= 24;
+            }).length;
+            
+            document.getElementById('logsModalTotal').textContent = totalLogs;
+            document.getElementById('logsModalLast24').textContent = last24Hours;
+        }
+
+        // Canceled Orders Modal
+        async function showCanceledOrdersModal() {
+            const modal = document.getElementById('canceledOrdersModal');
+            if (!modal) return;
+            
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+            
+            const modalBody = document.getElementById('canceledOrdersModalBody');
+            modalBody.innerHTML = '<div class="dashboard-modal-loading">Loading canceled orders...</div>';
+            
+            try {
+                const response = await fetch('/api/dashboard/canceled-orders-list');
+                const data = await response.json();
+                
+                if (data.success && data.orders && data.orders.length > 0) {
+                    renderOrdersList(data.orders, 'cancelled');
+                    updateCanceledOrdersStats(data.orders);
+                } else {
+                    modalBody.innerHTML = '<div class="dashboard-modal-empty">No canceled orders found.</div>';
+                }
+            } catch (error) {
+                console.error('Error loading canceled orders:', error);
+                modalBody.innerHTML = '<div class="dashboard-modal-empty" style="color:#dc2626;">Failed to load canceled orders. Please try again.</div>';
+            }
+        }
+
+        function updateCanceledOrdersStats(orders) {
+            const totalOrders = orders.length;
+            const totalAmount = orders.reduce((sum, o) => sum + (parseFloat(o.TotalAmount) || 0), 0);
+            
+            document.getElementById('canceledOrdersModalTotal').textContent = totalOrders;
+            document.getElementById('canceledOrdersModalAmount').textContent = `â‚±${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+        }
+
+        // Close modals on overlay click
+        document.addEventListener('click', function(e) {
+            const modals = ['productsModal', 'materialsModal', 'pendingOrdersModal', 'alertsModal', 'logsModal', 'canceledOrdersModal'];
+            modals.forEach(modalId => {
+                const modal = document.getElementById(modalId);
+                if (modal && e.target === modal) {
+                    closeDashboardModal(modalId);
+                }
+            });
+        });
+
+        // Close modals on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const modals = ['productsModal', 'materialsModal', 'pendingOrdersModal', 'alertsModal', 'logsModal', 'canceledOrdersModal'];
+                modals.forEach(modalId => {
+                    closeDashboardModal(modalId);
+                });
+                closeProductsModal();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            
+        });
+    </script>
+    
+    <!-- Include AdminAlerts.js for popup alerts -->
+    
+    <!-- Products Modal -->
+    <div id="productsModal" class="products-modal-overlay">
+        <div class="products-modal-content">
+            <div class="products-modal-header">
+                <h3>
+                    <i class="fa-solid fa-box-open"></i>
+                    Products List
+                </h3>
+                <button class="products-modal-close" onclick="closeProductsModal()" aria-label="Close modal">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+            <div class="products-modal-stats">
+                <div class="products-modal-stat">
+                    <span class="products-modal-stat-label">Total Products</span>
+                    <span class="products-modal-stat-value" id="productsModalTotal">0</span>
+                </div>
+                <div class="products-modal-stat">
+                    <span class="products-modal-stat-label">Total Stock</span>
+                    <span class="products-modal-stat-value" id="productsModalStock">0</span>
+                </div>
+                <div class="products-modal-stat">
+                    <span class="products-modal-stat-label">Out of Stock</span>
+                    <span class="products-modal-stat-value" id="productsModalOutOfStock">0</span>
+                </div>
+                <div class="products-modal-stat">
+                    <span class="products-modal-stat-label">Low Stock (â‰¤10)</span>
+                    <span class="products-modal-stat-value" id="productsModalLowStock">0</span>
+                </div>
+            </div>
+            <div class="products-modal-body" id="productsModalBody">
+                <div class="products-modal-loading">Loading products...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Materials Modal -->
+    <div id="materialsModal" class="dashboard-modal-overlay">
+        <div class="dashboard-modal-content">
+            <div class="dashboard-modal-header">
+                <h3>
+                    <i class="fa-solid fa-cubes"></i>
+                    Raw Materials List
+                </h3>
+                <button class="dashboard-modal-close" onclick="closeDashboardModal('materialsModal')" aria-label="Close modal">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+            <div class="dashboard-modal-stats">
+                <div class="dashboard-modal-stat">
+                    <span class="dashboard-modal-stat-label">Total Materials</span>
+                    <span class="dashboard-modal-stat-value" id="materialsModalTotal">0</span>
+                </div>
+                <div class="dashboard-modal-stat">
+                    <span class="dashboard-modal-stat-label">Total Quantity</span>
+                    <span class="dashboard-modal-stat-value" id="materialsModalQuantity">0</span>
+                </div>
+            </div>
+            <div class="dashboard-modal-body" id="materialsModalBody">
+                <div class="dashboard-modal-loading">Loading materials...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Orders Modal -->
+    <div id="pendingOrdersModal" class="dashboard-modal-overlay">
+        <div class="dashboard-modal-content">
+            <div class="dashboard-modal-header">
+                <h3>
+                    <i class="fa-solid fa-shopping-cart"></i>
+                    Pending Orders
+                </h3>
+                <button class="dashboard-modal-close" onclick="closeDashboardModal('pendingOrdersModal')" aria-label="Close modal">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+            <div class="dashboard-modal-stats">
+                <div class="dashboard-modal-stat">
+                    <span class="dashboard-modal-stat-label">Total Orders</span>
+                    <span class="dashboard-modal-stat-value" id="pendingOrdersModalTotal">0</span>
+                </div>
+                <div class="dashboard-modal-stat">
+                    <span class="dashboard-modal-stat-label">Total Amount</span>
+                    <span class="dashboard-modal-stat-value" id="pendingOrdersModalAmount">â‚±0.00</span>
+                </div>
+            </div>
+            <div class="dashboard-modal-body" id="pendingOrdersModalBody">
+                <div class="dashboard-modal-loading">Loading pending orders...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts Modal -->
+    <div id="alertsModal" class="dashboard-modal-overlay">
+        <div class="dashboard-modal-content">
+            <div class="dashboard-modal-header">
+                <h3>
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    Active Alerts
+                </h3>
+                <button class="dashboard-modal-close" onclick="closeDashboardModal('alertsModal')" aria-label="Close modal">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+            <div class="dashboard-modal-stats">
+                <div class="dashboard-modal-stat">
+                    <span class="dashboard-modal-stat-label">Total Alerts</span>
+                    <span class="dashboard-modal-stat-value" id="alertsModalTotal">0</span>
+                </div>
+                <div class="dashboard-modal-stat">
+                    <span class="dashboard-modal-stat-label">Product Alerts</span>
+                    <span class="dashboard-modal-stat-value" id="alertsModalProducts">0</span>
+                </div>
+                <div class="dashboard-modal-stat">
+                    <span class="dashboard-modal-stat-label">Material Alerts</span>
+                    <span class="dashboard-modal-stat-value" id="alertsModalMaterials">0</span>
+                </div>
+            </div>
+            <div class="dashboard-modal-body" id="alertsModalBody">
+                <div class="dashboard-modal-loading">Loading alerts...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs Modal -->
+    <div id="logsModal" class="dashboard-modal-overlay">
+        <div class="dashboard-modal-content">
+            <div class="dashboard-modal-header">
+                <h3>
+                    <i class="fa-solid fa-clock-rotate-left"></i>
+                    Recent Activities
+                </h3>
+                <button class="dashboard-modal-close" onclick="closeDashboardModal('logsModal')" aria-label="Close modal">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+            <div class="dashboard-modal-stats">
+                <div class="dashboard-modal-stat">
+                    <span class="dashboard-modal-stat-label">Total Activities</span>
+                    <span class="dashboard-modal-stat-value" id="logsModalTotal">0</span>
+                </div>
+                <div class="dashboard-modal-stat">
+                    <span class="dashboard-modal-stat-label">Last 24 Hours</span>
+                    <span class="dashboard-modal-stat-value" id="logsModalLast24">0</span>
+                </div>
+            </div>
+            <div class="dashboard-modal-body" id="logsModalBody">
+                <div class="dashboard-modal-loading">Loading recent activities...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Canceled Orders Modal -->
+    <div id="canceledOrdersModal" class="dashboard-modal-overlay">
+        <div class="dashboard-modal-content">
+            <div class="dashboard-modal-header">
+                <h3>
+                    <i class="fa-solid fa-ban"></i>
+                    Canceled Orders
+                </h3>
+                <button class="dashboard-modal-close" onclick="closeDashboardModal('canceledOrdersModal')" aria-label="Close modal">
+                    <i class="fa-solid fa-times"></i>
+                </button>
+            </div>
+            <div class="dashboard-modal-stats">
+                <div class="dashboard-modal-stat">
+                    <span class="dashboard-modal-stat-label">Total Canceled</span>
+                    <span class="dashboard-modal-stat-value" id="canceledOrdersModalTotal">0</span>
+                </div>
+                <div class="dashboard-modal-stat">
+                    <span class="dashboard-modal-stat-label">Total Amount</span>
+                    <span class="dashboard-modal-stat-value" id="canceledOrdersModalAmount">â‚±0.00</span>
+                </div>
+            </div>
+            <div class="dashboard-modal-body" id="canceledOrdersModalBody">
+                <div class="dashboard-modal-loading">Loading canceled orders...</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Admin Session Handler -->
+    </div>
+</div>
+
+</body>
+</html>
+

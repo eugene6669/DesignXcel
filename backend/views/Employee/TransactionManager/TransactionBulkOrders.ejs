@@ -1,0 +1,674 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk Orders - Transaction Manager</title>
+    <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+
+    <style>
+        .bulk-orders-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        .bulk-orders-header h2 {
+            margin: 0;
+            color: var(--text-dark);
+            font-family: var(--font-display);
+            font-weight: 700;
+        }
+        .bulk-orders-header .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .bulk-orders-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .bulk-orders-table thead {
+            background: #F0B21B;
+            color: #333;
+        }
+        .bulk-orders-table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        .bulk-orders-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .bulk-orders-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-processing {
+            background: #cfe2ff;
+            color: #084298;
+        }
+        .status-shipping {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-delivery {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-received {
+            background: #cfe2ff;
+            color: #084298;
+        }
+        .status-completed {
+            background: #d1e7dd;
+            color: #0f5132;
+        }
+        .status-cancelled {
+            background: #f8d7da;
+            color: #842029;
+        }
+        .status-unknown {
+            background: #e5e7eb;
+            color: #6b7280;
+        }
+        .view-details-btn {
+            padding: 6px 12px;
+            background: var(--primary-color);
+            color: var(--text-dark);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s, transform 0.2s;
+        }
+        .view-details-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-light);
+        }
+        .items-count {
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+        /* Modal Styles */
+        .bulk-order-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1050;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+        .bulk-order-modal-overlay.show {
+            display: flex;
+        }
+        .bulk-order-modal-content {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 0;
+            min-width: 600px;
+            max-width: 90vw;
+            max-height: 90vh;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .bulk-order-modal-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8f9fa;
+        }
+        .bulk-order-modal-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #111827;
+        }
+        .bulk-order-modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #6b7280;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .bulk-order-modal-close:hover {
+            background: #e5e7eb;
+            color: #111827;
+        }
+        .bulk-order-modal-body {
+            padding: 2rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .bulk-order-section {
+            margin-bottom: 2rem;
+        }
+        .bulk-order-section:last-child {
+            margin-bottom: 0;
+        }
+        .bulk-order-section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+        }
+        .bulk-order-section-content {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+        }
+        .bulk-order-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .bulk-order-info-row:last-child {
+            border-bottom: none;
+        }
+        .bulk-order-info-label {
+            font-weight: 600;
+            color: #374151;
+        }
+        .bulk-order-info-value {
+            color: #111827;
+            text-align: right;
+        }
+        .bulk-order-items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.5rem;
+        }
+        .bulk-order-items-table th {
+            text-align: left;
+            padding: 0.75rem;
+            background: #ffffff;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: #6b7280;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        .bulk-order-items-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 0.875rem;
+        }
+        .bulk-order-items-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+        .bulk-order-items-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        .bulk-order-totals {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        .bulk-order-total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            font-size: 0.875rem;
+        }
+        .bulk-order-total-row.grand-total {
+            border-top: 2px solid #e5e7eb;
+            margin-top: 0.5rem;
+            padding-top: 0.75rem;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #111827;
+        }
+        .bulk-order-modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            gap: 0.75rem;
+            justify-content: flex-end;
+            background: #f8f9fa;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.show {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            margin-bottom: 20px;
+        }
+        .modal-header h3 {
+            margin: 0;
+            color: var(--text-dark);
+        }
+        .modal-body {
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.95rem;
+            box-sizing: border-box;
+        }
+        .modal-footer {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: var(--primary-color);
+            color: var(--text-dark);
+        }
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="sidebar">
+            <%- include('partials/sidebar', { activePage: 'bulk-orders' }) %>
+</div>
+<div class="main-content">
+            <div class="header bulk-orders-header">
+                    <h2>Bulk Orders</h2>
+                <div class="header-actions">
+                    <button onclick="location.reload()" class="view-details-btn">Refresh</button>
+                </div>
+                </div>
+
+            <div class="content-area">
+                <% if (bulkOrders && bulkOrders.length > 0) { %>
+                    <table class="bulk-orders-table">
+                        <thead>
+                            <tr>
+                                <th>Customer</th>
+                                <th>Email</th>
+                                <th>Total Quantity</th>
+                                <th>Subtotal</th>
+                                <th>Discount</th>
+                                <th>Grand Total</th>
+                                <th>Status</th>
+                                <th>Created At</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% bulkOrders.forEach(function(order) { %>
+                                <tr>
+                                    <td>
+                                        <% if (order.CustomerFullName) { %>
+                                            <%= order.CustomerFullName %>
+                                        <% } else { %>
+                                            Guest
+                                        <% } %>
+                                    </td>
+                                    <td><%= order.CustomerEmail || 'N/A' %></td>
+                                    <td><%= order.TotalQuantity %></td>
+                                    <td>â‚±<%= parseFloat(order.Subtotal).toFixed(2) %></td>
+                                    <td>â‚±<%= parseFloat(order.DiscountAmount || 0).toFixed(2) %></td>
+                                    <td><strong>â‚±<%= parseFloat(order.GrandTotal).toFixed(2) %></strong></td>
+                                    <td>
+                                        <% 
+                                            const status = (order.Status || 'Unknown').toString().toLowerCase();
+                                            const validStatuses = ['pending', 'processing', 'shipping', 'delivery', 'received', 'completed', 'cancelled'];
+                                            const statusClass = validStatuses.includes(status)
+                                                ? `status-badge status-${status}` 
+                                                : 'status-badge status-unknown';
+                                            const statusDisplay = order.Status || 'Unknown';
+                                        %>
+                                        <span class="<%= statusClass %>">
+                                            <%= statusDisplay %>
+                                        </span>
+                                    </td>
+                                    <td><%= new Date(order.CreatedAt).toLocaleDateString() %></td>
+                                    <td>
+                                        <button class="view-details-btn" onclick="viewBulkOrderDetails(<%= order.BulkOrderID %>)">
+                                            View Details
+                                        </button>
+                                    </td>
+                                </tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                <% } else { %>
+                    <div class="empty-state">
+                        <h3>No Bulk Orders Found</h3>
+                        <p>Bulk orders will appear here once customers submit them.</p>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Order Details Modal -->
+    <div class="bulk-order-modal-overlay" id="bulkOrderDetailsModal">
+        <div class="bulk-order-modal-content">
+            <div class="bulk-order-modal-header">
+                <h3 id="modalOrderTitle">Bulk Order Details</h3>
+                <button class="bulk-order-modal-close" onclick="closeBulkOrderDetailsModal()">Ã—</button>
+            </div>
+            <div class="bulk-order-modal-body" id="bulkOrderDetailsContent">
+                <div style="text-align: center; padding: 2rem;">
+                    <p>Loading order details...</p>
+                </div>
+            </div>
+            <div class="bulk-order-modal-footer">
+                <button class="btn btn-secondary" onclick="closeBulkOrderDetailsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+
+        function viewBulkOrderDetails(orderId) {
+            const modal = document.getElementById('bulkOrderDetailsModal');
+            const content = document.getElementById('bulkOrderDetailsContent');
+            const title = document.getElementById('modalOrderTitle');
+            
+            // Show loading state
+            modal.classList.add('show');
+            content.innerHTML = '<div style="text-align: center; padding: 2rem;"><p>Loading order details...</p></div>';
+            
+            // Fetch order details via API
+            fetch(`/api/admin/bulk-orders/${orderId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        const order = data.order;
+                        const items = data.items;
+                        
+                        // Get pickup date from PickupDate column or extract from Notes (backward compatibility)
+                        let pickupDateText = 'Not specified';
+                        if (order.PickupDate) {
+                            // Use PickupDate column if available
+                            try {
+                                const pickupDate = new Date(order.PickupDate);
+                                if (!isNaN(pickupDate.getTime())) {
+                                    pickupDateText = pickupDate.toLocaleString('en-US', {
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: true
+                                    });
+                                }
+                            } catch (e) {
+                                console.error('Error parsing PickupDate:', e);
+                            }
+                        } else if (order.Notes && order.Notes.includes('Pickup Date:')) {
+                            // Fallback: Extract from Notes for old orders (backward compatibility)
+                            const isoMatch = order.Notes.match(/Pickup Date:\s*([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})?)/);
+                            if (isoMatch && isoMatch[1]) {
+                                try {
+                                    const pickupDate = new Date(isoMatch[1]);
+                                    if (!isNaN(pickupDate.getTime())) {
+                                        pickupDateText = pickupDate.toLocaleString('en-US', {
+                                            year: 'numeric',
+                                            month: 'long',
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: true
+                                        });
+                                    }
+                                } catch (e) {
+                                    console.error('Error parsing ISO date from Notes:', e);
+                                }
+                            }
+                            
+                            if (pickupDateText === 'Not specified') {
+                                const readableMatch = order.Notes.match(/\|\s*(.+?)(?:\s*$|$)/);
+                                if (readableMatch && readableMatch[1]) {
+                                    pickupDateText = readableMatch[1].trim();
+                                } else {
+                                    const fallbackMatch = order.Notes.match(/Pickup Date:\s*(.+?)(?:\s*\||$)/);
+                                    if (fallbackMatch && fallbackMatch[1]) {
+                                        try {
+                                            const pickupDate = new Date(fallbackMatch[1].trim());
+                                            if (!isNaN(pickupDate.getTime())) {
+                                                pickupDateText = pickupDate.toLocaleString('en-US', {
+                                                    year: 'numeric',
+                                                    month: 'long',
+                                                    day: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                    hour12: true
+                                                });
+                                            } else {
+                                                pickupDateText = fallbackMatch[1].trim();
+                                            }
+                                        } catch (e) {
+                                            pickupDateText = fallbackMatch[1].trim();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Build modal content
+                        title.textContent = 'Bulk Order Details';
+                        
+                        let itemsHtml = '';
+                        if (items && items.length > 0) {
+                            itemsHtml = items.map(item => `
+                                <tr>
+                                    <td>${item.ProductName || 'N/A'}</td>
+                                    <td>${item.SKU || 'N/A'}</td>
+                                    <td style="text-align: center;">${item.Quantity || 0}</td>
+                                    <td style="text-align: right;">â‚±${parseFloat(item.UnitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    <td style="text-align: right;">â‚±${parseFloat((item.UnitPrice || 0) * (item.Quantity || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                            `).join('');
+                        } else {
+                            itemsHtml = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: #6b7280;">No items found</td></tr>';
+                        }
+                        
+                        content.innerHTML = `
+                            <div class="bulk-order-section">
+                                <div class="bulk-order-section-title">Order Information</div>
+                                <div class="bulk-order-section-content">
+                                    <div class="bulk-order-info-row">
+                                        <span class="bulk-order-info-label">Status</span>
+                                        <span class="bulk-order-info-value">
+                                            ${(() => {
+                                                const status = (order.Status || 'Unknown').toString().toLowerCase();
+                                                const validStatuses = ['pending', 'processing', 'shipping', 'delivery', 'received', 'completed', 'cancelled'];
+                                                const statusClass = validStatuses.includes(status)
+                                                    ? `status-badge status-${status}` 
+                                                    : 'status-badge status-unknown';
+                                                const statusDisplay = order.Status || 'Unknown';
+                                                return `<span class="${statusClass}">${statusDisplay}</span>`;
+                                            })()}
+                                        </span>
+                                    </div>
+                                    <div class="bulk-order-info-row">
+                                        <span class="bulk-order-info-label">Created At</span>
+                                        <span class="bulk-order-info-value">${new Date(order.CreatedAt).toLocaleString('en-US')}</span>
+                                    </div>
+                                    ${order.UpdatedAt ? `
+                                    <div class="bulk-order-info-row">
+                                        <span class="bulk-order-info-label">Updated At</span>
+                                        <span class="bulk-order-info-value">${new Date(order.UpdatedAt).toLocaleString('en-US')}</span>
+                                    </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                            
+                            <div class="bulk-order-section">
+                                <div class="bulk-order-section-title">Customer Information</div>
+                                <div class="bulk-order-section-content">
+                                    <div class="bulk-order-info-row">
+                                        <span class="bulk-order-info-label">Full Name</span>
+                                        <span class="bulk-order-info-value">${order.CustomerFullName || order.CustomerEmail || 'N/A'}</span>
+                                    </div>
+                                    <div class="bulk-order-info-row">
+                                        <span class="bulk-order-info-label">Email</span>
+                                        <span class="bulk-order-info-value">${order.CustomerEmail || 'N/A'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bulk-order-section">
+                                <div class="bulk-order-section-title">Pickup Information</div>
+                                <div class="bulk-order-section-content">
+                                    <div class="bulk-order-info-row">
+                                        <span class="bulk-order-info-label">Pickup Date & Time</span>
+                                        <span class="bulk-order-info-value">${pickupDateText}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="bulk-order-section">
+                                <div class="bulk-order-section-title">Order Items (${items ? items.length : 0})</div>
+                                <div class="bulk-order-section-content">
+                                    <table class="bulk-order-items-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Product Name</th>
+                                                <th>SKU</th>
+                                                <th style="text-align: center;">Quantity</th>
+                                                <th style="text-align: right;">Unit Price</th>
+                                                <th style="text-align: right;">Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${itemsHtml}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <div class="bulk-order-section">
+                                <div class="bulk-order-section-title">Order Summary</div>
+                                <div class="bulk-order-totals">
+                                    <div class="bulk-order-total-row">
+                                        <span>Total Quantity</span>
+                                        <span>${order.TotalQuantity || 0} items</span>
+                                    </div>
+                                    <div class="bulk-order-total-row">
+                                        <span>Subtotal</span>
+                                        <span>â‚±${parseFloat(order.Subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div class="bulk-order-total-row">
+                                        <span>Discount</span>
+                                        <span>â‚±${parseFloat(order.DiscountAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div class="bulk-order-total-row grand-total">
+                                        <span>Grand Total</span>
+                                        <span>â‚±${parseFloat(order.GrandTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        content.innerHTML = '<div style="text-align: center; padding: 2rem; color: #ef4444;"><p>Failed to load order details</p></div>';
+                    }
+                })
+                .catch(err => {
+                    console.error('Error fetching order details:', err);
+                    content.innerHTML = '<div style="text-align: center; padding: 2rem; color: #ef4444;"><p>Error loading order details</p></div>';
+                });
+        }
+        
+        function closeBulkOrderDetailsModal() {
+            document.getElementById('bulkOrderDetailsModal').classList.remove('show');
+        }
+        
+        // Close modal when clicking outside
+        document.getElementById('bulkOrderDetailsModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeBulkOrderDetailsModal();
+            }
+        });
+    </script>
+</body>
+</html>
+
+

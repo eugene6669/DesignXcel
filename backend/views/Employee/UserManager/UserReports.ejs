@@ -1,0 +1,2492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports - Admin Panel</title>
+    <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #F0B21B;
+            --primary-dark: #d4a017;
+            --primary-hover: #e6a017;
+            --text-dark: #0f172a;
+            --text-light: #64748b;
+            --bg-light: #f8fafc;
+            --border-color: #e5e7eb;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+            --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-display: 'Poppins', sans-serif;
+        }
+
+        .dashboard-container {
+            display: flex;
+            min-height: 100vh;
+            background: var(--bg-light);
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+
+        /* Header */
+        .reports-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .reports-header h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin: 0;
+            letter-spacing: -0.02em;
+            font-family: var(--font-display);
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        /* Tabs */
+        .reports-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid var(--border-color);
+            overflow-x: auto;
+        }
+
+        .tab-button {
+            padding: 0.875rem 1.5rem;
+            border: none;
+            background: transparent;
+            color: var(--text-light);
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tab-button:hover {
+            color: var(--primary-color);
+            background: rgba(240, 178, 27, 0.05);
+        }
+
+        .tab-button.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+
+        .tab-button svg {
+            width: 18px;
+            height: 18px;
+            stroke-width: 2;
+        }
+
+        /* Filters Section */
+        .filters-section {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .filter-group label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-light);
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 0.625rem 0.875rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            background: #ffffff;
+            color: var(--text-dark);
+            font-family: var(--font-primary);
+        }
+
+        .filter-group input:focus,
+        .filter-group select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(240, 178, 27, 0.1);
+        }
+
+        .filter-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .btn-filter {
+            padding: 0.625rem 1.25rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: var(--font-primary);
+        }
+
+        .btn-filter-primary {
+            background: var(--primary-color);
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(240, 178, 27, 0.2);
+        }
+
+        .btn-filter-primary:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(240, 178, 27, 0.3);
+        }
+
+        .btn-filter-secondary {
+            background: #ffffff;
+            color: var(--text-light);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-filter-secondary:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .btn-export {
+            background: #10b981;
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+        }
+
+        .btn-export:hover {
+            background: #059669;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        /* CSV Preview Modal Styles */
+        .csv-preview-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+        }
+
+        .csv-preview-content {
+            background: #ffffff;
+            border-radius: 12px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .csv-preview-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f9fafb;
+        }
+
+        .csv-preview-header h2 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .csv-preview-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .csv-preview-close:hover {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .csv-preview-body {
+            padding: 1.5rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .csv-preview-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .csv-preview-section h3 {
+            margin: 0 0 1rem 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .csv-preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+
+        .csv-preview-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .csv-preview-table td:first-child {
+            font-weight: 600;
+            color: #374151;
+            width: 40%;
+        }
+
+        .csv-preview-table td:last-child {
+            color: #111827;
+            text-align: right;
+        }
+
+        .csv-preview-footer {
+            padding: 1.5rem;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            background: #f9fafb;
+        }
+
+        /* Reports Table */
+        .reports-table-section {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            overflow-x: auto;
+        }
+
+        /* Stats Table Container - Horizontal Scroll */
+        #stats-table-container {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: visible;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: var(--primary-color) var(--bg-light);
+        }
+
+        #stats-table-container::-webkit-scrollbar {
+            height: 12px;
+        }
+
+        #stats-table-container::-webkit-scrollbar-track {
+            background: var(--bg-light);
+            border-radius: 10px;
+        }
+
+        #stats-table-container::-webkit-scrollbar-thumb {
+            background: var(--primary-color);
+            border-radius: 10px;
+            border: 2px solid var(--bg-light);
+        }
+
+        #stats-table-container::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-dark);
+        }
+
+        /* Sales Table Container - Horizontal Scroll */
+        #sales-table-container {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: visible;
+            margin-top: 1.5rem;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: var(--primary-color) var(--bg-light);
+        }
+
+        /* Custom scrollbar for Webkit browsers (Chrome, Safari, Edge) */
+        #sales-table-container::-webkit-scrollbar {
+            height: 12px;
+        }
+
+        #sales-table-container::-webkit-scrollbar-track {
+            background: var(--bg-light);
+            border-radius: 10px;
+        }
+
+        #sales-table-container::-webkit-scrollbar-thumb {
+            background: var(--primary-color);
+            border-radius: 10px;
+            border: 2px solid var(--bg-light);
+        }
+
+        #sales-table-container::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-dark);
+        }
+
+        #sales-table-container #sales-table {
+            min-width: 1200px; /* Ensure table has minimum width to trigger scroll */
+        }
+
+        .reports-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.875rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, rgba(240, 178, 27, 0.1) 0%, rgba(240, 178, 27, 0.05) 100%);
+            border: 1px solid rgba(240, 178, 27, 0.2);
+            border-radius: 10px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.375rem;
+        }
+
+        .stat-label {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--text-light);
+            line-height: 1.3;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            font-family: var(--font-display);
+            line-height: 1.2;
+        }
+
+        .stat-icon {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(240, 178, 27, 0.15);
+            border-radius: 8px;
+            color: var(--primary-dark);
+        }
+        
+        .stat-icon svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+
+        thead {
+            background: var(--bg-light);
+        }
+
+        th {
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-dark);
+            border-bottom: 2px solid var(--border-color);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-dark);
+        }
+
+        tbody tr:hover {
+            background: var(--bg-light);
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: rgba(16, 185, 129, 0.15);
+            color: #059669;
+        }
+
+        .badge-warning {
+            background: rgba(240, 178, 27, 0.15);
+            color: #b45309;
+        }
+
+        .badge-danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: #dc2626;
+        }
+
+        .badge-info {
+            background: rgba(59, 130, 246, 0.15);
+            color: #1d4ed8;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-light);
+        }
+
+        .empty-state-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1rem;
+            color: var(--border-color);
+        }
+
+        .empty-state-text {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .search-box {
+            position: relative;
+            flex: 1;
+            max-width: 400px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 0.625rem 0.875rem 0.625rem 2.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 0.875rem;
+        }
+
+        .search-box svg {
+            position: absolute;
+            left: 0.875rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            color: var(--text-light);
+            pointer-events: none;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-light);
+        }
+
+        /* Charts Section */
+        .charts-section {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+        }
+
+        .chart-container {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        #inventory-chart {
+            width: 100%;
+            max-width: 100%;
+            height: 250px;
+            display: block;
+        }
+
+        #sales-status-chart,
+        #sales-revenue-chart,
+        #sales-payment-chart {
+            width: 100%;
+            max-width: 100%;
+            height: 250px;
+            display: block;
+        }
+
+        #sales-revenue-chart {
+            width: 100%;
+            max-width: 100%;
+            height: 300px;
+            display: block;
+        }
+
+        .chart-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin: 0 0 1.5rem 0;
+            font-family: var(--font-display);
+        }
+
+        .chart-title svg {
+            color: var(--primary-color);
+        }
+
+        .inventory-section {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+        }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin: 0 0 1.5rem 0;
+            font-family: var(--font-display);
+        }
+
+        .section-title svg {
+            color: var(--primary-color);
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                padding: 1rem;
+            }
+
+            .filters-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .reports-tabs {
+                overflow-x: auto;
+            }
+
+            table {
+                font-size: 0.75rem;
+            }
+
+            th, td {
+                padding: 0.75rem 0.5rem;
+            }
+
+            /* Ensure sales table container has horizontal scroll on mobile */
+            #sales-table-container {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            #sales-table-container #sales-table {
+                min-width: 1000px; /* Slightly smaller min-width for mobile */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="sidebar">
+            <%- include('partials/sidebar', { activePage: 'reports' }) %>
+        </div>
+        <div class="main-content">
+            <div class="reports-header">
+                <h2>Reports</h2>
+                <div class="header-actions">
+                    <div class="search-box">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <path d="m21 21-4.35-4.35"/>
+                        </svg>
+                        <input type="text" id="globalSearch" placeholder="Search reports...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="reports-tabs">
+                <button class="tab-button active" data-tab="inventory" onclick="switchTab('inventory')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                        <line x1="3" y1="6" x2="21" y2="6"/>
+                        <path d="M16 10a4 4 0 0 1-8 0"/>
+                    </svg>
+                    Inventory Report
+                </button>
+                <button class="tab-button" data-tab="sales" onclick="switchTab('sales')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="2" x2="12" y2="22"/>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                    </svg>
+                    Sales Report
+                </button>
+                <button class="tab-button" data-tab="masterlist" onclick="switchTab('masterlist')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    Masterlist Report
+                </button>
+            </div>
+
+            <!-- Inventory Report Tab -->
+            <div id="inventory-tab" class="tab-content active">
+                <div class="filters-section">
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label for="inv-search">Search</label>
+                            <input type="text" id="inv-search" placeholder="Product name, SKU...">
+                        </div>
+                        <div class="filter-group">
+                            <label for="inv-category">Category</label>
+                            <select id="inv-category">
+                                <option value="">All Categories</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="inv-status">Status</label>
+                            <select id="inv-status">
+                                <option value="">All Status</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="low-stock">Low Stock</option>
+                                <option value="out-of-stock">Out of Stock</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="inv-stock-min">Stock Min</label>
+                            <input type="number" id="inv-stock-min" placeholder="Min quantity">
+                        </div>
+                        <div class="filter-group">
+                            <label for="inv-stock-max">Stock Max</label>
+                            <input type="number" id="inv-stock-max" placeholder="Max quantity">
+                        </div>
+                        <div class="filter-group">
+                            <label for="inv-date-from">Date From</label>
+                            <input type="date" id="inv-date-from">
+                        </div>
+                        <div class="filter-group">
+                            <label for="inv-date-to">Date To</label>
+                            <input type="date" id="inv-date-to">
+                        </div>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="btn-filter btn-filter-primary" onclick="applyInventoryFilters()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                            </svg>
+                            Apply Filters
+                        </button>
+                        <button class="btn-filter btn-filter-secondary" onclick="clearInventoryFilters()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                            Clear
+                        </button>
+                        <button class="btn-filter btn-export" onclick="exportInventoryCSV()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            Export CSV
+                        </button>
+                    </div>
+                </div>
+                <div class="reports-table-section">
+                    <div class="reports-stats" id="inventory-stats"></div>
+                    
+                    <!-- Charts Section -->
+                    <div class="charts-section">
+                        <div class="chart-container">
+                            <h3 class="chart-title">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="20" x2="12" y2="10"/>
+                                    <line x1="18" y1="20" x2="18" y2="4"/>
+                                    <line x1="6" y1="20" x2="6" y2="16"/>
+                                </svg>
+                                Inventory Overview
+                            </h3>
+                            <canvas id="inventory-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Products Inventory Section -->
+                    <div class="inventory-section">
+                        <h3 class="section-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                                <line x1="3" y1="6" x2="21" y2="6"/>
+                                <path d="M16 10a4 4 0 0 1-8 0"/>
+                            </svg>
+                            Products Inventory
+                        </h3>
+                        <div id="inventory-table-container">
+                            <table id="inventory-table">
+                                <thead>
+                                    <tr>
+                                        <th>Product Name</th>
+                                        <th>SKU</th>
+                                        <th>Category</th>
+                                        <th>Stock Quantity</th>
+                                        <th>Price</th>
+                                        <th>Status</th>
+                                        <th>Last Updated</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="inventory-tbody">
+                                    <tr>
+                                        <td colspan="7" class="loading">Loading inventory data...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Raw Materials Inventory Section -->
+                    <div class="inventory-section">
+                        <h3 class="section-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                                <polyline points="3.27,6.96 12,12.01 20.73,6.96"/>
+                            </svg>
+                            Raw Materials Inventory
+                        </h3>
+                        <div id="raw-materials-table-container">
+                            <table id="raw-materials-table">
+                                <thead>
+                                    <tr>
+                                        <th>Material Name</th>
+                                        <th>Unit</th>
+                                        <th>Available Quantity</th>
+                                        <th>Status</th>
+                                        <th>Last Updated</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="raw-materials-tbody">
+                                    <tr>
+                                        <td colspan="5" class="loading">Loading raw materials data...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Sales Report Tab -->
+            <div id="sales-tab" class="tab-content">
+                <div class="filters-section">
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label for="sales-search">Search</label>
+                            <input type="text" id="sales-search" placeholder="Order ID, Customer, Email...">
+                        </div>
+                        <div class="filter-group">
+                            <label for="sales-status">Order Status</label>
+                            <select id="sales-status">
+                                <option value="">All Status</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Processing">Processing</option>
+                                <option value="Shipping">Shipping</option>
+                                <option value="Delivery">Delivery</option>
+                                <option value="Received">Received</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Returned">Returns</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="sales-payment">Payment Method</label>
+                            <select id="sales-payment">
+                                <option value="">All Methods</option>
+                                <option value="E-Wallet">E-Wallet</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="sales-date-from">Date From</label>
+                            <input type="date" id="sales-date-from">
+                        </div>
+                        <div class="filter-group">
+                            <label for="sales-date-to">Date To</label>
+                            <input type="date" id="sales-date-to">
+                        </div>
+                        <div class="filter-group">
+                            <label for="sales-amount-min">Amount Min (₱)</label>
+                            <input type="number" id="sales-amount-min" placeholder="Min amount">
+                        </div>
+                        <div class="filter-group">
+                            <label for="sales-amount-max">Amount Max (₱)</label>
+                            <input type="number" id="sales-amount-max" placeholder="Max amount">
+                        </div>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="btn-filter btn-filter-primary" onclick="applySalesFilters()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                            </svg>
+                            Apply Filters
+                        </button>
+                        <button class="btn-filter btn-filter-secondary" onclick="clearSalesFilters()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                            Clear
+                        </button>
+                        <button class="btn-filter btn-export" onclick="exportSalesCSV()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            Export CSV
+                        </button>
+                    </div>
+                </div>
+                <div class="reports-table-section">
+                    <div class="reports-stats" id="sales-stats"></div>
+                    
+                    <!-- Stats Table -->
+                    <div style="background: #ffffff; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e5e7eb;">
+                        <h3 class="section-title" style="margin-bottom: 1rem;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                                <polyline points="10 9 9 9 8 9"/>
+                            </svg>
+                            Sales Report Statistics
+                        </h3>
+                        <div id="stats-table-container" style="width: 100%; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch;">
+                            <table id="stats-table" style="width: 100%; border-collapse: collapse; min-width: 1200px;">
+                                <thead id="stats-thead">
+                                    <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
+                                        <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: #111827; font-size: 0.875rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; border-right: 1px solid #e5e7eb;">Metric</th>
+                                        <th colspan="13" style="padding: 0.5rem; text-align: center; color: #6b7280; font-size: 0.75rem;">Loading statistics...</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stats-tbody">
+                                    <tr>
+                                        <td colspan="14" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Sales Table Container - moved above charts -->
+                    <div id="sales-table-container">
+                        <table id="sales-table">
+                            <thead>
+                                <tr>
+                                    <th>Order ID</th>
+                                    <th>Reference</th>
+                                    <th>Customer</th>
+                                    <th>Email</th>
+                                    <th>Order Date</th>
+                                    <th>Status</th>
+                                    <th>Order Items</th>
+                                    <th>Products and Qty</th>
+                                    <th>Subtotal</th>
+                                    <th>Extra Delivery</th>
+                                    <th>Delivery</th>
+                                    <th>Total Amount</th>
+                                    <th>Discounts</th>
+                                    <th>Taxes</th>
+                                    <th>Payment Method</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sales-tbody">
+                                <tr>
+                                    <td colspan="15" class="loading">Loading sales data...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Sales Statistics Charts -->
+                    <div class="charts-section" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
+                        <div class="chart-container">
+                            <h3 class="chart-title">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="2" x2="12" y2="22"/>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                                </svg>
+                                Revenue Breakdown
+                            </h3>
+                            <canvas id="sales-revenue-chart" height="300"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Masterlist Report Tab -->
+            <div id="masterlist-tab" class="tab-content">
+                <div class="filters-section">
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label for="ml-search">Search</label>
+                            <input type="text" id="ml-search" placeholder="Name, Email, Role...">
+                        </div>
+                        <div class="filter-group">
+                            <label for="ml-type">Type</label>
+                            <select id="ml-type">
+                                <option value="">All Types</option>
+                                <option value="customers">Customers</option>
+                                <option value="employees">Employees</option>
+                                <option value="admins">Admins</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="ml-role">Role</label>
+                            <select id="ml-role">
+                                <option value="">All Roles</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="ml-status">Status</label>
+                            <select id="ml-status">
+                                <option value="">All Status</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="ml-date-from">Date From</label>
+                            <input type="date" id="ml-date-from">
+                        </div>
+                        <div class="filter-group">
+                            <label for="ml-date-to">Date To</label>
+                            <input type="date" id="ml-date-to">
+                        </div>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="btn-filter btn-filter-primary" onclick="applyMasterlistFilters()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                            </svg>
+                            Apply Filters
+                        </button>
+                        <button class="btn-filter btn-filter-secondary" onclick="clearMasterlistFilters()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                            Clear
+                        </button>
+                        <button class="btn-filter btn-export" onclick="exportMasterlistCSV()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            Export CSV
+                        </button>
+                    </div>
+                </div>
+                <div class="reports-table-section">
+                    <div class="reports-stats" id="masterlist-stats"></div>
+                    
+                    <!-- Users Table (Employees/Admins) -->
+                    <div class="inventory-section">
+                        <h3 class="section-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                            Users (Employees & Admins)
+                        </h3>
+                        <div id="users-table-container">
+                            <table id="users-table">
+                                <thead>
+                                    <tr>
+                                        <th>Full Name</th>
+                                        <th>Email</th>
+                                        <th>Role</th>
+                                        <th>Account Status</th>
+                                        <th>Created At</th>
+                                        <th>Last Login</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="users-tbody">
+                                    <tr>
+                                        <td colspan="6" class="loading">Loading users data...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Customer Accounts Table -->
+                    <div class="inventory-section">
+                        <h3 class="section-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                            Customer Accounts
+                        </h3>
+                        <div id="customers-table-container">
+                            <table id="customers-table">
+                                <thead>
+                                    <tr>
+                                        <th>Customer ID</th>
+                                        <th>Full Name</th>
+                                        <th>Email</th>
+                                        <th>Phone</th>
+                                        <th>Created Date</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="customers-tbody">
+                                    <tr>
+                                        <td colspan="6" class="loading">Loading customer accounts data...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Product Categories Breakdown Section -->
+                    <div class="inventory-section">
+                        <h3 class="section-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                                <line x1="3" y1="6" x2="21" y2="6"/>
+                                <path d="M16 10a4 4 0 0 1-8 0"/>
+                            </svg>
+                            Product Categories Breakdown
+                        </h3>
+                        <div id="categories-breakdown-container">
+                            <table id="categories-breakdown-table">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th>Products</th>
+                                        <th>Active</th>
+                                        <th>Inactive</th>
+                                        <th>Total Stock</th>
+                                        <th>Category Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="categories-breakdown-tbody">
+                                    <tr>
+                                        <td colspan="6" class="loading">Loading categories breakdown...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Masterlist Summary Section -->
+                    <div class="inventory-section">
+                        <h3 class="section-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                            Masterlist Summary
+                        </h3>
+                        <div id="masterlist-summary-container">
+                            <table id="masterlist-summary-table">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>Total Count</th>
+                                        <th>Active</th>
+                                        <th>Inactive</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="masterlist-summary-tbody">
+                                    <tr>
+                                        <td colspan="4" class="loading">Loading masterlist summary...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+
+            // Load data for the active tab
+            loadTabData(tabName);
+        }
+
+        // Load data for each tab
+        async function loadTabData(tabName) {
+            switch(tabName) {
+                case 'inventory':
+                    await loadInventoryData();
+                    break;
+                case 'sales':
+                    await loadSalesData();
+                    break;
+                case 'masterlist':
+                    await loadMasterlistData();
+                    break;
+            }
+        }
+
+        // Inventory Report Functions
+        let inventoryFilters = {};
+        async function loadInventoryData() {
+            try {
+                const params = new URLSearchParams(inventoryFilters);
+                const response = await fetch(`/Employee/Admin/Reports/Inventory/Data?${params}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderInventoryTable(data.data);
+                    renderRawMaterialsTable(data.rawMaterials || []);
+                    renderInventoryStats(data.stats);
+                    renderInventoryChart(data.stats);
+                } else {
+                    document.getElementById('inventory-tbody').innerHTML = 
+                        `<tr><td colspan="7" class="empty-state">${data.error || 'Error loading inventory data'}</td></tr>`;
+                }
+            } catch (error) {
+                console.error('Error loading inventory:', error);
+                document.getElementById('inventory-tbody').innerHTML = 
+                    `<tr><td colspan="7" class="empty-state">Error loading inventory data</td></tr>`;
+            }
+        }
+
+        function renderInventoryTable(data) {
+            const tbody = document.getElementById('inventory-tbody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No inventory data found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(item => {
+                const statusClass = item.StockQuantity === 0 ? 'badge-danger' : 
+                                   item.StockQuantity < 10 ? 'badge-warning' : 
+                                   item.IsActive ? 'badge-success' : 'badge-info';
+                const statusText = item.StockQuantity === 0 ? 'Out of Stock' : 
+                                  item.StockQuantity < 10 ? 'Low Stock' : 
+                                  item.IsActive ? 'Active' : 'Inactive';
+                
+                return `
+                    <tr>
+                        <td>${item.Name || 'N/A'}</td>
+                        <td>${item.SKU || 'N/A'}</td>
+                        <td>${item.CategoryName || 'N/A'}</td>
+                        <td>${item.StockQuantity || 0}</td>
+                        <td>₱${Number(item.Price || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                        <td>${item.LastUpdated ? new Date(item.LastUpdated).toLocaleDateString() : 'N/A'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderRawMaterialsTable(data) {
+            const tbody = document.getElementById('raw-materials-tbody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No raw materials data found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(item => {
+                const statusClass = item.QuantityAvailable === 0 ? 'badge-danger' : 
+                                   item.QuantityAvailable < 10 ? 'badge-warning' : 
+                                   item.IsActive ? 'badge-success' : 'badge-info';
+                const statusText = item.QuantityAvailable === 0 ? 'Out of Stock' : 
+                                  item.QuantityAvailable < 10 ? 'Low Stock' : 
+                                  item.IsActive ? 'Active' : 'Inactive';
+                
+                return `
+                    <tr>
+                        <td>${item.Name || 'N/A'}</td>
+                        <td>${item.Unit || 'N/A'}</td>
+                        <td>${item.QuantityAvailable || 0}</td>
+                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                        <td>${item.LastUpdated ? new Date(item.LastUpdated).toLocaleDateString() : 'N/A'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderCategoriesBreakdown(data) {
+            const tbody = document.getElementById('categories-breakdown-tbody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No categories data found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(item => {
+                const categoryValue = parseFloat(item.CategoryValue || 0);
+                return `
+                    <tr>
+                        <td><strong>${item.CategoryName || 'Uncategorized'}</strong></td>
+                        <td>${item.ProductCount || 0}</td>
+                        <td><span class="badge badge-success">${item.ActiveProducts || 0}</span></td>
+                        <td><span class="badge badge-danger">${item.InactiveProducts || 0}</span></td>
+                        <td>${item.TotalStock || 0}</td>
+                        <td>₱${categoryValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderMasterlistSummary(data) {
+            const tbody = document.getElementById('masterlist-summary-tbody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No masterlist data found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(item => {
+                return `
+                    <tr>
+                        <td><strong>${item.RoleName || 'N/A'}</strong></td>
+                        <td>${item.TotalCount || 0}</td>
+                        <td><span class="badge badge-success">${item.ActiveCount || 0}</span></td>
+                        <td><span class="badge badge-danger">${item.InactiveCount || 0}</span></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderInventoryStats(stats) {
+            if (!stats) return;
+            const container = document.getElementById('inventory-stats');
+            container.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Total Products</div>
+                    <div class="stat-value">${stats.totalProducts || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Active Products</div>
+                    <div class="stat-value">${stats.activeProducts || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Low Stock Products</div>
+                    <div class="stat-value">${stats.lowStock || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Total Raw Materials</div>
+                    <div class="stat-value">${stats.totalRawMaterials || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Active Raw Materials</div>
+                    <div class="stat-value">${stats.activeRawMaterials || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Low Stock Raw Materials</div>
+                    <div class="stat-value">${stats.lowStockRawMaterials || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="2" x2="12" y2="22"/>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Total Inventory Value</div>
+                    <div class="stat-value">₱${Number(stats.totalValue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                </div>
+            `;
+        }
+
+        function renderInventoryChart(stats) {
+            const canvas = document.getElementById('inventory-chart');
+            if (!canvas || !stats) return;
+
+            const ctx = canvas.getContext('2d');
+            const maxValue = Math.max(
+                stats.totalProducts || 0,
+                stats.activeProducts || 0,
+                stats.totalRawMaterials || 0,
+                stats.activeRawMaterials || 0,
+                stats.lowStock || 0,
+                stats.lowStockRawMaterials || 0,
+                1 // Minimum value to prevent division by zero
+            );
+
+            // Get container width for responsive sizing
+            const container = canvas.parentElement;
+            const width = container.clientWidth || 800;
+            const height = 250;
+            
+            // Set canvas size
+            canvas.width = width;
+            canvas.height = height;
+
+            const padding = 60;
+            const chartWidth = width - (padding * 2);
+            const chartHeight = height - (padding * 2);
+            const barWidth = chartWidth / 6;
+            const spacing = barWidth * 0.2;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw chart background
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(padding, padding, chartWidth, chartHeight);
+
+            // Chart data
+            const chartData = [
+                { label: 'Total Products', value: stats.totalProducts || 0, color: '#F0B21B' },
+                { label: 'Active Products', value: stats.activeProducts || 0, color: '#10b981' },
+                { label: 'Low Stock Products', value: stats.lowStock || 0, color: '#f59e0b' },
+                { label: 'Total Raw Materials', value: stats.totalRawMaterials || 0, color: '#3b82f6' },
+                { label: 'Active Raw Materials', value: stats.activeRawMaterials || 0, color: '#14b8a6' },
+                { label: 'Low Stock Raw Materials', value: stats.lowStockRawMaterials || 0, color: '#f97316' }
+            ];
+
+            // Draw bars
+            chartData.forEach((item, index) => {
+                const x = padding + (index * barWidth) + (spacing / 2);
+                const barHeight = maxValue > 0 ? (item.value / maxValue) * chartHeight : 0;
+                const y = padding + chartHeight - barHeight;
+
+                // Draw bar
+                ctx.fillStyle = item.color;
+                ctx.fillRect(x, y, barWidth - spacing, barHeight);
+
+                // Draw value label on top of bar
+                if (item.value > 0) {
+                    ctx.fillStyle = '#0f172a';
+                    ctx.font = 'bold 12px Inter';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(item.value.toString(), x + (barWidth - spacing) / 2, y - 5);
+                }
+
+                // Draw label below bar
+                ctx.fillStyle = '#64748b';
+                ctx.font = '10px Inter';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                const labelY = padding + chartHeight + 25;
+                
+                // Split label into multiple lines if too long
+                const words = item.label.split(' ');
+                const lineHeight = 12;
+                const maxWidth = barWidth - spacing;
+                
+                let yOffset = 0;
+                let currentLine = '';
+                
+                words.forEach((word, idx) => {
+                    const testLine = currentLine + (idx > 0 ? ' ' : '') + word;
+                    const metrics = ctx.measureText(testLine);
+                    
+                    if (metrics.width > maxWidth && currentLine !== '') {
+                        ctx.fillText(currentLine, x + (barWidth - spacing) / 2, labelY + yOffset);
+                        currentLine = word;
+                        yOffset += lineHeight;
+                    } else {
+                        currentLine = testLine;
+                    }
+                });
+                
+                if (currentLine !== '') {
+                    ctx.fillText(currentLine, x + (barWidth - spacing) / 2, labelY + yOffset);
+                }
+            });
+
+            // Draw axes
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.lineWidth = 1;
+            
+            // X axis
+            ctx.beginPath();
+            ctx.moveTo(padding, padding + chartHeight);
+            ctx.lineTo(padding + chartWidth, padding + chartHeight);
+            ctx.stroke();
+
+            // Y axis
+            ctx.beginPath();
+            ctx.moveTo(padding, padding);
+            ctx.lineTo(padding, padding + chartHeight);
+            ctx.stroke();
+
+            // Y axis labels
+            ctx.fillStyle = '#64748b';
+            ctx.font = '11px Inter';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            
+            const ySteps = 5;
+            for (let i = 0; i <= ySteps; i++) {
+                const value = Math.round((maxValue / ySteps) * (ySteps - i));
+                const y = padding + (chartHeight / ySteps) * i;
+                ctx.fillText(value.toString(), padding - 10, y);
+                
+                // Draw grid line
+                if (i > 0) {
+                    ctx.strokeStyle = '#e5e7eb';
+                    ctx.lineWidth = 0.5;
+                    ctx.beginPath();
+                    ctx.moveTo(padding, y);
+                    ctx.lineTo(padding + chartWidth, y);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function applyInventoryFilters() {
+            inventoryFilters = {
+                search: document.getElementById('inv-search').value,
+                category: document.getElementById('inv-category').value,
+                status: document.getElementById('inv-status').value,
+                stockMin: document.getElementById('inv-stock-min').value,
+                stockMax: document.getElementById('inv-stock-max').value,
+                dateFrom: document.getElementById('inv-date-from').value,
+                dateTo: document.getElementById('inv-date-to').value
+            };
+            loadInventoryData();
+        }
+
+        function clearInventoryFilters() {
+            document.getElementById('inv-search').value = '';
+            document.getElementById('inv-category').value = '';
+            document.getElementById('inv-status').value = '';
+            document.getElementById('inv-stock-min').value = '';
+            document.getElementById('inv-stock-max').value = '';
+            document.getElementById('inv-date-from').value = '';
+            document.getElementById('inv-date-to').value = '';
+            inventoryFilters = {};
+            loadInventoryData();
+        }
+
+        async function exportInventoryCSV() {
+            try {
+                const params = new URLSearchParams(inventoryFilters);
+                window.location.href = `/Employee/Admin/Reports/Inventory/Export?${params}`;
+            } catch (error) {
+                console.error('Export error:', error);
+                alert('Error exporting inventory data');
+            }
+        }
+
+        // Sales Report Functions
+        let salesFilters = {};
+        async function loadSalesData() {
+            try {
+                const params = new URLSearchParams(salesFilters);
+                const response = await fetch(`/Employee/Admin/Reports/Sales/Data?${params}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderSalesTable(data.data);
+                    renderSalesStats(data.stats);
+                    renderSalesCharts(data.stats);
+                } else {
+                    document.getElementById('sales-tbody').innerHTML = 
+                        `<tr><td colspan="15" class="empty-state">${data.error || 'Error loading sales data'}</td></tr>`;
+                }
+            } catch (error) {
+                console.error('Error loading sales:', error);
+                document.getElementById('sales-tbody').innerHTML = 
+                    `<tr><td colspan="15" class="empty-state">Error loading sales data</td></tr>`;
+            }
+        }
+
+        function renderSalesTable(data) {
+            const tbody = document.getElementById('sales-tbody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="15" class="empty-state">No sales data found</td></tr>';
+                return;
+            }
+
+            // Debug: Log first order to see what data we're receiving
+            if (data.length > 0) {
+                console.log('[SALES REPORT FRONTEND] First order data:', data[0]);
+                console.log('[SALES REPORT FRONTEND] First order TotalDiscounts:', data[0].TotalDiscounts);
+                console.log('[SALES REPORT FRONTEND] First order OrderItems:', data[0].OrderItems);
+                console.log('[SALES REPORT FRONTEND] First order OrderItems type:', typeof data[0].OrderItems);
+                console.log('[SALES REPORT FRONTEND] First order OrderItems length:', data[0].OrderItems ? data[0].OrderItems.length : 'N/A');
+            }
+
+            tbody.innerHTML = data.map(item => {
+                const statusClass = item.Status === 'Completed' || item.Status === 'Received' ? 'badge-success' :
+                                   item.Status === 'Cancelled' || item.Status === 'Returned' || (item.Status && (item.Status.toLowerCase() === 'returned' || item.Status.toLowerCase() === 'return')) ? 'badge-danger' :
+                                   item.Status === 'Pending' ? 'badge-warning' : 'badge-info';
+                
+                // Use TotalDiscounts directly from API response (calculated from OrderItems)
+                // If TotalDiscounts is not available, fallback to 0
+                const discount = item.TotalDiscounts || 0;
+                
+                // Use TotalTaxes directly from API response (calculated from OrderItems)
+                // If TotalTaxes is not available, fallback to 0
+                const tax = item.TotalTaxes || 0;
+                
+                // Debug: Log if discount is 0 but we expect it to have a value
+                if (item.OrderID && discount === 0 && item.TotalAmount > 0) {
+                    console.log(`[SALES REPORT FRONTEND] Order ${item.OrderID} has TotalDiscounts:`, item.TotalDiscounts, 'TotalAmount:', item.TotalAmount);
+                }
+                
+                // Format order items count for display
+                let orderItemsCount = item.TotalItems || 0;
+                if (item.OrderItems && Array.isArray(item.OrderItems)) {
+                    orderItemsCount = item.OrderItems.length;
+                }
+                
+                // Format product names and quantities for display
+                let productNamesQuantitiesHtml = 'N/A';
+                
+                // Debug: Log the item structure
+                if (item.OrderID && !item.OrderItems) {
+                    console.log(`[SALES REPORT FRONTEND] Order ${item.OrderID} has no OrderItems property. Available keys:`, Object.keys(item));
+                }
+                
+                if (item.OrderItems && Array.isArray(item.OrderItems) && item.OrderItems.length > 0) {
+                    productNamesQuantitiesHtml = item.OrderItems.map(orderItem => {
+                        const name = orderItem.name || orderItem.Name || 'Unknown Product';
+                        const qty = orderItem.quantity || orderItem.Quantity || 0;
+                        return `${name} (Qty: ${qty})`;
+                    }).join('<br>');
+                } else if (item.TotalItems && item.TotalItems > 0) {
+                    // Fallback message if OrderItems array is not available
+                    productNamesQuantitiesHtml = `${item.TotalItems} item(s) - Details not available`;
+                } else if (item.OrderItems && !Array.isArray(item.OrderItems)) {
+                    // Handle case where OrderItems might be an object or string
+                    console.warn(`[SALES REPORT FRONTEND] Order ${item.OrderID} has OrderItems but it's not an array:`, typeof item.OrderItems, item.OrderItems);
+                    productNamesQuantitiesHtml = item.TotalItems ? `${item.TotalItems} item(s) - Details not available` : 'N/A';
+                }
+                
+                return `
+                    <tr>
+                        <td>${item.OrderID || 'N/A'}</td>
+                        <td>${item.ReferenceNumber || 'N/A'}</td>
+                        <td>${item.CustomerName || 'N/A'}</td>
+                        <td>${item.CustomerEmail || 'N/A'}</td>
+                        <td>${item.OrderDate ? new Date(item.OrderDate).toLocaleDateString() : 'N/A'}</td>
+                        <td><span class="badge ${statusClass}">${item.Status || 'N/A'}</span></td>
+                        <td>${orderItemsCount}</td>
+                        <td style="max-width: 300px; word-wrap: break-word; line-height: 1.5;">${productNamesQuantitiesHtml}</td>
+                        <td>₱${Number(item.Subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td>₱${Number(item.ExtraDeliveryFee || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td>₱${Number(item.DeliveryCost || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td>₱${Number(item.TotalAmount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td>₱${Number(discount).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td>₱${Number(tax).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td>${item.PaymentMethod || 'N/A'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderSalesStats(stats) {
+            if (!stats) return;
+            
+            // Store stats data for resize handler
+            const container = document.getElementById('sales-stats');
+            if (container) {
+                container.dataset.stats = JSON.stringify(stats);
+            }
+            
+            // Render stat cards (keep existing cards)
+            container.innerHTML = `
+                <!-- Revenue Metrics (Updated Formulas) -->
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="2" x2="12" y2="22"/>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Gross Sales</div>
+                    <div class="stat-value">₱${Number(stats.grossSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Total price of items sold (before discounts & returns)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="2" x2="12" y2="22"/>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Net Sales</div>
+                    <div class="stat-value">₱${Number(stats.netSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Gross Sales – (Discounts + Returns)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="2" x2="12" y2="22"/>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Gross Revenue</div>
+                    <div class="stat-value">₱${Number(stats.grossRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Gross Sales + Delivery Fees</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z"/>
+                            <path d="M16 17l-3-3-3 3" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Returns</div>
+                    <div class="stat-value">₱${Number(stats.salesReturns || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                    <div style="font-size: 0.7rem; color: var(--text-light); margin-top: 0.2rem;">${stats.returnedOrdersCount || 0} orders (${Number(stats.returnRate || 0).toFixed(1)}%)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Total Discounts</div>
+                    <div class="stat-value">₱${Number(stats.totalDiscounts || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">All discounts applied</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="2" x2="12" y2="22"/>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Net Revenue</div>
+                    <div class="stat-value">₱${Number(stats.netRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Gross Revenue – (Discounts + Returns)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 12l2 2 4-4"/>
+                            <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/>
+                            <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Inventory Loss</div>
+                    <div class="stat-value">₱${Number(stats.inventoryLoss || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Value of returned/damaged items</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 11l3 3L22 4"/>
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Total Taxes</div>
+                    <div class="stat-value">₱${Number(stats.totalTaxes || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Price before Tax item × (12% / 100)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 3h15v13H1zM5 21h19"/>
+                            <path d="M8 21V11M16 21V11"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Delivery Revenues</div>
+                    <div class="stat-value">₱${Number(stats.deliveryRevenues || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Delivery + Extra Delivery (excluding returns)</div>
+                </div>
+                <!-- Total Orders Section -->
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="9" cy="21" r="1"/>
+                            <circle cx="20" cy="21" r="1"/>
+                            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Total Orders</div>
+                    <div class="stat-value">${stats.totalOrders || 0}</div>
+                </div>
+                
+                <!-- Total Customers Section -->
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Total Customers</div>
+                    <div class="stat-value">${stats.totalCustomers || 0}</div>
+                </div>
+                
+                <!-- Average Order Value Section -->
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="1" x2="12" y2="23"/>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Average Order Value</div>
+                    <div class="stat-value">₱${Number(stats.averageOrderValue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                </div>
+            `;
+            
+            // Render stats table - vertical columns layout
+            const statsTableHead = document.getElementById('stats-thead');
+            const statsTableBody = document.getElementById('stats-tbody');
+            if (statsTableHead && statsTableBody) {
+                // Build header row with metric names as columns
+                const metrics = [
+                    { name: 'Gross Sales', isSection: false },
+                    { name: 'Net Sales', isSection: false },
+                    { name: 'Gross Revenue', isSection: false },
+                    { name: 'Net Revenue', isSection: false },
+                    { name: 'Returns', isSection: false },
+                    { name: 'Total Discounts', isSection: false },
+                    { name: 'Inventory Loss', isSection: false },
+                    { name: 'Total Taxes', isSection: false },
+                    { name: 'Delivery Revenues', isSection: false },
+                    { name: 'Total Orders', isSection: true },
+                    { name: 'Total Customers', isSection: true },
+                    { name: 'Average Order Value', isSection: true }
+                ];
+
+                let headerHTML = '<tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;"><th style="padding: 0.75rem; text-align: left; font-weight: 600; color: #111827; font-size: 0.875rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; border-right: 1px solid #e5e7eb; background: #f9fafb;">Metric</th>';
+                metrics.forEach(metric => {
+                    const bgColor = metric.isSection ? '#f3f4f6' : '#f9fafb';
+                    headerHTML += `<th style="padding: 0.75rem; text-align: center; font-weight: 600; color: #111827; font-size: 0.75rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; background: ${bgColor}; border-left: 1px solid #e5e7eb;">${metric.name}</th>`;
+                });
+                headerHTML += '</tr>';
+                statsTableHead.innerHTML = headerHTML;
+
+                // Build value row
+                let valueRow = '<tr style="border-bottom: 1px solid #e5e7eb;"><td style="padding: 0.75rem; font-weight: 600; color: #374151; border-right: 1px solid #e5e7eb; background: #f9fafb;">Value</td>';
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.grossSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.netSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.grossRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.netRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.salesReturns || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.totalDiscounts || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.inventoryLoss || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.totalTaxes || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.deliveryRevenues || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.totalOrders || 0}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.totalCustomers || 0}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">₱${Number(stats.averageOrderValue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
+                valueRow += '</tr>';
+
+                // Build formula row
+                let formulaRow = '<tr><td style="padding: 0.75rem; font-weight: 600; color: #374151; border-right: 1px solid #e5e7eb; background: #f9fafb;">Formula</td>';
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Total price of items sold (before discounts & returns)</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Gross Sales – (Discounts + Returns)</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Gross Sales + Delivery Fees</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Gross Revenue – (Discounts + Returns)</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">${stats.returnedOrdersCount || 0} orders (${Number(stats.returnRate || 0).toFixed(1)}%)</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">All discounts applied</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Value of returned/damaged items</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Price before Tax item × (12% / 100)</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Delivery + Extra Delivery (excluding returns)</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Total number of orders (excluding returns)</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Unique customers with orders</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Sum of TotalAmount / Total Orders</td>`;
+                formulaRow += '</tr>';
+
+                statsTableBody.innerHTML = valueRow + formulaRow;
+            }
+        }
+
+        function renderSalesCharts(stats) {
+            if (!stats) return;
+            
+            renderRevenueChart(stats);
+        }
+
+        function renderRevenueChart(stats) {
+            const canvas = document.getElementById('sales-revenue-chart');
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+            const container = canvas.parentElement;
+            const width = container.clientWidth || 600;
+            const height = 300;
+            canvas.width = width;
+            canvas.height = height;
+
+            const padding = 60;
+            const chartWidth = width - (padding * 2);
+            const chartHeight = height - (padding * 2);
+
+            ctx.clearRect(0, 0, width, height);
+
+            // Chart data
+            const revenueData = [
+                { label: 'Gross Revenue', value: parseFloat(stats.grossSales || 0), color: '#F0B21B' },
+                { label: 'Net Revenue', value: parseFloat(stats.netSales || 0), color: '#10b981' },
+                { label: 'Total Revenue', value: parseFloat(stats.totalRevenue || 0), color: '#3b82f6' },
+                { label: 'Taxes', value: parseFloat(stats.totalTaxes || 0), color: '#8b5cf6' },
+                { label: 'Delivery', value: parseFloat(stats.deliveryRevenues || 0), color: '#06b6d4' }
+            ];
+
+            const maxValue = Math.max(...revenueData.map(d => d.value), 1);
+            const barWidth = chartWidth / revenueData.length;
+            const spacing = barWidth * 0.2;
+
+            // Draw background
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(padding, padding, chartWidth, chartHeight);
+
+            // Draw bars
+            revenueData.forEach((item, index) => {
+                const x = padding + (index * barWidth) + (spacing / 2);
+                const barHeight = maxValue > 0 ? (item.value / maxValue) * chartHeight : 0;
+                const y = padding + chartHeight - barHeight;
+
+                // Draw bar
+                ctx.fillStyle = item.color;
+                ctx.fillRect(x, y, barWidth - spacing, barHeight);
+
+                // Draw value label
+                if (item.value > 0) {
+                    ctx.fillStyle = '#0f172a';
+                    ctx.font = 'bold 10px Inter';
+                    ctx.textAlign = 'center';
+                    const formattedValue = (item.value / 1000).toFixed(1) + 'K';
+                    ctx.fillText(formattedValue, x + (barWidth - spacing) / 2, y - 5);
+                }
+
+                // Draw label
+                ctx.fillStyle = '#64748b';
+                ctx.font = '9px Inter';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                const labelY = padding + chartHeight + 20;
+                
+                // Split long labels
+                const words = item.label.split(' ');
+                let currentLine = '';
+                let yOffset = 0;
+                words.forEach((word, idx) => {
+                    const testLine = currentLine + (idx > 0 ? ' ' : '') + word;
+                    const metrics = ctx.measureText(testLine);
+                    if (metrics.width > barWidth - spacing && currentLine !== '') {
+                        ctx.fillText(currentLine, x + (barWidth - spacing) / 2, labelY + yOffset);
+                        currentLine = word;
+                        yOffset += 11;
+                    } else {
+                        currentLine = testLine;
+                    }
+                });
+                if (currentLine !== '') {
+                    ctx.fillText(currentLine, x + (barWidth - spacing) / 2, labelY + yOffset);
+                }
+            });
+
+            // Draw axes
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(padding, padding + chartHeight);
+            ctx.lineTo(padding + chartWidth, padding + chartHeight);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(padding, padding);
+            ctx.lineTo(padding, padding + chartHeight);
+            ctx.stroke();
+
+            // Y axis labels
+            ctx.fillStyle = '#64748b';
+            ctx.font = '10px Inter';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            const ySteps = 5;
+            for (let i = 0; i <= ySteps; i++) {
+                const value = (maxValue / ySteps) * (ySteps - i);
+                const y = padding + (chartHeight / ySteps) * i;
+                const formattedValue = (value / 1000).toFixed(1) + 'K';
+                ctx.fillText(formattedValue, padding - 10, y);
+                
+                if (i > 0) {
+                    ctx.strokeStyle = '#e5e7eb';
+                    ctx.lineWidth = 0.5;
+                    ctx.beginPath();
+                    ctx.moveTo(padding, y);
+                    ctx.lineTo(padding + chartWidth, y);
+                    ctx.stroke();
+                }
+            }
+        }
+
+
+        function applySalesFilters() {
+            salesFilters = {
+                search: document.getElementById('sales-search').value,
+                status: document.getElementById('sales-status').value,
+                payment: document.getElementById('sales-payment').value,
+                dateFrom: document.getElementById('sales-date-from').value,
+                dateTo: document.getElementById('sales-date-to').value,
+                amountMin: document.getElementById('sales-amount-min').value,
+                amountMax: document.getElementById('sales-amount-max').value
+            };
+            loadSalesData();
+        }
+
+        function clearSalesFilters() {
+            document.getElementById('sales-search').value = '';
+            document.getElementById('sales-status').value = '';
+            document.getElementById('sales-payment').value = '';
+            document.getElementById('sales-date-from').value = '';
+            document.getElementById('sales-date-to').value = '';
+            document.getElementById('sales-amount-min').value = '';
+            document.getElementById('sales-amount-max').value = '';
+            salesFilters = {};
+            loadSalesData();
+        }
+
+        // CSV Preview Modal
+        let csvPreviewData = null;
+        function showCSVPreview() {
+            if (!csvPreviewData) {
+                // Fetch preview data
+                loadSalesData().then(() => {
+                    const statsContainer = document.getElementById('sales-stats');
+                    const stats = statsContainer?.dataset.stats ? JSON.parse(statsContainer.dataset.stats) : null;
+                    const table = document.getElementById('sales-tbody');
+                    const rows = table?.querySelectorAll('tr') || [];
+                    
+                    // Build preview data
+                    csvPreviewData = {
+                        stats: stats,
+                        rowCount: rows.length,
+                        filters: salesFilters
+                    };
+                    displayCSVPreview();
+                });
+            } else {
+                displayCSVPreview();
+            }
+        }
+
+        function displayCSVPreview() {
+            let csvModal = document.getElementById('csv-preview-modal');
+            if (!csvModal) {
+                // Create modal if it doesn't exist
+                const modalHTML = `
+                    <div id="csv-preview-modal" class="csv-preview-overlay" style="display: none;">
+                        <div class="csv-preview-content">
+                            <div class="csv-preview-header">
+                                <h2>CSV Export Preview</h2>
+                                <button class="csv-preview-close" onclick="closeCSVPreview()">&times;</button>
+                            </div>
+                            <div class="csv-preview-body" id="csv-preview-body">
+                                <p>Loading preview...</p>
+                            </div>
+                            <div class="csv-preview-footer">
+                                <button class="btn-filter btn-filter-secondary" onclick="closeCSVPreview()">Cancel</button>
+                                <button class="btn-filter btn-export" onclick="downloadCSV()">Download CSV</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+                csvModal = document.getElementById('csv-preview-modal');
+            }
+            const previewBody = document.getElementById('csv-preview-body');
+            
+            if (csvPreviewData && csvPreviewData.stats) {
+                const stats = csvPreviewData.stats;
+                previewBody.innerHTML = `
+                    <div class="csv-preview-section">
+                        <h3>Sales Report Statistics</h3>
+                        <table class="csv-preview-table">
+                            <tr><td><strong>Gross Sales</strong></td><td>₱${Number(stats.grossSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
+                            <tr><td><strong>Net Sales</strong></td><td>₱${Number(stats.netSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
+                            <tr><td><strong>Gross Revenue</strong></td><td>₱${Number(stats.grossRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
+                            <tr><td><strong>Net Revenue</strong></td><td>₱${Number(stats.netRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
+                            <tr><td><strong>Returns</strong></td><td>₱${Number(stats.salesReturns || 0).toLocaleString('en-US', {minimumFractionDigits: 2})} (${stats.returnedOrdersCount || 0} orders, ${Number(stats.returnRate || 0).toFixed(1)}%)</td></tr>
+                            <tr><td><strong>Total Discounts</strong></td><td>₱${Number(stats.totalDiscounts || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
+                            <tr><td><strong>Inventory Loss</strong></td><td>₱${Number(stats.inventoryLoss || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
+                            <tr><td><strong>Total Taxes</strong></td><td>₱${Number(stats.totalTaxes || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
+                            <tr><td><strong>Delivery Revenues</strong></td><td>₱${Number(stats.deliveryRevenues || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
+                        </table>
+                    </div>
+                    <div class="csv-preview-section">
+                        <h3>Order Summary</h3>
+                        <table class="csv-preview-table">
+                            <tr><td><strong>Total Orders</strong></td><td>${stats.totalOrders || 0} (including returns)</td></tr>
+                            <tr><td><strong>Total Customers</strong></td><td>${stats.totalCustomers || 0}</td></tr>
+                            <tr><td><strong>Average Order Value</strong></td><td>₱${Number(stats.averageOrderValue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
+                        </table>
+                    </div>
+                    <div class="csv-preview-section">
+                        <h3>Export Details</h3>
+                        <p><strong>Total Records:</strong> ${csvPreviewData.rowCount || 0} orders</p>
+                        <p><strong>Filters Applied:</strong> ${Object.keys(csvPreviewData.filters || {}).length > 0 ? 'Yes' : 'No'}</p>
+                        <p><strong>Export Format:</strong> Excel (.xlsx)</p>
+                        <p><em>The Excel file will include:</em></p>
+                        <ul style="margin: 0.5rem 0; padding-left: 1.5rem;">
+                            <li>Sales Report Statistics with formulas</li>
+                            <li>Orders by Status breakdown</li>
+                            <li>Revenue by Payment Method</li>
+                            <li>Additional Summary Statistics</li>
+                            <li>Detailed Order Transactions (${csvPreviewData.rowCount || 0} orders)</li>
+                        </ul>
+                    </div>
+                `;
+            } else {
+                previewBody.innerHTML = '<p>No data available for preview.</p>';
+            }
+            
+            csvModal.style.display = 'flex';
+        }
+
+        function closeCSVPreview() {
+            const csvModal = document.getElementById('csv-preview-modal');
+            if (csvModal) {
+                csvModal.style.display = 'none';
+            }
+        }
+
+        function downloadCSV() {
+            closeCSVPreview();
+            const params = new URLSearchParams(salesFilters);
+            window.location.href = `/Employee/Admin/Reports/Sales/Export?${params}`;
+        }
+
+        async function exportSalesCSV() {
+            try {
+                showCSVPreview();
+            } catch (error) {
+                console.error('Export error:', error);
+                alert('Error exporting sales data');
+            }
+        }
+
+        // Masterlist Report Functions
+        let masterlistFilters = {};
+        async function loadMasterlistData() {
+            try {
+                const params = new URLSearchParams(masterlistFilters);
+                const response = await fetch(`/Employee/Admin/Reports/Masterlist/Data?${params}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderUsersTable(data.users || []);
+                    renderCustomersTable(data.customers || []);
+                    renderCategoriesBreakdown(data.categoriesBreakdown || []);
+                    renderMasterlistSummary(data.masterlistSummary || []);
+                    renderMasterlistStats(data.stats);
+                } else {
+                    document.getElementById('users-tbody').innerHTML = 
+                        `<tr><td colspan="6" class="empty-state">${data.error || 'Error loading users data'}</td></tr>`;
+                    document.getElementById('customers-tbody').innerHTML = 
+                        `<tr><td colspan="6" class="empty-state">${data.error || 'Error loading customers data'}</td></tr>`;
+                }
+            } catch (error) {
+                console.error('Error loading masterlist:', error);
+                document.getElementById('users-tbody').innerHTML = 
+                    `<tr><td colspan="6" class="empty-state">Error loading users data</td></tr>`;
+                document.getElementById('customers-tbody').innerHTML = 
+                    `<tr><td colspan="6" class="empty-state">Error loading customers data</td></tr>`;
+            }
+        }
+
+        function renderUsersTable(data) {
+            const tbody = document.getElementById('users-tbody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No users found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(item => {
+                const statusClass = item.IsActive ? 'badge-success' : 'badge-danger';
+                const statusText = item.IsActive ? 'Active' : 'Inactive';
+                
+                return `
+                    <tr>
+                        <td>${item.FullName || 'N/A'}</td>
+                        <td>${item.Email || 'N/A'}</td>
+                        <td>${item.RoleName || 'N/A'}</td>
+                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                        <td>${item.CreatedAt ? new Date(item.CreatedAt).toLocaleDateString() : 'N/A'}</td>
+                        <td>${item.LastLogin ? new Date(item.LastLogin).toLocaleDateString() : 'Never'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderCustomersTable(data) {
+            const tbody = document.getElementById('customers-tbody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No customer accounts found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(item => {
+                const statusClass = item.IsActive ? 'badge-success' : 'badge-danger';
+                const statusText = item.IsActive ? 'Active' : 'Inactive';
+                const customerID = item.CustomerID && item.CustomerID > 0 ? item.CustomerID : '-';
+                
+                return `
+                    <tr>
+                        <td>${customerID}</td>
+                        <td>${item.FullName || 'N/A'}</td>
+                        <td>${item.Email || 'N/A'}</td>
+                        <td>${item.PhoneNumber || '-'}</td>
+                        <td>${item.CreatedAt ? new Date(item.CreatedAt).toLocaleDateString() : 'N/A'}</td>
+                        <td><span class="badge ${statusClass}">${statusText}</span></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderMasterlistStats(stats) {
+            if (!stats) return;
+            const container = document.getElementById('masterlist-stats');
+            container.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Total Users</div>
+                    <div class="stat-value">${stats.totalUsers || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                            <circle cx="12" cy="7" r="4"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Employees & Admins</div>
+                    <div class="stat-value">${stats.totalEmployees || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Customers</div>
+                    <div class="stat-value">${stats.totalCustomers || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Active Employees</div>
+                    <div class="stat-value">${stats.activeEmployees || 0}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                        </svg>
+                    </div>
+                    <div class="stat-label">Active Customers</div>
+                    <div class="stat-value">${stats.activeCustomers || 0}</div>
+                </div>
+            `;
+        }
+
+        function applyMasterlistFilters() {
+            masterlistFilters = {
+                search: document.getElementById('ml-search').value,
+                type: document.getElementById('ml-type').value,
+                role: document.getElementById('ml-role').value,
+                status: document.getElementById('ml-status').value,
+                dateFrom: document.getElementById('ml-date-from').value,
+                dateTo: document.getElementById('ml-date-to').value
+            };
+            loadMasterlistData();
+        }
+
+        function clearMasterlistFilters() {
+            document.getElementById('ml-search').value = '';
+            document.getElementById('ml-type').value = '';
+            document.getElementById('ml-role').value = '';
+            document.getElementById('ml-status').value = '';
+            document.getElementById('ml-date-from').value = '';
+            document.getElementById('ml-date-to').value = '';
+            masterlistFilters = {};
+            loadMasterlistData();
+        }
+
+        async function exportMasterlistCSV() {
+            try {
+                const params = new URLSearchParams(masterlistFilters);
+                window.location.href = `/Employee/Admin/Reports/Masterlist/Export?${params}`;
+            } catch (error) {
+                console.error('Export error:', error);
+                alert('Error exporting masterlist data');
+            }
+        }
+
+        // Global search
+        document.getElementById('globalSearch')?.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const activeTab = document.querySelector('.tab-content.active').id;
+            
+            if (activeTab === 'inventory-tab') {
+                document.getElementById('inv-search').value = e.target.value;
+                applyInventoryFilters();
+            } else if (activeTab === 'sales-tab') {
+                document.getElementById('sales-search').value = e.target.value;
+                applySalesFilters();
+            } else if (activeTab === 'masterlist-tab') {
+                document.getElementById('ml-search').value = e.target.value;
+                applyMasterlistFilters();
+            }
+        });
+
+        // Handle window resize for chart
+        let resizeTimeout;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(function() {
+                const activeTab = document.querySelector('.tab-content.active');
+                if (activeTab && activeTab.id === 'inventory-tab') {
+                    // Reload chart if inventory tab is active
+                    if (typeof renderInventoryChart === 'function') {
+                        const statsContainer = document.getElementById('inventory-stats');
+                        if (statsContainer && statsContainer.innerHTML) {
+                            // Extract stats from current display
+                            const statsText = statsContainer.innerText;
+                            // Trigger a reload of inventory data to get fresh stats
+                            loadInventoryData();
+                        }
+                    }
+                } else if (activeTab && activeTab.id === 'sales-tab') {
+                    // Reload charts if sales tab is active
+                    const statsContainer = document.getElementById('sales-stats');
+                    if (statsContainer && statsContainer.dataset.stats) {
+                        const stats = JSON.parse(statsContainer.dataset.stats);
+                        renderSalesCharts(stats);
+                    } else {
+                        // If no stored data, reload
+                        loadSalesData();
+                    }
+                }
+            }, 250);
+        });
+
+        // Date validation functions
+        function setupDateValidation(startDateId, endDateId) {
+            const startDateInput = document.getElementById(startDateId);
+            const endDateInput = document.getElementById(endDateId);
+            
+            if (!startDateInput || !endDateInput) return;
+            
+            // When start date changes, update end date min attribute
+            startDateInput.addEventListener('change', function() {
+                const startDate = this.value;
+                if (startDate) {
+                    endDateInput.setAttribute('min', startDate);
+                    // If end date is before start date, clear it
+                    if (endDateInput.value && endDateInput.value < startDate) {
+                        endDateInput.value = '';
+                        alert('End date cannot be before start date. Please select a valid end date.');
+                    }
+                } else {
+                    endDateInput.removeAttribute('min');
+                }
+            });
+            
+            // When end date changes, validate it's not before start date
+            endDateInput.addEventListener('change', function() {
+                const startDate = startDateInput.value;
+                const endDate = this.value;
+                
+                if (startDate && endDate && endDate < startDate) {
+                    this.value = '';
+                    alert('End date cannot be before start date. Please select a valid end date.');
+                }
+            });
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadInventoryData();
+            
+            // Setup date validation for all report tabs
+            setupDateValidation('inv-date-from', 'inv-date-to');
+            setupDateValidation('sales-date-from', 'sales-date-to');
+            setupDateValidation('ml-date-from', 'ml-date-to');
+        });
+
+        // Handle logout modal
+        async function handleLogout(event) {
+            event.preventDefault();
+            if (confirm('Are you sure you want to log out?')) {
+                try {
+                    const response = await fetch('/logout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    if (response.ok) {
+                        window.location.href = '/login';
+                    }
+                } catch (error) {
+                    console.error('Logout error:', error);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+
