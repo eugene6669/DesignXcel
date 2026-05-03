@@ -396,7 +396,9 @@ class ApiClient {
     if (error.response) {
       // Server responded with error
       const message = error.response.data?.message || error.response.data?.error || 'Server error occurred';
-      return new Error(message);
+      const err = new Error(message);
+      if (error.response.data?.code) err.code = error.response.data.code;
+      return err;
     } else if (error.request) {
       // Network error
       console.error('❌ Network Error - No response received:', error.request);

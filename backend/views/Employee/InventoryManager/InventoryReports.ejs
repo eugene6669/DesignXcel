@@ -2243,6 +2243,13 @@
                 return;
             }
 
+            const formatDateManila = (value) => {
+                if (!value) return null;
+                const d = new Date(value);
+                if (Number.isNaN(d.getTime())) return null;
+                return d.toLocaleDateString('en-US', { timeZone: 'Asia/Manila' });
+            };
+
             tbody.innerHTML = data.map(item => {
                 const statusClass = item.IsActive ? 'badge-success' : 'badge-danger';
                 const statusText = item.IsActive ? 'Active' : 'Inactive';
@@ -2253,8 +2260,8 @@
                         <td>${item.Email || 'N/A'}</td>
                         <td>${item.RoleName || 'N/A'}</td>
                         <td><span class="badge ${statusClass}">${statusText}</span></td>
-                        <td>${item.CreatedAt ? new Date(item.CreatedAt).toLocaleDateString() : 'N/A'}</td>
-                        <td>${item.LastLogin ? new Date(item.LastLogin).toLocaleDateString() : 'Never'}</td>
+                        <td>${formatDateManila(item.CreatedAt) || 'N/A'}</td>
+                        <td>${formatDateManila(item.LastLogin) || 'Never'}</td>
                     </tr>
                 `;
             }).join('');
@@ -2267,6 +2274,13 @@
                 return;
             }
 
+            const formatDateManila = (value) => {
+                if (!value) return null;
+                const d = new Date(value);
+                if (Number.isNaN(d.getTime())) return null;
+                return d.toLocaleDateString('en-US', { timeZone: 'Asia/Manila' });
+            };
+
             tbody.innerHTML = data.map(item => {
                 const statusClass = item.IsActive ? 'badge-success' : 'badge-danger';
                 const statusText = item.IsActive ? 'Active' : 'Inactive';
@@ -2278,7 +2292,7 @@
                         <td>${item.FullName || 'N/A'}</td>
                         <td>${item.Email || 'N/A'}</td>
                         <td>${item.PhoneNumber || '-'}</td>
-                        <td>${item.CreatedAt ? new Date(item.CreatedAt).toLocaleDateString() : 'N/A'}</td>
+                        <td>${formatDateManila(item.CreatedAt) || 'N/A'}</td>
                         <td><span class="badge ${statusClass}">${statusText}</span></td>
                     </tr>
                 `;

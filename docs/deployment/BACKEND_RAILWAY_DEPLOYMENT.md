@@ -72,7 +72,13 @@ Your backend will be available at:
 
 ## Environment Variables Reference
 
-See `backend/.env.railway.example` for a complete list of environment variables.
+Use these files for a clean setup flow:
+
+- `backend/.env.template` - full canonical list for backend environments
+- `backend/.env.example` - minimal local development quickstart
+- `backend/.env.railway.example` - Railway-focused production template
+
+For Railway deployment, copy `backend/.env.railway.example` to `backend/.env.railway` and fill in real values.
 
 ## Troubleshooting
 

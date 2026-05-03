@@ -13,6 +13,7 @@ const getExcelJS = () => {
 };
 const sendgridHelper = require('./utils/sendgridHelper');
 const { generateReferenceNumber } = require('./utils/generateReferenceNumber');
+const { generateTransactionId } = require('./utils/generateTransactionId');
 const { generateProductIdentifiers, generateTemporaryPublicId, generateGuid } = require('./utils/generateProductIdentifiers');
 const { calculateEstimatedDeliveryDate, formatEstimatedDeliveryDate } = require('./utils/deliveryEstimate');
 const { cleanupExpiredDiscountsSafe } = require('./utils/cleanupExpiredDiscounts');
@@ -1415,8 +1416,171 @@ module.exports = function (sql, pool, getStripe = null) {
     const bcrypt = require('bcrypt');
     const crypto = require('crypto');
     const jwtUtils = require('./utils/jwtUtils');
+    const passport = require('passport');
+    const GoogleStrategy = require('passport-google-oauth20').Strategy;
     const { jwtAuth, optionalJwtAuth, requireRole, requireUserType } = require('./middleware/jwtAuth');
     const { checkPermission, checkAnyPermission } = require('./middleware/permissionCheck');
+
+    async function ensureCustomerGoogleAuthColumns() {
+        try {
+            await pool.connect();
+            const columns = [
+                { name: 'GoogleSub', type: 'NVARCHAR(255)' },
+                { name: 'AuthProvider', type: 'NVARCHAR(32)' }
+            ];
+            for (const col of columns) {
+                const check = await pool.request().query(`
+                    SELECT COUNT(*) AS cnt
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Customers' AND COLUMN_NAME = '${col.name}'
+                `);
+                if (check.recordset[0].cnt === 0) {
+                    await pool.request().query(`ALTER TABLE dbo.Customers ADD ${col.name} ${col.type} NULL`);
+                }
+            }
+        } catch (e) {
+            console.error('[GOOGLE AUTH] ensureCustomerGoogleAuthColumns:', e.message);
+        }
+    }
+
+    function buildGoogleCustomerCallbackUrl() {
+        if (process.env.GOOGLE_CALLBACK_URL) {
+            return process.env.GOOGLE_CALLBACK_URL;
+        }
+        const port = process.env.PORT || 5000;
+        const base = (process.env.PUBLIC_API_URL || process.env.BACKEND_PUBLIC_URL || `http://localhost:${port}`).replace(/\/$/, '');
+        return `${base}/api/auth/google/callback`;
+    }
+
+    if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+        passport.use('google-customer', new GoogleStrategy({
+            clientID: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            callbackURL: buildGoogleCustomerCallbackUrl(),
+            passReqToCallback: true
+        }, async (req, accessToken, refreshToken, profile, done) => {
+            try {
+                await ensureCustomerGoogleAuthColumns();
+                await pool.connect();
+
+                const googleSub = String(profile.id || '');
+                const emailRaw = profile.emails && profile.emails[0] && profile.emails[0].value;
+                const email = String(emailRaw || '').trim().toLowerCase();
+                const displayName = profile.displayName
+                    || (profile.name && [profile.name.givenName, profile.name.familyName].filter(Boolean).join(' '))
+                    || 'Customer';
+
+                if (!email || !googleSub) {
+                    return done(null, false);
+                }
+
+                let bySub = await pool.request()
+                    .input('sub', sql.NVarChar(255), googleSub)
+                    .query(`
+                        SELECT TOP 1 CustomerID, Email, FullName, PhoneNumber, IsActive, ProfileImage, GoogleSub, AuthProvider
+                        FROM Customers
+                        WHERE GoogleSub = @sub
+                    `);
+
+                let customer = bySub.recordset[0];
+
+                if (!customer) {
+                    const byEmail = await pool.request()
+                        .input('email', sql.NVarChar(255), email)
+                        .query(`
+                            SELECT TOP 1 CustomerID, Email, FullName, PhoneNumber, IsActive, ProfileImage, GoogleSub, AuthProvider
+                            FROM Customers
+                            WHERE Email = @email
+                        `);
+                    customer = byEmail.recordset[0];
+                }
+
+                if (customer) {
+                    if (!customer.IsActive) {
+                        return done(null, false);
+                    }
+                    if (customer.GoogleSub && String(customer.GoogleSub) !== googleSub) {
+                        return done(null, false);
+                    }
+                    if (!customer.GoogleSub) {
+                        await pool.request()
+                            .input('sub', sql.NVarChar(255), googleSub)
+                            .input('id', sql.Int, customer.CustomerID)
+                            .query(`
+                                UPDATE Customers
+                                SET GoogleSub = @sub, AuthProvider = 'google'
+                                WHERE CustomerID = @id
+                            `);
+                    }
+                    await pool.request()
+                        .input('id', sql.Int, customer.CustomerID)
+                        .query('UPDATE Customers SET LastLogin = GETDATE() WHERE CustomerID = @id');
+
+                    const customerData = {
+                        id: customer.CustomerID,
+                        fullName: customer.FullName || displayName,
+                        email: customer.Email,
+                        phoneNumber: customer.PhoneNumber,
+                        role: 'Customer',
+                        type: 'customer',
+                        profileImage: customer.ProfileImage || null
+                    };
+                    return done(null, customerData);
+                }
+
+                try {
+                    const insertResult = await pool.request()
+                        .input('fullName', sql.NVarChar(255), displayName)
+                        .input('email', sql.NVarChar(255), email)
+                        .input('sub', sql.NVarChar(255), googleSub)
+                        .query(`
+                            INSERT INTO Customers (FullName, Email, PhoneNumber, PasswordHash, IsActive, CreatedAt, GoogleSub, AuthProvider)
+                            OUTPUT INSERTED.CustomerID, INSERTED.FullName, INSERTED.Email, INSERTED.PhoneNumber, INSERTED.ProfileImage
+                            VALUES (@fullName, @email, NULL, NULL, 1, GETDATE(), @sub, 'google')
+                        `);
+                    const row = insertResult.recordset[0];
+                    const customerData = {
+                        id: row.CustomerID,
+                        fullName: row.FullName || displayName,
+                        email: row.Email,
+                        phoneNumber: row.PhoneNumber,
+                        role: 'Customer',
+                        type: 'customer',
+                        profileImage: row.ProfileImage || null
+                    };
+                    return done(null, customerData);
+                } catch (insertErr) {
+                    const randomHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
+                    const insertResult = await pool.request()
+                        .input('fullName', sql.NVarChar(255), displayName)
+                        .input('email', sql.NVarChar(255), email)
+                        .input('sub', sql.NVarChar(255), googleSub)
+                        .input('passwordHash', sql.NVarChar(255), randomHash)
+                        .query(`
+                            INSERT INTO Customers (FullName, Email, PhoneNumber, PasswordHash, IsActive, CreatedAt, GoogleSub, AuthProvider)
+                            OUTPUT INSERTED.CustomerID, INSERTED.FullName, INSERTED.Email, INSERTED.PhoneNumber, INSERTED.ProfileImage
+                            VALUES (@fullName, @email, NULL, @passwordHash, 1, GETDATE(), @sub, 'google')
+                        `);
+                    const row = insertResult.recordset[0];
+                    const customerData = {
+                        id: row.CustomerID,
+                        fullName: row.FullName || displayName,
+                        email: row.Email,
+                        phoneNumber: row.PhoneNumber,
+                        role: 'Customer',
+                        type: 'customer',
+                        profileImage: row.ProfileImage || null
+                    };
+                    return done(null, customerData);
+                }
+            } catch (err) {
+                console.error('[GOOGLE AUTH] Strategy error:', err);
+                return done(err);
+            }
+        }));
+    } else if (process.env.NODE_ENV === 'development') {
+        console.log('[GOOGLE AUTH] GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set — Google Sign-In disabled.');
+    }
 
 
     /**
@@ -2004,6 +2168,7 @@ module.exports = function (sql, pool, getStripe = null) {
             const result = await pool.request().query(`
                 SELECT 
                     p.*,
+                    COALESCE(ip.SKU, ipById.SKU, p.SKU) as EffectiveSKU,
                     pd.DiscountID,
                     pd.DiscountType,
                     pd.DiscountValue,
@@ -2025,6 +2190,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         ELSE 0
                     END as DiscountAmount
                 FROM Products p
+                LEFT JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
+                LEFT JOIN InventoryProducts ipById ON ipById.InventoryProductID = p.ProductID AND ipById.IsActive = 1
                 LEFT JOIN ProductDiscounts pd ON p.ProductID = pd.ProductID 
                     AND pd.IsActive = 1 
                     AND GETDATE() BETWEEN pd.StartDate AND pd.EndDate
@@ -4204,6 +4371,7 @@ module.exports = function (sql, pool, getStripe = null) {
             const result = await pool.request().query(`
                 SELECT 
                     p.*,
+                    COALESCE(ip.SKU, ipById.SKU, p.SKU) as EffectiveSKU,
                     pd.DiscountID,
                     pd.DiscountType,
                     pd.DiscountValue,
@@ -4225,6 +4393,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         ELSE 0
                     END as DiscountAmount
                 FROM Products p
+                LEFT JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
+                LEFT JOIN InventoryProducts ipById ON ipById.InventoryProductID = p.ProductID AND ipById.IsActive = 1
                 LEFT JOIN ProductDiscounts pd ON p.ProductID = pd.ProductID 
                     AND pd.IsActive = 1 
                     AND GETDATE() BETWEEN pd.StartDate AND pd.EndDate
@@ -5444,6 +5614,7 @@ module.exports = function (sql, pool, getStripe = null) {
             const result = await pool.request().query(`
                 SELECT 
                     p.*,
+                    COALESCE(ip.SKU, ipById.SKU, p.SKU) as EffectiveSKU,
                     pd.DiscountID,
                     pd.DiscountType,
                     pd.DiscountValue,
@@ -5465,6 +5636,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         ELSE 0
                     END as DiscountAmount
                 FROM Products p
+                LEFT JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
+                LEFT JOIN InventoryProducts ipById ON ipById.InventoryProductID = p.ProductID AND ipById.IsActive = 1
                 LEFT JOIN ProductDiscounts pd ON p.ProductID = pd.ProductID 
                     AND pd.IsActive = 1 
                     AND GETDATE() BETWEEN pd.StartDate AND pd.EndDate
@@ -7975,6 +8148,7 @@ module.exports = function (sql, pool, getStripe = null) {
             const result = await pool.request().query(`
                 SELECT 
                     p.*,
+                    COALESCE(ip.SKU, ipById.SKU, p.SKU) as EffectiveSKU,
                     pd.DiscountID,
                     pd.DiscountType,
                     pd.DiscountValue,
@@ -7996,6 +8170,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         ELSE 0
                     END as DiscountAmount
                 FROM Products p
+                LEFT JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
+                LEFT JOIN InventoryProducts ipById ON ipById.InventoryProductID = p.ProductID AND ipById.IsActive = 1
                 LEFT JOIN ProductDiscounts pd ON p.ProductID = pd.ProductID 
                     AND pd.IsActive = 1 
                     AND GETDATE() BETWEEN pd.StartDate AND pd.EndDate
@@ -10261,6 +10437,23 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
+            // Ensure Discount column exists (older tables may not have it)
+            const discountColExists = await pool.request().query(`
+                SELECT COUNT(*) as count
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_NAME = 'WalkInOrders' AND COLUMN_NAME = 'Discount'
+            `);
+
+            if (discountColExists.recordset[0].count === 0) {
+                await pool.request().query(`
+                    ALTER TABLE WalkInOrders ADD Discount DECIMAL(10,2) NULL
+                `);
+                await pool.request().query(`
+                    UPDATE WalkInOrders SET Discount = 0 WHERE Discount IS NULL
+                `);
+                console.log('Added Discount column to WalkInOrders');
+            }
+
             // Update DeliveryType column size if needed (to accommodate rate IDs)
             const deliveryTypeCol = await pool.request().query(`
                 SELECT CHARACTER_MAXIMUM_LENGTH 
@@ -10275,6 +10468,28 @@ module.exports = function (sql, pool, getStripe = null) {
                 console.log('Updated DeliveryType column size to 100');
             }
 
+            // Additional tracking/payment columns for walk-in cards
+            const extraColumns = [
+                { name: 'OrderNumber', type: 'NVARCHAR(50)' },
+                { name: 'TransactionID', type: 'NVARCHAR(50)' },
+                { name: 'PaymentMethod', type: 'NVARCHAR(50)' },
+                { name: 'PaymentStatus', type: 'NVARCHAR(50)' },
+                { name: 'StripeSessionID', type: 'NVARCHAR(255)' }
+            ];
+            for (const col of extraColumns) {
+                const exists = await pool.request().query(`
+                    SELECT COUNT(*) as count
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_NAME = 'WalkInOrders' AND COLUMN_NAME = '${col.name}'
+                `);
+                if (exists.recordset[0].count === 0) {
+                    await pool.request().query(`
+                        ALTER TABLE WalkInOrders ADD ${col.name} ${col.type} NULL
+                    `);
+                    console.log(`Added ${col.name} column to WalkInOrders`);
+                }
+            }
+
             console.log('WalkInOrders table setup completed');
         } catch (err) {
             console.error('Error in ensureWalkInOrdersTable:', err);
@@ -10287,14 +10502,86 @@ module.exports = function (sql, pool, getStripe = null) {
         try {
             await pool.connect();
             await ensureWalkInOrdersTable(pool);
-            const { customerName, address, contactNumber, contactEmail, orderedProducts, discount, totalAmount, expectedArrival, deliveryType, deliveryRate, addressRegion, addressProvince, addressCity, addressBarangay, addressPostalCode } = req.body;
+            const { customerName, address, contactNumber, contactEmail, orderedProducts, discount, totalAmount, expectedArrival, deliveryType, deliveryRate, addressRegion, addressProvince, addressCity, addressBarangay, addressPostalCode, paymentMethod, stripeSessionId } = req.body;
             const ordered = JSON.parse(orderedProducts || '[]');
 
             // Determine delivery type - if deliveryRate is provided, use it; otherwise use deliveryType
             const finalDeliveryType = (deliveryType === 'delivery' && deliveryRate) ? deliveryRate : (deliveryType || 'pickup');
 
+            // For delivery orders, require a valid existing customer account by email
+            let linkedCustomer = null;
+            if (deliveryType === 'delivery') {
+                if (!contactEmail || !String(contactEmail).trim()) {
+                    return res.status(400).send('Delivery orders require a customer account email.');
+                }
+
+                const customerResult = await pool.request()
+                    .input('email', sql.NVarChar, String(contactEmail).trim())
+                    .query(`
+                        SELECT TOP 1 CustomerID, FullName, Email, IsActive
+                        FROM Customers
+                        WHERE Email = @email
+                    `);
+
+                if (!customerResult.recordset.length) {
+                    return res.status(400).send('Customer account email not found. Please use a registered customer email.');
+                }
+
+                linkedCustomer = customerResult.recordset[0];
+                if (linkedCustomer.IsActive === 0 || linkedCustomer.IsActive === false) {
+                    return res.status(400).send('Customer account is inactive. Please use an active customer account.');
+                }
+            }
+
+            // Resolve a valid PaymentMethod based on current DB constraint (CHK_PaymentMethod)
+            async function resolveAllowedPaymentMethod() {
+                try {
+                    const constraintResult = await pool.request().query(`
+                        SELECT TOP 1 cc.definition
+                        FROM sys.check_constraints cc
+                        INNER JOIN sys.objects o ON cc.parent_object_id = o.object_id
+                        WHERE o.name = 'Orders' AND cc.name = 'CHK_PaymentMethod'
+                    `);
+
+                    const definition = constraintResult.recordset?.[0]?.definition || '';
+                    const allowed = [];
+                    const matcher = /'([^']+)'/g;
+                    let match;
+                    while ((match = matcher.exec(definition)) !== null) {
+                        if (match[1]) allowed.push(match[1]);
+                    }
+
+                    // Prefer methods already used by existing customer order flow
+                    const preferredOrder = ['E-Wallet', 'Cash on Delivery', 'Bank Transfer'];
+                    for (const preferred of preferredOrder) {
+                        if (allowed.includes(preferred)) return preferred;
+                    }
+                    if (allowed.length > 0) return allowed[0];
+                } catch (constraintErr) {
+                    console.warn('[WALKIN LINKED ORDER] Could not parse CHK_PaymentMethod, using fallback:', constraintErr.message);
+                }
+
+                // Fallback to last used method in Orders
+                try {
+                    const recent = await pool.request().query(`
+                        SELECT TOP 1 PaymentMethod
+                        FROM Orders
+                        WHERE PaymentMethod IS NOT NULL
+                        ORDER BY OrderID DESC
+                    `);
+                    const fallback = recent.recordset?.[0]?.PaymentMethod;
+                    if (fallback) return fallback;
+                } catch (recentErr) {
+                    console.warn('[WALKIN LINKED ORDER] Could not fetch fallback PaymentMethod:', recentErr.message);
+                }
+
+                return 'E-Wallet';
+            }
+
             // Insert bulk order with ETA
-            await pool.request()
+            const nowForIds = new Date();
+            const walkInTransactionId = generateTransactionId(nowForIds);
+            const walkInInsert = await pool.request()
                 .input('CustomerName', customerName || '')
                 .input('Address', address || '')
                 .input('ContactNumber', contactNumber || '')
@@ -10309,41 +10596,233 @@ module.exports = function (sql, pool, getStripe = null) {
                 .input('AddressCity', addressCity || null)
                 .input('AddressBarangay', addressBarangay || null)
                 .input('AddressPostalCode', addressPostalCode || null)
+                .input('PaymentMethod', (paymentMethod || 'Cash').toLowerCase() === 'stripe' ? 'Stripe' : 'Cash')
+                .input('PaymentStatus', (paymentMethod || '').toLowerCase() === 'stripe' ? 'Paid' : 'Paid')
+                .input('StripeSessionID', stripeSessionId || null)
+                .input('TransactionID', walkInTransactionId)
                 .query(`
                     INSERT INTO WalkInOrders 
-                        (CustomerName, Address, ContactNumber, ContactEmail, OrderedProducts, Discount, TotalAmount, Status, ExpectedArrival, DeliveryType, AddressRegion, AddressProvince, AddressCity, AddressBarangay, AddressPostalCode)
+                        (CustomerName, Address, ContactNumber, ContactEmail, OrderedProducts, Discount, TotalAmount, Status, ExpectedArrival, DeliveryType, AddressRegion, AddressProvince, AddressCity, AddressBarangay, AddressPostalCode, PaymentMethod, PaymentStatus, StripeSessionID, TransactionID)
+                    OUTPUT INSERTED.BulkOrderID
                     VALUES 
-                        (@CustomerName, @Address, @ContactNumber, @ContactEmail, @OrderedProducts, @Discount, @TotalAmount, 'Processing', @ExpectedArrival, @DeliveryType, @AddressRegion, @AddressProvince, @AddressCity, @AddressBarangay, @AddressPostalCode)
+                        (@CustomerName, @Address, @ContactNumber, @ContactEmail, @OrderedProducts, @Discount, @TotalAmount, 'Processing', @ExpectedArrival, @DeliveryType, @AddressRegion, @AddressProvince, @AddressCity, @AddressBarangay, @AddressPostalCode, @PaymentMethod, @PaymentStatus, @StripeSessionID, @TransactionID)
                 `);
-            // Deduct stock quantities
+            const walkInOrderId = walkInInsert.recordset?.[0]?.BulkOrderID;
+            const walkInOrderNumber = generateReferenceNumber(nowForIds, walkInOrderId);
+            await pool.request()
+                .input('walkInOrderId', sql.Int, walkInOrderId)
+                .input('orderNumber', sql.NVarChar, walkInOrderNumber)
+                .query(`UPDATE WalkInOrders SET OrderNumber = @orderNumber WHERE BulkOrderID = @walkInOrderId`);
+
+            // If delivery and customer email is valid, create a linked customer Order for dashboard tracking
+            if (deliveryType === 'delivery' && linkedCustomer && walkInOrderId) {
+                const safePaymentMethod = await resolveAllowedPaymentMethod();
+                console.log('[WALKIN LINKED ORDER] Using PaymentMethod:', safePaymentMethod);
+
+                // Ensure LinkedOrderID column exists
+                const linkedOrderColCheck = await pool.request().query(`
+                    SELECT COUNT(*) as count
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_NAME = 'WalkInOrders' AND COLUMN_NAME = 'LinkedOrderID'
+                `);
+                if (linkedOrderColCheck.recordset[0].count === 0) {
+                    await pool.request().query(`
+                        ALTER TABLE WalkInOrders ADD LinkedOrderID INT NULL
+                    `);
+                }
+
+                // Reuse existing customer address if exact match exists, otherwise create one
+                let shippingAddressId = null;
+                if (addressCity || addressProvince || addressRegion) {
+                    const existingAddressResult = await pool.request()
+                        .input('customerId', sql.Int, linkedCustomer.CustomerID)
+                        .input('houseNumber', sql.NVarChar, null)
+                        .input('street', sql.NVarChar, null)
+                        .input('barangay', sql.NVarChar, addressBarangay || null)
+                        .input('city', sql.NVarChar, addressCity || null)
+                        .input('province', sql.NVarChar, addressProvince || null)
+                        .input('region', sql.NVarChar, addressRegion || null)
+                        .input('postalCode', sql.NVarChar, addressPostalCode || null)
+                        .query(`
+                            SELECT TOP 1 AddressID
+                            FROM CustomerAddresses
+                            WHERE CustomerID = @customerId
+                              AND ISNULL(Barangay,'') = ISNULL(@barangay,'')
+                              AND ISNULL(City,'') = ISNULL(@city,'')
+                              AND ISNULL(Province,'') = ISNULL(@province,'')
+                              AND ISNULL(Region,'') = ISNULL(@region,'')
+                              AND ISNULL(PostalCode,'') = ISNULL(@postalCode,'')
+                            ORDER BY AddressID DESC
+                        `);
+
+                    if (existingAddressResult.recordset.length > 0) {
+                        shippingAddressId = existingAddressResult.recordset[0].AddressID;
+                    } else {
+                        const newAddressResult = await pool.request()
+                            .input('customerId', sql.Int, linkedCustomer.CustomerID)
+                            .input('label', sql.NVarChar, 'Walk-in Delivery')
+                            .input('houseNumber', sql.NVarChar, null)
+                            .input('street', sql.NVarChar, null)
+                            .input('barangay', sql.NVarChar, addressBarangay || null)
+                            .input('city', sql.NVarChar, addressCity || null)
+                            .input('province', sql.NVarChar, addressProvince || null)
+                            .input('region', sql.NVarChar, addressRegion || null)
+                            .input('postalCode', sql.NVarChar, addressPostalCode || null)
+                            .input('country', sql.NVarChar, 'Philippines')
+                            .query(`
+                                INSERT INTO CustomerAddresses
+                                    (CustomerID, Label, HouseNumber, Street, Barangay, City, Province, Region, PostalCode, Country, IsDefault)
+                                OUTPUT INSERTED.AddressID
+                                VALUES
+                                    (@customerId, @label, @houseNumber, @street, @barangay, @city, @province, @region, @postalCode, @country, 0)
+                            `);
+                        shippingAddressId = newAddressResult.recordset?.[0]?.AddressID || null;
+                    }
+                }
+
+                // Determine service type and delivery cost from rate table
+                let serviceType = 'Standard Delivery';
+                let deliveryCost = 0;
+                if (finalDeliveryType && String(finalDeliveryType).startsWith('rate_')) {
+                    const rateId = parseInt(String(finalDeliveryType).replace('rate_', ''));
+                    if (!Number.isNaN(rateId)) {
+                        const rateResult = await pool.request()
+                            .input('rateId', sql.Int, rateId)
+                            .query(`
+                                SELECT TOP 1 ServiceType, Price
+                                FROM RegionDeliveryRates
+                                WHERE RegionRateID = @rateId
+                            `);
+                        if (rateResult.recordset.length > 0) {
+                            serviceType = rateResult.recordset[0].ServiceType || serviceType;
+                            deliveryCost = Number(rateResult.recordset[0].Price || 0);
+                        }
+                    }
+                }
+
+                const now = new Date();
+                const orderInsertResult = await pool.request()
+                    .input('customerId', sql.Int, linkedCustomer.CustomerID)
+                    .input('status', sql.NVarChar, 'Pending')
+                    .input('totalAmount', sql.Decimal(10, 2), Number(totalAmount || 0))
+                    .input('paymentMethod', sql.NVarChar, safePaymentMethod)
+                    .input('currency', sql.NVarChar, 'PHP')
+                    .input('orderDate', sql.DateTime, now)
+                    .input('paymentDate', sql.DateTime, now)
+                    .input('shippingAddressId', sql.Int, shippingAddressId)
+                    .input('deliveryType', sql.NVarChar, finalDeliveryType)
+                    .input('serviceType', sql.NVarChar, serviceType)
+                    .input('deliveryCost', sql.Decimal(10, 2), deliveryCost)
+                    .input('paymentStatus', sql.NVarChar, 'Paid')
+                    .query(`
+                        INSERT INTO Orders
+                            (CustomerID, Status, TotalAmount, PaymentMethod, Currency, OrderDate, PaymentDate, ShippingAddressID, DeliveryType, ServiceType, DeliveryCost, PaymentStatus)
+                        OUTPUT INSERTED.OrderID
+                        VALUES
+                            (@customerId, @status, @totalAmount, @paymentMethod, @currency, @orderDate, @paymentDate, @shippingAddressId, @deliveryType, @serviceType, @deliveryCost, @paymentStatus)
+                    `);
+
+                const linkedOrderId = orderInsertResult.recordset?.[0]?.OrderID || null;
+                if (linkedOrderId) {
+                    const linkedOrderNumber = generateReferenceNumber(now, linkedOrderId);
+                    const linkedTransactionId = generateTransactionId(now);
+                    await pool.request()
+                        .input('orderId', sql.Int, linkedOrderId)
+                        .input('referenceNumber', sql.NVarChar, linkedOrderNumber)
+                        .input('transactionId', sql.NVarChar, linkedTransactionId)
+                        .query(`
+                            UPDATE Orders
+                            SET ReferenceNumber = @referenceNumber,
+                                TransactionID = @transactionId
+                            WHERE OrderID = @orderId
+                        `);
+
+                    // Add order items for customer dashboard visibility
+                    for (const item of ordered) {
+                        const pid = parseInt(item.productId || item.ProductID);
+                        const qty = parseInt(item.quantity || 0);
+                        const unitPrice = Number(item.unitPrice || item.price || 0);
+                        const variationId = item.variationID || item.VariationID || null;
+                        const itemName = String(item.name || '').replace(/\s*\(Stock:.*\)$/, '').trim() || 'Walk-in Item';
+
+                        if (pid && qty > 0) {
+                            await pool.request()
+                                .input('orderId', sql.Int, linkedOrderId)
+                                .input('productId', sql.Int, pid)
+                                .input('quantity', sql.Int, qty)
+                                .input('priceAtPurchase', sql.Decimal(10, 2), unitPrice)
+                                .input('name', sql.NVarChar, itemName)
+                                .input('variationId', sql.Int, variationId ? parseInt(variationId) : null)
+                                .query(`
+                                    INSERT INTO OrderItems (OrderID, ProductID, Quantity, PriceAtPurchase, Name, VariationID)
+                                    VALUES (@orderId, @productId, @quantity, @priceAtPurchase, @name, @variationId)
+                                `);
+                        }
+                    }
+
+                    // Link the generated customer order to walk-in order
+                    await pool.request()
+                        .input('walkInOrderId', sql.Int, walkInOrderId)
+                        .input('linkedOrderId', sql.Int, linkedOrderId)
+                        .input('orderNumber', sql.NVarChar, linkedOrderNumber)
+                        .input('transactionId', sql.NVarChar, linkedTransactionId)
+                        .query(`
+                            UPDATE WalkInOrders
+                            SET LinkedOrderID = @linkedOrderId,
+                                OrderNumber = @orderNumber,
+                                TransactionID = @transactionId
+                            WHERE BulkOrderID = @walkInOrderId
+                        `);
+
+                    // Email notification like customer receipt
+                    try {
+                        await sendgridHelper.sendOrderReceiptEmail(
+                            linkedCustomer.Email,
+                            linkedCustomer.FullName || customerName || 'Customer',
+                            {
+                                orderNumber: linkedOrderNumber,
+                                totalAmount: Number(totalAmount || 0),
+                                paymentMethod: safePaymentMethod,
+                                paymentStatus: 'Paid',
+                                deliveryType: finalDeliveryType,
+                                shippingCost: Number(deliveryCost || 0),
+                                extraDeliveryFee: 0,
+                                orderDate: now,
+                                items: ordered.map(it => ({
+                                    name: String(it.name || '').replace(/\s*\(Stock:.*\)$/, '').trim(),
+                                    quantity: Number(it.quantity || 0),
+                                    unitPrice: Number(it.unitPrice || 0),
+                                    totalPrice: Number(it.unitPrice || 0) * Number(it.quantity || 0),
+                                    image: null,
+                                    variationName: null,
+                                    color: null
+                                })),
+                                shippingAddress: {
+                                    houseNumber: '',
+                                    street: '',
+                                    barangay: addressBarangay || '',
+                                    city: addressCity || '',
+                                    province: addressProvince || '',
+                                    region: addressRegion || '',
+                                    postalCode: addressPostalCode || '',
+                                    country: 'Philippines'
+                                }
+                            }
+                        );
+                    } catch (mailErr) {
+                        console.error('[WALKIN LINKED ORDER] Failed to send receipt email:', mailErr.message);
+                    }
+                }
+            }
+
+            // Deduct stock quantities using inventory-aware flow
             for (const item of ordered) {
                 const pid = parseInt(item.productId || item.ProductID);
                 const qty = parseInt(item.quantity || 0);
-                const variationID = item.variationID || item.variationID;
+                const variationID = item.variationID || item.VariationID || null;
 
                 if (pid && qty > 0) {
-                    // Check if this is a variation purchase
-                    if (variationID) {
-                        // Decrement variation stock
-                        console.log('WalkIn order: Decrementing variation stock for variation ID:', variationID);
-                        await pool.request()
-                            .input('variationID', sql.Int, variationID)
-                            .input('quantity', sql.Int, qty)
-                            .query(`UPDATE ProductVariations 
-                                    SET Quantity = CASE WHEN Quantity >= @quantity THEN Quantity - @quantity ELSE 0 END 
-                                    WHERE VariationID = @variationID`);
-                        console.log('WalkIn order: Variation stock decremented successfully');
-                    } else {
-                        // Decrement main product stock
-                        console.log('WalkIn order: Decrementing main product stock for product ID:', pid);
-                        await pool.request()
-                            .input('productId', sql.Int, pid)
-                            .input('quantity', sql.Int, qty)
-                            .query(`UPDATE Products 
-                                    SET StockQuantity = CASE WHEN StockQuantity >= @quantity THEN StockQuantity - @quantity ELSE 0 END 
-                                    WHERE ProductID = @productId`);
-                        console.log('WalkIn order: Main product stock decremented successfully');
-                    }
+                    await decrementStockFromInventory(pid, qty, variationID, null);
                 }
             }
             res.redirect('/Employee/Admin/WalkIn');
@@ -10359,6 +10838,17 @@ module.exports = function (sql, pool, getStripe = null) {
             await pool.connect();
             const id = parseInt(req.params.id);
             await pool.request().query(`UPDATE WalkInOrders SET Status = 'On delivery' WHERE BulkOrderID = ${id}`);
+
+            // Sync to linked customer order so dashboard gets real-time status updates
+            const linkResult = await pool.request()
+                .input('id', sql.Int, id)
+                .query(`SELECT LinkedOrderID FROM WalkInOrders WHERE BulkOrderID = @id`);
+            const linkedOrderId = linkResult.recordset?.[0]?.LinkedOrderID || null;
+            if (linkedOrderId) {
+                await pool.request()
+                    .input('orderId', sql.Int, linkedOrderId)
+                    .query(`UPDATE Orders SET Status = 'Shipping' WHERE OrderID = @orderId`);
+            }
             res.json({ success: true });
         } catch (err) {
             console.error('Error updating bulk order to delivery:', err);
@@ -10372,10 +10862,268 @@ module.exports = function (sql, pool, getStripe = null) {
             await pool.connect();
             const id = parseInt(req.params.id);
             await pool.request().query(`UPDATE WalkInOrders SET Status = 'Completed', CompletedAt = GETDATE() WHERE BulkOrderID = ${id}`);
+
+            // Sync to linked customer order so dashboard sees completed delivery
+            const linkResult = await pool.request()
+                .input('id', sql.Int, id)
+                .query(`SELECT LinkedOrderID FROM WalkInOrders WHERE BulkOrderID = @id`);
+            const linkedOrderId = linkResult.recordset?.[0]?.LinkedOrderID || null;
+            if (linkedOrderId) {
+                await pool.request()
+                    .input('orderId', sql.Int, linkedOrderId)
+                    .query(`UPDATE Orders SET Status = 'Delivered' WHERE OrderID = @orderId`);
+            }
             res.json({ success: true });
         } catch (err) {
             console.error('Error completing bulk order:', err);
             res.json({ success: false, message: 'Update failed' });
+        }
+    });
+
+    // Admin WalkIn: Remove order card (with optional stock restore for uncompleted orders)
+    router.post('/Employee/Admin/WalkIn/Remove/:id', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const id = parseInt(req.params.id, 10);
+            if (!id) {
+                return res.status(400).json({ success: false, message: 'Invalid walk-in order id.' });
+            }
+
+            const walkInResult = await pool.request()
+                .input('id', sql.Int, id)
+                .query(`
+                    SELECT TOP 1 BulkOrderID, Status, OrderedProducts, LinkedOrderID
+                    FROM WalkInOrders
+                    WHERE BulkOrderID = @id
+                `);
+
+            if (!walkInResult.recordset.length) {
+                return res.status(404).json({ success: false, message: 'Walk-in order not found.' });
+            }
+
+            const walkInOrder = walkInResult.recordset[0];
+            let orderedItems = [];
+            try {
+                orderedItems = JSON.parse(walkInOrder.OrderedProducts || '[]');
+            } catch (parseErr) {
+                orderedItems = [];
+            }
+
+            // If not completed yet, restore stock for each ordered item.
+            if (walkInOrder.Status !== 'Completed') {
+                for (const item of orderedItems) {
+                    const productId = parseInt(item.productId || item.ProductID, 10);
+                    const quantity = parseInt(item.quantity || 0, 10);
+                    const variationId = item.variationID || item.VariationID || null;
+                    if (productId && quantity > 0) {
+                        await incrementStockToInventory(productId, quantity, variationId, null, false);
+                    }
+                }
+            }
+
+            if (walkInOrder.LinkedOrderID) {
+                await pool.request()
+                    .input('orderId', sql.Int, walkInOrder.LinkedOrderID)
+                    .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId`);
+            }
+
+            await pool.request()
+                .input('id', sql.Int, id)
+                .query(`DELETE FROM WalkInOrders WHERE BulkOrderID = @id`);
+
+            res.json({ success: true });
+        } catch (err) {
+            console.error('Error removing walk-in order:', err);
+            res.status(500).json({ success: false, message: 'Remove failed' });
+        }
+    });
+
+    // Admin WalkIn: Build delivery address payload + matched rates (employee-side helper API)
+    router.post('/api/admin/walkin/address', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            console.log('[ADMIN WALKIN ADDRESS API] Incoming payload:', req.body);
+            const {
+                label,
+                houseNumber,
+                street,
+                barangay,
+                city,
+                province,
+                region,
+                postalCode,
+                country
+            } = req.body || {};
+
+            if (!city || !String(city).trim()) {
+                return res.status(400).json({ success: false, message: 'City is required' });
+            }
+
+            const parts = [
+                houseNumber,
+                street,
+                barangay,
+                city,
+                province,
+                region,
+                postalCode,
+                country || 'Philippines'
+            ].filter(Boolean).map(v => String(v).trim()).filter(Boolean);
+
+            const formattedAddress = parts.join(', ') || String(label || '').trim();
+
+            const ratesResult = await pool.request()
+                .input('City', sql.NVarChar(100), String(city).trim())
+                .input('Province', sql.NVarChar(100), province ? String(province).trim() : null)
+                .input('Region', sql.NVarChar(100), region ? String(region).trim() : null)
+                .query(`
+                    SELECT 
+                        RegionRateID,
+                        Region,
+                        Province,
+                        City,
+                        Price,
+                        ServiceType,
+                        Notes,
+                        CASE 
+                            WHEN (Province = @Province OR (Province IS NULL AND @Province IS NULL)) 
+                                 AND (Region = @Region OR (Region IS NULL AND @Region IS NULL)) THEN 1
+                            WHEN (Province = @Province OR (Province IS NULL AND @Province IS NULL)) 
+                                 AND Region IS NULL AND @Region IS NOT NULL THEN 2
+                            WHEN Province IS NULL AND @Province IS NULL 
+                                 AND (Region = @Region OR (Region IS NULL AND @Region IS NULL)) THEN 3
+                            WHEN Province IS NULL AND Region IS NULL THEN 4
+                            ELSE 5
+                        END AS MatchPriority
+                    FROM RegionDeliveryRates
+                    WHERE IsActive = 1
+                      AND City = @City
+                      AND (
+                          ((Province = @Province OR (Province IS NULL AND @Province IS NULL)) 
+                           AND (Region = @Region OR (Region IS NULL AND @Region IS NULL)))
+                          OR
+                          ((Province = @Province OR (Province IS NULL AND @Province IS NULL)) 
+                           AND Region IS NULL)
+                          OR
+                          (Province IS NULL AND @Province IS NULL 
+                           AND (Region = @Region OR (Region IS NULL AND @Region IS NULL)))
+                          OR
+                          (Province IS NULL AND Region IS NULL)
+                      )
+                    ORDER BY MatchPriority ASC, Price ASC
+                `);
+
+            return res.json({
+                success: true,
+                formattedAddress,
+                address: {
+                    label: label || '',
+                    houseNumber: houseNumber || '',
+                    street: street || '',
+                    barangay: barangay || '',
+                    city: city || '',
+                    province: province || '',
+                    region: region || '',
+                    postalCode: postalCode || '',
+                    country: country || 'Philippines'
+                },
+                availableServiceTypes: ratesResult.recordset || []
+            });
+        } catch (err) {
+            console.error('Error creating walk-in delivery address payload:', err);
+            res.status(500).json({ success: false, message: 'Failed to process delivery address', error: err.message });
+        }
+    });
+
+    // Validate customer account email for WalkIn delivery orders
+    router.post('/api/admin/walkin/validate-customer-email', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const email = String((req.body && req.body.email) || '').trim();
+            if (!email) {
+                return res.status(400).json({ success: false, message: 'Email is required' });
+            }
+
+            const result = await pool.request()
+                .input('email', sql.NVarChar, email)
+                .query(`
+                    SELECT TOP 1 CustomerID, FullName, Email, IsActive
+                    FROM Customers
+                    WHERE Email = @email
+                `);
+
+            if (!result.recordset.length) {
+                return res.json({ success: true, exists: false, active: false, message: 'Customer account not found' });
+            }
+
+            const customer = result.recordset[0];
+            return res.json({
+                success: true,
+                exists: true,
+                active: !(customer.IsActive === 0 || customer.IsActive === false),
+                customer: {
+                    customerId: customer.CustomerID,
+                    fullName: customer.FullName,
+                    email: customer.Email
+                }
+            });
+        } catch (err) {
+            console.error('Error validating walk-in customer email:', err);
+            res.status(500).json({ success: false, message: 'Failed to validate customer email', error: err.message });
+        }
+    });
+
+    // Admin WalkIn Stripe session (gateway only)
+    router.post('/api/admin/walkin/create-checkout-session', isAuthenticated, async (req, res) => {
+        try {
+            const stripe = getStripe ? getStripe() : null;
+            if (!stripe) {
+                return res.status(500).json({ success: false, message: 'Stripe is not configured' });
+            }
+
+            const { orderedProducts, customerName, contactEmail, totalAmount } = req.body || {};
+            let ordered = [];
+            try {
+                ordered = JSON.parse(orderedProducts || '[]');
+            } catch (e) {
+                ordered = [];
+            }
+            if (!ordered.length) {
+                return res.status(400).json({ success: false, message: 'No products to checkout' });
+            }
+
+            const line_items = ordered.map(item => ({
+                price_data: {
+                    currency: 'php',
+                    product_data: {
+                        name: String(item.name || 'Walk-in Item').replace(/\s*\(Stock:.*\)$/, '').trim()
+                    },
+                    unit_amount: Math.round(Number(item.unitPrice || 0) * 100)
+                },
+                quantity: Math.max(1, Number(item.quantity || 1))
+            }));
+
+            req.session.pendingAdminWalkIn = req.body || {};
+
+            const origin = `${req.protocol}://${req.get('host')}`;
+            const session = await stripe.checkout.sessions.create({
+                payment_method_types: ['card'],
+                mode: 'payment',
+                line_items,
+                success_url: `${origin}/Employee/Admin/WalkIn?stripe=success`,
+                cancel_url: `${origin}/Employee/Admin/WalkIn?stripe=cancelled`,
+                customer_email: contactEmail || undefined,
+                metadata: {
+                    orderType: 'admin_walkin',
+                    customerName: customerName || '',
+                    totalAmount: String(Number(totalAmount || 0))
+                }
+            });
+
+            return res.json({ success: true, url: session.url, sessionId: session.id });
+        } catch (err) {
+            console.error('Error creating admin walk-in Stripe session:', err);
+            return res.status(500).json({ success: false, message: 'Failed to create Stripe checkout session', error: err.message });
         }
     });
 
@@ -10407,7 +11155,15 @@ module.exports = function (sql, pool, getStripe = null) {
             `);
 
             // Query bulk orders
-            const result = await pool.request().query('SELECT * FROM WalkInOrders ORDER BY CreatedAt DESC');
+            const result = await pool.request().query(`
+                SELECT 
+                    w.*,
+                    o.ReferenceNumber AS LinkedOrderNumber,
+                    o.TransactionID AS LinkedTransactionID
+                FROM WalkInOrders w
+                LEFT JOIN Orders o ON w.LinkedOrderID = o.OrderID
+                ORDER BY w.CreatedAt DESC
+            `);
             const bulkOrders = result.recordset;
 
             res.render('Employee/Admin/AdminWalkIn', { user: req.session.user, bulkOrders });
@@ -13685,12 +14441,36 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/Employee/Admin/Reports/Inventory/Data', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
+            // Keep Products.SKU aligned with ProductInventory (InventoryProducts) source of truth
+            await pool.request().query(`
+                UPDATE p
+                SET p.SKU = src.SKU
+                FROM Products p
+                OUTER APPLY (
+                    SELECT TOP 1 ip.SKU
+                    FROM InventoryProducts ip
+                    WHERE ip.IsActive = 1
+                      AND ip.SKU IS NOT NULL
+                      AND (
+                           ip.ProductID = p.ProductID
+                        OR ip.InventoryProductID = p.ProductID
+                      )
+                    ORDER BY
+                        CASE WHEN ip.ProductID = p.ProductID THEN 0 ELSE 1 END,
+                        ip.DateUpdated DESC,
+                        ip.DateAdded DESC,
+                        ip.InventoryProductID DESC
+                ) src
+                WHERE src.SKU IS NOT NULL
+                  AND ISNULL(p.SKU, '') <> src.SKU
+            `);
             const { search, category, status, stockMin, stockMax, dateFrom, dateTo } = req.query;
 
             let query = `
                 SELECT 
                     p.Name,
-                    ISNULL(p.SKU, '') AS SKU,
+                    -- Use the same deterministic SKU mapping as Admin Products page
+                    ISNULL(COALESCE(linkedIp.SKU, linkedIpById.SKU), ISNULL(p.SKU, '')) AS SKU,
                     ISNULL(p.Category, 'Uncategorized') AS CategoryName,
                     ISNULL(p.StockQuantity, 0) AS StockQuantity,
                     ISNULL(p.Price, 0) AS Price,
@@ -13698,13 +14478,28 @@ module.exports = function (sql, pool, getStripe = null) {
                     ISNULL(p.UpdatedAt, p.DateAdded) AS LastUpdated,
                     p.DateAdded AS CreatedAt
                 FROM Products p
+                OUTER APPLY (
+                    SELECT TOP 1
+                        ip.SKU
+                    FROM InventoryProducts ip
+                    WHERE ip.ProductID = p.ProductID
+                      AND ip.IsActive = 1
+                    ORDER BY ip.DateUpdated DESC, ip.DateAdded DESC, ip.InventoryProductID DESC
+                ) linkedIp
+                OUTER APPLY (
+                    SELECT TOP 1
+                        ip.SKU
+                    FROM InventoryProducts ip
+                    WHERE ip.InventoryProductID = p.ProductID
+                      AND ip.IsActive = 1
+                ) linkedIpById
                 WHERE 1=1
             `;
 
             const request = pool.request();
 
             if (search && search.trim() !== '') {
-                query += ` AND (p.Name LIKE @search OR ISNULL(p.SKU, '') LIKE @search)`;
+                query += ` AND (p.Name LIKE @search OR ISNULL(COALESCE(linkedIp.SKU, linkedIpById.SKU), ISNULL(p.SKU, '')) LIKE @search)`;
                 request.input('search', sql.NVarChar, `%${search.trim()}%`);
             }
 
@@ -15365,30 +16160,55 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
-            // Calculate stats according to new formulas:
-            // Gross Sales = Total price of items sold (before discounts & returns)
-            const grossSalesValue = grossSales;
+            // Calculate stats using explicit business formulas provided by user:
+            // 1) Gross Sales = Sum(Subtotal) for Completed + Returned (exclude Cancelled/Declined, exclude delivery fees)
+            // 2) Net Sales = Gross Sales - Sum(Subtotal of Returned orders)
+            // 3) Gross Revenue = Gross Sales + Sum(Delivery Fees for Completed + Returned orders)
+            // 4) Net Revenue = Gross Revenue - (Returned + Refunded), using Subtotal for refunded unless otherwise specified
+            const normalizedOrders = result.recordset.map(o => ({
+                ...o,
+                __status: (o.Status || '').toLowerCase().trim(),
+                __subtotal: parseFloat(o.Subtotal || 0),
+                __deliveryFee: parseFloat(o.DeliveryCost || 0) + parseFloat(o.ExtraDeliveryFee || 0)
+            }));
 
-            // Net Sales = Gross Sales – (Discounts + Returns)
-            // Note: Returns and totalRefunds are the same (both use RefundAmount), so we only subtract one
-            const netSalesValue = grossSalesValue - finalTotalDiscounts - returns;
+            const isCompletedOrder = (o) => o.__status === 'completed';
+            const isReturnedOrder = (o) => o.__status === 'returned';
+            const isRefundedOrder = (o) =>
+                o.__status === 'refunded' ||
+                o.__status === 'completed returned' ||
+                o.IsRefunded === 1 ||
+                o.IsRefunded === true;
+            const isValidSalesOrder = (o) => isCompletedOrder(o) || isReturnedOrder(o);
 
-            // Gross Revenue = Gross Sales + Delivery Fees (from all orders including refunded)
-            // For in-house delivery service: This represents total revenue before deductions
-            const grossRevenueValue = grossSalesValue + deliveryRevenuesExcludingReturns;
+            const grossSalesValue = normalizedOrders
+                .filter(isValidSalesOrder)
+                .reduce((sum, o) => sum + o.__subtotal, 0);
 
-            // Net Revenue = Gross Revenue – (Discounts + Returns)
-            // Note: Returns and totalRefunds are the same (both use RefundAmount), so we only subtract one
-            const netRevenueValue = grossRevenueValue - finalTotalDiscounts - returns;
+            const returnedSubtotalValue = normalizedOrders
+                .filter(isReturnedOrder)
+                .reduce((sum, o) => sum + o.__subtotal, 0);
+
+            const refundedSubtotalValue = normalizedOrders
+                .filter(isRefundedOrder)
+                .reduce((sum, o) => sum + o.__subtotal, 0);
+
+            const deliveryFeesValidOrders = normalizedOrders
+                .filter(isValidSalesOrder)
+                .reduce((sum, o) => sum + o.__deliveryFee, 0);
+
+            const netSalesValue = grossSalesValue - returnedSubtotalValue;
+            const grossRevenueValue = grossSalesValue + deliveryFeesValidOrders;
+            const netRevenueValue = grossRevenueValue - (returnedSubtotalValue + refundedSubtotalValue);
 
             // Calculate stats (using only completed orders)
             // Sales report includes only orders with 'Completed' status, not 'Processing' or other statuses
             // For E-commerce Furniture Inventory System with In-House Delivery Service:
             const stats = {
-                grossSales: grossSalesValue, // Gross Sales = Total price of items sold (before discounts & returns)
-                netSales: netSalesValue, // Net Sales = Gross Sales – (Discounts + Returns)
-                grossRevenue: grossRevenueValue, // Gross Revenue = Gross Sales + Delivery Fees (from all orders)
-                netRevenue: netRevenueValue, // Net Revenue = Gross Revenue – (Discounts + Returns)
+                grossSales: grossSalesValue, // Gross Sales = Completed + Returned subtotals (no delivery fees)
+                netSales: netSalesValue, // Net Sales = Gross Sales - Returned subtotals
+                grossRevenue: grossRevenueValue, // Gross Revenue = Gross Sales + delivery fees from Completed + Returned
+                netRevenue: netRevenueValue, // Net Revenue = Gross Revenue - (Returned subtotals + Refunded subtotals)
                 salesReturns: returns, // Returns = Total value of returned orders (including delivery fees)
                 totalRefunds: totalRefunds, // Total Refunds = Sum of all refunded amounts (product amounts only, delivery fees typically non-refundable)
                 refundedOrdersCount: refundedOrdersCount, // Number of refunded orders
@@ -15397,10 +16217,10 @@ module.exports = function (sql, pool, getStripe = null) {
                 totalDiscounts: finalTotalDiscounts,
                 totalTaxes: totalTaxes, // Total Taxes = Price before Tax × (12% / 100)
                 // In-House Delivery Service Metrics:
-                deliveryRevenues: deliveryRevenuesExcludingReturns, // Delivery revenues from completed orders (actual revenue earned)
+                deliveryRevenues: deliveryFeesValidOrders, // Delivery fees from valid orders (Completed + Returned)
                 deliveryRevenuesLostFromReturns: deliveryRevenuesFromReturns, // Delivery revenues lost due to returned orders
                 deliveryRevenuesLostFromRefunds: deliveryRevenuesFromRefunds, // Delivery revenues lost due to refunded orders
-                totalDeliveryRevenues: deliveryRevenuesExcludingReturns, // Total delivery revenues (same as deliveryRevenues, for clarity)
+                totalDeliveryRevenues: deliveryFeesValidOrders, // Total delivery fees from valid orders
                 // Note: For in-house delivery service, you may want to track:
                 // - Delivery Costs (actual costs of running delivery service: fuel, driver wages, vehicle maintenance, etc.)
                 // - Delivery Profit = Delivery Revenues - Delivery Costs
@@ -15419,7 +16239,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 damageRate: totalUnitsReturned > 0 ? (totalUnitsDamaged / totalUnitsReturned) * 100 : 0, // Percentage of returned units that are damaged
                 returnRateByUnits: totalUnitsSold > 0 ? (totalUnitsReturned / totalUnitsSold) * 100 : 0, // Return rate by units (not orders)
                 replacementRate: totalUnitsReturned > 0 ? (totalUnitsReplaced / totalUnitsReturned) * 100 : 0, // Percentage of returns that were replaced
-                totalRevenue: netSalesValue + deliveryRevenuesExcludingReturns, // Total Revenue = Net Sales + Delivery (what customers paid for products + delivery)
+                totalRevenue: grossRevenueValue, // Keep compatibility: Total Revenue mirrors Gross Revenue per current business formula
                 totalOrders: totalOrders, // Total orders including returns
                 totalCustomers: new Set(result.recordset
                     .filter(o => {
@@ -16729,21 +17549,43 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
-            // Calculate stats according to new formulas:
-            // Gross Sales = Total price of items sold (before discounts & returns)
-            const grossSalesValue = totalGrossSales;
+            // Export stats must match on-screen business formulas exactly
+            const normalizedOrders = result.recordset.map(o => ({
+                ...o,
+                __status: (o.Status || '').toLowerCase().trim(),
+                __subtotal: parseFloat(o.Subtotal || 0),
+                __deliveryFee: parseFloat(o.DeliveryCost || 0) + parseFloat(o.ExtraDeliveryFee || 0)
+            }));
 
-            // Net Sales = Gross Sales – (Discounts + Returns)
-            const netSalesValue = grossSalesValue - (totalDiscounts + returns);
+            const isCompletedOrder = (o) => o.__status === 'completed';
+            const isReturnedOrder = (o) => o.__status === 'returned';
+            const isRefundedOrder = (o) =>
+                o.__status === 'refunded' ||
+                o.__status === 'completed returned' ||
+                o.IsRefunded === 1 ||
+                o.IsRefunded === true;
+            const isValidSalesOrder = (o) => isCompletedOrder(o) || isReturnedOrder(o);
 
-            // Gross Revenue = Gross Sales + Delivery Fees
-            const grossRevenueValue = grossSalesValue + deliveryRevenues;
+            const grossSalesValue = normalizedOrders
+                .filter(isValidSalesOrder)
+                .reduce((sum, o) => sum + o.__subtotal, 0);
 
-            // Net Revenue = Gross Revenue – (Discounts + Returns)
-            const netRevenueValue = grossRevenueValue - (totalDiscounts + returns);
+            const returnedSubtotalValue = normalizedOrders
+                .filter(isReturnedOrder)
+                .reduce((sum, o) => sum + o.__subtotal, 0);
 
-            // Calculate Total Revenue = Net Revenue + Delivery Revenues (legacy, kept for compatibility)
-            const totalRevenue = netRevenueValue + deliveryRevenues;
+            const refundedSubtotalValue = normalizedOrders
+                .filter(isRefundedOrder)
+                .reduce((sum, o) => sum + o.__subtotal, 0);
+
+            const deliveryFeesValidOrders = normalizedOrders
+                .filter(isValidSalesOrder)
+                .reduce((sum, o) => sum + o.__deliveryFee, 0);
+
+            const netSalesValue = grossSalesValue - returnedSubtotalValue;
+            const grossRevenueValue = grossSalesValue + deliveryFeesValidOrders;
+            const netRevenueValue = grossRevenueValue - (returnedSubtotalValue + refundedSubtotalValue);
+            const totalRevenue = grossRevenueValue;
 
             // COGS, Gross Profit, and Gross Margin calculations removed
 
@@ -16891,10 +17733,10 @@ module.exports = function (sql, pool, getStripe = null) {
 
             // Revenue Metrics (Updated Formulas) - Matching current report
             const statsData = [
-                { metric: 'Gross Sales', value: grossSalesValue, formula: 'Total price of items sold (before discounts & returns)', format: 'currency' },
-                { metric: 'Net Sales', value: netSalesValue, formula: 'Gross Sales – (Discounts + Returns)', format: 'currency' },
-                { metric: 'Gross Revenue', value: grossRevenueValue, formula: 'Gross Sales + Delivery Fees', format: 'currency' },
-                { metric: 'Net Revenue', value: netRevenueValue, formula: 'Gross Revenue – (Discounts + Returns)', format: 'currency' },
+                { metric: 'Gross Sales', value: grossSalesValue, formula: 'Completed + Returned subtotals (excluding delivery fees)', format: 'currency' },
+                { metric: 'Net Sales', value: netSalesValue, formula: 'Gross Sales - Returned subtotals', format: 'currency' },
+                { metric: 'Gross Revenue', value: grossRevenueValue, formula: 'Gross Sales + delivery fees from Completed + Returned orders', format: 'currency' },
+                { metric: 'Net Revenue', value: netRevenueValue, formula: 'Gross Revenue - (Returned subtotals + Refunded subtotals)', format: 'currency' },
                 { metric: 'Returns', value: returns, formula: `${returnedOrdersCount} orders (${returnRate.toFixed(1)}%)`, format: 'currency' },
                 { metric: 'Total Discounts', value: totalDiscounts, formula: 'All discounts applied', format: 'currency' },
                 { metric: 'Inventory Loss', value: inventoryLoss, formula: 'Value of returned/damaged items', format: 'currency' },
@@ -18073,6 +18915,12 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/api/admin/products', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
+            await pool.request().query(`
+                IF COL_LENGTH('Products', 'IsBestSeller') IS NULL
+                    ALTER TABLE Products ADD IsBestSeller BIT NOT NULL CONSTRAINT DF_Products_IsBestSeller DEFAULT 0;
+                IF COL_LENGTH('Products', 'IsNewArrival') IS NULL
+                    ALTER TABLE Products ADD IsNewArrival BIT NOT NULL CONSTRAINT DF_Products_IsNewArrival DEFAULT 0;
+            `);
             const result = await pool.request().query(`
                 SELECT 
                     ProductID,
@@ -18082,6 +18930,8 @@ module.exports = function (sql, pool, getStripe = null) {
                     ImageURL,
                     Category,
                     IsFeatured,
+                    IsBestSeller,
+                    IsNewArrival,
                     IsActive,
                     Model3DURL,
                     ThumbnailURLs,
@@ -18774,6 +19624,52 @@ module.exports = function (sql, pool, getStripe = null) {
         } catch (err) {
             console.error('Error updating product featured status:', err);
             res.json({ success: false, message: 'Failed to update product featured status.' });
+        }
+    });
+
+    router.put('/api/admin/products/:id/best-seller', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const { id } = req.params;
+            const { bestSeller } = req.body;
+
+            await pool.request().query(`
+                IF COL_LENGTH('Products', 'IsBestSeller') IS NULL
+                    ALTER TABLE Products ADD IsBestSeller BIT NOT NULL CONSTRAINT DF_Products_IsBestSeller DEFAULT 0;
+            `);
+
+            await pool.request()
+                .input('productId', sql.Int, id)
+                .input('bestSeller', sql.Bit, bestSeller)
+                .query('UPDATE Products SET IsBestSeller = @bestSeller WHERE ProductID = @productId');
+
+            res.json({ success: true, message: 'Product best seller status updated.' });
+        } catch (err) {
+            console.error('Error updating product best seller status:', err);
+            res.json({ success: false, message: 'Failed to update product best seller status.' });
+        }
+    });
+
+    router.put('/api/admin/products/:id/new-arrival', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const { id } = req.params;
+            const { newArrival } = req.body;
+
+            await pool.request().query(`
+                IF COL_LENGTH('Products', 'IsNewArrival') IS NULL
+                    ALTER TABLE Products ADD IsNewArrival BIT NOT NULL CONSTRAINT DF_Products_IsNewArrival DEFAULT 0;
+            `);
+
+            await pool.request()
+                .input('productId', sql.Int, id)
+                .input('newArrival', sql.Bit, newArrival)
+                .query('UPDATE Products SET IsNewArrival = @newArrival WHERE ProductID = @productId');
+
+            res.json({ success: true, message: 'Product new arrival status updated.' });
+        } catch (err) {
+            console.error('Error updating product new arrival status:', err);
+            res.json({ success: false, message: 'Failed to update product new arrival status.' });
         }
     });
 
@@ -24946,6 +25842,22 @@ module.exports = function (sql, pool, getStripe = null) {
                 return res.redirect('/login');
             }
 
+            // Update last login timestamp (used by Reports -> Masterlist)
+            try {
+                await pool.request()
+                    .input('userId', sql.Int, user.UserID)
+                    .query(`
+                        UPDATE Users
+                        SET
+                            LastLogin = GETDATE(),
+                            CreatedAt = ISNULL(CreatedAt, GETDATE())
+                        WHERE UserID = @userId
+                    `);
+            } catch (lastLoginErr) {
+                // Non-blocking: don't fail login if audit fields can't be updated
+                console.error('Error updating Users.LastLogin:', lastLoginErr);
+            }
+
             // Create session (using employee session middleware)
             // Clear any existing customer session data to prevent conflicts
             if (req.session.user && req.session.user.type === 'customer') {
@@ -25039,6 +25951,101 @@ module.exports = function (sql, pool, getStripe = null) {
     // =============================================================================
     // CUSTOMER AUTHENTICATION ROUTES
     // =============================================================================
+
+    function customerOAuthFrontendBaseUrl() {
+        return (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+    }
+
+    /**
+     * Whether Google OAuth is configured (for UI)
+     * GET /api/auth/social-providers
+     */
+    router.get('/api/auth/social-providers', (req, res) => {
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.json({
+            success: true,
+            google: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)
+        });
+    });
+
+    /**
+     * Issue JWT pair from an existing customer session (used after Google redirect)
+     * POST /api/auth/customer/sync-tokens
+     */
+    router.post('/api/auth/customer/sync-tokens', async (req, res) => {
+        try {
+            if (!req.session || !req.session.user || req.session.user.type !== 'customer') {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Not authenticated',
+                    code: 'NOT_AUTHENTICATED'
+                });
+            }
+            const customerData = { ...req.session.user };
+            let jwtTokens = null;
+            try {
+                jwtTokens = jwtUtils.generateTokenPair(customerData);
+            } catch (e) {
+                console.error('[GOOGLE AUTH] sync-tokens JWT:', e.message);
+            }
+            res.setHeader('Access-Control-Allow-Credentials', 'true');
+            res.json({
+                success: true,
+                user: customerData,
+                tokens: jwtTokens,
+                sessionId: req.sessionID
+            });
+        } catch (err) {
+            console.error('sync-tokens error:', err);
+            res.status(500).json({ success: false, message: 'Token sync failed' });
+        }
+    });
+
+    /**
+     * Start Google OAuth (customer)
+     * GET /api/auth/google
+     */
+    router.get('/api/auth/google', (req, res, next) => {
+        if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+            return res.status(503).json({
+                success: false,
+                message: 'Google sign-in is not configured.'
+            });
+        }
+        passport.authenticate('google-customer', { scope: ['profile', 'email'], session: false })(req, res, next);
+    });
+
+    /**
+     * Google OAuth callback
+     * GET /api/auth/google/callback
+     */
+    router.get('/api/auth/google/callback',
+        (req, res, next) => {
+            const failUrl = `${customerOAuthFrontendBaseUrl()}/login?google=error`;
+            passport.authenticate('google-customer', { session: false, failureRedirect: failUrl })(req, res, next);
+        },
+        async (req, res) => {
+            try {
+                const customerData = req.user;
+                if (!customerData) {
+                    return res.redirect(`${customerOAuthFrontendBaseUrl()}/login?google=error`);
+                }
+                if (req.session.user && req.session.user.type === 'employee') {
+                    req.session.user = null;
+                }
+                req.session.user = customerData;
+                req.session.customerData = customerData;
+                await new Promise((resolve, reject) => {
+                    req.session.save((err) => (err ? reject(err) : resolve()));
+                });
+                res.redirect(`${customerOAuthFrontendBaseUrl()}/login?google=success`);
+            } catch (e) {
+                console.error('[GOOGLE AUTH] Callback session save:', e);
+                res.redirect(`${customerOAuthFrontendBaseUrl()}/login?google=error`);
+            }
+        }
+    );
+
     /**
      * Customer Login (API endpoint)
      * POST /api/auth/customer/login
@@ -25118,6 +26125,14 @@ module.exports = function (sql, pool, getStripe = null) {
 
             const passwordHash = passwordResult.recordset[0].PasswordHash;
 
+            if (passwordHash == null || passwordHash === '') {
+                return res.status(401).json({
+                    success: false,
+                    message: 'This account uses Google sign-in. Please use Continue with Google.',
+                    code: 'OAUTH_ONLY'
+                });
+            }
+
             // Verify password using bcrypt
             console.log('Verifying password...');
             const passwordMatch = await bcrypt.compare(password, passwordHash);
@@ -25137,6 +26152,22 @@ module.exports = function (sql, pool, getStripe = null) {
             await pool.request()
                 .input('customerId', sql.Int, customer.CustomerID)
                 .query('UPDATE Customers SET LastLogin = GETDATE() WHERE CustomerID = @customerId');
+
+            // Keep Users.LastLogin in sync when a customer also has a Users record
+            try {
+                await pool.request()
+                    .input('email', sql.NVarChar, customer.Email)
+                    .query(`
+                        UPDATE Users
+                        SET
+                            LastLogin = GETDATE(),
+                            CreatedAt = ISNULL(CreatedAt, GETDATE())
+                        WHERE Email = @email
+                    `);
+            } catch (lastLoginErr) {
+                // Non-blocking: don't fail login if audit fields can't be updated
+                console.error('Error updating Users.LastLogin for customer:', lastLoginErr);
+            }
 
             // Create customer session data
             const customerData = {
@@ -29185,6 +30216,29 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/Employee/Admin/Products', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
+            // Keep Products.SKU aligned with ProductInventory (InventoryProducts) source of truth
+            await pool.request().query(`
+                UPDATE p
+                SET p.SKU = src.SKU
+                FROM Products p
+                OUTER APPLY (
+                    SELECT TOP 1 ip.SKU
+                    FROM InventoryProducts ip
+                    WHERE ip.IsActive = 1
+                      AND ip.SKU IS NOT NULL
+                      AND (
+                           ip.ProductID = p.ProductID
+                        OR ip.InventoryProductID = p.ProductID
+                      )
+                    ORDER BY
+                        CASE WHEN ip.ProductID = p.ProductID THEN 0 ELSE 1 END,
+                        ip.DateUpdated DESC,
+                        ip.DateAdded DESC,
+                        ip.InventoryProductID DESC
+                ) src
+                WHERE src.SKU IS NOT NULL
+                  AND ISNULL(p.SKU, '') <> src.SKU
+            `);
             const page = parseInt(req.query.page) || 1;
             const limit = 20;
             const offset = (page - 1) * limit;
@@ -29222,42 +30276,41 @@ module.exports = function (sql, pool, getStripe = null) {
                         -- Priority: InventoryProducts.AvailableQuantity > Products.StockQuantity
                         -- Use COALESCE with explicit NULL handling
                         COALESCE(
-                            -- Primary: Use JOIN result if matched (fastest path)
-                            ip.AvailableQuantity,
-                            -- Fallback: Subquery to find linked product via ProductID
-                            (SELECT TOP 1 ip_sub.AvailableQuantity 
-                             FROM InventoryProducts ip_sub 
-                             WHERE ip_sub.ProductID = p.ProductID 
-                               AND ip_sub.IsActive = 1),
+                            linkedIp.AvailableQuantity,
+                            linkedIpById.AvailableQuantity,
                             -- Final fallback: Products.StockQuantity
                             p.StockQuantity
                         ) as AvailableStock,
-                        -- Use InventoryProducts SKU if linked, otherwise use Products SKU
-                        COALESCE(
-                            (SELECT TOP 1 ip2.SKU 
-                             FROM InventoryProducts ip2 
-                             WHERE ip2.InventoryProductID = p.ProductID 
-                               AND ip2.IsActive = 1),
-                            ip.SKU,
-                            p.SKU
-                        ) as SKU,
-                        -- Link to InventoryProductID if exists
-                        COALESCE(
-                            (SELECT TOP 1 ip2.InventoryProductID 
-                             FROM InventoryProducts ip2 
-                             WHERE ip2.InventoryProductID = p.ProductID 
-                               AND ip2.IsActive = 1),
-                            ip.InventoryProductID
-                        ) as InventoryProductID,
+                        -- Keep SKU source aligned with ProductInventory link fallback logic
+                        COALESCE(linkedIp.SKU, linkedIpById.SKU, p.SKU) as SKU,
+                        COALESCE(linkedIp.SKU, linkedIpById.SKU, p.SKU) as EffectiveSKU,
+                        -- Link to InventoryProductID if exists (same priority as SKU source)
+                        COALESCE(linkedIp.InventoryProductID, linkedIpById.InventoryProductID) as InventoryProductID,
                         -- Get discount info
                         d.DiscountedPrice,
                         d.DiscountPercentage,
                         d.StartDate as DiscountStartDate,
                         d.EndDate as DiscountEndDate
                     FROM Products p
-                    -- JOIN: Link via ProductID (correct link after migration)
-                    -- This JOIN helps with performance and provides fallback
-                    LEFT JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
+                    OUTER APPLY (
+                        SELECT TOP 1
+                            ip.InventoryProductID,
+                            ip.SKU,
+                            ip.AvailableQuantity
+                        FROM InventoryProducts ip
+                        WHERE ip.ProductID = p.ProductID
+                          AND ip.IsActive = 1
+                        ORDER BY ip.DateUpdated DESC, ip.DateAdded DESC, ip.InventoryProductID DESC
+                    ) linkedIp
+                    OUTER APPLY (
+                        SELECT TOP 1
+                            ip.InventoryProductID,
+                            ip.SKU,
+                            ip.AvailableQuantity
+                        FROM InventoryProducts ip
+                        WHERE ip.InventoryProductID = p.ProductID
+                          AND ip.IsActive = 1
+                    ) linkedIpById
                     LEFT JOIN Discounts d ON p.ProductID = d.ProductID 
                         AND d.IsActive = 1 
                         AND GETDATE() BETWEEN d.StartDate AND d.EndDate
@@ -29278,18 +30331,21 @@ module.exports = function (sql, pool, getStripe = null) {
                             p.Name,
                             p.StockQuantity,
                             COALESCE(
-                                ip.AvailableQuantity,
-                                (SELECT TOP 1 ip_sub.AvailableQuantity 
-                                 FROM InventoryProducts ip_sub 
-                                 WHERE ip_sub.ProductID = p.ProductID 
-                                   AND ip_sub.IsActive = 1),
+                                linkedIp.AvailableQuantity,
                                 p.StockQuantity
                             ) as AvailableStock,
-                            ip.InventoryProductID,
-                            ip.ProductID as InventoryProducts_ProductID,
-                            ip.AvailableQuantity as JOIN_AvailableQuantity
+                            linkedIp.InventoryProductID,
+                            linkedIp.AvailableQuantity as JOIN_AvailableQuantity
                         FROM Products p
-                        LEFT JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
+                        OUTER APPLY (
+                            SELECT TOP 1
+                                ip.InventoryProductID,
+                                ip.AvailableQuantity
+                            FROM InventoryProducts ip
+                            WHERE ip.ProductID = p.ProductID
+                              AND ip.IsActive = 1
+                            ORDER BY ip.DateUpdated DESC, ip.DateAdded DESC, ip.InventoryProductID DESC
+                        ) linkedIp
                         WHERE p.ProductID = 58 AND p.IsActive = 1
                     `);
 
@@ -29301,7 +30357,6 @@ module.exports = function (sql, pool, getStripe = null) {
                         StockQuantity: p58.StockQuantity,
                         AvailableStock: p58.AvailableStock,
                         InventoryProductID: p58.InventoryProductID,
-                        InventoryProducts_ProductID: p58.InventoryProducts_ProductID,
                         JOIN_AvailableQuantity: p58.JOIN_AvailableQuantity
                     });
                 } else {

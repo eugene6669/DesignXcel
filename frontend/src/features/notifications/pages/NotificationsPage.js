@@ -5,6 +5,7 @@ import { PageLoader } from '../../../shared/components/ui';
 import './NotificationsPage.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const RESTORE_RECEIPT_ORDER_NUMBERS = ['ORD20260503002', 'ORD20260503001'];
 
 const NotificationsPage = () => {
   const { isAuthenticated, loading } = useAuth();
@@ -23,19 +24,55 @@ const NotificationsPage = () => {
       try {
         const loadedNotifications = [];
 
-        // Load order receipt notification from localStorage (persists until dismissed)
-        const notificationData = localStorage.getItem('orderReceiptNotification');
-        if (notificationData) {
-          try {
-            const data = JSON.parse(notificationData);
-            // Check if notification was dismissed
-            if (!data.dismissed) {
-              // Check if it was marked as read
-              const readReceipts = JSON.parse(localStorage.getItem('readReceiptNotifications') || '[]');
-              const isRead = readReceipts.includes('order-receipt');
-              
+        // Load order receipt notifications from localStorage (persist until dismissed).
+        // Supports both new list storage and legacy single-item storage.
+        try {
+          const receiptNotifications = [];
+          const savedReceipts = JSON.parse(localStorage.getItem('orderReceiptNotifications') || '[]');
+          const normalizedSavedReceipts = Array.isArray(savedReceipts) ? [...savedReceipts] : [];
+
+          // Restore requested receipt notifications if they were accidentally removed.
+          RESTORE_RECEIPT_ORDER_NUMBERS.forEach((orderNumber, index) => {
+            const receiptId = `order-receipt-${orderNumber}`;
+            const exists = normalizedSavedReceipts.some((item) => item.id === receiptId);
+            if (!exists) {
+              normalizedSavedReceipts.push({
+                id: receiptId,
+                orderNumber,
+                timestamp: new Date(Date.now() - index * 60000).toISOString(),
+                dismissed: false
+              });
+            }
+          });
+
+          localStorage.setItem('orderReceiptNotifications', JSON.stringify(normalizedSavedReceipts));
+          receiptNotifications.push(...normalizedSavedReceipts);
+
+          const legacyReceipt = localStorage.getItem('orderReceiptNotification');
+          if (legacyReceipt) {
+            const parsedLegacy = JSON.parse(legacyReceipt);
+            if (parsedLegacy && parsedLegacy.orderNumber) {
+              const legacyId = parsedLegacy.id || `order-receipt-${parsedLegacy.orderNumber}`;
+              const exists = receiptNotifications.some((item) => item.id === legacyId);
+              if (!exists) {
+                receiptNotifications.push({
+                  ...parsedLegacy,
+                  id: legacyId
+                });
+              }
+            }
+          }
+
+          const readReceipts = JSON.parse(localStorage.getItem('readReceiptNotifications') || '[]');
+          const forcedReceiptIds = RESTORE_RECEIPT_ORDER_NUMBERS.map((orderNumber) => `order-receipt-${orderNumber}`);
+          const normalizedReadReceipts = readReceipts.filter((id) => !forcedReceiptIds.includes(id));
+          if (normalizedReadReceipts.length !== readReceipts.length) {
+            localStorage.setItem('readReceiptNotifications', JSON.stringify(normalizedReadReceipts));
+          }
+          receiptNotifications.forEach((data) => {
+              const receiptId = data.id || `order-receipt-${data.orderNumber || Date.now()}`;
               loadedNotifications.push({
-                id: 'order-receipt',
+                id: receiptId,
                 type: 'order_receipt',
                 title: 'Order Receipt Sent!',
                 message: data.orderNumber
@@ -43,12 +80,11 @@ const NotificationsPage = () => {
                   : 'Your order receipt has been sent to your email.',
                 orderNumber: data.orderNumber,
                 timestamp: data.timestamp,
-                read: isRead
+                read: normalizedReadReceipts.includes(receiptId)
               });
-            }
-          } catch (error) {
-            console.error('Error parsing notification data:', error);
-          }
+            });
+        } catch (error) {
+          console.error('Error parsing receipt notification data:', error);
         }
 
         // Load refund receipt notification from localStorage (persists until dismissed)
@@ -124,11 +160,13 @@ const NotificationsPage = () => {
           console.error('[NOTIFICATIONS] Error fetching order notifications:', error);
         }
 
-        // Sort by timestamp (newest first)
+        // Sort by timestamp (newest first); invalid dates sort to the end
         loadedNotifications.sort((a, b) => {
           const timeA = new Date(a.timestamp).getTime();
           const timeB = new Date(b.timestamp).getTime();
-          return timeB - timeA;
+          const safeA = Number.isFinite(timeA) ? timeA : 0;
+          const safeB = Number.isFinite(timeB) ? timeB : 0;
+          return safeB - safeA;
         });
 
         setNotifications(loadedNotifications);
@@ -154,16 +192,13 @@ const NotificationsPage = () => {
   }, [isAuthenticated]);
 
   const handleDismiss = (notificationId) => {
-    if (notificationId === 'order-receipt') {
-      const notificationData = localStorage.getItem('orderReceiptNotification');
-      if (notificationData) {
-        try {
-          const data = JSON.parse(notificationData);
-          data.dismissed = true;
-          localStorage.setItem('orderReceiptNotification', JSON.stringify(data));
-        } catch (error) {
-          console.error('Error updating notification data:', error);
-        }
+    if (notificationId.startsWith('order-receipt-')) {
+      // Keep order receipts persistent per request: do not remove from storage.
+      // Dismiss acts as "mark as read" for receipt items.
+      const read = JSON.parse(localStorage.getItem('readReceiptNotifications') || '[]');
+      if (!read.includes(notificationId)) {
+        read.push(notificationId);
+        localStorage.setItem('readReceiptNotifications', JSON.stringify(read));
       }
     } else if (notificationId === 'order-refund') {
       const notificationData = localStorage.getItem('orderRefundNotification');
@@ -185,7 +220,15 @@ const NotificationsPage = () => {
       }
     }
 
-    setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    if (notificationId.startsWith('order-receipt-')) {
+      setNotifications(prev =>
+        prev.map(n =>
+          n.id === notificationId ? { ...n, read: true } : n
+        )
+      );
+    } else {
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    }
 
     // Dispatch custom event to update notification icon
     window.dispatchEvent(new CustomEvent('notificationUpdated'));
@@ -196,7 +239,7 @@ const NotificationsPage = () => {
   };
 
   const handleMarkAsRead = (notificationId) => {
-    if (notificationId === 'order-receipt') {
+    if (notificationId.startsWith('order-receipt-')) {
       // Store read receipt notifications
       const read = JSON.parse(localStorage.getItem('readReceiptNotifications') || '[]');
       if (!read.includes(notificationId)) {
@@ -255,6 +298,13 @@ const NotificationsPage = () => {
     }
     if (notification.type === 'order_status') {
       switch (notification.status) {
+        case 'Processing':
+          return (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+          );
         case 'Shipping':
           return (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -271,7 +321,21 @@ const NotificationsPage = () => {
               <circle cx="18.5" cy="18.5" r="2.5"></circle>
             </svg>
           );
+        case 'Delivered':
+          return (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+          );
         case 'Received':
+          return (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+          );
+        case 'Completed':
           return (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>

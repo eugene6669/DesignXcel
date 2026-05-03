@@ -1,5 +1,14 @@
 # Railway Environment Variables Setup
 
+## Recommended File Structure
+
+Keep these files in `backend/`:
+
+- `.env.template` - canonical complete env reference
+- `.env.example` - local dev quickstart
+- `.env.railway.example` - Railway production template
+- `.env.railway` - your real Railway values (do not commit)
+
 ## Required Environment Variables for Backend
 
 You need to set these environment variables in your Railway backend project dashboard:

@@ -15,6 +15,39 @@ const CartIcon = () => (
     </svg>
 );
 
+/** Persist each order receipt separately so older receipts are not overwritten by newer checkouts. */
+const persistOrderReceiptNotification = (orderNumber) => {
+    if (!orderNumber) return;
+    const receiptId = `order-receipt-${String(orderNumber)}`;
+    const notificationData = {
+        id: receiptId,
+        orderNumber: String(orderNumber),
+        timestamp: new Date().toISOString(),
+        dismissed: false
+    };
+    try {
+        const existing = JSON.parse(localStorage.getItem('orderReceiptNotifications') || '[]');
+        const withoutCurrent = existing.filter((item) => item.id !== receiptId);
+        const next = [notificationData, ...withoutCurrent];
+        localStorage.setItem('orderReceiptNotifications', JSON.stringify(next));
+    } catch {
+        localStorage.setItem('orderReceiptNotifications', JSON.stringify([notificationData]));
+    }
+
+    // Backward compatibility for components still checking the legacy single-item key.
+    localStorage.setItem('orderReceiptNotification', JSON.stringify(notificationData));
+
+    try {
+        const read = JSON.parse(localStorage.getItem('readReceiptNotifications') || '[]');
+        const next = read.filter((id) => id !== receiptId);
+        localStorage.setItem('readReceiptNotifications', JSON.stringify(next));
+    } catch {
+        localStorage.setItem('readReceiptNotifications', '[]');
+    }
+    window.dispatchEvent(new CustomEvent('notificationUpdated'));
+    window.dispatchEvent(new Event('storage'));
+};
+
 const OrderSuccessPage = () => {
     const { orderId } = useParams();
     const location = useLocation();
@@ -43,16 +76,8 @@ const OrderSuccessPage = () => {
                     const orderExtraDeliveryFee = parseFloat(order.ExtraDeliveryFee) || 0;
                     const calculatedSubtotal = orderTotal - orderShipping - orderExtraDeliveryFee;
                     
-                    // Trigger notification for order receipt email
                     if (order.ReferenceNumber || order.OrderID) {
-                        const notificationData = {
-                            orderNumber: order.ReferenceNumber || order.OrderID,
-                            timestamp: new Date().toISOString(),
-                            dismissed: false
-                        };
-                        localStorage.setItem('orderReceiptNotification', JSON.stringify(notificationData));
-                        // Trigger storage event for other tabs/components
-                        window.dispatchEvent(new Event('storage'));
+                        persistOrderReceiptNotification(order.ReferenceNumber || order.OrderID);
                     }
                     
                     setPaymentDetails(prev => ({
@@ -167,16 +192,8 @@ const OrderSuccessPage = () => {
                             const extraDeliveryFeeFromMetadata = parseFloat(session.metadata?.extraDeliveryFee) || 0;
                             const orderExtraDeliveryFee = parseFloat(order.ExtraDeliveryFee) || extraDeliveryFeeFromMetadata || 0;
                             
-                            // Trigger notification for order receipt email
                             if (order.ReferenceNumber || order.OrderID) {
-                                const notificationData = {
-                                    orderNumber: order.ReferenceNumber || order.OrderID,
-                                    timestamp: new Date().toISOString(),
-                                    dismissed: false
-                                };
-                                localStorage.setItem('orderReceiptNotification', JSON.stringify(notificationData));
-                                // Trigger storage event for other tabs/components
-                                window.dispatchEvent(new Event('storage'));
+                                persistOrderReceiptNotification(order.ReferenceNumber || order.OrderID);
                             }
                             
                             setPaymentDetails(prev => ({
@@ -292,16 +309,8 @@ const OrderSuccessPage = () => {
                                     const order = orderResult.order;
                                     console.log('Found order in database by session ID:', order);
                                     
-                                    // Trigger notification for order receipt email
                                     if (order.ReferenceNumber || order.OrderID) {
-                                        const notificationData = {
-                                            orderNumber: order.ReferenceNumber || order.OrderID,
-                                            timestamp: new Date().toISOString(),
-                                            dismissed: false
-                                        };
-                                        localStorage.setItem('orderReceiptNotification', JSON.stringify(notificationData));
-                                        // Trigger storage event for other tabs/components
-                                        window.dispatchEvent(new Event('storage'));
+                                        persistOrderReceiptNotification(order.ReferenceNumber || order.OrderID);
                                     }
                                     
                                     // Update payment details with actual order information

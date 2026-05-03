@@ -1384,7 +1384,8 @@
                                     <th>Category</th>
                                     <th>Price</th>
                                     <th>Featured</th>
-                                    <th>Remove</th>
+                                    <th>Best Seller</th>
+                                    <th>New Arrival</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -3195,7 +3196,10 @@
                     // --- Products Tab Logic ---
                     async function fetchProducts() {
                         const res = await fetch('/api/admin/products');
-                        return res.json();
+                        const data = await res.json();
+                        if (Array.isArray(data)) return data;
+                        if (data && Array.isArray(data.products)) return data.products;
+                        return [];
                     }
                     async function setProductFeatured(id, isFeatured) {
                         const res = await fetch(`/api/admin/products/${id}/featured`, {
@@ -3205,11 +3209,27 @@
                         });
                         return res.json();
                     }
+                    async function setProductBestSeller(id, isBestSeller) {
+                        const res = await fetch(`/api/admin/products/${id}/best-seller`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ bestSeller: isBestSeller })
+                        });
+                        return res.json();
+                    }
+                    async function setProductNewArrival(id, isNewArrival) {
+                        const res = await fetch(`/api/admin/products/${id}/new-arrival`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ newArrival: isNewArrival })
+                        });
+                        return res.json();
+                    }
 
                     async function renderProductsTable() {
                         const tbody = document.querySelector('#products-table tbody');
                         if (!tbody) return;
-                        tbody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
                         try {
                             const products = await fetchProducts();
                             tbody.innerHTML = products.map(p => {
@@ -3222,9 +3242,10 @@
                                             <input type="checkbox" ${p.IsFeatured ? 'checked' : ''} onchange="toggleFeatured(${p.ProductID}, this.checked)">
                                         </td>
                                         <td>
-                                            <button onclick="deleteProduct(${p.ProductID}, '${p.Name}')" style="padding: 0.25em 0.5em; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">
-                                                Remove
-                                            </button>
+                                            <input type="checkbox" ${p.IsBestSeller ? 'checked' : ''} onchange="toggleBestSeller(${p.ProductID}, this.checked)">
+                                        </td>
+                                        <td>
+                                            <input type="checkbox" ${p.IsNewArrival ? 'checked' : ''} onchange="toggleNewArrival(${p.ProductID}, this.checked)">
                                         </td>
                                     </tr>
                                 `;
@@ -3237,6 +3258,26 @@
                         document.getElementById('products-status').textContent = 'Saving...';
                         try {
                             await setProductFeatured(id, checked);
+                            document.getElementById('products-status').textContent = 'Saved!';
+                            renderProductsTable();
+                        } catch {
+                            document.getElementById('products-status').textContent = 'Failed to save.';
+                        }
+                    };
+                    window.toggleBestSeller = async function (id, checked) {
+                        document.getElementById('products-status').textContent = 'Saving...';
+                        try {
+                            await setProductBestSeller(id, checked);
+                            document.getElementById('products-status').textContent = 'Saved!';
+                            renderProductsTable();
+                        } catch {
+                            document.getElementById('products-status').textContent = 'Failed to save.';
+                        }
+                    };
+                    window.toggleNewArrival = async function (id, checked) {
+                        document.getElementById('products-status').textContent = 'Saving...';
+                        try {
+                            await setProductNewArrival(id, checked);
                             document.getElementById('products-status').textContent = 'Saved!';
                             renderProductsTable();
                         } catch {

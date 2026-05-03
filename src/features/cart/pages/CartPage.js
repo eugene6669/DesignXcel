@@ -114,7 +114,7 @@ const Cart = () => {
                     <div className="cart-empty-page">
                         <div className="empty-cart-content">
                             <div className="empty-cart-icon">
-                                <ShoppingCartIcon size={64} color="#9ca3af" />
+                                <ShoppingCartIcon size={64} color="#F0B21B" />
                             </div>
                             <h1>Your Cart is Empty</h1>
                             <p>Looks like you haven't added any items to your cart yet.</p>

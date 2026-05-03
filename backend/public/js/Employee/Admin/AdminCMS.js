@@ -920,7 +920,6 @@ function loadProducts() {
     fetchProducts().then(products => {
         tbody.innerHTML = products.map(p => `
             <tr>
-                <td>${p.ProductID}</td>
                 <td>${p.Name}</td>
                 <td>${p.Category || 'N/A'}</td>
                 <td>₱${parseFloat(p.Price).toFixed(2)}</td>
@@ -929,8 +928,12 @@ function loadProducts() {
                            onchange="toggleProductFeatured(${p.ProductID}, this.checked)">
                 </td>
                 <td>
-                    <button onclick="editProduct(${p.ProductID})" class="btn-edit">Edit</button>
-                    <button onclick="deleteProduct(${p.ProductID})" class="btn-delete">Delete</button>
+                    <input type="checkbox" ${p.IsBestSeller ? 'checked' : ''} 
+                           onchange="toggleProductBestSeller(${p.ProductID}, this.checked)">
+                </td>
+                <td>
+                    <input type="checkbox" ${p.IsNewArrival ? 'checked' : ''} 
+                           onchange="toggleProductNewArrival(${p.ProductID}, this.checked)">
                 </td>
             </tr>
         `).join('');
@@ -956,6 +959,54 @@ function toggleProductFeatured(productId, featured) {
             if (window.EmployeeUtils) {
                 window.EmployeeUtils.showNotification('Failed to update product', 'error');
             }
+        }
+    })
+    .catch(error => {
+        console.error('Error updating product:', error);
+        if (window.EmployeeUtils) {
+            window.EmployeeUtils.showNotification('Error updating product', 'error');
+        }
+    });
+}
+
+function toggleProductBestSeller(productId, bestSeller) {
+    fetch(`/api/admin/products/${productId}/best-seller`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bestSeller })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            if (window.EmployeeUtils) {
+                window.EmployeeUtils.showNotification('Product best seller status updated');
+            }
+        } else if (window.EmployeeUtils) {
+            window.EmployeeUtils.showNotification('Failed to update product', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error updating product:', error);
+        if (window.EmployeeUtils) {
+            window.EmployeeUtils.showNotification('Error updating product', 'error');
+        }
+    });
+}
+
+function toggleProductNewArrival(productId, newArrival) {
+    fetch(`/api/admin/products/${productId}/new-arrival`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newArrival })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            if (window.EmployeeUtils) {
+                window.EmployeeUtils.showNotification('Product new arrival status updated');
+            }
+        } else if (window.EmployeeUtils) {
+            window.EmployeeUtils.showNotification('Failed to update product', 'error');
         }
     })
     .catch(error => {

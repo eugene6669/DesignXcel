@@ -13,6 +13,8 @@ import '../shared/components/ui/slider.css';
 const Home = () => {
     // Featured Products
     const [featuredProducts, setFeaturedProducts] = useState([]);
+    const [bestSellerProducts, setBestSellerProducts] = useState([]);
+    const [newArrivalProducts, setNewArrivalProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     
     // Categories
@@ -58,7 +60,7 @@ const Home = () => {
         try {
             // Try to get from the frontend API endpoint to get featured products with discounts
             const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-            const response = await fetch(`${apiBase}/api/products`);
+            const response = await fetch(`${apiBase}/api/products`, { cache: 'no-store' });
             if (response.ok) {
                 const data = await response.json();
                 if (data.success && data.products) {
@@ -75,23 +77,49 @@ const Home = () => {
                             discountInfo: p.discountInfo,
                             ...p
                         }));
+
+                    const bestSellers = data.products
+                        .filter(p => p.isBestSeller)
+                        .map(p => ({
+                            id: p.id,
+                            name: p.name,
+                            description: p.description,
+                            price: p.price,
+                            image: p.images && p.images.length > 0 ? p.images[0] : null,
+                            hasDiscount: p.hasDiscount,
+                            discountInfo: p.discountInfo,
+                            ...p
+                        }));
+
+                    const newArrivals = data.products
+                        .filter(p => p.isNewArrival)
+                        .map(p => ({
+                            id: p.id,
+                            name: p.name,
+                            description: p.description,
+                            price: p.price,
+                            image: p.images && p.images.length > 0 ? p.images[0] : null,
+                            hasDiscount: p.hasDiscount,
+                            discountInfo: p.discountInfo,
+                            ...p
+                        }));
                     
-                    if (featured.length > 0) {
-                        setFeaturedProducts(featured);
-                    } else {
-                        // If no featured products from backend, use mock data
-                        const mockResponse = await getFeaturedProducts();
-                        setFeaturedProducts(mockResponse.products || []);
-                    }
+                    setFeaturedProducts(featured);
+                    setBestSellerProducts(bestSellers);
+                    setNewArrivalProducts(newArrivals);
                 } else {
                     // If no featured products from backend, use mock data
                     const mockResponse = await getFeaturedProducts();
                     setFeaturedProducts(mockResponse.products || []);
+                    setBestSellerProducts([]);
+                    setNewArrivalProducts([]);
                 }
             } else {
                 // If backend is not available, use mock data
                 const mockResponse = await getFeaturedProducts();
                 setFeaturedProducts(mockResponse.products || []);
+                setBestSellerProducts([]);
+                setNewArrivalProducts([]);
             }
         } catch (error) {
             console.error('Error loading featured products:', error);
@@ -99,9 +127,13 @@ const Home = () => {
             try {
                 const mockResponse = await getFeaturedProducts();
                 setFeaturedProducts(mockResponse.products || []);
+                setBestSellerProducts([]);
+                setNewArrivalProducts([]);
             } catch (mockError) {
                 console.error('Error loading mock products:', mockError);
                 setFeaturedProducts([]);
+                setBestSellerProducts([]);
+                setNewArrivalProducts([]);
             }
         } finally {
             setLoading(false);
@@ -534,6 +566,33 @@ const Home = () => {
                             transform: scale(1); 
                         }
                     }
+
+                    @keyframes bestSellerSlideIn {
+                        from {
+                            opacity: 0;
+                            transform: translateX(14px);
+                        }
+                        to {
+                            opacity: 1;
+                            transform: translateX(0);
+                        }
+                    }
+
+                    @keyframes bestSellerPulse {
+                        0%, 100% { box-shadow: 0 0 0 rgba(240, 178, 27, 0.1); }
+                        50% { box-shadow: 0 10px 24px rgba(240, 178, 27, 0.2); }
+                    }
+
+                    @keyframes newArrivalFloatIn {
+                        from {
+                            opacity: 0;
+                            transform: translateY(16px) scale(0.98);
+                        }
+                        to {
+                            opacity: 1;
+                            transform: translateY(0) scale(1);
+                        }
+                    }
                     
                     /* Testimonials Grid */
                     .testimonials-grid {
@@ -798,6 +857,67 @@ const Home = () => {
                             ))}
                         </Slider>
                     </>
+                </div>
+            </section>
+
+            <section className="best-seller-section">
+                <div className="container">
+                    <div className="section-header section-header--best-seller">
+                        <div className="section-header-title-wrap">
+                            <h2>Best Seller</h2>
+                            <p className="section-header-sub">Top picks customers love right now</p>
+                        </div>
+                        <Link to="/products?sort=popular" className="view-all view-all--section">View Best Sellers →</Link>
+                    </div>
+                    {bestSellerProducts.length > 0 ? (
+                        <div className="best-seller-layout">
+                            <div className="best-seller-hero">
+                                <span className="best-seller-hero-badge" aria-hidden="true">#1</span>
+                                <div className="best-seller-hero-card">
+                                    <ProductCard product={bestSellerProducts[0]} />
+                                </div>
+                            </div>
+                            <div className="best-seller-rank-list">
+                                {bestSellerProducts.slice(1, 4).map((product, index) => (
+                                    <div key={`best-${product.id}`} className="best-seller-rank-card">
+                                        <span className="best-seller-rank-num" aria-hidden="true">#{index + 2}</span>
+                                        <ProductCard product={product} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="section-empty-note">No best seller products selected yet.</p>
+                    )}
+                </div>
+            </section>
+
+            <section className="new-arrival-section">
+                <div className="container">
+                    <div className="section-header section-header--new-arrival">
+                        <div className="section-header-title-wrap">
+                            <span className="section-eyebrow">Just landed</span>
+                            <h2>New Arrival</h2>
+                            <p className="section-header-sub">Fresh styles added to the showroom</p>
+                        </div>
+                        <Link to="/products?sort=newest" className="view-all view-all--section">View New Arrivals →</Link>
+                    </div>
+                    {newArrivalProducts.length > 0 ? (
+                        <div className="new-arrival-grid">
+                            {newArrivalProducts.map((product, index) => (
+                                <div
+                                    key={`new-${product.id}`}
+                                    className={`new-arrival-card ${index % 3 === 1 ? 'new-arrival-card--featured' : ''}`}
+                                    style={{ animationDelay: `${index * 0.08}s` }}
+                                >
+                                    <span className="new-arrival-ribbon">NEW</span>
+                                    <ProductCard product={product} />
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="section-empty-note">No new arrival products selected yet.</p>
+                    )}
                 </div>
             </section>
 

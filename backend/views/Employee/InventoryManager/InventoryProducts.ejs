@@ -1078,6 +1078,7 @@
                         <thead>
                             <tr>
                                 <th>Name</th>
+                                <th>SKU</th>
                                 <th>Description</th>
                                 <th>Price</th>
                                 <th>Discount</th>
@@ -1109,6 +1110,7 @@
                                             <span><%= product.Name %></span>
                                         </div>
                                     </td>
+                                    <td><%= product.EffectiveSKU || product.SKU || 'N/A' %></td>
                                     <td><%= product.Description %></td>
                                     <td>
                                         <% if (product.DiscountedPrice && product.DiscountedPrice !== product.Price) { %>

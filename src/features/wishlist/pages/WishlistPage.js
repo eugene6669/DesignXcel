@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useWishlist } from '../../../shared/contexts/WishlistContext';
 import { useCurrency } from '../../../shared/contexts/CurrencyContext';
 import { useCart } from '../../../shared/contexts/CartContext';
@@ -14,6 +14,7 @@ import {
   StarIcon
 } from '../../../shared/components/ui/SvgIcons';
 import './WishlistPage.css';
+import '../cart/components/cart.css';
 
 const WishlistPage = () => {
   const { 
@@ -66,41 +67,56 @@ const WishlistPage = () => {
     });
   };
 
-  return (
-    <div className="wishlist-page">
-      <PageHeader
-        breadcrumbs={[
-          { label: 'Home', href: '/' },
-          { label: 'My Wishlist' }
-        ]}
-        title="My Wishlist"
-        subtitle={`${wishlist.length} items`}
-      />
-      
-      <div className="wishlist-container">
-        {/* Content */}
-        <div className="wishlist-content">
-          {wishlist.length === 0 ? (
-            <div className="wishlist-empty">
-              <div className="empty-wishlist-content">
-                <div className="empty-wishlist-icon">
-                  <HeartIcon size={64} color="#d1d5db" />
-                </div>
-                <h2>Your wishlist is empty</h2>
-                <p>Start adding products you love to your wishlist!</p>
-                <div className="empty-wishlist-actions">
-                  <button 
-                    className="browse-products-btn"
-                    onClick={() => navigate('/products')}
-                  >
-                    <ShoppingBagIcon size={16} color="#ffffff" />
-                    Browse Products
-                  </button>
-                </div>
+  if (wishlist.length === 0) {
+    return (
+      <div className="wishlist-page">
+        <div className="container">
+          <div className="cart-empty-page">
+            <div className="empty-cart-content">
+              <div className="empty-cart-icon">
+                <HeartIcon size={64} color="#F0B21B" />
+              </div>
+              <h1>Your Wishlist is Empty</h1>
+              <p>Looks like you haven&apos;t added any items to your wishlist yet.</p>
+              <div className="empty-cart-actions">
+                <Link to="/products" className="btn btn-primary btn-large">
+                  Continue Shopping
+                </Link>
+                <Link to="/" className="btn btn-secondary">
+                  Back to Home
+                </Link>
               </div>
             </div>
-          ) : (
-            <>
+          </div>
+        </div>
+
+        <ConfirmationModal
+          isOpen={showClearConfirmation}
+          onClose={() => setShowClearConfirmation(false)}
+          onConfirm={handleConfirmClear}
+          title="Clear Wishlist"
+          message="Are you sure you want to remove all items from your wishlist? This action cannot be undone."
+          confirmText="Clear Wishlist"
+          cancelText="Keep Items"
+          type="warning"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="wishlist-page">
+      <div className="wishlist-container">
+        <PageHeader
+          breadcrumbs={[
+            { label: 'Home', href: '/' },
+            { label: 'My Wishlist' }
+          ]}
+          title="My Wishlist"
+          subtitle={`${wishlist.length} ${wishlist.length === 1 ? 'item' : 'items'} saved`}
+        />
+
+        <div className="wishlist-content">
               {/* Actions Bar */}
               <div className="wishlist-actions-bar">
                 <button 
@@ -201,12 +217,9 @@ const WishlistPage = () => {
                   </div>
                 ))}
               </div>
-            </>
-          )}
         </div>
       </div>
 
-      {/* Clear Wishlist Confirmation Modal */}
       <ConfirmationModal
         isOpen={showClearConfirmation}
         onClose={() => setShowClearConfirmation(false)}

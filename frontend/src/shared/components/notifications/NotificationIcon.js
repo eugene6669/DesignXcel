@@ -16,21 +16,33 @@ const NotificationIcon = ({ iconColor = '#F0B21B' }) => {
     const checkForNotification = async () => {
       let hasUnread = false;
 
-      // Check order receipt notification
-      const notificationData = localStorage.getItem('orderReceiptNotification');
-      if (notificationData) {
-        try {
-          const data = JSON.parse(notificationData);
-          // Only show if not dismissed AND not read
-          if (!data.dismissed) {
-            const readReceipts = JSON.parse(localStorage.getItem('readReceiptNotifications') || '[]');
-            if (!readReceipts.includes('order-receipt')) {
-              hasUnread = true;
+      // Check order receipt notifications (multi-entry storage + legacy fallback)
+      try {
+        const readReceipts = JSON.parse(localStorage.getItem('readReceiptNotifications') || '[]');
+        const savedReceipts = JSON.parse(localStorage.getItem('orderReceiptNotifications') || '[]');
+        const receipts = Array.isArray(savedReceipts) ? [...savedReceipts] : [];
+
+        const legacyReceipt = localStorage.getItem('orderReceiptNotification');
+        if (legacyReceipt) {
+          const parsedLegacy = JSON.parse(legacyReceipt);
+          if (parsedLegacy && parsedLegacy.orderNumber) {
+            const legacyId = parsedLegacy.id || `order-receipt-${parsedLegacy.orderNumber}`;
+            if (!receipts.some((item) => item.id === legacyId)) {
+              receipts.push({ ...parsedLegacy, id: legacyId });
             }
           }
-        } catch (error) {
-          console.error('Error parsing notification data:', error);
         }
+
+        const hasUnreadReceipts = receipts.some((receipt) => {
+          const receiptId = receipt.id || `order-receipt-${receipt.orderNumber || ''}`;
+          return receiptId && !readReceipts.includes(receiptId);
+        });
+
+        if (hasUnreadReceipts) {
+          hasUnread = true;
+        }
+      } catch (error) {
+        console.error('Error parsing receipt notifications:', error);
       }
 
       // Check order status notifications from API
@@ -79,6 +91,7 @@ const NotificationIcon = ({ iconColor = '#F0B21B' }) => {
     // Listen for storage changes (when notifications are read/dismissed in other tabs)
     const handleStorageChange = (e) => {
       if (e.key === 'orderReceiptNotification' || 
+          e.key === 'orderReceiptNotifications' || 
           e.key === 'readReceiptNotifications' || 
           e.key === 'readOrderNotifications' ||
           e.key === 'dismissedOrderNotifications') {

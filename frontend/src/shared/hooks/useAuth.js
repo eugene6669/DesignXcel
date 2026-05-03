@@ -96,6 +96,43 @@ export const AuthProvider = ({ children }) => {
     }, [clearAuthData]);
 
     /**
+     * After Google OAuth redirect, session cookie is set; load JWTs into SPA state.
+     */
+    const syncSessionTokens = useCallback(async () => {
+        try {
+            const response = await apiClient.post('/api/auth/customer/sync-tokens', {});
+
+            if (response.success) {
+                const { user: userData, tokens, sessionId: userSessionId } = response;
+
+                if (userData) {
+                    setUser(userData);
+                    localStorage.setItem('userData', JSON.stringify(userData));
+                }
+                if (userSessionId) {
+                    setSessionId(userSessionId);
+                }
+                if (tokens) {
+                    if (tokens.accessToken) {
+                        setToken(tokens.accessToken);
+                        localStorage.setItem('accessToken', tokens.accessToken);
+                    }
+                    if (tokens.refreshToken) {
+                        localStorage.setItem('refreshToken', tokens.refreshToken);
+                    }
+                }
+
+                return { success: true, user: userData };
+            }
+
+            return { success: false, error: response.message || 'Sync failed' };
+        } catch (error) {
+            console.error('syncSessionTokens error:', error);
+            return { success: false, error: error.message || 'Sync failed' };
+        }
+    }, []);
+
+    /**
      * Initialize authentication state
      */
     const initializeAuth = useCallback(async () => {
@@ -462,6 +499,7 @@ export const AuthProvider = ({ children }) => {
         // Actions
         loginCustomer,
         registerCustomer,
+        syncSessionTokens,
         logout,
         updateProfile,
         changePassword,

@@ -198,10 +198,7 @@ const Header = () => {
   };
 
   const handleSearchBlur = () => {
-    // Delay hiding results to allow clicking on them
-    setTimeout(() => {
-      setShowSearchResults(false);
-    }, 200);
+    // Keep results open until user explicitly closes or clears search.
   };
 
   const handleSearchFocus = () => {
@@ -220,22 +217,7 @@ const Header = () => {
     setShowSearchPopup(!showSearchPopup);
   };
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (searchRef.current && !searchRef.current.contains(event.target)) {
-        setShowSearchResults(false);
-      }
-    };
-
-    if (showSearchResults) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showSearchResults]);
+  // Keep desktop search dropdown persistent on outside click.
 
   return (
     <>
@@ -488,7 +470,6 @@ const Header = () => {
                 </div>
                 <div className="search-no-results">
                   <p>No products found for "{searchQuery}"</p>
-                  <p>Try different keywords or browse our categories</p>
                 </div>
               </div>
             )}

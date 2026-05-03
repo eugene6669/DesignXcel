@@ -2116,6 +2116,8 @@ app.use((req, res, next) => {
     }
     // Customer API routes (frontend)
     else if (req.path.startsWith('/api/auth/customer/') ||
+        req.path.startsWith('/api/auth/google') ||
+        req.path.startsWith('/api/auth/social-providers') ||
         req.path.startsWith('/api/auth/verify-otp') ||
         req.path.startsWith('/api/auth/register') ||
         req.path.startsWith('/api/auth/refresh-token') ||
@@ -2171,6 +2173,9 @@ const initializePassport = () => {
     }
     return passport;
 };
+
+// Passport (Google OAuth for customers). Must run after session middleware.
+initializePassport();
 
 app.use(flash());
 
@@ -2268,9 +2273,8 @@ app.get('/api/customer/order-notifications', async (req, res) => {
 
         await poolConnect;
 
-        // Get orders with status Shipping, Delivery, or Received
-        // We'll show all orders in these statuses (not just recent ones) since we don't track status change timestamps
-        // The frontend will filter based on what the user has already seen
+        // Include fulfillment statuses customers still care about after "Received".
+        // Previously we omitted Delivered/Completed — those orders vanished from this list when staff closed them out.
         const result = await pool.request()
             .input('customerId', sql.Int, customerId)
             .query(`
@@ -2295,11 +2299,11 @@ app.get('/api/customer/order-notifications', async (req, res) => {
                     ORDER BY CASE WHEN ca.AddressID = o.ShippingAddressID THEN 0 WHEN ca.IsDefault = 1 THEN 1 ELSE 2 END, ca.AddressID DESC
                 ) a
                 WHERE o.CustomerID = @customerId
-                AND o.Status IN ('Shipping', 'Delivery', 'Received')
+                AND o.Status IN ('Processing', 'Shipping', 'Delivery', 'Delivered', 'Received', 'Completed')
                 ORDER BY o.OrderDate DESC
             `);
 
-        console.log(`[ORDER NOTIFICATIONS] Found ${result.recordset.length} orders with status Shipping/Delivery/Received for customer ${customerId}`);
+        console.log(`[ORDER NOTIFICATIONS] Found ${result.recordset.length} active/fulfillment orders for customer ${customerId}`);
 
         const notifications = result.recordset.map(order => {
             let title, message, icon;
@@ -2320,6 +2324,10 @@ app.get('/api/customer/order-notifications', async (req, res) => {
             }
 
             switch (order.Status) {
+                case 'Processing':
+                    title = 'Your Order is Being Processed!';
+                    message = `Your order #${order.ReferenceNumber} is being prepared. We'll notify you when it ships.`;
+                    break;
                 case 'Shipping':
                     title = 'Your Order is Shipping!';
                     message = `Your order #${order.ReferenceNumber} has been processed and is now shipping to you.`;
@@ -2328,9 +2336,17 @@ app.get('/api/customer/order-notifications', async (req, res) => {
                     title = 'Your Order is Out for Delivery!';
                     message = `Your order #${order.ReferenceNumber} is now out for delivery and should arrive soon.`;
                     break;
+                case 'Delivered':
+                    title = 'Your Order Was Delivered!';
+                    message = `Your order #${order.ReferenceNumber} has been marked as delivered.`;
+                    break;
                 case 'Received':
                     title = 'Your Order Has Been Received!';
                     message = `Your order #${order.ReferenceNumber} has been successfully received!`;
+                    break;
+                case 'Completed':
+                    title = 'Your Order is Complete!';
+                    message = `Your order #${order.ReferenceNumber} is complete. Thank you for your purchase!`;
                     break;
                 default:
                     title = 'Order Update';
@@ -3690,9 +3706,42 @@ app.get('/api/products', async (req, res) => {
         await poolConnect;
         console.log('Products API: Database connected');
 
-        // Set cache headers for products (5 minutes)
-        res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
-        res.setHeader('ETag', `products-${Date.now()}`);
+        // Keep Products.SKU aligned with ProductInventory (InventoryProducts) source of truth
+        await pool.request().query(`
+            UPDATE p
+            SET p.SKU = src.SKU
+            FROM Products p
+            OUTER APPLY (
+                SELECT TOP 1 ip.SKU
+                FROM InventoryProducts ip
+                WHERE ip.IsActive = 1
+                  AND ip.SKU IS NOT NULL
+                  AND (
+                       ip.ProductID = p.ProductID
+                    OR ip.InventoryProductID = p.ProductID
+                  )
+                ORDER BY
+                    CASE WHEN ip.ProductID = p.ProductID THEN 0 ELSE 1 END,
+                    ip.DateUpdated DESC,
+                    ip.DateAdded DESC,
+                    ip.InventoryProductID DESC
+            ) src
+            WHERE src.SKU IS NOT NULL
+              AND ISNULL(p.SKU, '') <> src.SKU
+        `);
+
+        await pool.request().query(`
+            IF COL_LENGTH('Products', 'IsBestSeller') IS NULL
+                ALTER TABLE Products ADD IsBestSeller BIT NOT NULL CONSTRAINT DF_Products_IsBestSeller DEFAULT 0;
+            IF COL_LENGTH('Products', 'IsNewArrival') IS NULL
+                ALTER TABLE Products ADD IsNewArrival BIT NOT NULL CONSTRAINT DF_Products_IsNewArrival DEFAULT 0;
+        `);
+
+        // Disable caching so CMS toggle changes appear on homepage immediately
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.setHeader('Surrogate-Control', 'no-store');
 
         const result = await pool.request().query(`
             SELECT 
@@ -3708,10 +3757,12 @@ app.get('/api/products', async (req, res) => {
                 DateAdded as dateAdded,
                 IsActive as isActive,
                 Dimensions as specifications,
-                IsFeatured as featured
+                IsFeatured as featured,
+                IsBestSeller as isBestSeller,
+                IsNewArrival as isNewArrival
             FROM Products WITH (NOLOCK)
             WHERE IsActive = 1
-            ORDER BY IsFeatured DESC, DateAdded DESC
+            ORDER BY IsFeatured DESC, IsBestSeller DESC, IsNewArrival DESC, DateAdded DESC
         `);
 
         console.log('Products API: Query executed, found', result.recordset.length, 'products');
@@ -3739,18 +3790,147 @@ app.get('/api/products', async (req, res) => {
     }
 });
 
-// Get product by ID (supports UUID, slug, and legacy numeric ID for backward compatibility)
+// Resolve product identifier (ProductID, PublicId, Slug, or SKU) to ProductID
+async function resolveProductId(identifier) {
+    const value = String(identifier || '').trim();
+    if (!value) return null;
+
+    const isNumeric = /^\d+$/.test(value);
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+    let query = `
+        SELECT TOP 1 ProductID
+        FROM Products WITH (NOLOCK)
+        WHERE IsActive = 1
+          AND (
+                (@isNumeric = 1 AND ProductID = TRY_CAST(@identifier AS INT))
+             OR (@isUUID = 1 AND PublicId = TRY_CAST(@identifier AS UNIQUEIDENTIFIER))
+             OR Slug = @identifier
+             OR SKU = @identifier
+          )
+        ORDER BY DateAdded DESC, ProductID DESC
+    `;
+
+    const result = await pool.request()
+        .input('identifier', sql.NVarChar, value)
+        .input('isNumeric', sql.Bit, isNumeric ? 1 : 0)
+        .input('isUUID', sql.Bit, isUUID ? 1 : 0)
+        .query(query);
+
+    if (!result.recordset.length) return null;
+    return result.recordset[0].ProductID || null;
+}
+
+// Search products (must be declared before /api/products/:id)
+app.get('/api/products/search', async (req, res) => {
+    try {
+        const query = String(req.query.q || '').trim().toLowerCase();
+
+        if (!query) {
+            return res.json({ success: true, products: [] });
+        }
+
+        await poolConnect;
+
+        const searchPattern = `%${query}%`;
+        const startsPattern = `${query}%`;
+
+        const result = await pool.request()
+            .input('searchTerm', sql.NVarChar, query)
+            .input('searchPattern', sql.NVarChar, searchPattern)
+            .input('startsPattern', sql.NVarChar, startsPattern)
+            .query(`
+                SELECT TOP 20
+                    ProductID as id,
+                    Name as name,
+                    Description as description,
+                    Price as price,
+                    StockQuantity as stockQuantity,
+                    Category as categoryName,
+                    ImageURL as images,
+                    DateAdded as dateAdded,
+                    IsActive as isActive,
+                    Dimensions as specifications,
+                    IsFeatured as featured,
+                    Slug as slug,
+                    SKU as sku
+                FROM Products WITH (NOLOCK)
+                WHERE IsActive = 1
+                  AND (
+                    LOWER(Name) LIKE @searchPattern
+                    OR LOWER(Description) LIKE @searchPattern
+                    OR LOWER(Category) LIKE @searchPattern
+                    OR LOWER(Name) LIKE @startsPattern
+                    OR LOWER(Category) LIKE @startsPattern
+                  )
+                ORDER BY
+                    CASE
+                        WHEN LOWER(Name) = @searchTerm THEN 1
+                        WHEN LOWER(Name) LIKE @startsPattern THEN 2
+                        WHEN LOWER(Category) = @searchTerm THEN 3
+                        WHEN LOWER(Category) LIKE @startsPattern THEN 4
+                        ELSE 5
+                    END,
+                    IsFeatured DESC,
+                    DateAdded DESC
+            `);
+
+        const products = result.recordset.map((product) => ({
+            ...product,
+            images: product.images ? [product.images] : [],
+            specifications: (() => {
+                try {
+                    return product.specifications ? JSON.parse(product.specifications) : {};
+                } catch {
+                    return {};
+                }
+            })()
+        }));
+
+        return res.json({ success: true, products });
+    } catch (err) {
+        console.error('Product search error:', err);
+        return res.status(500).json({ success: false, error: 'Failed to search products' });
+    }
+});
+
+// Get product by ID (supports UUID, slug, SKU, and legacy numeric ID)
 app.get('/api/products/:id', async (req, res) => {
     try {
         const identifier = req.params.id;
         await poolConnect;
 
+        // Keep Products.SKU aligned with ProductInventory (InventoryProducts) source of truth
+        await pool.request().query(`
+            UPDATE p
+            SET p.SKU = src.SKU
+            FROM Products p
+            OUTER APPLY (
+                SELECT TOP 1 ip.SKU
+                FROM InventoryProducts ip
+                WHERE ip.IsActive = 1
+                  AND ip.SKU IS NOT NULL
+                  AND (
+                       ip.ProductID = p.ProductID
+                    OR ip.InventoryProductID = p.ProductID
+                  )
+                ORDER BY
+                    CASE WHEN ip.ProductID = p.ProductID THEN 0 ELSE 1 END,
+                    ip.DateUpdated DESC,
+                    ip.DateAdded DESC,
+                    ip.InventoryProductID DESC
+            ) src
+            WHERE src.SKU IS NOT NULL
+              AND ISNULL(p.SKU, '') <> src.SKU
+        `);
+
         // Set cache headers for product detail (2 minutes - products change less frequently)
         res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
 
-        // Determine if identifier is UUID, slug, or legacy numeric ID
+        // Determine if identifier is UUID, slug, SKU, or legacy numeric ID
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier);
         const isNumeric = /^\d+$/.test(identifier);
+        const isSKU = /^SKU-[A-Z0-9]+-[0-9]{6}$/i.test(identifier) || /^DX-[A-F0-9]{8}-[0-9]{4}$/i.test(identifier);
 
         let query, inputParam;
         if (isUUID) {
@@ -3794,6 +3974,26 @@ app.get('/api/products/:id', async (req, res) => {
                 WHERE ProductID = @identifier AND IsActive = 1
             `;
             inputParam = sql.Int;
+        } else if (isSKU) {
+            query = `
+                SELECT 
+                    PublicId as id,
+                    Slug as slug,
+                    SKU as sku,
+                    Name as name,
+                    Description as description,
+                    Price as price,
+                    StockQuantity as stockQuantity,
+                    Category as categoryName,
+                    ImageURL as images,
+                    DateAdded as dateAdded,
+                    IsActive as isActive,
+                    Dimensions as specifications,
+                    IsFeatured as featured
+                FROM Products WITH (NOLOCK)
+                WHERE SKU = @identifier AND IsActive = 1
+            `;
+            inputParam = sql.NVarChar;
         } else {
             // Assume it's a slug
             query = `
@@ -3846,6 +4046,12 @@ app.get('/api/products/:id', async (req, res) => {
             details: err.message
         });
     }
+});
+
+// Backward-compatible alias used by frontend service
+app.get('/api/products/detail/:id', async (req, res) => {
+    req.url = `/api/products/${encodeURIComponent(req.params.id)}`;
+    return app._router.handle(req, res, () => {});
 });
 
 // Stripe Payment Routes
@@ -4084,12 +4290,12 @@ let hasBulkOrdersOrderIdColumn = null;
 app.get('/api/products/:productId/available-stock', async (req, res) => {
     try {
         await pool.connect();
-        const productId = parseInt(req.params.productId);
+        const productId = await resolveProductId(req.params.productId);
 
-        if (isNaN(productId) || productId <= 0) {
+        if (!productId || productId <= 0) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid product ID'
+                message: 'Invalid product identifier'
             });
         }
 

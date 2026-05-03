@@ -4,36 +4,47 @@ import './OrderReceiptNotification.css';
 
 const OrderReceiptNotification = ({ isOpen, onClose, onOpenGmail }) => {
   const [orderNumber, setOrderNumber] = useState(null);
+  const [currentReceiptId, setCurrentReceiptId] = useState(null);
   const [hasNotification, setHasNotification] = useState(false);
   const notificationRef = useRef(null);
 
   useEffect(() => {
     // Check if there's a pending notification in localStorage
     const checkForNotification = () => {
-      const notificationData = localStorage.getItem('orderReceiptNotification');
-      if (notificationData) {
-        try {
-          const data = JSON.parse(notificationData);
-          // Check if notification is not dismissed and is recent (within last 24 hours)
-          const notificationTime = new Date(data.timestamp);
-          const now = new Date();
-          const hoursSinceNotification = (now - notificationTime) / (1000 * 60 * 60);
-          
-          if (!data.dismissed && hoursSinceNotification < 24) {
-            setHasNotification(true);
-            setOrderNumber(data.orderNumber);
-          } else {
-            // Clean up old notifications
-            localStorage.removeItem('orderReceiptNotification');
-            setHasNotification(false);
-          }
-        } catch (error) {
-          console.error('Error parsing notification data:', error);
-          localStorage.removeItem('orderReceiptNotification');
-          setHasNotification(false);
+      try {
+        const receipts = JSON.parse(localStorage.getItem('orderReceiptNotifications') || '[]');
+        const validReceipts = Array.isArray(receipts) ? receipts : [];
+        const activeReceipts = validReceipts;
+
+        if (activeReceipts.length > 0) {
+          const latest = activeReceipts.sort(
+            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          )[0];
+          setHasNotification(true);
+          setOrderNumber(latest.orderNumber || null);
+          setCurrentReceiptId(latest.id || `order-receipt-${latest.orderNumber || ''}`);
+          localStorage.setItem('orderReceiptNotification', JSON.stringify(latest));
+          return;
         }
-      } else {
+
+        // Fallback for legacy single receipt key
+        const notificationData = localStorage.getItem('orderReceiptNotification');
+        if (notificationData) {
+          const data = JSON.parse(notificationData);
+          setHasNotification(true);
+          setOrderNumber(data.orderNumber || null);
+          setCurrentReceiptId(data.id || `order-receipt-${data.orderNumber || ''}`);
+          return;
+        }
+
         setHasNotification(false);
+        setOrderNumber(null);
+        setCurrentReceiptId(null);
+      } catch (error) {
+        console.error('Error parsing notification data:', error);
+        setHasNotification(false);
+        setOrderNumber(null);
+        setCurrentReceiptId(null);
       }
     };
 
@@ -41,7 +52,7 @@ const OrderReceiptNotification = ({ isOpen, onClose, onOpenGmail }) => {
 
     // Listen for new order notifications (from order success page)
     const handleStorageChange = (e) => {
-      if (e.key === 'orderReceiptNotification') {
+      if (e.key === 'orderReceiptNotification' || e.key === 'orderReceiptNotifications') {
         checkForNotification();
       }
     };
@@ -61,16 +72,22 @@ const OrderReceiptNotification = ({ isOpen, onClose, onOpenGmail }) => {
 
   const handleDismiss = () => {
     // Mark as dismissed in localStorage
-    const notificationData = localStorage.getItem('orderReceiptNotification');
-    if (notificationData) {
-      try {
-        const data = JSON.parse(notificationData);
-        data.dismissed = true;
-        localStorage.setItem('orderReceiptNotification', JSON.stringify(data));
-        setHasNotification(false);
-      } catch (error) {
-        console.error('Error updating notification data:', error);
+    try {
+      const receipts = JSON.parse(localStorage.getItem('orderReceiptNotifications') || '[]');
+      const validReceipts = Array.isArray(receipts) ? receipts : [];
+      const updatedReceipts = validReceipts;
+      localStorage.setItem('orderReceiptNotifications', JSON.stringify(updatedReceipts));
+
+      const latestActive = updatedReceipts[0];
+      if (latestActive) {
+        localStorage.setItem('orderReceiptNotification', JSON.stringify(latestActive));
+      } else {
+        localStorage.removeItem('orderReceiptNotification');
       }
+
+      setHasNotification(false);
+    } catch (error) {
+      console.error('Error updating notification data:', error);
     }
     if (onClose) {
       onClose();

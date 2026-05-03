@@ -193,6 +193,12 @@
     height: 48px;
 }
 
+/* Same visible color as wishlist empty heart (outline icons) */
+.empty-cart-icon svg,
+.empty-cart-icon svg :is(path, circle, line, polyline, polygon) {
+    stroke: #F0B21B !important;
+}
+
 .empty-cart-content h1 {
     font-size: clamp(1.25rem, 4vw, 1.5rem);
     font-weight: 600;
@@ -204,7 +210,7 @@
 
 .empty-cart-content p {
     color: #6b7280;
-    margin-bottom: 2rem;
+    margin: 0 0 0.5rem;
     line-height: 1.5;
     text-align: center;
     font-weight: 500;
@@ -247,14 +253,53 @@
     box-shadow: 0 4px 8px rgba(240, 178, 27, 0.3) !important;
 }
 
+/* Same layout/spacing as .empty-wishlist-actions on wishlist empty state */
 .empty-cart-actions {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
     align-items: center;
+    margin-top: 1rem;
+    width: 100%;
+    max-width: 100%;
 }
 
-/* Match wishlist .browse-products-btn / .add-to-cart-btn: yellow mustard, same size */
+/* Empty-state CTAs: same width, height, and spacing as wishlist empty */
+.empty-cart-content .browse-products-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 10px 20px;
+    min-height: 44px;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 280px;
+    background: #F0B21B;
+    color: #ffffff;
+    border: 2px solid #F0B21B;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 0.5rem;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.empty-cart-content .browse-products-btn:hover {
+    background: #d99a0d;
+    border-color: #d99a0d;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(240, 178, 27, 0.3);
+}
+
+.empty-cart-content .browse-products-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(240, 178, 27, 0.3);
+}
+
+/* Other pages: keep pill style without full-width constraint */
 .browse-products-btn {
     display: flex;
     align-items: center;
@@ -1031,6 +1076,26 @@
         font-size: 13px;
         min-height: 44px;
     }
+
+    .cart-empty-page {
+        min-height: 50vh;
+    }
+
+    .empty-cart-content {
+        padding: 2rem 1.5rem;
+    }
+
+    .empty-cart-content h1 {
+        font-size: 1.125rem;
+    }
+
+    .empty-cart-content p {
+        font-size: 0.8125rem;
+    }
+
+    .empty-cart-content .browse-products-btn {
+        max-width: 100%;
+    }
 }
 
 /* =============================================================================
@@ -1073,6 +1138,11 @@ body.theme-dark .empty-cart-content p {
     color: #d1d5db;
 }
 
+body.theme-dark .empty-cart-icon svg,
+body.theme-dark .empty-cart-icon svg :is(path, circle, line, polyline, polygon) {
+    stroke: #F0B21B !important;
+}
+
 body.theme-dark .browse-products-btn {
     background: linear-gradient(135deg, #F0B21B 0%, #e6a632 100%);
     color: #000000;
@@ -1081,6 +1151,19 @@ body.theme-dark .browse-products-btn {
 body.theme-dark .browse-products-btn:hover {
     background: linear-gradient(135deg, #e6a632 0%, #d69e16 100%);
     color: #000000;
+}
+
+/* Empty-state CTAs: keep white label on gold (match wishlist empty) */
+body.theme-dark .empty-cart-content .browse-products-btn {
+    background: #F0B21B;
+    color: #ffffff;
+    border-color: #F0B21B;
+}
+
+body.theme-dark .empty-cart-content .browse-products-btn:hover {
+    background: #d99a0d;
+    border-color: #d99a0d;
+    color: #ffffff;
 }
 
 /* Cart Layout Dark Mode */
