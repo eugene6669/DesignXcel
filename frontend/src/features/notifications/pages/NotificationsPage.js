@@ -2,16 +2,35 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../shared/hooks/useAuth';
 import { PageLoader } from '../../../shared/components/ui';
+import {
+  getNotificationUserStorageKey as getUserStorageKey,
+  clearAllCustomerNotifications
+} from '../../../shared/utils/customerNotificationStorage';
 import './NotificationsPage.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-const RESTORE_RECEIPT_ORDER_NUMBERS = ['ORD20260503002', 'ORD20260503001'];
+const PAGE_SIZE = 10;
 
 const NotificationsPage = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loadingNotifications, setLoadingNotifications] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [clearingAll, setClearingAll] = useState(false);
+
+  const totalPages = Math.max(1, Math.ceil(notifications.length / PAGE_SIZE));
+  const paginatedNotifications = notifications.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
+  useEffect(() => {
+    const pages = Math.max(1, Math.ceil(notifications.length / PAGE_SIZE));
+    if (currentPage > pages) {
+      setCurrentPage(pages);
+    }
+  }, [notifications.length, currentPage]);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -25,30 +44,18 @@ const NotificationsPage = () => {
         const loadedNotifications = [];
 
         // Load order receipt notifications from localStorage (persist until dismissed).
-        // Supports both new list storage and legacy single-item storage.
+        // Data is scoped per customer account to avoid cross-account leakage.
         try {
           const receiptNotifications = [];
-          const savedReceipts = JSON.parse(localStorage.getItem('orderReceiptNotifications') || '[]');
+          const receiptKey = getUserStorageKey('orderReceiptNotifications', user);
+          const legacyReceiptKey = getUserStorageKey('orderReceiptNotification', user);
+          const readReceiptKey = getUserStorageKey('readReceiptNotifications', user);
+
+          const savedReceipts = JSON.parse(localStorage.getItem(receiptKey) || '[]');
           const normalizedSavedReceipts = Array.isArray(savedReceipts) ? [...savedReceipts] : [];
-
-          // Restore requested receipt notifications if they were accidentally removed.
-          RESTORE_RECEIPT_ORDER_NUMBERS.forEach((orderNumber, index) => {
-            const receiptId = `order-receipt-${orderNumber}`;
-            const exists = normalizedSavedReceipts.some((item) => item.id === receiptId);
-            if (!exists) {
-              normalizedSavedReceipts.push({
-                id: receiptId,
-                orderNumber,
-                timestamp: new Date(Date.now() - index * 60000).toISOString(),
-                dismissed: false
-              });
-            }
-          });
-
-          localStorage.setItem('orderReceiptNotifications', JSON.stringify(normalizedSavedReceipts));
           receiptNotifications.push(...normalizedSavedReceipts);
 
-          const legacyReceipt = localStorage.getItem('orderReceiptNotification');
+          const legacyReceipt = localStorage.getItem(legacyReceiptKey);
           if (legacyReceipt) {
             const parsedLegacy = JSON.parse(legacyReceipt);
             if (parsedLegacy && parsedLegacy.orderNumber) {
@@ -63,12 +70,8 @@ const NotificationsPage = () => {
             }
           }
 
-          const readReceipts = JSON.parse(localStorage.getItem('readReceiptNotifications') || '[]');
-          const forcedReceiptIds = RESTORE_RECEIPT_ORDER_NUMBERS.map((orderNumber) => `order-receipt-${orderNumber}`);
-          const normalizedReadReceipts = readReceipts.filter((id) => !forcedReceiptIds.includes(id));
-          if (normalizedReadReceipts.length !== readReceipts.length) {
-            localStorage.setItem('readReceiptNotifications', JSON.stringify(normalizedReadReceipts));
-          }
+          const readReceipts = JSON.parse(localStorage.getItem(readReceiptKey) || '[]');
+          const normalizedReadReceipts = Array.isArray(readReceipts) ? readReceipts : [];
           receiptNotifications.forEach((data) => {
               const receiptId = data.id || `order-receipt-${data.orderNumber || Date.now()}`;
               loadedNotifications.push({
@@ -88,14 +91,16 @@ const NotificationsPage = () => {
         }
 
         // Load refund receipt notification from localStorage (persists until dismissed)
-        const refundNotificationData = localStorage.getItem('orderRefundNotification');
+        const refundNotificationKey = getUserStorageKey('orderRefundNotification', user);
+        const readRefundKey = getUserStorageKey('readRefundNotifications', user);
+        const refundNotificationData = localStorage.getItem(refundNotificationKey);
         if (refundNotificationData) {
           try {
             const data = JSON.parse(refundNotificationData);
             // Check if notification was dismissed
             if (!data.dismissed) {
               // Check if it was marked as read
-              const readRefunds = JSON.parse(localStorage.getItem('readRefundNotifications') || '[]');
+              const readRefunds = JSON.parse(localStorage.getItem(readRefundKey) || '[]');
               const isRead = readRefunds.includes('order-refund');
               
               loadedNotifications.push({
@@ -132,12 +137,10 @@ const NotificationsPage = () => {
               console.log('[NOTIFICATIONS] Fetched order notifications:', data);
               if (data.success && data.notifications) {
                 // Load dismissed notifications from localStorage
-                const dismissedNotifications = JSON.parse(
-                  localStorage.getItem('dismissedOrderNotifications') || '[]'
-                );
-                const readNotifications = JSON.parse(
-                  localStorage.getItem('readOrderNotifications') || '[]'
-                );
+                const dismissedOrderKey = getUserStorageKey('dismissedOrderNotifications', user);
+                const readOrderKey = getUserStorageKey('readOrderNotifications', user);
+                const dismissedNotifications = JSON.parse(localStorage.getItem(dismissedOrderKey) || '[]');
+                const readNotifications = JSON.parse(localStorage.getItem(readOrderKey) || '[]');
 
                 // Filter out dismissed notifications and mark read ones
                 const orderStatusNotifications = data.notifications
@@ -189,43 +192,78 @@ const NotificationsPage = () => {
 
       return () => clearInterval(interval);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user]);
 
   const handleDismiss = (notificationId) => {
     if (notificationId.startsWith('order-receipt-')) {
-      // Keep order receipts persistent per request: do not remove from storage.
-      // Dismiss acts as "mark as read" for receipt items.
-      const read = JSON.parse(localStorage.getItem('readReceiptNotifications') || '[]');
-      if (!read.includes(notificationId)) {
-        read.push(notificationId);
-        localStorage.setItem('readReceiptNotifications', JSON.stringify(read));
+      // Remove receipt notification from storage entirely.
+      try {
+        const receiptKey = getUserStorageKey('orderReceiptNotifications', user);
+        const legacyReceiptKey = getUserStorageKey('orderReceiptNotification', user);
+        const readReceiptKey = getUserStorageKey('readReceiptNotifications', user);
+
+        const savedReceipts = JSON.parse(localStorage.getItem(receiptKey) || '[]');
+        const receipts = Array.isArray(savedReceipts) ? savedReceipts : [];
+        const nextReceipts = receipts.filter((r) => (r?.id || `order-receipt-${r?.orderNumber || ''}`) !== notificationId);
+        localStorage.setItem(receiptKey, JSON.stringify(nextReceipts));
+
+        // Also mark as read to avoid legacy fallback reappearing.
+        const read = JSON.parse(localStorage.getItem(readReceiptKey) || '[]');
+        const readArr = Array.isArray(read) ? read : [];
+        if (!readArr.includes(notificationId)) {
+          readArr.push(notificationId);
+          localStorage.setItem(readReceiptKey, JSON.stringify(readArr));
+        }
+
+        // Update legacy single receipt key if it pointed to this one
+        const legacyRaw = localStorage.getItem(legacyReceiptKey);
+        if (legacyRaw) {
+          try {
+            const legacy = JSON.parse(legacyRaw);
+            const legacyId = legacy?.id || (legacy?.orderNumber ? `order-receipt-${legacy.orderNumber}` : null);
+            if (legacyId === notificationId) {
+              if (nextReceipts[0]) {
+                localStorage.setItem(legacyReceiptKey, JSON.stringify(nextReceipts[0]));
+              } else {
+                localStorage.removeItem(legacyReceiptKey);
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+      } catch (e) {
+        // ignore
       }
     } else if (notificationId === 'order-refund') {
-      const notificationData = localStorage.getItem('orderRefundNotification');
-      if (notificationData) {
-        try {
-          const data = JSON.parse(notificationData);
-          data.dismissed = true;
-          localStorage.setItem('orderRefundNotification', JSON.stringify(data));
-        } catch (error) {
-          console.error('Error updating refund notification data:', error);
+      // Remove refund notification from storage entirely.
+      try {
+        const refundNotificationKey = getUserStorageKey('orderRefundNotification', user);
+        const readRefundKey = getUserStorageKey('readRefundNotifications', user);
+        localStorage.removeItem(refundNotificationKey);
+
+        // Also mark as read so it won't be treated as new if legacy code re-adds it.
+        const read = JSON.parse(localStorage.getItem(readRefundKey) || '[]');
+        const readArr = Array.isArray(read) ? read : [];
+        if (!readArr.includes('order-refund')) {
+          readArr.push('order-refund');
+          localStorage.setItem(readRefundKey, JSON.stringify(readArr));
         }
+      } catch (e) {
+        // ignore
       }
     } else if (notificationId.startsWith('order-status-')) {
       // Store dismissed order status notifications
-      const dismissed = JSON.parse(localStorage.getItem('dismissedOrderNotifications') || '[]');
+      const dismissedOrderKey = getUserStorageKey('dismissedOrderNotifications', user);
+      const dismissed = JSON.parse(localStorage.getItem(dismissedOrderKey) || '[]');
       if (!dismissed.includes(notificationId)) {
         dismissed.push(notificationId);
-        localStorage.setItem('dismissedOrderNotifications', JSON.stringify(dismissed));
+        localStorage.setItem(dismissedOrderKey, JSON.stringify(dismissed));
       }
     }
 
     if (notificationId.startsWith('order-receipt-')) {
-      setNotifications(prev =>
-        prev.map(n =>
-          n.id === notificationId ? { ...n, read: true } : n
-        )
-      );
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
     } else {
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
     }
@@ -241,24 +279,27 @@ const NotificationsPage = () => {
   const handleMarkAsRead = (notificationId) => {
     if (notificationId.startsWith('order-receipt-')) {
       // Store read receipt notifications
-      const read = JSON.parse(localStorage.getItem('readReceiptNotifications') || '[]');
+      const readReceiptKey = getUserStorageKey('readReceiptNotifications', user);
+      const read = JSON.parse(localStorage.getItem(readReceiptKey) || '[]');
       if (!read.includes(notificationId)) {
         read.push(notificationId);
-        localStorage.setItem('readReceiptNotifications', JSON.stringify(read));
+        localStorage.setItem(readReceiptKey, JSON.stringify(read));
       }
     } else if (notificationId === 'order-refund') {
       // Store read refund notifications
-      const read = JSON.parse(localStorage.getItem('readRefundNotifications') || '[]');
+      const readRefundKey = getUserStorageKey('readRefundNotifications', user);
+      const read = JSON.parse(localStorage.getItem(readRefundKey) || '[]');
       if (!read.includes(notificationId)) {
         read.push(notificationId);
-        localStorage.setItem('readRefundNotifications', JSON.stringify(read));
+        localStorage.setItem(readRefundKey, JSON.stringify(read));
       }
     } else if (notificationId.startsWith('order-status-')) {
       // Store read order status notifications
-      const read = JSON.parse(localStorage.getItem('readOrderNotifications') || '[]');
+      const readOrderKey = getUserStorageKey('readOrderNotifications', user);
+      const read = JSON.parse(localStorage.getItem(readOrderKey) || '[]');
       if (!read.includes(notificationId)) {
         read.push(notificationId);
-        localStorage.setItem('readOrderNotifications', JSON.stringify(read));
+        localStorage.setItem(readOrderKey, JSON.stringify(read));
       }
     }
 
@@ -270,6 +311,18 @@ const NotificationsPage = () => {
 
     // Dispatch custom event to update notification icon
     window.dispatchEvent(new CustomEvent('notificationUpdated'));
+  };
+
+  const handleClearAll = async () => {
+    if (notifications.length === 0 || clearingAll) return;
+    setClearingAll(true);
+    try {
+      await clearAllCustomerNotifications(user, { apiBaseUrl: API_BASE_URL });
+      setNotifications([]);
+      setCurrentPage(1);
+    } finally {
+      setClearingAll(false);
+    }
   };
 
   // Function to remove emojis and special characters from title
@@ -378,14 +431,27 @@ const NotificationsPage = () => {
       <div className="notifications-container">
         {/* Header */}
         <div className="notifications-header">
-          <div className="notifications-header-content">
-            <h1 className="notifications-title">Notifications</h1>
-            <p className="notifications-subtitle">
-              {notifications.length === 0
-                ? 'No new notifications'
-                : `${notifications.filter(n => !n.read).length} unread • ${notifications.length} ${notifications.length === 1 ? 'notification' : 'notifications'}`
-              }
-            </p>
+          <div className="notifications-header-inner">
+            <div className="notifications-header-content">
+              <h1 className="notifications-title">Notifications</h1>
+              <p className="notifications-subtitle">
+                {notifications.length === 0
+                  ? 'No new notifications'
+                  : `${notifications.filter(n => !n.read).length} unread • ${notifications.length} ${notifications.length === 1 ? 'notification' : 'notifications'}`
+                }
+              </p>
+            </div>
+            {notifications.length > 0 && (
+              <button
+                type="button"
+                className="notifications-clear-all-btn"
+                disabled={clearingAll}
+                onClick={handleClearAll}
+                title="Clear all notifications"
+              >
+                {clearingAll ? 'Clearing…' : 'Clear all'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -406,7 +472,7 @@ const NotificationsPage = () => {
             </div>
           ) : (
             <div className="notifications-list">
-              {notifications.map((notification) => (
+              {paginatedNotifications.map((notification) => (
                 <div
                   key={notification.id}
                   className={`notification-card ${notification.read ? 'read' : 'unread'}`}
@@ -497,6 +563,29 @@ const NotificationsPage = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {notifications.length > PAGE_SIZE && (
+            <div className="notifications-pagination" role="navigation" aria-label="Notification pages">
+              <button
+                type="button"
+                className="notifications-pagination-btn"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </button>
+              <span className="notifications-pagination-info">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                className="notifications-pagination-btn"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </button>
             </div>
           )}
         </div>

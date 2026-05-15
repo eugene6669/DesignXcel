@@ -162,6 +162,10 @@ const Login = () => {
 
     const finalizeCustomerLoginRedirect = useCallback((customerUser) => {
         if (!customerUser) return;
+        if (customerUser.requiresPasswordSetup) {
+            navigate('/account?tab=security&passwordRequired=1', { replace: true });
+            return;
+        }
         const guestCart = localStorage.getItem('shopping-cart-guest');
         let hasGuestCartItems = false;
         if (guestCart) {

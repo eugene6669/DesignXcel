@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../../shared/hooks/useAuth';
 import stripeService from '../services/stripeService';
+import paymongoService from '../services/paymongoService';
 import apiClient from '../../../shared/services/api/apiClient';
 import checkoutSessionManager from '../utils/checkoutSessionManager';
 import './payment.css';
@@ -19,7 +20,9 @@ const Payment = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { user } = useAuth();
-    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('stripe');
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('paymongo');
+    const [stripeAvailable, setStripeAvailable] = useState(true);
+    const [paymongoAvailable, setPaymongoAvailable] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -30,15 +33,28 @@ const Payment = () => {
             setError('Payment was cancelled. You can try again or choose a different payment method.');
         }
         
-        // Check if Stripe is available
-        const checkStripeAvailability = async () => {
-            const isAvailable = await stripeService.isStripeAvailable();
-            if (!isAvailable) {
+        // Check if providers are available
+        const checkPaymentAvailability = async () => {
+            const [isStripeAvailable, isPayMongoAvailable] = await Promise.all([
+                stripeService.isStripeAvailable(),
+                paymongoService.isPayMongoAvailable()
+            ]);
+            setStripeAvailable(isStripeAvailable);
+            setPaymongoAvailable(isPayMongoAvailable);
+
+            if (!isStripeAvailable && !isPayMongoAvailable) {
                 setError('Payment system is currently unavailable. Please contact support for alternative payment methods.');
+                return;
+            }
+
+            if (isPayMongoAvailable) {
+                setSelectedPaymentMethod('paymongo');
+            } else if (isStripeAvailable) {
+                setSelectedPaymentMethod('stripe');
             }
         };
         
-        checkStripeAvailability();
+        checkPaymentAvailability();
         
         // Validate session for persistent accounts
         const validateSession = async () => {
@@ -91,18 +107,18 @@ const Payment = () => {
         
         try {
             // Validate session before processing payment
-            const sessionValid = await checkoutSessionManager.ensureValidSession();
+            const sessionValid = await checkoutSessionManager.ensureValidSession(user || null, { redirectOnInvalid: false });
             if (!sessionValid) {
+                setError('Your session looks expired. Please sign in again before confirming payment.');
                 setLoading(false);
-                return; // Session manager will handle redirect
+                return;
             }
 
             // Get customer email from user context or localStorage
             const customerEmail = user?.email || JSON.parse(localStorage.getItem('user') || '{}').email;
             
             if (!customerEmail) {
-                setError('Please log in to proceed with payment.');
-                navigate('/login');
+                setError('Missing account email for checkout. Please refresh the page or sign in again.');
                 return;
             }
 
@@ -112,8 +128,8 @@ const Payment = () => {
                 return;
             }
 
-            // Prepare items for Stripe checkout with enhanced product information
-            const itemsForStripe = checkedItems.map(item => {
+            // Prepare items for checkout with enhanced product information
+            const checkoutItems = checkedItems.map(item => {
                 const variationId = item.product?.selectedVariation?.id || null;
                 const variationName = item.product?.selectedVariation?.name || null;
                 const useOriginalProduct = item.product?.useOriginalProduct || false;
@@ -141,15 +157,16 @@ const Payment = () => {
             
             // No shipping cost added
             
-            console.log('Creating Stripe checkout session:', { 
-                items: itemsForStripe, 
+            console.log('Creating checkout session:', {
+                provider: selectedPaymentMethod,
+                items: checkoutItems,
                 email: customerEmail,
                 deliveryType: deliveryType,
                 shippingCost: shippingCost
             });
             
             // Debug: Log each item's variation data
-            itemsForStripe.forEach((item, index) => {
+            checkoutItems.forEach((item, index) => {
                 console.log(`PaymentPage: Item ${index + 1} variation data:`, {
                     name: item.name,
                     id: item.id,
@@ -163,21 +180,28 @@ const Payment = () => {
             // Clear the cart before redirecting to Stripe (cart will be cleared by webhook after successful payment)
             localStorage.removeItem(`shopping-cart-${user?.id || 'guest'}`);
             
-            // Use Stripe service to create checkout session and redirect
-            await stripeService.createCheckoutSession(
-                itemsForStripe, 
-                customerEmail,
-                'E-Wallet',
-                { 
-                    deliveryType: deliveryType, 
-                    pickupDate: pickupDateTime || null,
-                    shippingCost: shippingCost,
-                    extraDeliveryFee: extraDeliveryFee,
-                    subtotal: subtotal,
-                    total: total,
-                    shippingAddressId: location.state?.shippingAddressId || null
+            const checkoutOptions = {
+                deliveryType: deliveryType,
+                pickupDate: pickupDateTime || null,
+                shippingCost: shippingCost,
+                extraDeliveryFee: extraDeliveryFee,
+                subtotal: subtotal,
+                total: total,
+                shippingAddressId: location.state?.shippingAddressId || null
+            };
+
+            if (selectedPaymentMethod === 'paymongo') {
+                if (!paymongoAvailable) {
+                    throw new Error('PayMongo is currently unavailable.');
                 }
-            );
+                await paymongoService.createCheckoutSession(checkoutItems, customerEmail, 'E-Wallet / Bank Transfer', checkoutOptions);
+            } else {
+                if (!stripeAvailable) {
+                    throw new Error('Stripe is currently unavailable.');
+                }
+                localStorage.setItem('lastPaymentProvider', 'stripe');
+                await stripeService.createCheckoutSession(checkoutItems, customerEmail, 'Bank Transfer', checkoutOptions);
+            }
             
             // Note: Cart will be cleared by webhook after successful payment
             // Don't clear it here in case payment fails
@@ -186,12 +210,14 @@ const Payment = () => {
             console.error('E-Wallet payment error:', error);
 
             // Handle checkout-specific errors first
-            const handled = checkoutSessionManager.handleCheckoutError(error, 'stripe-checkout');
+            const handled = checkoutSessionManager.handleCheckoutError(error, `${selectedPaymentMethod}-checkout`);
             if (!handled) {
                 // Provide more specific error messages based on error type
                 let errorMessage = 'Payment setup failed: ';
                 if (error.message.includes('checkout session')) {
                     errorMessage += 'Unable to create payment session. Please try again.';
+                } else if (error.message.includes('PayMongo')) {
+                    errorMessage += 'PayMongo is temporarily unavailable. Please try Stripe or try again later.';
                 } else if (error.message.includes('not configured') || error.message.includes('not properly configured')) {
                     errorMessage += 'Payment system is not configured. Please contact support for alternative payment methods.';
                 } else if (error.message.includes('Stripe')) {
@@ -224,10 +250,31 @@ const Payment = () => {
                     <h2 className="section-title">Select Payment Method</h2>
                     
                     <div className="payment-methods-list">
+                        <div
+                            className={`payment-method-option ${selectedPaymentMethod === 'paymongo' ? 'selected' : ''} ${!paymongoAvailable ? 'disabled' : ''}`}
+                            onClick={() => paymongoAvailable && setSelectedPaymentMethod('paymongo')}
+                        >
+                            <div className="payment-method-radio">
+                                <div className={`radio-button ${selectedPaymentMethod === 'paymongo' ? 'checked' : ''}`}>
+                                    {selectedPaymentMethod === 'paymongo' && <div className="radio-dot"></div>}
+                                </div>
+                            </div>
+                            <div className="payment-method-icon">
+                                <svg width="64" height="24" viewBox="0 0 64 24" fill="none">
+                                    <rect x="0" y="0" width="64" height="24" rx="4" fill="#6D28D9"/>
+                                    <text x="32" y="16" textAnchor="middle" fill="white" fontSize="9" fontWeight="bold" fontFamily="Arial, sans-serif">PAYMONGO</text>
+                                </svg>
+                            </div>
+                            <span className="payment-method-name">PayMongo</span>
+                            <span className="payment-method-details">
+                                {paymongoAvailable ? 'GCash, Maya, Card, GrabPay' : 'Currently unavailable'}
+                            </span>
+                        </div>
+
                         {/* Stripe */}
                         <div 
-                            className={`payment-method-option ${selectedPaymentMethod === 'stripe' ? 'selected' : ''}`}
-                            onClick={() => setSelectedPaymentMethod('stripe')}
+                            className={`payment-method-option ${selectedPaymentMethod === 'stripe' ? 'selected' : ''} ${!stripeAvailable ? 'disabled' : ''}`}
+                            onClick={() => stripeAvailable && setSelectedPaymentMethod('stripe')}
                         >
                             <div className="payment-method-radio">
                                 <div className={`radio-button ${selectedPaymentMethod === 'stripe' ? 'checked' : ''}`}>
@@ -251,7 +298,9 @@ const Payment = () => {
                                 </svg>
                             </div>
                             <span className="payment-method-name">Stripe</span>
-                            <span className="payment-method-details">Secure payment processing</span>
+                            <span className="payment-method-details">
+                                {stripeAvailable ? 'Secure card processing' : 'Currently unavailable'}
+                            </span>
                         </div>
                     </div>
                 </div>

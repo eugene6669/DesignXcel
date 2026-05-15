@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { sendBulkOrderConfirmationEmail } = require('./utils/sendgridHelper');
+const { mapProductRecordAssetUrls } = require('./utils/productAssetUrls');
 
 module.exports = function(sql, pool) {
     const router = express.Router();
@@ -2724,13 +2725,25 @@ module.exports = function(sql, pool) {
                 FROM Products p
                 LEFT JOIN (
                     SELECT 
-                        oi.ProductID,
-                        SUM(oi.Quantity) as soldQuantity,
-                        COUNT(DISTINCT oi.OrderID) as orderCount
+                        cat.CatalogProductID AS ProductID,
+                        SUM(oi.Quantity) AS soldQuantity,
+                        COUNT(DISTINCT oi.OrderID) AS orderCount
                     FROM OrderItems oi
                     INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                    WHERE o.Status = 'Completed'
-                    GROUP BY oi.ProductID
+                    CROSS APPLY (
+                        SELECT COALESCE(
+                            (SELECT TOP 1 p2.ProductID FROM Products p2 WHERE p2.ProductID = oi.ProductID),
+                            (SELECT TOP 1 ip.ProductID FROM InventoryProducts ip
+                             WHERE ip.InventoryProductID = oi.ProductID AND ISNULL(ip.IsActive, 1) = 1
+                             ORDER BY ip.InventoryProductID DESC),
+                            (SELECT TOP 1 ip2.ProductID FROM InventoryProducts ip2
+                             WHERE ip2.ProductID = oi.ProductID AND ISNULL(ip2.IsActive, 1) = 1
+                             ORDER BY ip2.InventoryProductID DESC)
+                        ) AS CatalogProductID
+                    ) cat
+                    WHERE o.Status IN (N'Completed', N'Delivered', N'Received')
+                      AND cat.CatalogProductID IS NOT NULL
+                    GROUP BY cat.CatalogProductID
                 ) sold ON p.ProductID = sold.ProductID
                 WHERE p.IsActive = 1
                 ORDER BY sold.soldQuantity DESC, p.Name
@@ -2742,7 +2755,7 @@ module.exports = function(sql, pool) {
             const completedOrdersQuery = `
                 SELECT COUNT(*) as completedOrdersCount
                 FROM Orders 
-                WHERE Status = 'Completed'
+                WHERE Status IN (N'Completed', N'Delivered', N'Received')
             `;
             const completedOrdersResult = await pool.request().query(completedOrdersQuery);
             
@@ -2852,12 +2865,24 @@ module.exports = function(sql, pool) {
                         AND GETDATE() BETWEEN pd.StartDate AND pd.EndDate
                     LEFT JOIN (
                         SELECT 
-                            oi.ProductID,
-                            SUM(oi.Quantity) as soldQuantity
+                            cat.CatalogProductID AS ProductID,
+                            SUM(oi.Quantity) AS soldQuantity
                         FROM OrderItems oi
                         INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                        WHERE o.Status = 'Completed'
-                        GROUP BY oi.ProductID
+                        CROSS APPLY (
+                            SELECT COALESCE(
+                                (SELECT TOP 1 p2.ProductID FROM Products p2 WHERE p2.ProductID = oi.ProductID),
+                                (SELECT TOP 1 ip.ProductID FROM InventoryProducts ip
+                                 WHERE ip.InventoryProductID = oi.ProductID AND ISNULL(ip.IsActive, 1) = 1
+                                 ORDER BY ip.InventoryProductID DESC),
+                                (SELECT TOP 1 ip2.ProductID FROM InventoryProducts ip2
+                                 WHERE ip2.ProductID = oi.ProductID AND ISNULL(ip2.IsActive, 1) = 1
+                                 ORDER BY ip2.InventoryProductID DESC)
+                            ) AS CatalogProductID
+                        ) cat
+                        WHERE o.Status IN (N'Completed', N'Delivered', N'Received')
+                          AND cat.CatalogProductID IS NOT NULL
+                        GROUP BY cat.CatalogProductID
                     ) sold ON p.ProductID = sold.ProductID
                     WHERE p.IsActive = 1
                     GROUP BY 
@@ -2925,12 +2950,24 @@ module.exports = function(sql, pool) {
                         AND GETDATE() BETWEEN pd.StartDate AND pd.EndDate
                     LEFT JOIN (
                         SELECT 
-                            oi.ProductID,
-                            SUM(oi.Quantity) as soldQuantity
+                            cat.CatalogProductID AS ProductID,
+                            SUM(oi.Quantity) AS soldQuantity
                         FROM OrderItems oi
                         INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                        WHERE o.Status = 'Completed'
-                        GROUP BY oi.ProductID
+                        CROSS APPLY (
+                            SELECT COALESCE(
+                                (SELECT TOP 1 p2.ProductID FROM Products p2 WHERE p2.ProductID = oi.ProductID),
+                                (SELECT TOP 1 ip.ProductID FROM InventoryProducts ip
+                                 WHERE ip.InventoryProductID = oi.ProductID AND ISNULL(ip.IsActive, 1) = 1
+                                 ORDER BY ip.InventoryProductID DESC),
+                                (SELECT TOP 1 ip2.ProductID FROM InventoryProducts ip2
+                                 WHERE ip2.ProductID = oi.ProductID AND ISNULL(ip2.IsActive, 1) = 1
+                                 ORDER BY ip2.InventoryProductID DESC)
+                            ) AS CatalogProductID
+                        ) cat
+                        WHERE o.Status IN (N'Completed', N'Delivered', N'Received')
+                          AND cat.CatalogProductID IS NOT NULL
+                        GROUP BY cat.CatalogProductID
                     ) sold ON p.ProductID = sold.ProductID
                     WHERE p.IsActive = 1
                     ORDER BY p.IsFeatured DESC, p.DateAdded DESC
@@ -2990,12 +3027,24 @@ module.exports = function(sql, pool) {
                     FROM Products p
                     LEFT JOIN (
                         SELECT 
-                            oi.ProductID,
-                            SUM(oi.Quantity) as soldQuantity
+                            cat.CatalogProductID AS ProductID,
+                            SUM(oi.Quantity) AS soldQuantity
                         FROM OrderItems oi
                         INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                        WHERE o.Status = 'Completed'
-                        GROUP BY oi.ProductID
+                        CROSS APPLY (
+                            SELECT COALESCE(
+                                (SELECT TOP 1 p2.ProductID FROM Products p2 WHERE p2.ProductID = oi.ProductID),
+                                (SELECT TOP 1 ip.ProductID FROM InventoryProducts ip
+                                 WHERE ip.InventoryProductID = oi.ProductID AND ISNULL(ip.IsActive, 1) = 1
+                                 ORDER BY ip.InventoryProductID DESC),
+                                (SELECT TOP 1 ip2.ProductID FROM InventoryProducts ip2
+                                 WHERE ip2.ProductID = oi.ProductID AND ISNULL(ip2.IsActive, 1) = 1
+                                 ORDER BY ip2.InventoryProductID DESC)
+                            ) AS CatalogProductID
+                        ) cat
+                        WHERE o.Status IN (N'Completed', N'Delivered', N'Received')
+                          AND cat.CatalogProductID IS NOT NULL
+                        GROUP BY cat.CatalogProductID
                     ) sold ON p.ProductID = sold.ProductID
                     WHERE p.IsActive = 1
                     ORDER BY p.IsFeatured DESC, p.DateAdded DESC
@@ -3071,17 +3120,17 @@ module.exports = function(sql, pool) {
                     }
                 }
 
-                return {
+                return mapProductRecordAssetUrls({
                     ...product,
                     images: product.images ? [product.images] : [],
                     thumbnails: thumbnails,
                     specifications: specifications,
                     rating: Math.round(product.averageRating * 10) / 10,
                     reviews: product.reviewCount || 0,
-                    soldQuantity: product.soldQuantity || 0,
+                    soldQuantity: Number(product.soldQuantity ?? product.soldquantity ?? 0) || 0,
                     hasDiscount: !!hasDiscount,
                     discountInfo: discountInfo
-                };
+                });
             });
             
             console.log('Products processed successfully. Final count:', products.length);
@@ -3205,7 +3254,9 @@ module.exports = function(sql, pool) {
                     DateAdded as dateAdded,
                     IsActive as isActive,
                     Dimensions as specifications,
-                    IsFeatured as featured
+                    IsFeatured as featured,
+                    Model3DURL as model3d,
+                    Has3DModel as has3dModel
                 FROM Products 
                 WHERE IsActive = 1
             `;
@@ -3290,11 +3341,12 @@ module.exports = function(sql, pool) {
                     }
                 }
                 
-                return {
+                return mapProductRecordAssetUrls({
                     ...product,
                     images: product.images ? [product.images] : [],
-                    specifications: specifications
-                };
+                    specifications: specifications,
+                    thumbnails: []
+                });
             });
             
             res.json({
@@ -3797,7 +3849,7 @@ module.exports = function(sql, pool) {
             
             res.json({
                 success: true,
-                product: product
+                product: mapProductRecordAssetUrls(product)
             });
         } catch (err) {
             console.error('Error fetching product:', err);
@@ -4184,7 +4236,7 @@ module.exports = function(sql, pool) {
         try {
             await pool.connect();
             
-            // First try to get materials from RawMaterials table if it exists
+            // Check required tables for product-assigned materials.
             const tableCheck = await pool.request().query(`
                 SELECT TABLE_NAME 
                 FROM INFORMATION_SCHEMA.TABLES 
@@ -4192,37 +4244,42 @@ module.exports = function(sql, pool) {
             `);
             
             let materials = [];
-            
-            if (tableCheck.recordset.length > 0) {
-                // Get materials from RawMaterials table
+            const hiddenLegacyMaterials = new Set([
+                'material',
+                'laminate sheet',
+                'plywood (3/4 inch)',
+                'silicone sealant',
+                'wood'
+            ]);
+            const productMaterialsTableCheck = await pool.request().query(`
+                SELECT TABLE_NAME
+                FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_NAME = 'ProductMaterials'
+            `);
+
+            if (tableCheck.recordset.length > 0 && productMaterialsTableCheck.recordset.length > 0) {
+                // Return materials explicitly assigned in Admin > Products.
+                // Product identifiers differ across some query contexts, so we avoid joining Products here.
                 const result = await pool.request().query(`
-                    SELECT DISTINCT rm.Name as name, COUNT(p.ProductID) as count
-                    FROM RawMaterials rm
-                    LEFT JOIN Products p ON p.Dimensions LIKE '%' + rm.Name + '%' AND p.IsActive = 1
-                    WHERE rm.IsActive = 1
+                    SELECT rm.Name as name, COUNT(DISTINCT pm.ProductID) as count
+                    FROM ProductMaterials pm
+                    INNER JOIN RawMaterials rm ON rm.MaterialID = pm.MaterialID AND rm.IsActive = 1
                     GROUP BY rm.Name
+                    HAVING COUNT(DISTINCT pm.ProductID) > 0
                     ORDER BY rm.Name
                 `);
                 
-                materials = result.recordset.map(row => ({
-                    name: row.name,
-                    count: row.count
-                }));
+                materials = result.recordset
+                    .map(row => ({
+                        name: row.name,
+                        count: row.count
+                    }))
+                    .filter(material =>
+                        !hiddenLegacyMaterials.has(String(material.name || '').trim().toLowerCase())
+                    );
             }
             
-            // If no materials from RawMaterials or table doesn't exist, provide common materials
-            if (materials.length === 0) {
-                // Get product count for each common material based on category
-                const commonMaterials = [
-                    'Wood', 'Metal', 'Glass', 'Fabric', 'Leather', 
-                    'Plastic', 'Steel', 'Aluminum', 'Upholstered', 'Composite'
-                ];
-                
-                materials = commonMaterials.map(material => ({
-                    name: material,
-                    count: 0 // We'll set this to 0 since we can't determine from current schema
-                }));
-            }
+            // Keep empty until real materials are available from admin-managed data.
             
             res.json({ 
                 success: true, 
@@ -4358,12 +4415,24 @@ module.exports = function(sql, pool) {
                 FROM Products p
                 LEFT JOIN (
                     SELECT 
-                        oi.ProductID,
-                        SUM(oi.Quantity) as soldQuantity
+                        cat.CatalogProductID AS ProductID,
+                        SUM(oi.Quantity) AS soldQuantity
                     FROM OrderItems oi
                     INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                    WHERE o.Status = 'Completed'
-                    GROUP BY oi.ProductID
+                    CROSS APPLY (
+                        SELECT COALESCE(
+                            (SELECT TOP 1 p2.ProductID FROM Products p2 WHERE p2.ProductID = oi.ProductID),
+                            (SELECT TOP 1 ip.ProductID FROM InventoryProducts ip
+                             WHERE ip.InventoryProductID = oi.ProductID AND ISNULL(ip.IsActive, 1) = 1
+                             ORDER BY ip.InventoryProductID DESC),
+                            (SELECT TOP 1 ip2.ProductID FROM InventoryProducts ip2
+                             WHERE ip2.ProductID = oi.ProductID AND ISNULL(ip2.IsActive, 1) = 1
+                             ORDER BY ip2.InventoryProductID DESC)
+                        ) AS CatalogProductID
+                    ) cat
+                    WHERE o.Status IN (N'Completed', N'Delivered', N'Received')
+                      AND cat.CatalogProductID IS NOT NULL
+                    GROUP BY cat.CatalogProductID
                 ) sold ON p.ProductID = sold.ProductID
                 WHERE p.IsActive = 1
                 ORDER BY p.ProductID

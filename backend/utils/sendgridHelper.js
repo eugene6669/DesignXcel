@@ -5,6 +5,13 @@ const fs = require('fs');
 const path = require('path');
 const { calculateEstimatedDeliveryDate, formatEstimatedDeliveryDateFull } = require('./deliveryEstimate');
 
+// Prefer SENDGRID_FROM_EMAIL because it should be a verified sender identity.
+const getConfiguredFromEmail = () => {
+    const sendGridFromEmail = process.env.SENDGRID_FROM_EMAIL?.trim();
+    const otpEmailUser = process.env.OTP_EMAIL_USER?.trim();
+    return sendGridFromEmail || otpEmailUser || 'design.xcel01@gmail.com';
+};
+
 // Initialize SendGrid with API key
 const initializeSendGrid = () => {
     const apiKey = process.env.SENDGRID_API_KEY;
@@ -44,7 +51,7 @@ const sendOtpEmail = async (toEmail, otp) => {
         }
 
         // Get sender email
-        const fromEmail = process.env.OTP_EMAIL_USER || 'design.xcel01@gmail.com';
+        const fromEmail = getConfiguredFromEmail();
 
         // Read HTML template
         const templatePath = path.join(__dirname, '..', 'templates', 'emails', 'auth', 'otp-email.html');
@@ -195,7 +202,7 @@ const sendPasswordResetEmail = async (toEmail, userName, resetToken) => {
         }
 
         // Get sender email
-        const fromEmail = process.env.OTP_EMAIL_USER || 'design.xcel01@gmail.com';
+        const fromEmail = getConfiguredFromEmail();
         
         // Create reset link
         const frontendUrl = process.env.FRONTEND_URL || 'https://designxcellwebsite-production.up.railway.app';
@@ -348,7 +355,7 @@ const sendUserPasswordResetEmail = async (toEmail, userName, resetToken, roleNam
         }
 
         // Get sender email
-        const fromEmail = process.env.OTP_EMAIL_USER || 'design.xcel01@gmail.com';
+        const fromEmail = getConfiguredFromEmail();
         
         // Create reset link - for employees, always use backend URL (port 5000) since login is on backend
         // Try BACKEND_URL first, if not set, use SERVER_URL or default to localhost:5000
@@ -535,7 +542,7 @@ const sendOrderOutForDeliveryEmail = async (toEmail, customerName, orderDetails)
         }
 
         // Get sender email
-        const fromEmail = process.env.OTP_EMAIL_USER || process.env.SENDGRID_FROM_EMAIL || 'design.xcel01@gmail.com';
+        const fromEmail = getConfiguredFromEmail();
 
         // Format amounts
         const formatCurrency = (amount) => {
@@ -789,7 +796,7 @@ const sendOrderShippingEmail = async (toEmail, customerName, orderDetails) => {
         }
 
         // Get sender email
-        const fromEmail = process.env.OTP_EMAIL_USER || process.env.SENDGRID_FROM_EMAIL || 'design.xcel01@gmail.com';
+        const fromEmail = getConfiguredFromEmail();
 
         // Format amounts
         const formatCurrency = (amount) => {
@@ -1022,7 +1029,7 @@ const sendOrderReceivedEmail = async (toEmail, customerName, orderDetails) => {
         }
 
         // Get sender email
-        const fromEmail = process.env.OTP_EMAIL_USER || process.env.SENDGRID_FROM_EMAIL || 'design.xcel01@gmail.com';
+        const fromEmail = getConfiguredFromEmail();
 
         // Format amounts
         const formatCurrency = (amount) => {
@@ -1262,7 +1269,7 @@ const sendBulkOrderConfirmationEmail = async (toEmail, customerName, orderDetail
             throw new Error('SendGrid initialization failed');
         }
 
-        const fromEmail = process.env.OTP_EMAIL_USER || 'design.xcel01@gmail.com';
+        const fromEmail = getConfiguredFromEmail();
         const orderId = orderDetails.bulkOrderId || orderDetails.orderId || 'N/A';
         const totalAmount = new Intl.NumberFormat('en-PH', {
             style: 'currency',
@@ -1404,7 +1411,7 @@ const sendOrderReceiptEmail = async (toEmail, customerName, orderDetails) => {
         }
 
         // Get sender email
-        const fromEmail = process.env.OTP_EMAIL_USER || process.env.SENDGRID_FROM_EMAIL || 'design.xcel01@gmail.com';
+        const fromEmail = getConfiguredFromEmail();
         console.log('[SENDGRID RECEIPT] From Email:', fromEmail);
         
         // Validate recipient email
@@ -1694,7 +1701,7 @@ const sendRefundReceiptEmail = async (toEmail, customerName, orderDetails) => {
         }
 
         // Get sender email
-        const fromEmail = process.env.OTP_EMAIL_USER || process.env.SENDGRID_FROM_EMAIL || 'design.xcel01@gmail.com';
+        const fromEmail = getConfiguredFromEmail();
         console.log('[SENDGRID REFUND] From Email:', fromEmail);
         
         // Validate recipient email
@@ -1980,7 +1987,7 @@ const sendReturnRefundReceiptEmail = async (toEmail, customerName, orderDetails)
         }
 
         // Get sender email
-        const fromEmail = process.env.OTP_EMAIL_USER || process.env.SENDGRID_FROM_EMAIL || 'design.xcel01@gmail.com';
+        const fromEmail = getConfiguredFromEmail();
         console.log('[SENDGRID RETURN REFUND] From Email:', fromEmail);
         
         // Validate recipient email
@@ -2258,7 +2265,7 @@ const sendReturnRequestEmail = async (toEmail, customerName, orderDetails) => {
             throw new Error('SendGrid initialization failed');
         }
 
-        const fromEmail = process.env.OTP_EMAIL_USER || 'design.xcel01@gmail.com';
+        const fromEmail = getConfiguredFromEmail();
         
         const formatCurrency = (amount) => {
             return new Intl.NumberFormat('en-PH', {
@@ -2355,7 +2362,7 @@ const sendReturnApprovalEmail = async (toEmail, customerName, orderDetails) => {
             throw new Error('SendGrid initialization failed');
         }
 
-        const fromEmail = process.env.OTP_EMAIL_USER || 'design.xcel01@gmail.com';
+        const fromEmail = getConfiguredFromEmail();
         
         const formatCurrency = (amount) => {
             return new Intl.NumberFormat('en-PH', {
@@ -2475,7 +2482,7 @@ const sendReturnDeclineEmail = async (toEmail, customerName, orderDetails) => {
             throw new Error('SendGrid initialization failed');
         }
 
-        const fromEmail = process.env.OTP_EMAIL_USER || 'design.xcel01@gmail.com';
+        const fromEmail = getConfiguredFromEmail();
         
         const htmlContent = `
             <!DOCTYPE html>

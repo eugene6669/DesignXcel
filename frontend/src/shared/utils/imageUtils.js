@@ -16,18 +16,60 @@ const getBackendUrl = () => {
   export const getImageUrl = (imagePath) => {
     if (!imagePath) return '';
     
+    const trimmed = String(imagePath).trim();
+    if (!trimmed) return '';
+
+    // Protocol-relative absolute URL (e.g. //cdn.example.com/...)
+    if (trimmed.startsWith('//')) {
+      return `https:${trimmed}`;
+    }
+
     // If already a full URL, return as is
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-      return imagePath;
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
     }
     
     // If relative path starting with /, prepend backend URL
-    if (imagePath.startsWith('/')) {
-      return `${getBackendUrl()}${imagePath}`;
+    if (trimmed.startsWith('/')) {
+      return `${getBackendUrl()}${trimmed}`;
     }
     
     // If relative path without /, assume it's in uploads folder
-    return `${getBackendUrl()}/uploads/${imagePath}`;
+    return `${getBackendUrl()}/uploads/${trimmed}`;
+  };
+
+  // Normalize and repair legacy 3D model path formats
+  const normalizeModelPath = (rawPath) => {
+    if (!rawPath) return '';
+
+    let value = String(rawPath).trim();
+    if (!value) return '';
+
+    // Handle quoted/JSON-encoded strings
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1).trim();
+    }
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed === 'string') value = parsed.trim();
+    } catch (e) {
+      // Keep original value when not JSON
+    }
+
+    // Normalize slashes from Windows-style paths
+    value = value.replace(/\\/g, '/');
+
+    // Legacy typo path: /uploads/products/3dmodels/* -> /uploads/products/models/*
+    value = value.replace('/uploads/products/3dmodels/', '/uploads/products/models/');
+
+    // Relative model path should resolve from /uploads/products/models
+    if (!value.startsWith('/') && !value.startsWith('http://') && !value.startsWith('https://')) {
+      if (value.includes('.glb') || value.includes('.gltf')) {
+        value = `/uploads/products/models/${value}`;
+      }
+    }
+
+    return value;
   };
   
   /**
@@ -58,26 +100,25 @@ const getBackendUrl = () => {
    */
   export const getPrimaryImageUrl = (product) => {
     if (!product) return '/logo192.png';
-    
-  // Prefer first thumbnail if available (catalog/thumbnails from Admin)
-  if (Array.isArray(product.thumbnails) && product.thumbnails.length > 0 && product.thumbnails[0]) {
-    return getImageUrl(product.thumbnails[0]);
-  }
-  
-    // Try different image fields
+
+    // Catalog & cards: use main product image (ImageURL / images); thumbnails are optional extras / gallery only.
     const imageFields = [
       product.ImageURL,
       product.image,
       product.images?.[0],
       product.Images?.[0]
     ];
-    
+
     for (const field of imageFields) {
       if (field) {
         return getImageUrl(field);
       }
     }
-    
+
+    if (Array.isArray(product.thumbnails) && product.thumbnails.length > 0 && product.thumbnails[0]) {
+      return getImageUrl(product.thumbnails[0]);
+    }
+
     return '/logo192.png';
   };
 
@@ -92,6 +133,8 @@ const getBackendUrl = () => {
     // Try different 3D model fields
     const modelFields = [
       product.model3d,
+      product.model3DURL,
+      product.Model3DURL,
       product.Model3D,
       product.model3D,
       product.model_3d
@@ -99,11 +142,10 @@ const getBackendUrl = () => {
     
     for (const field of modelFields) {
       if (field) {
+        const normalizedPath = normalizeModelPath(field);
         // Check if the field contains a valid model path
-        if (field.includes('.glb') || field.includes('.gltf')) {
-          const modelUrl = getImageUrl(field);
-          console.log('3D Model URL:', modelUrl);
-          return modelUrl;
+        if (normalizedPath.includes('.glb') || normalizedPath.includes('.gltf')) {
+          return getImageUrl(normalizedPath);
         }
       }
     }

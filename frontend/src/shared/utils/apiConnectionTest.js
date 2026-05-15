@@ -35,11 +35,8 @@ class ApiConnectionTest {
             
             // Test 1: Direct fetch to health endpoint
             const healthResponse = await fetch(`${this.apiUrl}/api/health`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                // Don't include credentials for health check to avoid CORS issues
+                method: 'GET'
+                // Keep this as a simple request to minimize preflight/CORS edge cases.
             });
             
             if (!healthResponse.ok) {

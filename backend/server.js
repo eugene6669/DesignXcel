@@ -56,15 +56,21 @@ const getStripe = () => {
 const bodyParser = require('body-parser');
 const multer = require('multer');
 const fs = require('fs');
+const http = require('http');
+const https = require('https');
+const { URL } = require('url');
 const { generateReferenceNumber } = require('./utils/generateReferenceNumber');
 const { generateTransactionId } = require('./utils/generateTransactionId');
 const { calculateEstimatedDeliveryDate, formatEstimatedDeliveryDate } = require('./utils/deliveryEstimate');
 const { cleanupExpiredDiscountsSafe } = require('./utils/cleanupExpiredDiscounts');
+const { mapProductRecordAssetUrls } = require('./utils/productAssetUrls');
 
 const app = express();
 
-// Health check endpoint for Railway
+// Health check endpoint for Railway (must allow CORS — registered before global `cors()` middleware)
 app.get('/api/health', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.status(200).json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
@@ -1706,6 +1712,129 @@ app.get('/uploads/products/models/:filename', (req, res) => {
     });
 
     fileStream.pipe(res);
+});
+
+/**
+ * Proxy 3D model downloads when the browser cannot use the asset URL directly (CORS).
+ * Also resolves same-host /uploads/... to local disk (dev: CRA on :3000, API on :5000).
+ */
+function isAllowedModelProxyTarget(u) {
+    const host = (u.hostname || '').toLowerCase();
+    if (!host) return false;
+    if (host === 'localhost' || host === '127.0.0.1') return true;
+    if (host.endsWith('.blob.core.windows.net')) return true;
+    const base = process.env.AZURE_BLOB_PUBLIC_BASE_URL;
+    if (base) {
+        try {
+            if (host === new URL(base).hostname.toLowerCase()) return true;
+        } catch {
+            /* ignore */
+        }
+    }
+    return false;
+}
+
+function sendLocalPublicUploadFile(req, res, relativeUnderPublic) {
+    const abs = path.resolve(__dirname, 'public', relativeUnderPublic);
+    const pubRoot = path.resolve(__dirname, 'public');
+    if (!abs.startsWith(pubRoot) || !fs.existsSync(abs)) {
+        return res.status(404).setHeader('Access-Control-Allow-Origin', '*').send('Not found');
+    }
+    const stats = fs.statSync(abs);
+    const lower = abs.toLowerCase();
+    const contentType = lower.endsWith('.glb')
+        ? 'model/gltf-binary'
+        : lower.endsWith('.gltf')
+            ? 'model/gltf+json'
+            : 'application/octet-stream';
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Range');
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', stats.size);
+    res.setHeader('Accept-Ranges', 'bytes');
+    if (req.method === 'HEAD') {
+        return res.status(200).end();
+    }
+    const range = req.headers.range;
+    if (range) {
+        const parts = String(range).replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : stats.size - 1;
+        const chunksize = end - start + 1;
+        res.status(206);
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${stats.size}`);
+        res.setHeader('Content-Length', chunksize);
+        return fs.createReadStream(abs, { start, end }).pipe(res);
+    }
+    return fs.createReadStream(abs).pipe(res);
+}
+
+app.options('/api/model-file', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Range');
+    res.status(204).end();
+});
+
+app.get('/api/model-file', (req, res) => {
+    const raw = req.query.url;
+    if (!raw || typeof raw !== 'string') {
+        return res.status(400).setHeader('Access-Control-Allow-Origin', '*').send('Missing url');
+    }
+    let target;
+    try {
+        target = new URL(decodeURIComponent(raw));
+    } catch {
+        return res.status(400).setHeader('Access-Control-Allow-Origin', '*').send('Invalid url');
+    }
+    if (!/^https?:$/i.test(target.protocol)) {
+        return res.status(400).setHeader('Access-Control-Allow-Origin', '*').send('Invalid protocol');
+    }
+    if (!isAllowedModelProxyTarget(target)) {
+        return res.status(403).setHeader('Access-Control-Allow-Origin', '*').send('URL host not allowed');
+    }
+
+    const pathname = (target.pathname || '').replace(/^\//, '');
+    if ((target.hostname === 'localhost' || target.hostname === '127.0.0.1') && pathname.startsWith('uploads/')) {
+        return sendLocalPublicUploadFile(req, res, pathname);
+    }
+
+    const client = target.protocol === 'https:' ? https : http;
+    const opts = {
+        method: req.method === 'HEAD' ? 'HEAD' : 'GET',
+        headers: {
+            Accept: 'model/gltf-binary, model/gltf+json, application/octet-stream, */*'
+        }
+    };
+    const upstream = client.request(target, opts, (up) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Range');
+        const ct = up.headers['content-type'] || 'application/octet-stream';
+        res.status(up.statusCode || 502);
+        if (up.headers['content-length']) res.setHeader('Content-Length', up.headers['content-length']);
+        if (up.headers['content-range']) res.setHeader('Content-Range', up.headers['content-range']);
+        res.setHeader('Content-Type', ct);
+        if (req.method === 'HEAD') {
+            up.resume();
+            return res.end();
+        }
+        up.pipe(res);
+    });
+    upstream.on('error', (err) => {
+        console.error('[model-file] upstream error:', err.message);
+        if (!res.headersSent) {
+            res.status(502).setHeader('Access-Control-Allow-Origin', '*').send('Bad gateway');
+        }
+    });
+    upstream.setTimeout(120000, () => {
+        upstream.destroy();
+        if (!res.headersSent) {
+            res.status(504).setHeader('Access-Control-Allow-Origin', '*').send('Gateway timeout');
+        }
+    });
+    upstream.end();
 });
 
 // Static file serving for other uploads (images, etc.) - optimized caching
@@ -3619,41 +3748,6 @@ app.get('/api/public/delivery-rates', async (req, res) => {
     }
 });
 
-// Health check endpoint for local development
-app.get('/api/health', async (req, res) => {
-    try {
-        // Test database connection
-        let dbStatus = 'unknown';
-        try {
-            await pool.request().query('SELECT 1 as test');
-            dbStatus = 'connected';
-        } catch (dbError) {
-            dbStatus = 'disconnected';
-            console.log('Database health check failed:', dbError.message);
-        }
-
-        res.status(200).json({
-            status: 'ok',
-            timestamp: new Date().toISOString(),
-            environment: process.env.NODE_ENV || 'development',
-            port: process.env.PORT || 5000,
-            database: {
-                status: dbStatus,
-                server: dbConfig.server,
-                database: dbConfig.database,
-                user: dbConfig.user
-            },
-            stripe: stripe ? 'initialized' : 'not_initialized'
-        });
-    } catch (error) {
-        res.status(500).json({
-            status: 'error',
-            timestamp: new Date().toISOString(),
-            error: error.message
-        });
-    }
-});
-
 // Simple API test endpoint for frontend
 app.get('/api/test', (req, res) => {
     res.json({
@@ -3759,7 +3853,9 @@ app.get('/api/products', async (req, res) => {
                 Dimensions as specifications,
                 IsFeatured as featured,
                 IsBestSeller as isBestSeller,
-                IsNewArrival as isNewArrival
+                IsNewArrival as isNewArrival,
+                Model3DURL as model3d,
+                Has3DModel as has3dModel
             FROM Products WITH (NOLOCK)
             WHERE IsActive = 1
             ORDER BY IsFeatured DESC, IsBestSeller DESC, IsNewArrival DESC, DateAdded DESC
@@ -3768,11 +3864,20 @@ app.get('/api/products', async (req, res) => {
         console.log('Products API: Query executed, found', result.recordset.length, 'products');
 
         // Process images - convert single image URL to array
-        const products = result.recordset.map(product => ({
-            ...product,
-            images: product.images ? [product.images] : [],
-            specifications: product.specifications ? JSON.parse(product.specifications) : {}
-        }));
+        const products = result.recordset.map((product) => {
+            const row = {
+                ...product,
+                images: product.images ? [product.images] : [],
+                specifications: (() => {
+                    try {
+                        return product.specifications ? JSON.parse(product.specifications) : {};
+                    } catch {
+                        return {};
+                    }
+                })()
+            };
+            return mapProductRecordAssetUrls(row);
+        });
 
         console.log('Products API: Returning', products.length, 'products');
         res.json({
@@ -3853,7 +3958,9 @@ app.get('/api/products/search', async (req, res) => {
                     Dimensions as specifications,
                     IsFeatured as featured,
                     Slug as slug,
-                    SKU as sku
+                    SKU as sku,
+                    Model3DURL as model3d,
+                    Has3DModel as has3dModel
                 FROM Products WITH (NOLOCK)
                 WHERE IsActive = 1
                   AND (
@@ -3875,17 +3982,20 @@ app.get('/api/products/search', async (req, res) => {
                     DateAdded DESC
             `);
 
-        const products = result.recordset.map((product) => ({
-            ...product,
-            images: product.images ? [product.images] : [],
-            specifications: (() => {
-                try {
-                    return product.specifications ? JSON.parse(product.specifications) : {};
-                } catch {
-                    return {};
-                }
-            })()
-        }));
+        const products = result.recordset.map((product) => {
+            const row = {
+                ...product,
+                images: product.images ? [product.images] : [],
+                specifications: (() => {
+                    try {
+                        return product.specifications ? JSON.parse(product.specifications) : {};
+                    } catch {
+                        return {};
+                    }
+                })()
+            };
+            return mapProductRecordAssetUrls(row);
+        });
 
         return res.json({ success: true, products });
     } catch (err) {
@@ -3948,7 +4058,9 @@ app.get('/api/products/:id', async (req, res) => {
                     DateAdded as dateAdded,
                     IsActive as isActive,
                     Dimensions as specifications,
-                    IsFeatured as featured
+                    IsFeatured as featured,
+                    Model3DURL as model3d,
+                    Has3DModel as has3dModel
                 FROM Products WITH (NOLOCK)
                 WHERE PublicId = @identifier AND IsActive = 1
             `;
@@ -3969,7 +4081,9 @@ app.get('/api/products/:id', async (req, res) => {
                     DateAdded as dateAdded,
                     IsActive as isActive,
                     Dimensions as specifications,
-                    IsFeatured as featured
+                    IsFeatured as featured,
+                    Model3DURL as model3d,
+                    Has3DModel as has3dModel
                 FROM Products WITH (NOLOCK)
                 WHERE ProductID = @identifier AND IsActive = 1
             `;
@@ -3989,7 +4103,9 @@ app.get('/api/products/:id', async (req, res) => {
                     DateAdded as dateAdded,
                     IsActive as isActive,
                     Dimensions as specifications,
-                    IsFeatured as featured
+                    IsFeatured as featured,
+                    Model3DURL as model3d,
+                    Has3DModel as has3dModel
                 FROM Products WITH (NOLOCK)
                 WHERE SKU = @identifier AND IsActive = 1
             `;
@@ -4010,7 +4126,9 @@ app.get('/api/products/:id', async (req, res) => {
                     DateAdded as dateAdded,
                     IsActive as isActive,
                     Dimensions as specifications,
-                    IsFeatured as featured
+                    IsFeatured as featured,
+                    Model3DURL as model3d,
+                    Has3DModel as has3dModel
                 FROM Products WITH (NOLOCK)
                 WHERE Slug = @identifier AND IsActive = 1
             `;
@@ -4030,13 +4148,18 @@ app.get('/api/products/:id', async (req, res) => {
 
         const product = result.recordset[0];
 
-        // Process images - convert single image URL to array
         product.images = product.images ? [product.images] : [];
-        product.specifications = product.specifications ? JSON.parse(product.specifications) : {};
+        try {
+            product.specifications = product.specifications ? JSON.parse(product.specifications) : {};
+        } catch {
+            product.specifications = {};
+        }
+
+        const mapped = mapProductRecordAssetUrls(product);
 
         res.json({
             success: true,
-            product: product
+            product: mapped
         });
     } catch (err) {
         console.error('Error fetching product:', err);
@@ -4090,10 +4213,14 @@ app.post('/api/create-checkout-session', async (req, res) => {
         const stockIssues = [];
 
         for (const item of items) {
-            const productId = parseInt(item.productId);
             const requestedQuantity = parseInt(item.quantity) || 0;
+            if (requestedQuantity <= 0) {
+                continue;
+            }
 
-            if (isNaN(productId) || productId <= 0 || requestedQuantity <= 0) {
+            const productId = await resolveProductId(item.productId);
+            if (!productId || productId <= 0) {
+                stockIssues.push(`Product not found or inactive: ${item.productId}`);
                 continue;
             }
 
@@ -4326,8 +4453,6 @@ app.get('/api/products/:productId/available-stock', async (req, res) => {
 
         const pendingQuantity = pendingOrdersResult.recordset[0].PendingQuantity || 0;
 
-        console.log(`[AVAILABLE STOCK] Product ${productId}: Actual=${actualStock}, Pending=${pendingQuantity}, Available=${actualStock - pendingQuantity}`);
-
         // Calculate pending quantities from bulk orders (check if OrderID column exists, cached)
         let bulkPendingQuantity = 0;
         try {
@@ -4397,13 +4522,21 @@ app.post('/api/check-bulk-order-stock', async (req, res) => {
         // Check stock for each item
         const stockIssues = [];
         for (const item of items) {
-            const productId = parseInt(item.productId);
             const requestedQuantity = parseInt(item.quantity) || 0;
-
-            if (!productId || requestedQuantity <= 0) {
+            if (requestedQuantity <= 0) {
                 stockIssues.push({
-                    productId: productId,
+                    productId: item.productId,
                     message: 'Invalid product ID or quantity'
+                });
+                continue;
+            }
+
+            // Match /api/products list (PublicId as id) and available-stock: resolve UUID/slug/SKU to ProductID
+            const productId = await resolveProductId(item.productId);
+            if (!productId || productId <= 0) {
+                stockIssues.push({
+                    productId: item.productId,
+                    message: 'Product not found or inactive'
                 });
                 continue;
             }
@@ -4415,7 +4548,7 @@ app.post('/api/check-bulk-order-stock', async (req, res) => {
 
             if (stockResult.recordset.length === 0) {
                 stockIssues.push({
-                    productId: productId,
+                    productId: item.productId,
                     message: 'Product not found or inactive'
                 });
                 continue;
@@ -6112,10 +6245,10 @@ app.get('/api/order/stripe-session/:sessionId', async (req, res) => {
                     oi.ProductID,
                     oi.Quantity,
                     oi.PriceAtPurchase,
-                    p.Name as ProductName,
-                    p.SKU
+                    COALESCE(p.Name, oi.Name, 'Product') AS ProductName,
+                    COALESCE(p.SKU, '') AS SKU
                 FROM OrderItems oi
-                INNER JOIN Products p ON oi.ProductID = p.ProductID
+                LEFT JOIN Products p ON oi.ProductID = p.ProductID
                 WHERE oi.OrderID = @orderId
                 ORDER BY oi.OrderItemID
             `);
@@ -6139,7 +6272,6 @@ app.get('/api/order/stripe-session/:sessionId', async (req, res) => {
 // API endpoint for admin to check payment status
 app.get('/api/admin/payment-status/:orderId', async (req, res) => {
     try {
-        // Check if user is authenticated and has employee access
         if (!req.session.user) {
             return res.status(401).json({
                 success: false,
@@ -6147,9 +6279,9 @@ app.get('/api/admin/payment-status/:orderId', async (req, res) => {
             });
         }
 
-        // Allow access to all employee roles that can view orders
-        const allowedRoles = ['Admin'];
-        if (!allowedRoles.includes(req.session.user.role)) {
+        const role = String(req.session.user.role || req.session.user.RoleName || '').trim();
+        const allowedRoles = ['Admin', 'Transaction Manager', 'Order Support', 'Inventory Manager', 'User Manager'];
+        if (!allowedRoles.includes(role)) {
             return res.status(403).json({
                 success: false,
                 message: 'Access denied - insufficient permissions'
@@ -6157,14 +6289,30 @@ app.get('/api/admin/payment-status/:orderId', async (req, res) => {
         }
 
         const { orderId } = req.params;
+        const {
+            dedupeDoubledTransactionId,
+            isStripeCheckoutSessionId,
+            paymentMethodDisplayForOrder
+        } = require('./utils/orderDisplayHelpers');
 
         await poolConnect;
         const result = await pool.request()
             .input('orderId', sql.Int, orderId)
             .query(`
-                SELECT OrderID, PaymentMethod, PaymentStatus, StripeSessionID, TotalAmount, OrderDate, PaymentDate
-                FROM Orders 
-                WHERE OrderID = @orderId
+                SELECT 
+                    o.OrderID,
+                    o.PaymentMethod,
+                    o.PaymentStatus,
+                    o.StripeSessionID,
+                    o.TransactionID,
+                    o.TotalAmount,
+                    o.OrderDate,
+                    o.PaymentDate,
+                    o.ReferenceNumber,
+                    c.Email AS CustomerEmail
+                FROM Orders o
+                LEFT JOIN Customers c ON o.CustomerID = c.CustomerID
+                WHERE o.OrderID = @orderId
             `);
 
         if (result.recordset.length === 0) {
@@ -6175,22 +6323,144 @@ app.get('/api/admin/payment-status/:orderId', async (req, res) => {
         }
 
         const order = result.recordset[0];
+        order.TransactionID = dedupeDoubledTransactionId(order.TransactionID);
+        order.DisplayPaymentMethod = paymentMethodDisplayForOrder(order);
 
-        // If it's a Stripe order, get additional details
-        if (order.StripeSessionID) {
+        const sid = String(order.StripeSessionID || '').trim();
+        const txn = String(order.TransactionID || '').trim();
+        const totalPhp = Number(order.TotalAmount || 0);
+
+        const fallbackGatewayShape = (email) => ({
+            payment_status: String(order.PaymentStatus || 'Paid').toLowerCase(),
+            amount_total: Math.round((Number.isFinite(totalPhp) ? totalPhp : 0) * 100),
+            currency: 'php',
+            customer_email: email || order.CustomerEmail || null
+        });
+
+        const normalizeStripeSession = (session) => {
+            const rawAmt = session.amount_total;
+            const amountTotal =
+                rawAmt != null && Number.isFinite(Number(rawAmt)) && Number(rawAmt) >= 0
+                    ? Number(rawAmt)
+                    : Math.round((Number.isFinite(totalPhp) ? totalPhp : 0) * 100);
+            const piId =
+                typeof session.payment_intent === 'string'
+                    ? session.payment_intent
+                    : session.payment_intent?.id || null;
+            return {
+                payment_status: session.payment_status || String(order.PaymentStatus || 'paid').toLowerCase(),
+                amount_total: amountTotal,
+                currency: session.currency || 'php',
+                customer_email:
+                    session.customer_email ||
+                    session.customer_details?.email ||
+                    order.CustomerEmail ||
+                    null,
+                payment_intent_id: piId
+            };
+        };
+
+        const fetchPayMongoCheckoutNormalized = async () => {
+            const key = process.env.PAYMONGO_SECRET_KEY;
+            if (!key || !sid) return null;
+            const auth = `Basic ${Buffer.from(`${key}:`).toString('base64')}`;
+            const pmRes = await fetch(
+                `https://api.paymongo.com/v1/checkout_sessions/${encodeURIComponent(sid)}`,
+                { headers: { accept: 'application/json', authorization: auth } }
+            );
+            if (!pmRes.ok) return null;
+            const pmJson = await pmRes.json().catch(() => ({}));
+            const attrs = pmJson?.data?.attributes;
+            if (!attrs) return null;
+            const payId = attrs.payments?.[0]?.id || null;
+            const amountRaw = attrs.amount;
+            const amountTotal =
+                amountRaw != null && Number.isFinite(Number(amountRaw)) && Number(amountRaw) > 0
+                    ? Number(amountRaw)
+                    : Math.round((Number.isFinite(totalPhp) ? totalPhp : 0) * 100);
+            const pmStatus =
+                attrs.status ||
+                attrs.payment_intent?.attributes?.status ||
+                order.PaymentStatus ||
+                'paid';
+            return {
+                payment_status: String(pmStatus).toLowerCase(),
+                amount_total: amountTotal,
+                currency: (attrs.currency || 'PHP').toLowerCase(),
+                customer_email: attrs.billing?.email || attrs.customer_email || order.CustomerEmail || null,
+                paymongo_payment_id: typeof payId === 'string' ? payId : null
+            };
+        };
+
+        let stripeDetails = null;
+        const stripeInstance = getStripe();
+
+        if (sid && stripeInstance && isStripeCheckoutSessionId(sid)) {
             try {
-                const session = await stripe.checkout.sessions.retrieve(order.StripeSessionID);
-                order.stripeDetails = {
-                    payment_status: session.payment_status,
-                    amount_total: session.amount_total,
-                    currency: session.currency,
-                    customer_email: session.customer_email
-                };
-            } catch (stripeError) {
-                console.error('Error retrieving Stripe session:', stripeError);
-                order.stripeDetails = { error: 'Unable to retrieve Stripe details' };
+                const session = await stripeInstance.checkout.sessions.retrieve(sid);
+                stripeDetails = normalizeStripeSession(session);
+            } catch (e) {
+                console.error('[payment-status] Stripe session retrieve failed:', e.message);
+            }
+        } else if (sid && stripeInstance && /^cs_[a-z0-9_]+$/i.test(sid)) {
+            try {
+                const session = await stripeInstance.checkout.sessions.retrieve(sid);
+                stripeDetails = normalizeStripeSession(session);
+            } catch (e) {
+                console.warn('[payment-status] Stripe retrieve for cs_ id failed (will try PayMongo):', e.message);
             }
         }
+
+        if (!stripeDetails && process.env.PAYMONGO_SECRET_KEY && sid) {
+            try {
+                stripeDetails = await fetchPayMongoCheckoutNormalized();
+            } catch (e) {
+                console.warn('[payment-status] PayMongo checkout session lookup failed:', e.message);
+            }
+        }
+
+        if (!stripeDetails) {
+            stripeDetails = fallbackGatewayShape(order.CustomerEmail);
+        } else {
+            const at = Number(stripeDetails.amount_total);
+            if (!Number.isFinite(at) || at <= 0) {
+                stripeDetails.amount_total = Math.round((Number.isFinite(totalPhp) ? totalPhp : 0) * 100);
+            }
+        }
+
+        let primaryPaymentId = '';
+        if (/^(pay_|pi_|ch_)/i.test(txn)) {
+            primaryPaymentId = txn;
+        } else if (/^TXN/i.test(txn)) {
+            primaryPaymentId = txn;
+        }
+        if (!primaryPaymentId && stripeDetails.payment_intent_id) {
+            primaryPaymentId = String(stripeDetails.payment_intent_id);
+        }
+        if (!primaryPaymentId && stripeDetails.paymongo_payment_id) {
+            primaryPaymentId = String(stripeDetails.paymongo_payment_id);
+        }
+
+        let displayPaymentId = primaryPaymentId;
+        if (!displayPaymentId && sid) {
+            displayPaymentId = sid;
+            order.PaymentIdentifier = displayPaymentId;
+            order.PaymentIdentifierLabel = isStripeCheckoutSessionId(sid)
+                ? 'Stripe Checkout session ID'
+                : 'Gateway checkout session ID';
+        } else {
+            order.PaymentIdentifier = displayPaymentId;
+            order.PaymentIdentifierLabel = 'Payment / transaction ID';
+        }
+
+        if (sid && primaryPaymentId && sid !== primaryPaymentId) {
+            order.CheckoutSessionLabel = isStripeCheckoutSessionId(sid)
+                ? 'Stripe Checkout session ID'
+                : 'Gateway checkout session ID';
+            order.CheckoutSessionValue = sid;
+        }
+
+        order.stripeDetails = stripeDetails;
 
         res.json({
             success: true,

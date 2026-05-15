@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulk Orders - Order Support</title>
+    <title>Bulk Orders - Admin</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -389,9 +389,9 @@
                                     </td>
                                     <td><%= order.CustomerEmail || 'N/A' %></td>
                                     <td><%= order.TotalQuantity %></td>
-                                    <td>â‚±<%= parseFloat(order.Subtotal).toFixed(2) %></td>
-                                    <td>â‚±<%= parseFloat(order.DiscountAmount || 0).toFixed(2) %></td>
-                                    <td><strong>â‚±<%= parseFloat(order.GrandTotal).toFixed(2) %></strong></td>
+                                    <td>₱<%= parseFloat(order.Subtotal).toFixed(2) %></td>
+                                    <td>₱<%= parseFloat(order.DiscountAmount || 0).toFixed(2) %></td>
+                                    <td><strong>₱<%= parseFloat(order.GrandTotal).toFixed(2) %></strong></td>
                                     <td>
                                         <% 
                                             const status = (order.Status || 'Unknown').toString().toLowerCase();
@@ -430,7 +430,7 @@
         <div class="bulk-order-modal-content">
             <div class="bulk-order-modal-header">
                 <h3 id="modalOrderTitle">Bulk Order Details</h3>
-                <button class="bulk-order-modal-close" onclick="closeBulkOrderDetailsModal()">Ã—</button>
+                <button class="bulk-order-modal-close" onclick="closeBulkOrderDetailsModal()">×</button>
             </div>
             <div class="bulk-order-modal-body" id="bulkOrderDetailsContent">
                 <div style="text-align: center; padding: 2rem;">
@@ -542,8 +542,8 @@
                                     <td>${item.ProductName || 'N/A'}</td>
                                     <td>${item.SKU || 'N/A'}</td>
                                     <td style="text-align: center;">${item.Quantity || 0}</td>
-                                    <td style="text-align: right;">â‚±${parseFloat(item.UnitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                    <td style="text-align: right;">â‚±${parseFloat((item.UnitPrice || 0) * (item.Quantity || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    <td style="text-align: right;">₱${parseFloat(item.UnitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    <td style="text-align: right;">₱${parseFloat((item.UnitPrice || 0) * (item.Quantity || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                 </tr>
                             `).join('');
                         } else {
@@ -634,15 +634,15 @@
                                     </div>
                                     <div class="bulk-order-total-row">
                                         <span>Subtotal</span>
-                                        <span>â‚±${parseFloat(order.Subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                        <span>₱${parseFloat(order.Subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                     </div>
                                     <div class="bulk-order-total-row">
                                         <span>Discount</span>
-                                        <span>â‚±${parseFloat(order.DiscountAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                        <span>₱${parseFloat(order.DiscountAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                     </div>
                                     <div class="bulk-order-total-row grand-total">
                                         <span>Grand Total</span>
-                                        <span>â‚±${parseFloat(order.GrandTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                        <span>₱${parseFloat(order.GrandTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                     </div>
                                 </div>
                             </div>
@@ -670,5 +670,4 @@
     </script>
 </body>
 </html>
-
 

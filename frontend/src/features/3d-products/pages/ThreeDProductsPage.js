@@ -891,6 +891,26 @@ const ThreeDProducts = () => {
 
   // Use the uploaded 3D model from the product, or show placeholder
   const modelPath = getModel3dUrl(product);
+  const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  const loadableModelPath = React.useMemo(() => {
+    if (!modelPath) return null;
+    try {
+      const parsed = new URL(modelPath);
+      const apiRoot = apiBaseUrl.replace(/\/+$/, '');
+      const apiOrigin = new URL(apiRoot).origin;
+      // CRA (:3000) + API (:5000): model URL points at API — treat as "ours", no /api/model-file proxy.
+      const isOurAsset =
+        parsed.origin === window.location.origin ||
+        parsed.origin === apiOrigin;
+      if (isOurAsset) {
+        return modelPath;
+      }
+      // External hosts (e.g. Azure blob): proxy through API to avoid CORS blocks in the browser.
+      return `${apiRoot}/api/model-file?url=${encodeURIComponent(modelPath)}`;
+    } catch {
+      return modelPath;
+    }
+  }, [modelPath, apiBaseUrl]);
   
   // Debug model path
   useEffect(() => {
@@ -898,10 +918,10 @@ const ThreeDProducts = () => {
       console.log('Product data:', {
         model3d: product.model3d,
         has3dModel: product.has3dModel,
-        modelPath: modelPath
+        modelPath: loadableModelPath
       });
     }
-  }, [product, modelPath]);
+  }, [product, loadableModelPath]);
 
   // Calculate price adjustments
   useEffect(() => {
@@ -1433,7 +1453,7 @@ const ThreeDProducts = () => {
               >
                 <ModelErrorCatcher>
                   <CustomizableModel
-                    modelPath={modelPath}
+                    modelPath={loadableModelPath}
                     customizations={customizations}
                     isRotating360={isRotating360}
                   />
@@ -1584,7 +1604,7 @@ const ThreeDProducts = () => {
         isOpen={showARViewer}
         onClose={() => setShowARViewer(false)}
         product={product}
-        modelPath={modelPath}
+        modelPath={loadableModelPath}
       />
 
       {/* QR Code Modal - Only shown on desktop */}

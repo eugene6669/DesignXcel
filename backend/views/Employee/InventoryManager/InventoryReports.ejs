@@ -612,6 +612,102 @@
             display: block;
         }
 
+        #sales-composition-chart {
+            width: 200px;
+            height: 200px;
+            display: block;
+            flex-shrink: 0;
+        }
+
+        .composition-donut-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 1.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .composition-legend {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            font-size: 0.875rem;
+            color: var(--text-dark);
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .composition-legend li {
+            margin-bottom: 0.75rem;
+            line-height: 1.4;
+        }
+
+        .composition-swatch {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+
+        .composition-legend-value {
+            color: var(--text-light);
+            font-size: 0.8rem;
+        }
+
+        .chart-subtitle {
+            margin: -0.5rem 0 1rem 0;
+            font-size: 0.8rem;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+
+        .composition-subheading {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin: 0 0 0.35rem 0;
+            font-family: var(--font-display);
+        }
+
+        .composition-cat-caption {
+            font-size: 0.75rem;
+            color: var(--text-light);
+            margin: 0 0 0.75rem 0;
+        }
+
+        .composition-cat-row {
+            margin-bottom: 0.65rem;
+        }
+
+        .composition-cat-label {
+            font-size: 0.8rem;
+            color: var(--text-dark);
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+
+        .composition-cat-bar-wrap {
+            height: 8px;
+            background: #f1f5f9;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 0.2rem;
+        }
+
+        .composition-cat-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #F0B21B, #e6a017);
+            border-radius: 4px;
+            min-width: 2px;
+        }
+
+        .composition-cat-meta {
+            font-size: 0.72rem;
+            color: var(--text-light);
+        }
+
         .chart-title {
             display: flex;
             align-items: center;
@@ -892,11 +988,16 @@
                                 <option value="">All Status</option>
                                 <option value="Pending">Pending</option>
                                 <option value="Processing">Processing</option>
+                                <option value="Processing (Pickup)">Processing (Pickup)</option>
                                 <option value="Shipping">Shipping</option>
                                 <option value="Delivery">Delivery</option>
                                 <option value="Received">Received</option>
                                 <option value="Completed">Completed</option>
-                                <option value="Returned">Returns</option>
+                                <option value="Cancelled">Cancelled</option>
+                                <option value="Returned">Returned</option>
+                                <option value="Refunded">Refunded</option>
+                                <option value="Completed Returned">Completed Returned</option>
+                                <option value="Declined">Declined</option>
                             </select>
                         </div>
                         <div class="filter-group">
@@ -904,6 +1005,7 @@
                             <select id="sales-payment">
                                 <option value="">All Methods</option>
                                 <option value="E-Wallet">E-Wallet</option>
+                                <option value="Bank Card">Bank Card</option>
                             </select>
                         </div>
                         <div class="filter-group">
@@ -951,8 +1053,8 @@
                     <div class="reports-stats" id="sales-stats"></div>
                     
                     <!-- Stats Table -->
-                    <div style="background: #ffffff; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e5e7eb;">
-                        <h3 class="section-title" style="margin-bottom: 1rem;">
+                    <details style="background: #ffffff; border-radius: 12px; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e5e7eb;">
+                        <summary class="section-title" style="display: flex; align-items: center; gap: 0.5rem; padding: 1.5rem; cursor: pointer; list-style: none;">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                                 <polyline points="14 2 14 8 20 8"/>
@@ -961,23 +1063,25 @@
                                 <polyline points="10 9 9 9 8 9"/>
                             </svg>
                             Sales Report Statistics
-                        </h3>
-                        <div id="stats-table-container" style="width: 100%; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch;">
-                            <table id="stats-table" style="width: 100%; border-collapse: collapse; min-width: 1200px;">
-                                <thead id="stats-thead">
-                                    <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
-                                        <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: #111827; font-size: 0.875rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; border-right: 1px solid #e5e7eb;">Metric</th>
-                                        <th colspan="13" style="padding: 0.5rem; text-align: center; color: #6b7280; font-size: 0.75rem;">Loading statistics...</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="stats-tbody">
-                                    <tr>
-                                        <td colspan="14" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        </summary>
+                        <div style="padding: 0 1.5rem 1.5rem;">
+                            <div id="stats-table-container" style="width: 100%; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch;">
+                                <table id="stats-table" style="width: 100%; border-collapse: collapse; min-width: 1200px;">
+                                    <thead id="stats-thead">
+                                        <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
+                                            <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: #111827; font-size: 0.875rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; border-right: 1px solid #e5e7eb;">Metric</th>
+                                            <th colspan="13" style="padding: 0.5rem; text-align: center; color: #6b7280; font-size: 0.75rem;">Loading statistics...</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="stats-tbody">
+                                        <tr>
+                                            <td colspan="14" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
+                    </details>
                     
                     <!-- Sales Table Container - moved above charts -->
                     <div id="sales-table-container">
@@ -1020,6 +1124,23 @@
                                 Revenue Breakdown
                             </h3>
                             <canvas id="sales-revenue-chart" height="300"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3 class="chart-title">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M12 6v12M6 12h12"/>
+                                </svg>
+                                Revenue composition
+                            </h3>
+                            <p class="chart-subtitle">Share of gross revenue: merchandise subtotals versus delivery fees (same filters as the sales table).</p>
+                            <div class="composition-donut-wrap">
+                                <canvas id="sales-composition-chart" width="200" height="200"></canvas>
+                                <ul class="composition-legend" id="sales-composition-legend"></ul>
+                            </div>
+                            <h4 class="composition-subheading">By product category</h4>
+                            <p class="composition-cat-caption">Line revenue (price paid Ã— quantity) on completed and declined orders.</p>
+                            <div id="sales-composition-by-category"></div>
                         </div>
                     </div>
                 </div>
@@ -1631,7 +1752,11 @@
                 if (data.success) {
                     renderSalesTable(data.data);
                     renderSalesStats(data.stats);
-                    renderSalesCharts(data.stats);
+                    const salesStatsEl = document.getElementById('sales-stats');
+                    if (salesStatsEl) {
+                        salesStatsEl.dataset.revenueComposition = JSON.stringify(data.revenueComposition || null);
+                    }
+                    renderSalesCharts(data.stats, data.revenueComposition);
                 } else {
                     document.getElementById('sales-tbody').innerHTML = 
                         `<tr><td colspan="15" class="empty-state">${data.error || 'Error loading sales data'}</td></tr>`;
@@ -1826,7 +1951,7 @@
                     </div>
                     <div class="stat-label">Total Taxes</div>
                     <div class="stat-value">₱${Number(stats.totalTaxes || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Price before Tax item × (12% / 100)</div>
+                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Price before Tax item Ã— (12% / 100)</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon">
@@ -1930,7 +2055,7 @@
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">${stats.returnedOrdersCount || 0} orders (${Number(stats.returnRate || 0).toFixed(1)}%)</td>`;
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">All discounts applied</td>`;
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Value of returned/damaged items</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Price before Tax item × (12% / 100)</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Price before Tax item Ã— (12% / 100)</td>`;
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Delivery + Extra Delivery (excluding returns)</td>`;
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Total number of orders (excluding returns)</td>`;
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Unique customers with orders</td>`;
@@ -1941,10 +2066,100 @@
             }
         }
 
-        function renderSalesCharts(stats) {
+        function renderSalesCharts(stats, revenueComposition) {
             if (!stats) return;
             
             renderRevenueChart(stats);
+            renderRevenueComposition(revenueComposition);
+        }
+
+        function escapeCompositionLabel(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function renderRevenueComposition(composition) {
+            const canvas = document.getElementById('sales-composition-chart');
+            const legendEl = document.getElementById('sales-composition-legend');
+            const categoryEl = document.getElementById('sales-composition-by-category');
+            if (!canvas || !legendEl || !categoryEl) return;
+
+            const merch = composition ? parseFloat(composition.merchandise || 0) : 0;
+            const delivery = composition ? parseFloat(composition.delivery || 0) : 0;
+            const total = merch + delivery;
+
+            const wrap = canvas.parentElement;
+            const rawSize = (wrap && wrap.clientWidth ? Math.min(wrap.clientWidth - 240, 220) : 200);
+            const size = Math.max(160, Math.min(220, rawSize > 0 ? rawSize : 200));
+            canvas.width = size;
+            canvas.height = size;
+
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, size, size);
+
+            const fmtPhp = (v) => '₱' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2 });
+            const pct = (part) => (total > 0 ? ((part / total) * 100).toFixed(1) : '0.0');
+
+            legendEl.innerHTML = `
+                <li><span class="composition-swatch" style="background:#10b981"></span>Merchandise <strong>${pct(merch)}%</strong><div class="composition-legend-value">${fmtPhp(merch)} — subtotal (no delivery)</div></li>
+                <li><span class="composition-swatch" style="background:#06b6d4"></span>Delivery &amp; extra <strong>${pct(delivery)}%</strong><div class="composition-legend-value">${fmtPhp(delivery)}</div></li>
+            `;
+
+            const cx = size / 2;
+            const cy = size / 2;
+            const outerR = Math.min(cx, cy) * 0.85;
+            const innerR = outerR * 0.58;
+
+            const drawArcSlice = (start, sweep, color) => {
+                if (sweep <= 0 || total <= 0) return;
+                const end = start + sweep;
+                ctx.beginPath();
+                ctx.arc(cx, cy, outerR, start, end);
+                ctx.arc(cx, cy, innerR, end, start, true);
+                ctx.closePath();
+                ctx.fillStyle = color;
+                ctx.fill();
+            };
+
+            if (total <= 0) {
+                ctx.beginPath();
+                ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+                ctx.strokeStyle = '#e5e7eb';
+                ctx.lineWidth = outerR - innerR;
+                ctx.stroke();
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '12px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('No revenue', cx, cy);
+                categoryEl.innerHTML = '<p class="empty-state" style="margin:0;font-size:0.85rem;color:var(--text-light);">No category breakdown for this filter.</p>';
+                return;
+            }
+
+            let angle = -Math.PI / 2;
+            drawArcSlice(angle, (merch / total) * Math.PI * 2, '#10b981');
+            angle += (merch / total) * Math.PI * 2;
+            drawArcSlice(angle, (delivery / total) * Math.PI * 2, '#06b6d4');
+
+            const byCat = (composition && Array.isArray(composition.byCategory)) ? composition.byCategory : [];
+            if (!byCat.length) {
+                categoryEl.innerHTML = '<p class="empty-state" style="margin:0;font-size:0.85rem;color:var(--text-light);">No category breakdown for this filter.</p>';
+                return;
+            }
+
+            categoryEl.innerHTML = byCat.map(row => {
+                const w = Math.min(100, Math.max(0, row.percent || 0));
+                const label = escapeCompositionLabel(row.category || 'Uncategorized');
+                return `
+                    <div class="composition-cat-row">
+                        <div class="composition-cat-label">${label}</div>
+                        <div class="composition-cat-bar-wrap"><div class="composition-cat-bar" style="width:${w}%"></div></div>
+                        <div class="composition-cat-meta">${Number(row.percent || 0).toFixed(1)}% · ${fmtPhp(row.revenue || 0)}</div>
+                    </div>
+                `;
+            }).join('');
         }
 
         function renderRevenueChart(stats) {
@@ -2430,7 +2645,15 @@
                     const statsContainer = document.getElementById('sales-stats');
                     if (statsContainer && statsContainer.dataset.stats) {
                         const stats = JSON.parse(statsContainer.dataset.stats);
-                        renderSalesCharts(stats);
+                        let revenueComposition = null;
+                        try {
+                            if (statsContainer.dataset.revenueComposition) {
+                                revenueComposition = JSON.parse(statsContainer.dataset.revenueComposition);
+                            }
+                        } catch (e) {
+                            revenueComposition = null;
+                        }
+                        renderSalesCharts(stats, revenueComposition);
                     } else {
                         // If no stored data, reload
                         loadSalesData();

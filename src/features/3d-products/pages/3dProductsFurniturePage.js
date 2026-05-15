@@ -27,6 +27,19 @@ const ThreeDProductsFurniture = () => {
     const [filteredProducts, setFilteredProducts] = useState([]);
     const [selectedCategoryName, setSelectedCategoryName] = useState('');
 
+    const has3DModel = (product) => {
+        if (!product) return false;
+        return Boolean(
+            product.Has3DModel ||
+            product.has3DModel ||
+            product.has3dModel ||
+            product.model3D ||
+            product.model3d ||
+            product.Model3D ||
+            product.model3DURL
+        );
+    };
+
     // Parse URL parameters
     useEffect(() => {
         const searchParams = new URLSearchParams(location.search);
@@ -61,9 +74,7 @@ const ThreeDProductsFurniture = () => {
             const productsData = productsResponse.products || [];
             
             // Filter products to only include those with 3D models (check Has3DModel field)
-            const customFurnitureProducts = productsData.filter(product => 
-                product.Has3DModel || product.model3d || product.has3dModel
-            );
+            const customFurnitureProducts = productsData.filter(has3DModel);
             
             const categoriesData = categoriesResponse.categories || [];
             

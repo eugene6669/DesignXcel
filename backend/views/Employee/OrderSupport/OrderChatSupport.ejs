@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Support - Order Support</title>
+    <title>Chat Support - Admin</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,6 +30,7 @@
       .chat-message-bubble { max-width: 60%; padding: 10px 16px; border-radius: 16px; font-size: 1em; background: #F0B21B; color: #2c3e50; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
       .chat-message-row.customer .chat-message-bubble { background: #fffbe6; color: #2c3e50; border-bottom-left-radius: 4px; }
       .chat-message-row.admin .chat-message-bubble { background: #F0B21B; color: #2c3e50; border-bottom-right-radius: 4px; }
+      .chat-message-meta { font-size: 0.75rem; color: #6b7280; margin-top: 6px; line-height: 1.2; }
       .chat-reply-area { padding: 18px 24px; border-top: 1px solid #eee; background: #fff; display: flex; }
       .chat-reply-input { flex: 1; border-radius: 16px; border: 1px solid #ccc; padding: 10px 16px; font-size: 1em; margin-right: 12px; }
       .chat-reply-btn { background: #F0B21B; color: #2c3e50; border: none; border-radius: 16px; padding: 10px 24px; font-weight: 600; cursor: pointer; }
@@ -187,7 +188,11 @@
                       <% if (messages && messages.length) { %>
                         <% messages.forEach(function(msg) { %>
                           <div class="chat-message-row <%= msg.SenderType === 'support' ? 'admin' : 'customer' %>">
-                            <div class="chat-message-bubble"><%= msg.MessageText %></div>
+                            <div class="chat-message-bubble"><%= msg.MessageText %>
+                              <% if (msg.CreatedAt || msg.SentAt) { %>
+                              <div class="chat-message-meta"><%= new Date(msg.CreatedAt || msg.SentAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) %></div>
+                              <% } %>
+                            </div>
                           </div>
                         <% }); %>
                       <% } else { %>
@@ -253,6 +258,35 @@
       console.warn('Chat reply form not found in DOM');
     }
 
+    function formatManilaChatTime(iso) {
+      if (!iso) return '';
+      try {
+        let s = String(iso).trim().replace(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})/, '$1T$2');
+        var d = null;
+        if (!/[zZ]$/.test(s) && !/[+-]\d{2}:\d{2}$/.test(s)) {
+          var m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/);
+          if (m) {
+            var isoStr = m[1] + '-' + m[2] + '-' + m[3] + 'T' + m[4] + ':' + m[5] + ':' + (m[6] || '00');
+            if (m[7]) isoStr += '.' + String(m[7]).padEnd(3, '0').slice(0, 3);
+            isoStr += '+08:00';
+            d = new Date(isoStr);
+          }
+        }
+        if (!d || Number.isNaN(d.getTime())) d = new Date(s);
+        if (Number.isNaN(d.getTime())) return '';
+        var out = d.toLocaleString('en-PH', {
+          timeZone: 'Asia/Manila',
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        return out.replace(/\bAM\b/g, 'am').replace(/\bPM\b/g, 'pm') + ' (GMT+8)';
+      } catch (e) { return ''; }
+    }
+
     async function fetchMessagesAndUpdate() {
       if (!customerIdNumber || isNaN(customerIdNumber)) return;
       if (!messagesArea) {
@@ -269,7 +303,8 @@
           data.messages.forEach(function(msg) {
             const rowClass = msg.IsFromCustomer ? 'customer' : 'admin';
             const messageText = msg.Message || msg.MessageText || 'No message content';
-            html += `<div class="chat-message-row ${rowClass}"><div class="chat-message-bubble">${messageText}</div></div>`;
+            const timeStr = formatManilaChatTime(msg.CreatedAt);
+            html += `<div class="chat-message-row ${rowClass}"><div class="chat-message-bubble">${messageText}` + (timeStr ? `<div class="chat-message-meta">${timeStr}</div>` : '') + `</div></div>`;
           });
         }
         messagesArea.innerHTML = html;
@@ -281,7 +316,7 @@
     }
     // Only setup polling and reload button if a thread is selected
     if (customerIdNumber && !isNaN(customerIdNumber)) {
-      // Polling every 2 seconds
+      fetchMessagesAndUpdate();
       setInterval(fetchMessagesAndUpdate, 2000);
       // Manual reload button
       if (reloadBtn) {
@@ -300,7 +335,7 @@
         const customerId = this.getAttribute('data-customer-id');
         if (customerId) {
           // Redirect to the same page with the selected thread
-          window.location.href = `/Employee/Admin/ChatSupport?thread=${customerId}`;
+          window.location.href = `/Employee/OrderSupport/OrderChatSupport?thread=${customerId}`;
         }
       });
     });
@@ -366,4 +401,3 @@
 
 </body>
 </html>
-

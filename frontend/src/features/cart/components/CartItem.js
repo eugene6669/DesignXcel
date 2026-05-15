@@ -1,7 +1,6 @@
 import { useCurrency } from '../../../shared/contexts/CurrencyContext';
-import apiConfig from '../../../shared/services/api/apiConfig.js';
 import { PlusIcon, MinusIcon, TrashIcon } from '../../../shared/components/ui/SvgIcons';
-import { getImageUrl } from '../../../shared/utils/imageUtils';
+import { getImageUrl, getPrimaryImageUrl } from '../../../shared/utils/imageUtils';
 import { useState } from 'react';
 
 const CartItem = ({ item, onUpdateQuantity, onRemove, checked = true, onCheck = () => {} }) => {
@@ -17,8 +16,13 @@ const CartItem = ({ item, onUpdateQuantity, onRemove, checked = true, onCheck = 
   // Use discounted price if available, otherwise use original price
   const displayPrice = itemPrice || originalPrice;
 
-  // Use the utility function to get the image URL
-  const imageUrl = getImageUrl(selectedVariation?.imageUrl || images?.[0]);
+  // Resolve cart image from variation first, then all known product image fields.
+  const imageCandidate =
+    selectedVariation?.imageUrl ||
+    selectedVariation?.ImageURL ||
+    selectedVariation?.image ||
+    getPrimaryImageUrl(product);
+  const imageUrl = getImageUrl(imageCandidate);
 
   const handleImageError = () => {
     setImageError(true);

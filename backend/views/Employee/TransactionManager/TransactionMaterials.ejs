@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transaction Manager Raw Materials - Design Excellence</title>
+    <title>Admin Raw Materials - Design Excellence</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -311,7 +311,7 @@
     <!-- Custom Success/Error Popup -->
     <div id="customPopup" class="custom-popup">
         <div class="custom-popup-content">
-            <span class="custom-popup-icon">âœ“</span>
+            <span class="custom-popup-icon">✓</span>
             <span class="custom-popup-message"></span>
         </div>
     </div>
@@ -364,7 +364,7 @@
                     <div class="modal-content">
                         <span class="close-button">&times;</span>
                         <h3>Add New Raw Material</h3>
-                        <form action="/Employee/Admin/RawMaterials/Add" method="POST">
+                        <form action="/Employee/TransactionManager/TransactionMaterials/Add" method="POST">
                             <label for="name">Material Name:</label>
                             <input type="text" id="name" name="name" required><br><br>
 
@@ -440,7 +440,7 @@
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 20h9"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 3.5a2.121 2.121 0 113 3L7 19.5 3 21l1.5-4L16.5 3.5z"/></svg>
                                         </button>
-                                        <form action="/Employee/Admin/RawMaterials/Delete/<%= material.MaterialID %>" method="POST" style="display:inline;">
+                                        <form action="/Employee/TransactionManager/TransactionMaterials/Delete/<%= material.MaterialID %>" method="POST" style="display:inline;">
                                             <button type="submit" class="delete-material-btn" title="Archive">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
                                             </button>
@@ -462,7 +462,7 @@
         <div class="modal-content">
             <span class="close-button" id="closeEditMaterialModal">&times;</span>
             <h3>Edit Raw Material</h3>
-            <form id="editMaterialForm" action="/Employee/Admin/RawMaterials/Edit" method="POST">
+            <form id="editMaterialForm" action="/Employee/TransactionManager/TransactionMaterials/Edit" method="POST">
                 <input type="hidden" id="editMaterialID" name="materialid">
                 <label for="editMaterialName">Material Name:</label>
                 <input type="text" id="editMaterialName" name="name" required><br><br>
@@ -789,7 +789,7 @@
                         formData.append('quantity', '0');
                         formData.append('unit', material.unit);
 
-                        const response = await fetch('/Employee/Admin/RawMaterials/Add', {
+                        const response = await fetch('/Employee/TransactionManager/TransactionMaterials/Add', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -854,7 +854,7 @@
 
             // Set message and icon
             popupMessage.textContent = message;
-            popupIcon.textContent = isError ? 'âœ•' : 'âœ“';
+            popupIcon.textContent = isError ? '✕' : '✓';
             
             // Set style based on type
             popup.className = 'custom-popup' + (isError ? ' error' : '');
@@ -1151,4 +1151,3 @@
 
 </body>
 </html>
-

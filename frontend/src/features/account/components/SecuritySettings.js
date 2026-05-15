@@ -1,8 +1,14 @@
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import apiClient from '../../../shared/services/api/apiClient';
+import { useAuth } from '../../../shared/hooks/useAuth';
 import { EyeIcon, EyeOffIcon, LockIcon, CheckCircleIcon } from '../../../shared/components/ui/SvgIcons';
 
 const SecuritySettings = () => {
+  const { user, refreshAuth } = useAuth();
+  const [searchParams] = useSearchParams();
+  const passwordRequiredQuery = searchParams.get('passwordRequired') === '1';
+  const needsInitialPassword = Boolean(user?.requiresPasswordSetup);
   const [passwords, setPasswords] = useState({
     currentPassword: '',
     newPassword: '',
@@ -24,13 +30,13 @@ const SecuritySettings = () => {
   const handlePasswordChange = (e) => {
     const { name, value } = e.target;
     setPasswords({ ...passwords, [name]: value });
-    
+
     // Clear previous messages when user starts typing
     if (message) {
       setMessage('');
       setMessageType('');
     }
-    
+
     // Check password strength for new password
     if (name === 'newPassword') {
       const strength = checkPasswordStrength(value);
@@ -41,29 +47,50 @@ const SecuritySettings = () => {
   const checkPasswordStrength = (password) => {
     let score = 0;
     const feedback = [];
-    
+
+    // Blacklist of common/predictable passwords
+    const commonPasswords = [
+      'password', 'password123', 'admin123', '12345678', 'qwertyuiop',
+      'designxcel', 'designxcel123', '12341234', 'password!', 'p@ssword'
+    ];
+
+    if (commonPasswords.includes(password.toLowerCase())) {
+      return {
+        score: 0,
+        label: 'Common Password',
+        color: '#ef4444',
+        feedback: 'This password is too common and easy to guess. Please choose something unique.'
+      };
+    }
+
     if (password.length >= 8) score += 1;
     else feedback.push('At least 8 characters');
-    
+
     if (/[a-z]/.test(password)) score += 1;
     else feedback.push('Lowercase letter');
-    
+
     if (/[A-Z]/.test(password)) score += 1;
     else feedback.push('Uppercase letter');
-    
+
     if (/[0-9]/.test(password)) score += 1;
     else feedback.push('Number');
-    
+
     if (/[^A-Za-z0-9]/.test(password)) score += 1;
     else feedback.push('Special character');
-    
-    const strengthLabels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
-    const strengthColors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#16a34a'];
-    
+
+    // New mapping for 0-5 score:
+    // 0-1: Very Weak
+    // 2: Weak
+    // 3: Fair
+    // 4: Good
+    // 5: Strong
+    const strengthLabels = ['Very Weak', 'Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
+    const strengthColors = ['#ef4444', '#ef4444', '#f97316', '#eab308', '#3b82f6', '#22c55e'];
+
     return {
       score,
-      label: strengthLabels[Math.min(score, 4)],
-      color: strengthColors[Math.min(score, 4)],
+      label: strengthLabels[score],
+      color: strengthColors[score],
       feedback: feedback.length > 0 ? `Missing: ${feedback.join(', ')}` : 'Strong password!'
     };
   };
@@ -79,7 +106,7 @@ const SecuritySettings = () => {
     setMessageType('');
 
     // Validation
-    if (!passwords.currentPassword) {
+    if (!needsInitialPassword && !passwords.currentPassword) {
       setMessage('Please enter your current password.');
       setMessageType('error');
       setLoading(false);
@@ -107,7 +134,15 @@ const SecuritySettings = () => {
       return;
     }
 
-    if (passwords.currentPassword === passwords.newPassword) {
+    const strength = checkPasswordStrength(passwords.newPassword);
+    if (strength.label === 'Common Password') {
+      setMessage('This password is too common. Please choose a more secure password.');
+      setMessageType('error');
+      setLoading(false);
+      return;
+    }
+
+    if (!needsInitialPassword && passwords.currentPassword === passwords.newPassword) {
       setMessage('New password must be different from current password.');
       setMessageType('error');
       setLoading(false);
@@ -116,15 +151,23 @@ const SecuritySettings = () => {
 
     try {
       console.log('Attempting to change password...');
-      const res = await apiClient.put('/api/customer/change-password', {
-        currentPassword: passwords.currentPassword,
-        newPassword: passwords.newPassword
-      });
+      const payload = needsInitialPassword
+        ? { newPassword: passwords.newPassword, setupInitialPassword: true }
+        : {
+          currentPassword: passwords.currentPassword,
+          newPassword: passwords.newPassword
+        };
+
+      const res = await apiClient.put('/api/customer/change-password', payload);
 
       console.log('Password change response:', res);
 
       if (res.success) {
-        setMessage('Password updated successfully!');
+        setMessage(
+          needsInitialPassword
+            ? 'Password set successfully. You can continue shopping.'
+            : 'Password updated successfully!'
+        );
         setMessageType('success');
         setPasswords({
           currentPassword: '',
@@ -132,13 +175,17 @@ const SecuritySettings = () => {
           confirmPassword: ''
         });
         setPasswordStrength({ score: 0, feedback: '' });
+        if (typeof refreshAuth === 'function') {
+          await refreshAuth();
+        }
       } else {
         setMessage(res.message || 'Failed to update password.');
         setMessageType('error');
       }
     } catch (err) {
       console.error('Password change error:', err);
-      setMessage(err.response?.data?.message || 'Failed to update password. Please check your current password.');
+      // Handle the error message from the Error object thrown by our apiClient
+      setMessage(err.message || 'Failed to update password. Please check your current password.');
       setMessageType('error');
     } finally {
       setLoading(false);
@@ -151,17 +198,39 @@ const SecuritySettings = () => {
         <div className="tab-header-content">
           <div className="tab-header-icon">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <circle cx="12" cy="16" r="1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M7 11V7C7 5.67392 7.52678 4.40215 8.46447 3.46447C9.40215 2.52678 10.6739 2 12 2C13.3261 2 14.5979 2.52678 15.5355 3.46447C16.4732 4.40215 17 5.67392 17 7V11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="12" cy="16" r="1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M7 11V7C7 5.67392 7.52678 4.40215 8.46447 3.46447C9.40215 2.52678 10.6739 2 12 2C13.3261 2 14.5979 2.52678 15.5355 3.46447C16.4732 4.40215 17 5.67392 17 7V11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
           <div className="tab-header-text">
-            <h1 className="tab-title">Password Manager</h1>
-            <p className="tab-subtitle">Change your password to keep your account secure</p>
+            <h1 className="tab-title">
+              {needsInitialPassword ? 'Set your password' : 'Password Manager'}
+            </h1>
+            <p className="tab-subtitle">
+              {needsInitialPassword
+                ? 'Create a password for your account so you can sign in with email as well as Google.'
+                : 'Change your password to keep your account secure'}
+            </p>
           </div>
         </div>
       </div>
+
+      {(needsInitialPassword || passwordRequiredQuery) && (
+        <div
+          className="message"
+          style={{
+            padding: '12px 16px',
+            borderRadius: '8px',
+            marginBottom: '20px',
+            border: '1px solid #f59e0b',
+            backgroundColor: '#fffbeb',
+            color: '#92400e'
+          }}
+        >
+          Please set a password to continue using your account on this site.
+        </div>
+      )}
 
       {message && (
         <div className={`message ${messageType === 'success' ? 'success' : 'error'}`} style={{
@@ -185,46 +254,48 @@ const SecuritySettings = () => {
       )}
 
       <form className="password-form" onSubmit={handlePasswordUpdate}>
-        <div className="form-group">
-          <label className="form-label">Current Password *</label>
-          <div className="password-input-wrapper" style={{ position: 'relative' }}>
-            <input
-              type={showPasswords.current ? "text" : "password"}
-              name="currentPassword"
-              value={passwords.currentPassword}
-              onChange={handlePasswordChange}
-              className="form-input"
-              placeholder="Enter your current password"
-              required
-              style={{
-                width: '100%',
-                padding: '12px 48px 12px 16px',
-                border: '2px solid #e5e7eb',
-                borderRadius: '8px',
-                fontSize: '16px',
-                transition: 'border-color 0.2s ease'
-              }}
-            />
-            <button
-              type="button"
-              className="password-toggle"
-              onClick={() => togglePasswordVisibility('current')}
-              style={{
-                position: 'absolute',
-                right: '12px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '4px',
-                color: '#6b7280'
-              }}
-            >
-              {showPasswords.current ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
-            </button>
+        {!needsInitialPassword && (
+          <div className="form-group">
+            <label className="form-label">Current Password *</label>
+            <div className="password-input-wrapper" style={{ position: 'relative' }}>
+              <input
+                type={showPasswords.current ? 'text' : 'password'}
+                name="currentPassword"
+                value={passwords.currentPassword}
+                onChange={handlePasswordChange}
+                className="form-input"
+                placeholder="Enter your current password"
+                required
+                style={{
+                  width: '100%',
+                  padding: '12px 48px 12px 16px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  transition: 'border-color 0.2s ease'
+                }}
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => togglePasswordVisibility('current')}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  color: '#6b7280'
+                }}
+              >
+                {showPasswords.current ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="form-group">
           <label className="form-label">New Password *</label>
@@ -265,19 +336,19 @@ const SecuritySettings = () => {
               {showPasswords.new ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
             </button>
           </div>
-          
+
           {/* Password Strength Indicator */}
           {passwords.newPassword && (
             <div style={{ marginTop: '8px' }}>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
                 alignItems: 'center',
                 marginBottom: '4px'
               }}>
                 <span style={{ fontSize: '12px', color: '#6b7280' }}>Password Strength:</span>
-                <span style={{ 
-                  fontSize: '12px', 
+                <span style={{
+                  fontSize: '12px',
                   fontWeight: '600',
                   color: passwordStrength.color || '#6b7280'
                 }}>
@@ -299,8 +370,8 @@ const SecuritySettings = () => {
                 }} />
               </div>
               {passwordStrength.feedback && (
-                <div style={{ 
-                  fontSize: '11px', 
+                <div style={{
+                  fontSize: '11px',
                   color: '#6b7280',
                   marginTop: '4px'
                 }}>
@@ -350,13 +421,13 @@ const SecuritySettings = () => {
               {showPasswords.confirm ? <EyeOffIcon size={20} /> : <EyeIcon size={20} />}
             </button>
           </div>
-          
+
           {/* Password Match Indicator */}
           {passwords.confirmPassword && (
             <div style={{ marginTop: '8px' }}>
               {passwords.newPassword === passwords.confirmPassword ? (
-                <div style={{ 
-                  fontSize: '12px', 
+                <div style={{
+                  fontSize: '12px',
                   color: '#22c55e',
                   display: 'flex',
                   alignItems: 'center',
@@ -366,8 +437,8 @@ const SecuritySettings = () => {
                   Passwords match
                 </div>
               ) : (
-                <div style={{ 
-                  fontSize: '12px', 
+                <div style={{
+                  fontSize: '12px',
                   color: '#ef4444'
                 }}>
                   Passwords do not match
@@ -378,9 +449,9 @@ const SecuritySettings = () => {
         </div>
 
         <div className="form-actions" style={{ marginTop: '24px' }}>
-          <button 
-            type="submit" 
-            className="btn-primary" 
+          <button
+            type="submit"
+            className="btn-primary"
             disabled={loading}
             style={{
               width: '100%',
@@ -401,7 +472,13 @@ const SecuritySettings = () => {
               minHeight: window.innerWidth < 768 ? '48px' : '44px'
             }}
           >
-            {loading ? 'Updating password...' : 'Update Password'}
+            {loading
+              ? needsInitialPassword
+                ? 'Saving password...'
+                : 'Updating password...'
+              : needsInitialPassword
+                ? 'Save password'
+                : 'Update Password'}
           </button>
         </div>
       </form>

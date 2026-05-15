@@ -27,6 +27,8 @@ class ApiClient {
           config.url.includes('/api/auth/customer/') ||
           config.url.includes('/api/auth/validate-session') ||
           config.url.includes('/api/create-checkout-session') ||
+          config.url.includes('/api/create-paymongo-checkout-session') ||
+          config.url.includes('/api/paymongo-checkout-session') ||
           config.url.includes('/api/terms') ||
           config.url.includes('/api/public/') ||
           config.url.includes('/api/test-webhook') ||
@@ -96,6 +98,18 @@ class ApiClient {
           const { status, data } = error.response;
           
           if (status === 401) {
+            const isCheckoutFlowRoute = window.location.pathname === '/checkout' || window.location.pathname === '/payment';
+            const noAutoRedirectEndpoints = [
+              '/api/auth/status',
+              '/api/auth/validate-session',
+              '/api/create-checkout-session',
+              '/api/create-paymongo-checkout-session',
+              '/api/paymongo-checkout-session'
+            ];
+            const shouldSkipAutoRedirect = noAutoRedirectEndpoints.some((endpoint) =>
+              error.config?.url?.includes(endpoint)
+            );
+
             // Unauthorized - handle differently for customer vs admin endpoints
             const isCustomerEndpoint = error.config?.url && (
               error.config.url.includes('/api/customer/') || 
@@ -104,6 +118,11 @@ class ApiClient {
             );
             
             if (isCustomerEndpoint) {
+              if (shouldSkipAutoRedirect || isCheckoutFlowRoute) {
+                // Let checkout page handle message/UI for payment setup failures
+                return Promise.reject(error);
+              }
+
               // Special handling for auth status endpoint - don't redirect, let auth hook handle it
               if (error.config?.url?.includes('/api/auth/status')) {
                 console.log('🔒 401 error on auth status endpoint - auth hook will handle');
@@ -128,10 +147,14 @@ class ApiClient {
                 console.log('🔒 401 error on account endpoint - component will handle');
               }
             } else if (!error.config?.url?.includes('/validate-session')) {
+              if (shouldSkipAutoRedirect || isCheckoutFlowRoute) {
+                return Promise.reject(error);
+              }
               // Check if this is a critical endpoint that requires immediate logout
               const criticalEndpoints = ['/api/customer/profile', '/api/auth/customer/login'];
               const checkoutEndpoints = ['/api/customer/addresses', '/api/create-checkout-session'];
-              const publicEndpoints = ['/api/terms', '/api/public/', '/api/test-webhook'];
+              checkoutEndpoints.push('/api/create-paymongo-checkout-session');
+              const publicEndpoints = ['/api/terms', '/api/public/', '/api/test-webhook', '/api/paymongo-checkout-session'];
               
               const isCriticalEndpoint = criticalEndpoints.some(endpoint => 
                 error.config?.url?.includes(endpoint)
@@ -224,9 +247,12 @@ class ApiClient {
             return this.client(originalRequest);
           } catch (refreshError) {
             console.error('❌ Token refresh failed:', refreshError);
-            // Clear tokens and redirect to login
-            this.clearAuthToken();
-            window.location.href = '/login';
+            const isCheckoutFlowRoute = window.location.pathname === '/checkout' || window.location.pathname === '/payment';
+            if (!isCheckoutFlowRoute) {
+              // Keep existing behavior outside checkout flow
+              this.clearAuthToken();
+              window.location.href = '/login';
+            }
             return Promise.reject(refreshError);
           }
         }

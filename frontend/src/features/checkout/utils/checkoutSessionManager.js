@@ -8,14 +8,14 @@ class CheckoutSessionManager {
     }
 
     // Validate session before checkout operations
-    async validateCheckoutSession() {
+    async validateCheckoutSession(currentUser = null) {
         // Prevent multiple simultaneous validations
         if (this.isValidating && this.validationPromise) {
             return this.validationPromise;
         }
 
         this.isValidating = true;
-        this.validationPromise = this._performValidation();
+        this.validationPromise = this._performValidation(currentUser);
 
         try {
             const result = await this.validationPromise;
@@ -26,7 +26,7 @@ class CheckoutSessionManager {
         }
     }
 
-    async _performValidation() {
+    async _performValidation(currentUser = null) {
         try {
             // Lazy load dependencies to avoid circular dependencies
             const sessionManagerModule = await import('../../../shared/utils/sessionManager');
@@ -43,7 +43,10 @@ class CheckoutSessionManager {
             const user = localStorage.getItem('user');
             
             // Use either userData or user (for compatibility)
-            const userInfo = userData || user;
+            const fallbackUserInfo = (currentUser && currentUser.id && currentUser.email)
+                ? JSON.stringify(currentUser)
+                : null;
+            const userInfo = userData || user || fallbackUserInfo;
             
             
             const token = accessToken || authToken;
@@ -71,12 +74,33 @@ class CheckoutSessionManager {
                 }
             }
             
-            if (!token || !userInfo) {
+            if (!userInfo) {
                 return { 
                     valid: false, 
                     error: 'No authentication data found',
                     shouldRedirect: true 
                 };
+            }
+
+            // Allow checkout to continue for session/cookie-based logins even when JWT is missing.
+            // Some production flows rely on server sessions and local user info.
+            if (!token && userInfo) {
+                try {
+                    const parsedUserData = JSON.parse(userInfo);
+                    if (parsedUserData && parsedUserData.id && parsedUserData.email) {
+                        return {
+                            valid: true,
+                            user: parsedUserData,
+                            warning: 'Proceeding with session-based authentication (no JWT token found)'
+                        };
+                    }
+                } catch (parseError) {
+                    return {
+                        valid: true,
+                        user: {},
+                        warning: 'Proceeding with session-based authentication'
+                    };
+                }
             }
 
             // Check if session needs validation
@@ -112,6 +136,25 @@ class CheckoutSessionManager {
                     user: validation.user 
                 };
             } else {
+                // If API validation fails but we still have local/auth-context user data, do not force logout.
+                if (userInfo) {
+                    try {
+                        const parsedUserData = JSON.parse(userInfo);
+                        if (parsedUserData && parsedUserData.id && parsedUserData.email) {
+                            return {
+                                valid: true,
+                                user: parsedUserData,
+                                warning: 'Session validation API failed; using cached authenticated user'
+                            };
+                        }
+                    } catch (parseError) {
+                        return {
+                            valid: true,
+                            user: {},
+                            warning: 'Session validation API failed; proceeding with existing session state'
+                        };
+                    }
+                }
                 return { 
                     valid: false, 
                     error: validation.error || validation.message || 'Session validation failed',
@@ -137,10 +180,14 @@ class CheckoutSessionManager {
     }
 
     // Pre-validate session before starting checkout
-    async ensureValidSession() {
-        const validation = await this.validateCheckoutSession();
+    async ensureValidSession(currentUser = null, options = {}) {
+        const { redirectOnInvalid = true } = options;
+        const validation = await this.validateCheckoutSession(currentUser);
         
         if (!validation.valid && validation.shouldRedirect) {
+            if (!redirectOnInvalid) {
+                return false;
+            }
             // Lazy load sessionManager
             const sessionManagerModule = await import('../../../shared/utils/sessionManager');
             const sessionManager = sessionManagerModule.default || sessionManagerModule.sessionManager;
@@ -161,6 +208,10 @@ class CheckoutSessionManager {
     // Handle checkout-specific errors
     async handleCheckoutError(error, endpoint) {
         if (error.response && error.response.status === 401) {
+            const shouldRedirect = !String(endpoint || '').includes('paymongo') && !String(endpoint || '').includes('stripe');
+            if (!shouldRedirect) {
+                return false;
+            }
             // Lazy load sessionManager
             const sessionManagerModule = await import('../../../shared/utils/sessionManager');
             const sessionManager = sessionManagerModule.default || sessionManagerModule.sessionManager;

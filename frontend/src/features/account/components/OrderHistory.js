@@ -24,6 +24,17 @@ import {
 import { getImageUrl } from '../../../shared/utils/imageUtils';
 import './account.css';
 
+const getNotificationStorageKey = (baseKey) => {
+  try {
+    const raw = localStorage.getItem('userData');
+    const parsed = raw ? JSON.parse(raw) : null;
+    const userId = parsed?.id || parsed?.CustomerID || parsed?.email || 'guest';
+    return `${baseKey}:${String(userId).toLowerCase()}`;
+  } catch (e) {
+    return `${baseKey}:guest`;
+  }
+};
+
 const statusBadgeClass = (status) => {
   if (status === 'Cancelled') return 'status-badge status-cancelled';
   if (status === 'Returned') return 'status-badge status-returned';
@@ -80,8 +91,36 @@ const orderFlow = [
   { key: 'Returned', label: 'Returned' },
 ];
 
-const ConfirmModal = ({ open, onClose, onConfirm, countdown }) => {
+/** Stripe Checkout session ids used by this app (Stripe test/live). */
+const isStripeCheckoutSessionIdDisplay = (sid) => /^cs_(test_|live_)/i.test(String(sid || '').trim());
+
+const normalizeTxnDisplay = (tid) => {
+  if (tid == null || tid === '') return '';
+  const s = String(tid).trim();
+  if (s.includes(',')) {
+    const parts = s.split(',').map((p) => p.trim()).filter(Boolean);
+    const uniq = [...new Set(parts)];
+    if (uniq.length === 1) return uniq[0];
+    const payPick = uniq.find((p) => /^pay_[a-zA-Z0-9]+$/i.test(p));
+    return payPick || uniq[0];
+  }
+  const half = Math.floor(s.length / 2);
+  if (half > 10 && s.slice(0, half) === s.slice(half)) return s.slice(0, half);
+  return s;
+};
+
+const ConfirmModal = ({ open, onClose, onConfirm, countdown, order }) => {
   if (!open) return null;
+  const pm = String(order?.PaymentMethod || '').toLowerCase();
+  const sid = String(order?.StripeSessionID || '').trim();
+  const tid = String(order?.TransactionID || '').trim();
+  const codPlaceholder =
+    (pm.includes('bank transfer') || pm === 'stripe') && !sid && !tid;
+  const isCod =
+    pm.includes('cash on delivery') ||
+    /\bcod\b/.test(pm) ||
+    codPlaceholder;
+  const showRefundNotice = order && order.Status === 'Pending' && !isCod;
   return (
     <div className="cancel-order-modal-overlay" onClick={onClose}>
       <div className="cancel-order-modal-content" onClick={(e) => e.stopPropagation()}>
@@ -95,6 +134,7 @@ const ConfirmModal = ({ open, onClose, onConfirm, countdown }) => {
         <div className="cancel-order-modal-body">
           <p className="cancel-order-modal-message">
             Are you sure you want to cancel this order? This action cannot be undone.
+            {showRefundNotice ? ' Your payment will be fully refunded.' : ''}
           </p>
         </div>
 
@@ -120,7 +160,7 @@ const ConfirmModal = ({ open, onClose, onConfirm, countdown }) => {
 
 const DetailsModal = ({ open, onClose, order }) => {
   if (!open || !order) return null;
-  const { user, address, items, Status, OrderID, ReferenceNumber, OrderDate, PaymentMethod, TransactionID, TotalAmount, RefundAmount, DeliveryType, DeliveryCost, DeliveryTypeName, PickupDate, EstimatedDeliveryDate, EstimatedDeliveryDateFormatted, ActionType, ReturnType, ReturnReason, OriginalPackaging, AllParts, Unused, ProofOfPurchase, ProofOfPurchaseImageURL } = order;
+  const { user, address, items, Status, OrderID, ReferenceNumber, OrderDate, PaymentMethod, PaymentMethodDisplay, TransactionID, StripeSessionID, TotalAmount, RefundAmount, DeliveryType, DeliveryCost, DeliveryTypeName, PickupDate, EstimatedDeliveryDate, EstimatedDeliveryDateFormatted, ActionType, ReturnType, ReturnReason, OriginalPackaging, AllParts, Unused, ProofOfPurchase, ProofOfPurchaseImageURL } = order;
   
   // Normalize status for display
   const normalizedStatus = normalizeStatusDisplay(Status);
@@ -174,6 +214,15 @@ const DetailsModal = ({ open, onClose, order }) => {
   // For Refunded, show all steps as completed
   // For Declined, show all steps up to Completed as completed, then show Declined
   const isCompleted = Status === 'Completed' || Status === 'Delivered';
+  const isCancelled = Status === 'Cancelled';
+  const pmLower = String(PaymentMethod || '').toLowerCase();
+  const sidStr = String(StripeSessionID || '').trim();
+  const tidStr = String(TransactionID || '').trim();
+  const isCodOrder =
+    pmLower.includes('cash on delivery') ||
+    /\bcod\b/.test(pmLower) ||
+    ((pmLower.includes('bank transfer') || pmLower === 'stripe') && !sidStr && !tidStr);
+  const displayPaymentMethod = PaymentMethodDisplay || PaymentMethod || 'Not specified';
   const isReturned = Status === 'Returned';
   const isRefunded = Status === 'Refunded';
   const isDeclined = Status === 'Declined';
@@ -313,12 +362,24 @@ const DetailsModal = ({ open, onClose, order }) => {
                 <div className="info-card-content">
                   <div className="info-row" style={{ marginBottom: '0.25rem' }}>
                     <span className="info-label" style={{ fontSize: '0.75rem' }}>Method</span>
-                    <span className="info-value" style={{ fontSize: '0.8125rem' }}>{PaymentMethod || 'Not specified'}</span>
+                    <span className="info-value" style={{ fontSize: '0.8125rem' }}>{displayPaymentMethod}</span>
                   </div>
-                  {TransactionID && (
+                  {StripeSessionID && isStripeCheckoutSessionIdDisplay(StripeSessionID) && (
                     <div className="info-row" style={{ marginBottom: 0 }}>
-                      <span className="info-label" style={{ fontSize: '0.75rem' }}>Transaction ID</span>
-                      <span className="info-value" style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#64748b', wordBreak: 'break-all' }}>{TransactionID}</span>
+                      <span className="info-label" style={{ fontSize: '0.75rem' }}>Stripe Checkout Session ID</span>
+                      <span className="info-value" style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#64748b', wordBreak: 'break-all' }}>{StripeSessionID}</span>
+                    </div>
+                  )}
+                  {StripeSessionID && !isStripeCheckoutSessionIdDisplay(StripeSessionID) && (
+                    <div className="info-row" style={{ marginBottom: 0 }}>
+                      <span className="info-label" style={{ fontSize: '0.75rem' }}>PayMongo Checkout Session ID</span>
+                      <span className="info-value" style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#64748b', wordBreak: 'break-all' }}>{StripeSessionID}</span>
+                    </div>
+                  )}
+                  {!StripeSessionID && TransactionID && (
+                    <div className="info-row" style={{ marginBottom: 0 }}>
+                      <span className="info-label" style={{ fontSize: '0.75rem' }}>Transaction reference</span>
+                      <span className="info-value" style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#64748b', wordBreak: 'break-all' }}>{normalizeTxnDisplay(TransactionID)}</span>
                     </div>
                   )}
                 </div>
@@ -697,6 +758,26 @@ const DetailsModal = ({ open, onClose, order }) => {
                 </div>
               </div>
             )}
+            {isCancelled && (
+              <div
+                style={{
+                  marginTop: '16px',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  background: '#fffbeb',
+                  border: '1px solid #fcd34d',
+                  fontSize: '0.8125rem',
+                  lineHeight: 1.45,
+                  color: '#92400e',
+                  textAlign: 'left'
+                }}
+              >
+                <strong style={{ display: 'block', marginBottom: '6px', color: '#b45309' }}>Cancelled order — refund</strong>
+                {isCodOrder
+                  ? 'This order was cancelled before fulfillment. No online card or e-wallet payment was taken for cash on delivery orders.'
+                  : 'If you paid by card or e-wallet, a full refund was sent to your original payment method. Refunds can take a few business days to show on your statement.'}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -963,7 +1044,8 @@ const OrderHistory = () => {
             dismissed: false,
             refundAmount: res.notification.refundAmount
           };
-          localStorage.setItem('orderRefundNotification', JSON.stringify(notificationData));
+          const refundNotificationKey = getNotificationStorageKey('orderRefundNotification');
+          localStorage.setItem(refundNotificationKey, JSON.stringify(notificationData));
           // Trigger storage event for other tabs/components
           window.dispatchEvent(new Event('storage'));
           // Dispatch custom event to update notification icon
@@ -2366,7 +2448,7 @@ const OrderHistory = () => {
                   </>
                 )}
                 
-                {order.Status !== 'Cancelled' && order.Status !== 'Completed' && order.Status !== 'Delivered' && order.Status !== 'Shipping' && order.Status !== 'Delivering' && (
+                {order.Status !== 'Cancelled' && order.Status !== 'Completed' && order.Status !== 'Delivered' && order.Status !== 'Shipping' && order.Status !== 'Delivering' && order.Status !== 'Refunded' && order.Status !== 'Processing' && (
                   <button
                     className="btn btn-primary"
                     disabled={cancelling[order.OrderID]}
@@ -2421,6 +2503,7 @@ const OrderHistory = () => {
         onClose={closeModal}
         onConfirm={confirmCancel}
         countdown={countdown}
+        order={orders.find((o) => o.OrderID === modal.orderId)}
       />
       <DetailsModal
         open={detailsModal.open}

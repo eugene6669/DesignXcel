@@ -539,7 +539,7 @@
                     <div class="modal-content">
                         <span class="close-button" id="closeAddModal">&times;</span>
                         <h3>Create New Product</h3>
-                        <form id="addProductForm" action="/Employee/Admin/ProductInventory/Add" method="POST" enctype="multipart/form-data">
+                        <form id="addProductForm" action="/Employee/OrderSupport/ProductInventory/Add" method="POST" enctype="multipart/form-data">
                             <div class="form-group">
                                 <label for="name">Product Name:</label>
                                 <input type="text" id="name" name="name" required>
@@ -590,9 +590,15 @@
                                 </div>
                             </div>
 
+                            <!-- Product image is managed in Admin Products. Display only, no upload here. -->
                             <div class="form-group">
-                                <label for="image">Product Image:</label>
-                                <input type="file" id="image" name="image" accept="image/*">
+                                <label>Product Image:</label>
+                                <p style="color: #666; font-size: 0.9em; margin-bottom: 6px;">
+                                    Product images are configured in the Products page. This inventory form does not upload images.
+                                </p>
+                                <div id="addInventoryProductImagePreview" style="margin-top: 5px;">
+                                    <!-- Optional: image preview can be populated via JS if needed -->
+                                </div>
                             </div>
 
                             <div class="form-group">
@@ -675,9 +681,12 @@
                                 <strong>Current:</strong> Available: <span id="currentAvailableQty">0</span> | Damaged: <span id="currentDamagedQty">0</span> | Repaired: <span id="currentRepairedQty">0</span> | Disposed: <span id="currentDisposedQty">0</span>
                             </div>
 
+                            <!-- Product image is managed in Admin Products. Display only, no upload here. -->
                             <div class="form-group">
-                                <label for="editProductImage">Product Image:</label>
-                                <input type="file" id="editProductImage" name="productImage" accept="image/*" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 1em;" onchange="previewProductImage(event)">
+                                <label>Product Image:</label>
+                                <p style="color: #666; font-size: 0.9em; margin-bottom: 6px;">
+                                    Product images are configured in the Products page. You cannot change them from inventory.
+                                </p>
                                 <div id="editProductImagePreview" style="margin-top: 10px;"></div>
                             </div>
 
@@ -738,7 +747,36 @@
                                 const productName = item.InventoryProductName || 'N/A';
                                 const productSKU = item.InventoryProductSKU || 'N/A';
                                 const productCategory = item.InventoryProductCategory || 'N/A';
-                                const productImage = item.InventoryProductImageURL || null;
+                                const productImageRaw = item.InventoryProductImageURL || null;
+                                const productImageNormalized = productImageRaw ? String(productImageRaw).trim().replace(/\\/g, '/') : '';
+                                const ensureLeadingSlash = (value) => {
+                                    const v = String(value || '').trim();
+                                    if (!v) return '';
+                                    if (v.startsWith('http://') || v.startsWith('https://') || v.startsWith('data:')) return v;
+                                    return v.startsWith('/') ? v : `/${v}`;
+                                };
+                                const looksLikeFilename = (value) => /\.(png|jpe?g|gif|webp|svg)$/i.test(String(value || ''));
+
+                                // If DB stores only a filename (no path), assume uploads path.
+                                const normalizedForFilenameCheck = productImageNormalized.replace(/^\/+/, '');
+                                let productImage = ensureLeadingSlash(productImageNormalized);
+                                if (normalizedForFilenameCheck && looksLikeFilename(normalizedForFilenameCheck) && !normalizedForFilenameCheck.includes('/')) {
+                                    productImage = `/uploads/products/images/${normalizedForFilenameCheck}`;
+                                }
+
+                                let productImagePrimary = productImage || '';
+                                let productImageFallback = '';
+                                let productImageFallback2 = '';
+                                if (productImage && productImage.startsWith('/uploads/products/') && !productImage.startsWith('/uploads/products/images/')) {
+                                    productImagePrimary = productImage.replace('/uploads/products/', '/uploads/products/images/');
+                                    productImageFallback = productImage;
+                                } else if (productImage && productImage.startsWith('/uploads/products/images/')) {
+                                    productImageFallback = productImage.replace('/uploads/products/images/', '/uploads/products/');
+                                } else if (productImage && productImage.startsWith('/uploads/products/inventory/')) {
+                                    // Inventory images sometimes exist under /images instead.
+                                    productImageFallback = productImage.replace('/uploads/products/inventory/', '/uploads/products/images/');
+                                    productImageFallback2 = productImage.replace('/uploads/products/inventory/', '/uploads/products/');
+                                }
                                 const totalQuantity = item.TotalQuantity || 0;
                                 const availableQty = item.AvailableQuantity || 0;
                                 const damagedQty = item.DamagedQuantity || 0;
@@ -808,8 +846,15 @@
                                         <% } %>
                                     </td>
                                     <td>
-                                        <% if (productImage) { %>
-                                            <img src="<%= productImage %>" alt="Product Image" class="image-preview">
+                                        <% if (productImagePrimary) { %>
+                                            <img
+                                                src="<%= productImagePrimary %>"
+                                                alt="Product Image"
+                                                class="image-preview"
+                                                data-fallback-src="<%= productImageFallback %>"
+                                                data-fallback-src2="<%= productImageFallback2 %>"
+                                                onerror="if(this.dataset.fallbackSrc && this.src.indexOf(this.dataset.fallbackSrc) === -1){this.src=this.dataset.fallbackSrc;}else if(this.dataset.fallbackSrc2 && this.src.indexOf(this.dataset.fallbackSrc2) === -1){this.src=this.dataset.fallbackSrc2;}else{this.onerror=null;this.src='/images/placeholder-avatar.jpg';}"
+                                            >
                                         <% } else { %>
                                             <span style="color: #999;">No image</span>
                                         <% } %>
@@ -1457,7 +1502,7 @@
                 // Create a form and submit it
                 const form = document.createElement('form');
                 form.method = 'POST';
-                form.action = `/Employee/Admin/ProductInventory/Archive/${productId}`;
+                form.action = `/Employee/OrderSupport/ProductInventory/Archive/${productId}`;
                 form.style.display = 'none';
                 
                 // Add hidden input to indicate if it's from Products table (always false for InventoryProducts)
@@ -4347,9 +4392,12 @@
                         <label for="editVariationPrice">Price:</label>
                         <input type="number" id="editVariationPrice" name="price" step="0.01" min="0" placeholder="0.00">
                     </div>
+                    <!-- Variation image is managed in Admin Products/Variations. Display only, no upload here. -->
                     <div>
-                        <label for="editVariationImage">Variation Image:</label>
-                        <input type="file" id="editVariationImage" name="variationImage" accept="image/*">
+                        <label>Variation Image:</label>
+                        <p style="color: #666; font-size: 0.9em; margin-bottom: 6px;">
+                            Variation images are configured in the Products page. You cannot change them from inventory.
+                        </p>
                         <div id="currentVariationImagePreview" style="margin-top: 5px;"></div>
                     </div>
                 </div>

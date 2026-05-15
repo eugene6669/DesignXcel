@@ -5,11 +5,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Product Inventory - Design Excellence</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
 
     <style>
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-menu {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .logout-section {
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            margin-top: 20px;
+            text-align: center;
+            position: relative;
+        }
+        .logout-button {
+            display: inline-block;
+            width: auto;
+            padding: 12px 25px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .logout-button:hover {
+            background-color: #c82333;
+        }
         /* Modal Styles */
         .modal {
             display: none;
@@ -439,6 +475,20 @@
             display: block;
         }
 
+        #variationsTable {
+            width: 100%;
+        }
+        #variationsTable .variations-table-status-cell {
+            text-align: center;
+            vertical-align: middle;
+            padding: 28px 16px;
+            font-size: 1.05em;
+            color: #666;
+        }
+        #variationsTable .variations-table-status-cell.is-error {
+            color: #c82333;
+        }
+
         .variations-btn {
             background-color: #6f42c1;
             color: white;
@@ -747,7 +797,36 @@
                                 const productName = item.InventoryProductName || 'N/A';
                                 const productSKU = item.InventoryProductSKU || 'N/A';
                                 const productCategory = item.InventoryProductCategory || 'N/A';
-                                const productImage = item.InventoryProductImageURL || null;
+                                const productImageRaw = item.InventoryProductImageURL || null;
+                                const productImageNormalized = productImageRaw ? String(productImageRaw).trim().replace(/\\/g, '/') : '';
+                                const ensureLeadingSlash = (value) => {
+                                    const v = String(value || '').trim();
+                                    if (!v) return '';
+                                    if (v.startsWith('http://') || v.startsWith('https://') || v.startsWith('data:')) return v;
+                                    return v.startsWith('/') ? v : `/${v}`;
+                                };
+                                const looksLikeFilename = (value) => /\.(png|jpe?g|gif|webp|svg)$/i.test(String(value || ''));
+
+                                // If DB stores only a filename (no path), assume uploads path.
+                                const normalizedForFilenameCheck = productImageNormalized.replace(/^\/+/, '');
+                                let productImage = ensureLeadingSlash(productImageNormalized);
+                                if (normalizedForFilenameCheck && looksLikeFilename(normalizedForFilenameCheck) && !normalizedForFilenameCheck.includes('/')) {
+                                    productImage = `/uploads/products/images/${normalizedForFilenameCheck}`;
+                                }
+
+                                let productImagePrimary = productImage || '';
+                                let productImageFallback = '';
+                                let productImageFallback2 = '';
+                                if (productImage && productImage.startsWith('/uploads/products/') && !productImage.startsWith('/uploads/products/images/')) {
+                                    productImagePrimary = productImage.replace('/uploads/products/', '/uploads/products/images/');
+                                    productImageFallback = productImage;
+                                } else if (productImage && productImage.startsWith('/uploads/products/images/')) {
+                                    productImageFallback = productImage.replace('/uploads/products/images/', '/uploads/products/');
+                                } else if (productImage && productImage.startsWith('/uploads/products/inventory/')) {
+                                    // Inventory images sometimes exist under /images instead.
+                                    productImageFallback = productImage.replace('/uploads/products/inventory/', '/uploads/products/images/');
+                                    productImageFallback2 = productImage.replace('/uploads/products/inventory/', '/uploads/products/');
+                                }
                                 const totalQuantity = item.TotalQuantity || 0;
                                 const availableQty = item.AvailableQuantity || 0;
                                 const damagedQty = item.DamagedQuantity || 0;
@@ -817,8 +896,15 @@
                                         <% } %>
                                     </td>
                                     <td>
-                                        <% if (productImage) { %>
-                                            <img src="<%= productImage %>" alt="Product Image" class="image-preview">
+                                        <% if (productImagePrimary) { %>
+                                            <img
+                                                src="<%= productImagePrimary %>"
+                                                alt="Product Image"
+                                                class="image-preview"
+                                                data-fallback-src="<%= productImageFallback %>"
+                                                data-fallback-src2="<%= productImageFallback2 %>"
+                                                onerror="if(this.dataset.fallbackSrc && this.src.indexOf(this.dataset.fallbackSrc) === -1){this.src=this.dataset.fallbackSrc;}else if(this.dataset.fallbackSrc2 && this.src.indexOf(this.dataset.fallbackSrc2) === -1){this.src=this.dataset.fallbackSrc2;}else{this.onerror=null;this.src='/images/placeholder-no-image.svg';}"
+                                            >
                                         <% } else { %>
                                             <span style="color: #999;">No image</span>
                                         <% } %>
@@ -901,7 +987,7 @@
                             </thead>
                             <tbody id="variationsTableBody">
                                 <tr>
-                                    <td colspan="12" style="text-align: center; padding: 20px; color: #999;">Loading variations...</td>
+                                    <td colspan="12" class="variations-table-status-cell">Loading variations...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1044,12 +1130,12 @@
         async function loadVariationsForTable(productId) {
             if (!productId) {
                 console.error('No product ID provided to loadVariations');
-                variationsTableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px; color: #dc3545;">No product selected.</td></tr>';
+                variationsTableBody.innerHTML = '<tr><td colspan="12" class="variations-table-status-cell is-error">No product selected.</td></tr>';
                 return;
             }
 
             try {
-                variationsTableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px; color: #999;">Loading variations...</td></tr>';
+                variationsTableBody.innerHTML = '<tr><td colspan="12" class="variations-table-status-cell">Loading variations...</td></tr>';
                 
                 console.log('Loading variations for product ID:', productId);
                 console.log('variationsTableBody exists?', !!variationsTableBody);
@@ -1091,28 +1177,28 @@
                                 console.error('displayVariations is not a function! Type:', typeof window.displayVariations);
                                 // Fallback: directly update the table
                                 const html = variations.map(v => {
-                                    return `<tr><td><strong>${v.VariationName || 'N/A'}</strong></td><td>${v.Color || 'N/A'}</td><td><strong>${v.Quantity || 0}</strong></td><td>₱${parseFloat(v.Price || 0).toFixed(2)}</td><td><img src="${v.VariationImageURL || '/images/placeholder-avatar.jpg'}" style="width: 60px; height: 60px; object-fit: cover;"></td><td>${v.IsActive ? 'Active' : 'Inactive'}</td><td>Actions</td></tr>`;
+                                    return `<tr><td><strong>${v.VariationName || 'N/A'}</strong></td><td>${v.Color || 'N/A'}</td><td><strong>${v.Quantity || 0}</strong></td><td>₱${parseFloat(v.Price || 0).toFixed(2)}</td><td><img src="${v.VariationImageURL || '/images/placeholder-no-image.svg'}" style="width: 60px; height: 60px; object-fit: cover;"></td><td>${v.IsActive ? 'Active' : 'Inactive'}</td><td>Actions</td></tr>`;
                                 }).join('');
                                 variationsTableBody.innerHTML = html;
                             }
                         } catch (error) {
                             console.error('Error calling displayVariations:', error);
-                            variationsTableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px; color: #dc3545;">Error displaying variations: ' + error.message + '</td></tr>';
+                            variationsTableBody.innerHTML = '<tr><td colspan="12" class="variations-table-status-cell is-error">Error displaying variations: ' + error.message + '</td></tr>';
                         }
                     } else {
                         console.log('No variations to display');
-                        variationsTableBody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px; color: #999;">No variations found for this product.</td></tr>';
+                        variationsTableBody.innerHTML = '<tr><td colspan="12" class="variations-table-status-cell">No variations found for this product.</td></tr>';
                     }
                 } else {
                     window.currentVariations = [];
                     const errorMsg = result.message || 'Failed to load variations';
                     console.error('API returned error:', errorMsg);
-                    variationsTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #dc3545;">${errorMsg}</td></tr>`;
+                    variationsTableBody.innerHTML = `<tr><td colspan="12" class="variations-table-status-cell is-error">${errorMsg}</td></tr>`;
                 }
             } catch (error) {
                 console.error('Error loading variations:', error);
                 window.currentVariations = [];
-                variationsTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: #dc3545;">Error loading variations: ${error.message}. Please try again.</td></tr>`;
+                variationsTableBody.innerHTML = `<tr><td colspan="12" class="variations-table-status-cell is-error">Error loading variations: ${error.message}. Please try again.</td></tr>`;
             }
         }
 
@@ -1127,7 +1213,7 @@
 
             if (!variations || variations.length === 0) {
                 console.log('No variations to display');
-                variationsTableBody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px; color: #999;">No variations found for this product.</td></tr>';
+                variationsTableBody.innerHTML = '<tr><td colspan="12" class="variations-table-status-cell">No variations found for this product.</td></tr>';
                 return;
             }
 
@@ -1136,7 +1222,7 @@
 
             try {
                 const html = variations.map(variation => {
-                    const imageUrl = variation.VariationImageURL ? variation.VariationImageURL : '/images/placeholder-avatar.jpg';
+                    const imageUrl = variation.VariationImageURL ? variation.VariationImageURL : '/images/placeholder-no-image.svg';
                     const isActive = variation.IsActive !== false && variation.IsActive !== 0 && variation.IsActive !== '0';
                     const statusBadge = isActive
                         ? '<span class="status-badge status-available">Active</span>'
@@ -1196,7 +1282,7 @@
                             </td>
                             <td>${price}</td>
                             <td>
-                                <img src="${imageUrl}" alt="Variation Image" class="image-preview" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd;" onerror="this.src='/images/placeholder-avatar.jpg'">
+                                <img src="${imageUrl}" alt="Variation Image" class="image-preview" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd;" onerror="this.src='/images/placeholder-no-image.svg'">
                             </td>
                             <td>${statusBadge}</td>
                             <td>
@@ -1219,7 +1305,7 @@
             } catch (error) {
                 console.error('Error displaying variations:', error);
                 console.error('Error stack:', error.stack);
-                variationsTableBody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px; color: #dc3545;">Error displaying variations: ' + error.message + '. Please check the console.</td></tr>';
+                variationsTableBody.innerHTML = '<tr><td colspan="12" class="variations-table-status-cell is-error">Error displaying variations: ' + error.message + '. Please check the console.</td></tr>';
             }
         }
 
@@ -3592,12 +3678,9 @@
                     selectedStatus: selectedStatus
                 });
                 
-                // Allow submission if quantities changed OR status was selected OR image was uploaded (even if no quantity entered, user might want to save notes or update image)
-                const variationImageInputEl = document.getElementById('editVariationStatusImage');
-                const hasVariationImage = variationImageInputEl && variationImageInputEl.files && variationImageInputEl.files.length > 0;
-                
-                if (!quantitiesChanged && !selectedStatus && !hasVariationImage) {
-                    showCustomPopup('No changes detected. Please modify quantities, select a status, or upload a new image before saving.', true);
+                // Allow submission if quantities changed OR status was selected
+                if (!quantitiesChanged && !selectedStatus) {
+                    showCustomPopup('No changes detected. Please modify quantities or select a status before saving.', true);
                     return;
                 }
                 
@@ -3644,8 +3727,6 @@
                 
                 const calculatedTotalForBackend = newAvailableQty + newDamagedQty;
                 
-                // Handle image upload if provided
-                const variationImageInputForUpload = document.getElementById('editVariationStatusImage');
                 const formData = new FormData();
                 formData.append('variationID', parseInt(variationId));
                 formData.append('availableQuantity', newAvailableQty);
@@ -3654,16 +3735,11 @@
                 formData.append('disposedQuantity', newDisposedQty);
                 formData.append('notes', notes || '');
                 
-                if (variationImageInputForUpload && variationImageInputForUpload.files && variationImageInputForUpload.files.length > 0) {
-                    formData.append('variationImage', variationImageInputForUpload.files[0]);
-                }
-                
                 console.log('Final quantities to save:', {
                     available: newAvailableQty,
                     damaged: newDamagedQty,
                     repaired: newRepairedQty,
                     disposed: newDisposedQty,
-                    hasImage: variationImageInputForUpload && variationImageInputForUpload.files && variationImageInputForUpload.files.length > 0,
                     calculatedTotal: calculatedTotalForBackend,
                     inputTotalQuantity: currentTotalQuantity,
                     totalQuantityChanged: totalQuantityChanged
@@ -3833,23 +3909,8 @@
             }
         }
 
-        function previewVariationImage(event) {
-            const file = event.target.files[0];
-            const preview = document.getElementById('editVariationStatusImagePreview');
-            if (file && preview) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    preview.innerHTML = `<p style="margin: 5px 0; font-weight: bold;">New Image Preview:</p><img src="${e.target.result}" alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 4px; border: 1px solid #ddd; margin-top: 5px;">`;
-                };
-                reader.readAsDataURL(file);
-            } else if (preview) {
-                preview.innerHTML = '';
-            }
-        }
-
         // Make preview functions globally available
         window.previewProductImage = previewProductImage;
-        window.previewVariationImage = previewVariationImage;
 
         // Archive variation
         function archiveVariation(variationId, variationName, quantity) {
@@ -4279,7 +4340,7 @@
             <!-- Add Variation Form -->
             <div style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
                 <h4>Add New Variation</h4>
-                <form id="addVariationForm" enctype="multipart/form-data">
+                <form id="addVariationForm">
                     <input type="hidden" id="variationProductID" name="productID">
                     <input type="hidden" id="variationInventoryProductID" name="inventoryProductID">
                     <input type="hidden" name="isActive" value="1">
@@ -4305,8 +4366,10 @@
                         </div>
                     </div>
                     <div style="margin-bottom: 10px;">
-                        <label for="variationImage">Variation Image:</label>
-                        <input type="file" id="variationImage" name="variationImage" accept="image/*">
+                        <label>Variation Image:</label>
+                        <p style="color: #666; font-size: 0.9em; margin: 6px 0 0;">
+                            Add or change variation images in <strong>Admin → Products → Manage Variations</strong>. This page only creates the variation record (name, color, quantity, price).
+                        </p>
                     </div>
                     <button type="submit" style="background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Add Variation</button>
                 </form>
@@ -4336,7 +4399,7 @@
                 </div>
             </div>
             
-            <form id="editVariationForm" enctype="multipart/form-data">
+            <form id="editVariationForm">
                 <input type="hidden" id="editVariationID" name="variationID">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                     <div>
@@ -4427,8 +4490,10 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="editVariationStatusImage">Variation Image:</label>
-                    <input type="file" id="editVariationStatusImage" name="variationImage" accept="image/*" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 1em;" onchange="previewVariationImage(event)">
+                    <label>Variation Image:</label>
+                    <p style="color: #666; font-size: 0.9em; margin: 6px 0 8px;">
+                        Images are managed in <strong>Admin → Products → Manage Variations</strong>. Current image (if any) is shown below.
+                    </p>
                     <div id="editVariationStatusImagePreview" style="margin-top: 10px;"></div>
                 </div>
 

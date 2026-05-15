@@ -29,6 +29,40 @@ const getBackendUrl = () => {
     // If relative path without /, assume it's in uploads folder
     return `${getBackendUrl()}/uploads/${imagePath}`;
   };
+
+  // Normalize and repair legacy 3D model path formats
+  const normalizeModelPath = (rawPath) => {
+    if (!rawPath) return '';
+
+    let value = String(rawPath).trim();
+    if (!value) return '';
+
+    // Handle quoted/JSON-encoded strings
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1).trim();
+    }
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed === 'string') value = parsed.trim();
+    } catch (e) {
+      // Keep original value when not JSON
+    }
+
+    // Normalize slashes from Windows-style paths
+    value = value.replace(/\\/g, '/');
+
+    // Legacy typo path: /uploads/products/3dmodels/* -> /uploads/products/models/*
+    value = value.replace('/uploads/products/3dmodels/', '/uploads/products/models/');
+
+    // Relative model path should resolve from /uploads/products/models
+    if (!value.startsWith('/') && !value.startsWith('http://') && !value.startsWith('https://')) {
+      if (value.includes('.glb') || value.includes('.gltf')) {
+        value = `/uploads/products/models/${value}`;
+      }
+    }
+
+    return value;
+  };
   
   /**
    * Get image URL with fallback
@@ -94,11 +128,13 @@ const getBackendUrl = () => {
     
     for (const field of modelFields) {
       if (field) {
+        const normalizedPath = normalizeModelPath(field);
         // Check if the field contains a valid model path
-        if (field.includes('.glb') || field.includes('.gltf')) {
-          const modelUrl = getImageUrl(field);
+        if (normalizedPath.includes('.glb') || normalizedPath.includes('.gltf')) {
+          const modelUrl = getImageUrl(normalizedPath);
           console.log('3D Model URL constructed:', {
             originalField: field,
+            normalizedPath,
             constructedUrl: modelUrl,
             backendUrl: getBackendUrl()
           });

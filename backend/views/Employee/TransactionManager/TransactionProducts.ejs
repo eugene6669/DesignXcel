@@ -77,8 +77,8 @@
         /* Modal Notification Popup - appears inside modals */
         .modal-notification {
             display: none;
-            position: absolute;
-            top: 20px;
+            position: fixed;
+            bottom: 20px;
             right: 20px;
             background-color: #4CAF50;
             color: white;
@@ -88,6 +88,15 @@
             z-index: 10001;
             animation: slideIn 0.5s ease-out;
             max-width: 300px;
+        }
+
+        /* Edit Product modal notification: directly below buttons, centered */
+        .edit-product-notification {
+            position: absolute; 
+            bottom: 20px;         /* override base fixed positioning */
+            left: 50%;
+            transform: translateX(-50%);
+            margin: 0;
         }
 
         .modal-notification.error {
@@ -802,7 +811,7 @@
                     <div>
                         <h2 style="margin: 0; color: #333;">Product CMS - Customer-Facing Products</h2>
                         <p style="margin: 5px 0 0 0; color: #666; font-size: 0.9em;">
-                            Manage products displayed to customers. Stock is synced from <a href="/Employee/Admin/ProductInventory" style="color: #007bff; text-decoration: none; font-weight: 600;">Product Inventory</a>.
+                            Manage products displayed to customers. Stock is synced from <a href="/Employee/TransactionManager/ProductInventory" style="color: #007bff; text-decoration: none; font-weight: 600;">Product Inventory</a>.
                         </p>
                     </div>
         </div>
@@ -869,7 +878,7 @@
                     <button id="sortCategoryBtn" style="background: #2196F3; color: #fff; border: none; border-radius: 4px; padding: 7px 18px; font-weight: 600; cursor: pointer;">Apply Sort</button>
                     <button id="resetCategoryBtn" style="background: #888; color: #fff; border: none; border-radius: 4px; padding: 7px 18px; font-weight: 600; cursor: pointer;">Reset Order</button>
                     <button id="addProductBtn" class="add-product-btn">Add Customer Product</button>
-                    <a href="/Employee/Admin/ProductInventory" style="background: #6c757d; color: white; border: none; border-radius: 5px; padding: 10px 20px; font-size: 1em; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; margin-left: 10px;">
+                    <a href="/Employee/TransactionManager/ProductInventory" style="background: #6c757d; color: white; border: none; border-radius: 5px; padding: 10px 20px; font-size: 1em; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; margin-left: 10px;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
                         </svg>
@@ -906,7 +915,7 @@
                     <div class="modal-content">
                         <span class="close-button" id="closeAddProductModal">&times;</span>
                         <h3>Add New Customer-Facing Product</h3>
-                        <form id="addProductForm" action="/Employee/Admin/Products/Add" method="POST" enctype="multipart/form-data">
+                        <form id="addProductForm" action="/Employee/TransactionManager/TransactionProducts/Add" method="POST" enctype="multipart/form-data">
                             <input type="hidden" id="inventoryProductId" name="inventoryProductId" value="">
                             
                             <!-- Select from Inventory Products -->
@@ -1217,13 +1226,13 @@
                                         <button class="edit-btn" data-id="<%= product.ProductID %>" data-name="<%= product.Name %>" data-description="<%= product.Description %>" data-price="<%= product.Price %>" data-stock="<%= product.StockQuantity %>" data-category="<%= product.Category %>" data-imageurl="<%= product.ImageURL %>" data-model3durl="<%= product.Model3D %>" data-has3dmodel="<%= product.Model3D ? 'true' : 'false' %>" data-thumbnails="<%= product.ThumbnailURLs || '[]' %>" data-dimensions="<%= product.Dimensions || '{}' %>" title="Edit">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 20h9"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 3.5a2.121 2.121 0 113 3L7 19.5 3 21l1.5-4L16.5 3.5z"/></svg>
                                         </button>
-                                        <a href="/Employee/Admin/ProductInventory?productId=<%= inventoryProductId %>" class="inventory-link-btn" title="View in Product Inventory" style="display: inline-block; background: #17a2b8; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; text-decoration: none; margin-right: 5px;">
+                                        <a href="/Employee/TransactionManager/ProductInventory?productId=<%= inventoryProductId %>" class="inventory-link-btn" title="View in Product Inventory" style="display: inline-block; background: #17a2b8; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; text-decoration: none; margin-right: 5px;">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
                                         </a>
                                         <button class="variations-btn" data-id="<%= product.ProductID %>" data-inventory-id="<%= inventoryProductId %>" data-name="<%= product.Name %>" title="Manage Variations">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z"/></svg>
                                         </button>
-                                        <form action="/Employee/Admin/Products/Delete/<%= product.ProductID %>" method="POST" style="display:inline;">
+                                        <form action="/Employee/TransactionManager/TransactionProducts/Delete/<%= product.ProductID %>" method="POST" style="display:inline;">
                                             <button type="submit" class="delete-btn" title="Archive">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
                                             </button>
@@ -1328,10 +1337,10 @@
 
     <!-- Edit Product Modal -->
     <div id="editProductModal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" style="position: relative;">
             <span class="close-button" id="closeEditModal">&times;</span>
             <h3>Edit Product</h3>
-            <form id="editProductForm" action="/Employee/Admin/Products/Edit" method="POST" enctype="multipart/form-data">
+            <form id="editProductForm" action="/Employee/TransactionManager/TransactionProducts/Edit" method="POST" enctype="multipart/form-data">
                 <input type="hidden" id="editProductID" name="productid">
                 <input type="hidden" id="editCurrentImageURL" name="currentImageURL">
                 <input type="hidden" id="editCurrentModel3dURL" name="currentModel3dURL">
@@ -1498,6 +1507,14 @@
 
                 <button type="submit">Save Changes</button>
                 <button type="button" id="cancelEditProduct">Cancel</button>
+
+                <!-- Notification Popup inside Edit Product Modal (shown below buttons) -->
+                <div id="editProductModalNotification" class="modal-notification edit-product-notification">
+                    <div class="modal-notification-content">
+                        <span class="modal-notification-icon">✓</span>
+                        <span class="modal-notification-message"></span>
+                    </div>
+                </div>
             </form>
         </div>
     </div>
@@ -2015,6 +2032,33 @@
             }, 3000);
         }
 
+        // Function to show notification inside edit product modal
+        function showEditProductModalNotification(message, isError = false) {
+            const notification = document.getElementById('editProductModalNotification');
+            if (!notification) {
+                console.warn('editProductModalNotification element not found.');
+                showCustomPopup(message, isError);
+                return;
+            }
+
+            const notificationMessage = notification.querySelector('.modal-notification-message');
+            const notificationIcon = notification.querySelector('.modal-notification-icon');
+
+            notificationMessage.textContent = message;
+            notificationIcon.textContent = isError ? '✕' : '✓';
+
+            // Remove error class if it exists, add if needed
+            notification.className = 'modal-notification' + (isError ? ' error' : '');
+
+            // Show notification
+            notification.style.display = 'block';
+
+            // Hide notification after 3 seconds
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+
         // Check for flash messages on page load
         // (Moved to a separate script block below to avoid linter errors and keep feature working)
 
@@ -2210,9 +2254,26 @@
             }
         });
 
+        // If an "edit" query parameter is present (e.g. ?edit=123),
+        // automatically open the edit modal for that product.
+        (function autoOpenEditModalFromQuery() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const editId = params.get('edit');
+                if (!editId) return;
+
+                const editButton = document.querySelector(`.edit-btn[data-id="${editId}"]`);
+                if (editButton) {
+                    editButton.click();
+                }
+            } catch (err) {
+                console.error('Failed to auto-open edit modal from query:', err);
+            }
+        })();
+
         // Stock is now read-only and managed in Product Inventory
         // Stock update functionality removed - stock is synced from InventoryProducts.AvailableQuantity
-        // Users should go to /Employee/Admin/ProductInventory to manage stock
+        // Users should go to /Employee/TransactionManager/ProductInventory to manage stock
 
         // Raw Materials Logic
         let allRawMaterials = [];
@@ -2454,7 +2515,11 @@
                 // If response is HTML (redirect happened), just reload the page
                 const contentType = response.headers.get('content-type') || '';
                 if (contentType.includes('text/html') || response.redirected) {
-                    showCustomPopup('Product saved successfully!');
+                    if (isEditForm) {
+                        showEditProductModalNotification('Product saved successfully!');
+                    } else {
+                        showCustomPopup('Product saved successfully!');
+                    }
                     setTimeout(() => {
                         location.reload();
                     }, 1000);
@@ -2466,7 +2531,12 @@
                     const data = await response.json();
                     console.log('Response data:', data);
                     if (data.success) {
-                        showCustomPopup(data.message || 'Product saved successfully!');
+                        const successMessage = data.message || 'Product saved successfully!';
+                        if (isEditForm) {
+                            showEditProductModalNotification(successMessage);
+                        } else {
+                            showCustomPopup(successMessage);
+                        }
                         setTimeout(() => {
                             location.reload();
                         }, 1000);
@@ -2476,7 +2546,11 @@
                     }
                 } else {
                     // Default: reload on success
-                    showCustomPopup('Product saved successfully!');
+                    if (isEditForm) {
+                        showEditProductModalNotification('Product saved successfully!');
+                    } else {
+                        showCustomPopup('Product saved successfully!');
+                    }
                     setTimeout(() => {
                         location.reload();
                     }, 1000);
@@ -3110,7 +3184,7 @@
             const formData = new FormData(this);
             
             try {
-                const response = await fetch('/Employee/Admin/Variations/Add', {
+                const response = await fetch('/Employee/TransactionManager/TransactionVariations/Add', {
                     method: 'POST',
                     body: formData
                 });
@@ -3140,7 +3214,7 @@
         // Load variations for a product
         async function loadVariations(productId) {
             try {
-                const response = await fetch(`/Employee/Admin/Variations/Get/${productId}`);
+                const response = await fetch(`/Employee/TransactionManager/TransactionVariations/Get/${productId}`);
                 const result = await response.json();
                 
                 if (result.success) {
@@ -3427,7 +3501,7 @@
             confirmDeleteVariation.textContent = 'Deleting...';
             
             try {
-                const response = await fetch(`/Employee/Admin/Variations/Delete/${variationId}`, {
+                const response = await fetch(`/Employee/TransactionManager/TransactionVariations/Delete/${variationId}`, {
                     method: 'POST'
                 });
                 
@@ -3485,7 +3559,7 @@
             
             
             try {
-                const response = await fetch('/Employee/Admin/Variations/Edit', {
+                const response = await fetch('/Employee/TransactionManager/TransactionVariations/Edit', {
                     method: 'POST',
                     body: formData
                 });
@@ -3602,7 +3676,7 @@
                                     : '<span style="color: #999;">No image</span>'}
                             </td>
                             <td style="text-align: center;">
-                                <a href="/Employee/Admin/ProductInventory?productId=${inventoryProductId || productId}&variationID=${variation.VariationID}" 
+                                <a href="/Employee/TransactionManager/ProductInventory?productId=${inventoryProductId || productId}&variationID=${variation.VariationID}" 
                                    style="background: #17a2b8; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-size: 0.85em; display: inline-block;"
                                    title="View in Product Inventory">
                                     View

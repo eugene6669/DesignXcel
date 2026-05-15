@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Manager Archived Items</title>
+    <title>Admin Archived Items</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -219,7 +219,7 @@
                                         <td><%= product.DateAdded ? new Date(product.DateAdded).toLocaleDateString() : 'N/A' %></td>
                                         <td>
                                             <div style="display: flex; gap: 8px; align-items: center;">
-                                                <form action="/Employee/Admin/Archived/ReactivateProduct/<%= product.ProductID %>" method="POST" style="display:inline;">
+                                                <form action="/Employee/UserManager/UserArchived/ReactivateProduct/<%= product.ProductID %>" method="POST" style="display:inline;">
                                                     <button type="submit" class="reactivate-btn">Reactivate</button>
                                                 </form>
                                                 <button type="button" class="delete-btn" data-id="<%= product.ProductID %>" data-type="product" data-name="<%= product.Name %>">Delete</button>
@@ -255,7 +255,7 @@
                                         <td><%= material.LastUpdated ? new Date(material.LastUpdated).toLocaleDateString() : 'N/A' %></td>
                                         <td>
                                             <div style="display: flex; gap: 8px; align-items: center;">
-                                                <form action="/Employee/Admin/Archived/ReactivateMaterial/<%= material.MaterialID %>" method="POST" style="display:inline;">
+                                                <form action="/Employee/UserManager/UserArchived/ReactivateMaterial/<%= material.MaterialID %>" method="POST" style="display:inline;">
                                                     <button type="submit" class="reactivate-btn">Reactivate</button>
                                                 </form>
                                                 <button type="button" class="delete-btn" data-id="<%= material.MaterialID %>" data-type="material" data-name="<%= material.Name %>">Delete</button>
@@ -289,13 +289,13 @@
                                     <tr>
                                         <td><%= product.Name %></td>
                                         <td><%= product.Description || 'N/A' %></td>
-                                        <td>â‚±<%= product.Price %></td>
+                                        <td>₱<%= product.Price %></td>
                                         <td><%= product.Category %></td>
                                         <td><%= product.SKU %></td>
                                         <td><%= product.DateAdded ? new Date(product.DateAdded).toLocaleDateString() : 'N/A' %></td>
                                         <td>
                                             <div style="display: flex; gap: 8px; align-items: center;">
-                                                <form action="/Employee/Admin/Archived/ReactivateInventoryProduct/<%= product.InventoryProductID %>" method="POST" style="display:inline;">
+                                                <form action="/Employee/UserManager/UserArchived/ReactivateInventoryProduct/<%= product.InventoryProductID %>" method="POST" style="display:inline;">
                                                     <button type="submit" class="reactivate-btn">Reactivate</button>
                                                 </form>
                                                 <button type="button" class="delete-btn" data-id="<%= product.InventoryProductID %>" data-type="inventory-product" data-name="<%= product.Name %>">Delete</button>
@@ -311,50 +311,83 @@
                 </div>
                 
                 <div class="alert-section">
-                    <h3>Archived Product Variations</h3>
-                    <table>
+                    <h3>Archived Product Variations Inventory</h3>
+                    <div class="archived-variations-wrap">
+                    <table class="archived-variations-table">
                         <thead>
                             <tr>
                                 <th>Variation Name</th>
                                 <th>Product</th>
                                 <th>Color</th>
-                                <th>Total Quantity</th>
-                                <th>Available</th>
-                                <th>Damaged</th>
-                                <th>Returned</th>
-                                <th>Repaired</th>
-                                <th>Disposed</th>
+                                <th>Total Qty</th>
+                                <th>Avail</th>
+                                <th>Dmg</th>
+                                <th>Rtn</th>
+                                <th>Rpr</th>
+                                <th>Dsp</th>
                                 <th>Price</th>
                                 <th>Image</th>
-                                <th>Date Archived</th>
+                                <th>Archived</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <% if (archivedVariations && archivedVariations.length > 0) { %>
                                 <% archivedVariations.forEach(variation => { %>
+                                    <% 
+                                      const availQ = Number(variation.AvailableQuantity) || 0;
+                                      const dmgQ = Number(variation.DamagedQuantity) || 0;
+                                      const retQ = Number(variation.ReturnedQuantity) || 0;
+                                      const repQ = Number(variation.RepairedQuantity) || 0;
+                                      const dispQ = Number(variation.DisposedQuantity) || 0;
+                                      const totalQ = availQ + dmgQ;
+                                    %>
                                     <tr>
                                         <td><strong><%= variation.VariationName || 'N/A' %></strong></td>
                                         <td><%= variation.ProductName || 'N/A' %></td>
                                         <td><%= variation.Color || 'N/A' %></td>
-                                        <td><strong style="color: #007bff;"><%= (variation.AvailableQuantity || 0) + (variation.DamagedQuantity || 0) %></strong></td>
-                                        <td><span class="status-badge status-available" style="background-color: #28a745;"><%= variation.AvailableQuantity || 0 %></span></td>
-                                        <td><%= variation.DamagedQuantity || 0 > 0 ? '<span class="status-badge status-damaged">' + (variation.DamagedQuantity || 0) + '</span>' : '<span style="color: #999;">0</span>' %></td>
-                                        <td><%= variation.ReturnedQuantity || 0 > 0 ? '<span class="status-badge status-returned">' + (variation.ReturnedQuantity || 0) + '</span>' : '<span style="color: #999;">0</span>' %></td>
-                                        <td><%= variation.RepairedQuantity || 0 > 0 ? '<span class="status-badge" style="background-color: #17a2b8; color: white;">' + (variation.RepairedQuantity || 0) + '</span>' : '<span style="color: #999;">0</span>' %></td>
-                                        <td><%= variation.DisposedQuantity || 0 > 0 ? '<span class="status-badge" style="background-color: #6c757d; color: white;">' + (variation.DisposedQuantity || 0) + '</span>' : '<span style="color: #999;">0</span>' %></td>
-                                        <td>â‚±<%= variation.Price ? parseFloat(variation.Price).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '0.00' %></td>
+                                        <td><strong style="color: #007bff;"><%= totalQ %></strong></td>
+                                        <td><span class="status-badge status-available"><%= availQ %></span></td>
+                                        <td>
+                                            <% if (dmgQ > 0) { %>
+                                                <span class="status-badge status-damaged"><%= dmgQ %></span>
+                                            <% } else { %>
+                                                <span style="color: #999;">0</span>
+                                            <% } %>
+                                        </td>
+                                        <td>
+                                            <% if (retQ > 0) { %>
+                                                <span class="status-badge status-returned"><%= retQ %></span>
+                                            <% } else { %>
+                                                <span style="color: #999;">0</span>
+                                            <% } %>
+                                        </td>
+                                        <td>
+                                            <% if (repQ > 0) { %>
+                                                <span class="status-badge" style="background-color: #17a2b8; color: white;"><%= repQ %></span>
+                                            <% } else { %>
+                                                <span style="color: #999;">0</span>
+                                            <% } %>
+                                        </td>
+                                        <td>
+                                            <% if (dispQ > 0) { %>
+                                                <span class="status-badge" style="background-color: #6c757d; color: white;"><%= dispQ %></span>
+                                            <% } else { %>
+                                                <span style="color: #999;">0</span>
+                                            <% } %>
+                                        </td>
+                                        <td>₱<%= variation.Price ? parseFloat(variation.Price).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '0.00' %></td>
                                         <td>
                                             <% if (variation.VariationImageURL) { %>
-                                                <img src="<%= variation.VariationImageURL %>" alt="Variation Image" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd;" onerror="this.src='/images/placeholder-avatar.jpg'">
+                                                <img src="<%= variation.VariationImageURL %>" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" onerror="this.onerror=null;this.src='/images/placeholder-no-image.svg'">
                                             <% } else { %>
-                                                <span style="color: #999;">No image</span>
+                                                <span style="color: #999;font-size:0.7rem;">—</span>
                                             <% } %>
                                         </td>
                                         <td><%= variation.UpdatedAt ? new Date(variation.UpdatedAt).toLocaleDateString() : (variation.CreatedAt ? new Date(variation.CreatedAt).toLocaleDateString() : 'N/A') %></td>
                                         <td>
-                                            <div style="display: flex; gap: 5px; align-items: center;">
-                                                <form method="POST" action="/Employee/Admin/Archived/ReactivateVariation/<%= variation.VariationID %>" style="margin: 0;">
+                                            <div class="archived-variations-actions">
+                                                <form method="POST" action="/Employee/UserManager/UserArchived/ReactivateVariation/<%= variation.VariationID %>" style="margin: 0;">
                                                     <button type="button" class="reactivate-btn">Reactivate</button>
                                                 </form>
                                                 <button type="button" class="delete-btn" data-id="<%= variation.VariationID %>" data-type="variation" data-name="<%= variation.VariationName || 'Variation' %>">Delete</button>
@@ -363,10 +396,11 @@
                                     </tr>
                                 <% }); %>
                             <% } else { %>
-                                <tr><td colspan="13" class="empty-table-message">No archived product variations found.</td></tr>
+                                <tr><td colspan="13" class="empty-table-message">No archived inventory variations found.</td></tr>
                             <% } %>
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -396,7 +430,7 @@
     <!-- Success Popup -->
     <div id="successPopup" class="custom-popup" style="display:none;position:fixed;top:20px;right:20px;background-color:#43e97b;color:white;padding:15px 25px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:4000;max-width:300px;">
         <div class="custom-popup-content">
-            <span class="custom-popup-icon">âœ“</span>
+            <span class="custom-popup-icon">✓</span>
             <span class="custom-popup-message" id="successPopupMsg"></span>
         </div>
     </div>

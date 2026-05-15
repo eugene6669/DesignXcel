@@ -147,12 +147,63 @@ const ProductDetail = () => {
     );
   }
 
+  // Normalize media field in case API returns array/JSON-string/comma-separated/double-encoded string
+  const normalizeMediaArray = (value) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (typeof value !== 'string') return [value].filter(Boolean);
+
+    const raw = value.trim();
+    if (!raw) return [];
+
+    const parseRecursively = (input, depth = 0) => {
+      if (depth > 2) return [];
+      if (Array.isArray(input)) return input.filter(Boolean);
+      if (typeof input !== 'string') return [input].filter(Boolean);
+
+      const str = input.trim();
+      if (!str) return [];
+
+      try {
+        const parsed = JSON.parse(str);
+        if (Array.isArray(parsed)) return parsed.filter(Boolean);
+        if (typeof parsed === 'string') return parseRecursively(parsed, depth + 1);
+        return [parsed].filter(Boolean);
+      } catch (e) {
+        if (str.includes(',')) return str.split(',').map((s) => s.trim()).filter(Boolean);
+        return [str];
+      }
+    };
+
+    return parseRecursively(raw);
+  };
+
+  const isLogoPlaceholder = (value) =>
+    typeof value === 'string' && value.toLowerCase().includes('logo192.png');
+
+  const normalizedThumbnails = normalizeMediaArray(product.thumbnails).filter((item) => !isLogoPlaceholder(item));
+  const normalizedImages = normalizeMediaArray(product.images).filter((item) => !isLogoPlaceholder(item));
+
   // Prepare images array - main image + thumbnails
-  const mainImage = product.image || (product.images && product.images[0]) || null;
-  const thumbnails = product.thumbnails || (product.images && product.images.slice(1)) || [];
+  const mainImage =
+    product.image ||
+    product.ImageURL ||
+    normalizedImages[0] ||
+    normalizedThumbnails[0] ||
+    null;
+  const thumbnails = normalizedThumbnails.length > 0
+    ? normalizedThumbnails
+    : normalizedImages.slice(1);
   
   // Create array with main image first, then thumbnails
-  const allImages = [mainImage, ...thumbnails].filter(Boolean);
+  const allImages = [...new Set([mainImage, ...thumbnails].filter(Boolean).filter((item) => !isLogoPlaceholder(item)))];
+
+  // Keep selected image index in range when product/images change
+  useEffect(() => {
+    if (selectedImageIndex >= allImages.length) {
+      setSelectedImageIndex(0);
+    }
+  }, [allImages.length, selectedImageIndex]);
   
   if (process.env.NODE_ENV === 'development') {
     console.log('Gallery setup:', {
@@ -163,8 +214,8 @@ const ProductDetail = () => {
     });
   }
   
-  const currentImage = allImages[selectedImageIndex] || '/logo192.png';
-  const imageUrl = getImageUrl(currentImage);
+  const currentImage = allImages[selectedImageIndex] || allImages[0] || null;
+  const imageUrl = currentImage ? getImageUrl(currentImage) : '';
 
   // Calculate pricing
   const hasDiscount = product.hasDiscount && product.discountInfo;
@@ -252,7 +303,9 @@ const ProductDetail = () => {
           {/* Gallery Section */}
           <div className="pdp-gallery">
             <div className="pdp-gallery-main">
+              {imageUrl ? (
               <img 
+                data-image-index={selectedImageIndex}
                 src={imageUrl} 
                 alt={product.name}
                 loading="eager"
@@ -261,9 +314,22 @@ const ProductDetail = () => {
                 height={500}
                 sizes="(max-width: 768px) 100vw, 600px"
                 onError={(e) => {
-                  e.target.src = '/logo192.png';
+                  e.target.onerror = null;
+                  const currentIndex = Number(e.currentTarget.dataset.imageIndex || 0);
+                  const nextIndex = allImages.findIndex((_, index) => index > currentIndex);
+                  if (nextIndex !== -1) {
+                    setSelectedImageIndex(nextIndex);
+                    return;
+                  }
+                  // If no valid uploaded image remains, keep it empty instead of showing logo placeholder.
+                  e.target.style.display = 'none';
                 }}
               />
+              ) : (
+                <div className="thumbnail-placeholder">
+                  <span>No product image uploaded</span>
+                </div>
+              )}
               
               {/* Navigation arrows - Always show for 4 thumbnails */}
               <button 

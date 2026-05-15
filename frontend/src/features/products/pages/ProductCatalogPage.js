@@ -8,6 +8,7 @@ import { getAllProducts, getCategories } from '../services/productService';
 import AudioLoader from '../../../shared/components/ui/AudioLoader';
 import '../../../app/pages.css';
 import '../../../shared/components/ui/modal.css';
+import apiClient from '../../../shared/services/api/apiClient';
 
 const ProductCatalog = () => {
     const location = useLocation();
@@ -90,7 +91,69 @@ const ProductCatalog = () => {
             ]);
             const productsData = productsResponse.products || [];
             const categoriesData = categoriesResponse.categories || [];
-            setProducts(productsData);
+            
+            // Hydrate materials per product so the "Material" filter actually matches real data.
+            const hydrateMaterials = async (list) => {
+                const uniqueIds = [...new Set(
+                    (list || [])
+                        .map((p) => String(p?.id || p?.ProductID || '').trim())
+                        .filter((v) => v.length > 0)
+                )];
+
+                if (uniqueIds.length === 0) return list;
+
+                const cacheKey = 'productMaterialsCache:v1';
+                let cache = {};
+                try {
+                    cache = JSON.parse(sessionStorage.getItem(cacheKey) || '{}') || {};
+                } catch {
+                    cache = {};
+                }
+
+                const CONCURRENCY = 6;
+                let idx = 0;
+                const results = {};
+                const workers = new Array(CONCURRENCY).fill(null).map(async () => {
+                    while (idx < uniqueIds.length) {
+                        const productId = uniqueIds[idx];
+                        idx += 1;
+
+                        if (cache[productId]) {
+                            results[productId] = cache[productId];
+                            continue;
+                        }
+
+                        try {
+                            const response = await apiClient.get(`/api/products/${encodeURIComponent(productId)}/materials`);
+                            const names = (response?.success && Array.isArray(response.materials))
+                                ? response.materials
+                                    .map((m) => String(m?.MaterialName || m?.name || m || '').trim())
+                                    .filter(Boolean)
+                                : [];
+                            const text = names.join(', ');
+                            results[productId] = text;
+                            cache[productId] = text;
+                        } catch {
+                            results[productId] = '';
+                            cache[productId] = '';
+                        }
+                    }
+                });
+
+                await Promise.all(workers);
+                try {
+                    sessionStorage.setItem(cacheKey, JSON.stringify(cache));
+                } catch {}
+
+                return (list || []).map((p) => {
+                    const productId = String(p?.id || p?.ProductID || '').trim();
+                    const hydrated = productId ? (results[productId] ?? cache[productId] ?? '') : '';
+                    return { ...p, __materialsText: hydrated };
+                });
+            };
+
+            const hydratedProducts = await hydrateMaterials(productsData);
+            setProducts(hydratedProducts);
             setCategories([
                 { id: '', name: 'All Products', count: productsData.length },
                 ...categoriesData.map(cat => ({
@@ -171,11 +234,26 @@ const ProductCatalog = () => {
 
         // Material filter
         if (filters.materials && filters.materials.length > 0) {
-            filtered = filtered.filter(product => 
-                filters.materials.some(material => 
-                    product.material && product.material.toLowerCase().includes(material)
-                )
-            );
+            filtered = filtered.filter((product) => {
+                const materialValue =
+                    product?.__materialsText ??
+                    product?.material ??
+                    product?.Material ??
+                    product?.materialName ??
+                    product?.MaterialName ??
+                    product?.Materials ??
+                    product?.materials ??
+                    '';
+
+                const materialText = Array.isArray(materialValue)
+                    ? materialValue
+                        .map((m) => (m?.name ?? m?.MaterialName ?? m?.material ?? m ?? ''))
+                        .join(', ')
+                    : String(materialValue);
+
+                const normalized = materialText.toLowerCase();
+                return filters.materials.some((material) => normalized.includes(String(material).toLowerCase()));
+            });
         }
 
         // Sort

@@ -5,12 +5,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Product CMS (Customer-Facing) - Design Excellence</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
 
     <!-- Link to the general admin styles -->
     <style>
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-menu {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .logout-section {
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            margin-top: 20px;
+            text-align: center;
+            position: relative;
+        }
+        .logout-button {
+            display: inline-block;
+            width: auto;
+            padding: 12px 25px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .logout-button:hover {
+            background-color: #c82333;
+        }
         /* Basic table styling */
         table {
             width: 100%;
@@ -74,7 +110,38 @@
             background-color: #f44336;
         }
 
-        /* Modal Notification Popup - appears inside modals */
+        /* Modal-style toasts: top-right of viewport (outside modals, above overlay) */
+        .page-top-modal-toasts {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            left: auto;
+            transform: none;
+            z-index: 20000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: flex-end;
+            max-width: min(420px, calc(100vw - 24px));
+            pointer-events: none;
+        }
+
+        .page-top-modal-toasts > .modal-notification {
+            display: none;
+            position: relative;
+            top: auto;
+            right: auto;
+            bottom: auto;
+            left: auto;
+            transform: none;
+            margin: 0;
+            width: auto;
+            min-width: 220px;
+            max-width: min(420px, calc(100vw - 24px));
+            box-sizing: border-box;
+            pointer-events: auto;
+        }
+
         .modal-notification {
             display: none;
             position: fixed;
@@ -88,15 +155,6 @@
             z-index: 10001;
             animation: slideIn 0.5s ease-out;
             max-width: 300px;
-        }
-
-        /* Edit Product modal notification: directly below buttons, centered */
-        .edit-product-notification {
-            position: absolute; 
-            bottom: 20px;         /* override base fixed positioning */
-            left: 50%;
-            transform: translateX(-50%);
-            margin: 0;
         }
 
         .modal-notification.error {
@@ -468,13 +526,6 @@
             background-color: #6c757d;
             color: white;
         }
-        .inventory-link-btn {
-            transition: background-color 0.3s ease;
-        }
-        .inventory-link-btn:hover {
-            background-color: #138496;
-        }
-
         .materials-section {
             border: 1px solid #ddd;
             padding: 15px;
@@ -618,6 +669,35 @@
         }
         .view-btn:hover {
             background-color: #1769aa;
+        }
+
+        .products-toolbar-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .products-legend-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 18px;
+            margin-bottom: 10px;
+        }
+        .product-actions-cell {
+            display: flex;
+            flex-wrap: wrap;
+            flex-direction: row;
+            align-items: center;
+            gap: 6px;
+        }
+        .product-actions-cell .view-btn,
+        .product-actions-cell .edit-btn,
+        .product-actions-cell .variations-btn,
+        .product-actions-cell form {
+            margin-right: 0;
+            flex-shrink: 0;
         }
 
         /* Highlight low and out-of-stock products */
@@ -801,6 +881,26 @@
     </style>
 </head>
 <body>
+    <div class="page-top-modal-toasts" aria-live="polite">
+        <div id="variationModalNotification" class="modal-notification">
+            <div class="modal-notification-content">
+                <span class="modal-notification-icon">✓</span>
+                <span class="modal-notification-message"></span>
+            </div>
+        </div>
+        <div id="editProductModalNotification" class="modal-notification">
+            <div class="modal-notification-content">
+                <span class="modal-notification-icon">✓</span>
+                <span class="modal-notification-message"></span>
+            </div>
+        </div>
+        <div id="editVariationModalNotification" class="modal-notification">
+            <div class="modal-notification-content">
+                <span class="modal-notification-icon">✓</span>
+                <span class="modal-notification-message"></span>
+            </div>
+        </div>
+    </div>
     <div class="dashboard-container">
         <div class="sidebar">
             <%- include('partials/sidebar', { activePage: 'products' }) %>
@@ -859,7 +959,7 @@
 
     <div class="header" style="margin-top: 10px;">
                 <!-- Category Filter and Add Product Button -->
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                <div class="products-toolbar-row">
                     <select id="categoryFilter" style="padding: 7px 12px; border-radius: 4px; border: 1px solid #ccc;">
                         <option value="">All Categories</option>
                         <option value="Chairs">Chairs</option>
@@ -886,7 +986,7 @@
                     </a>
                 </div>
                 <!-- Legend for row highlights (moved below controls) -->
-                <div style="display: flex; align-items: center; gap: 18px; margin-bottom: 10px;">
+                <div class="products-legend-row">
                     <span style="display: flex; align-items: center; gap: 6px;">
                         <span style="display:inline-block;width:22px;height:22px;background:#DC3545;border-radius:4px;margin-right:4px;"></span>
                         <span style="color:#333;font-size:1em;">Out of Stock (0 quantity)</span>
@@ -1182,7 +1282,7 @@
                                     </td>
                                     <td>
                                         <div style="display: flex; align-items: center; gap: 8px;">
-                                            <input type="number" class="stock-input" value="<%= availableStock %>" min="0" style="width:60px; background-color: #f0f0f0; cursor: not-allowed;" data-id="<%= product.ProductID %>" data-available-stock="<%= product.AvailableStock || '' %>" data-stock-quantity="<%= product.StockQuantity || '' %>" readonly disabled title="Stock is managed in Product Inventory and automatically synced here. Click 'View in Product Inventory' to manage stock.">
+                                            <input type="number" class="stock-input" value="<%= availableStock %>" min="0" style="width:60px; background-color: #f0f0f0; cursor: not-allowed;" data-id="<%= product.ProductID %>" data-available-stock="<%= product.AvailableStock || '' %>" data-stock-quantity="<%= product.StockQuantity || '' %>" readonly disabled title="Stock is managed in Product Inventory and automatically synced here. Use the Product Inventory link in the header or sidebar to manage stock.">
                                             <span style="font-size: 0.75em; color: #17a2b8; font-weight: 600; display: flex; align-items: center; gap: 4px;" title="Stock synced from Inventory Management">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -1209,6 +1309,7 @@
                                     <td><%= product.DateAdded ? new Date(product.DateAdded).toLocaleDateString() : 'N/A' %></td>
                                     <td><%= product.IsActive ? 'Yes' : 'No' %></td>
                                     <td>
+                                        <div class="product-actions-cell">
                                         <button class="view-btn" 
                                             data-id="<%= product.ProductID %>"
                                             data-name="<%= product.Name %>"
@@ -1226,17 +1327,15 @@
                                         <button class="edit-btn" data-id="<%= product.ProductID %>" data-name="<%= product.Name %>" data-description="<%= product.Description %>" data-price="<%= product.Price %>" data-stock="<%= product.StockQuantity %>" data-category="<%= product.Category %>" data-imageurl="<%= product.ImageURL %>" data-model3durl="<%= product.Model3D %>" data-has3dmodel="<%= product.Model3D ? 'true' : 'false' %>" data-thumbnails="<%= product.ThumbnailURLs || '[]' %>" data-dimensions="<%= product.Dimensions || '{}' %>" title="Edit">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 20h9"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 3.5a2.121 2.121 0 113 3L7 19.5 3 21l1.5-4L16.5 3.5z"/></svg>
                                         </button>
-                                        <a href="/Employee/Admin/ProductInventory?productId=<%= inventoryProductId %>" class="inventory-link-btn" title="View in Product Inventory" style="display: inline-block; background: #17a2b8; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; text-decoration: none; margin-right: 5px;">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-                                        </a>
                                         <button class="variations-btn" data-id="<%= product.ProductID %>" data-inventory-id="<%= inventoryProductId %>" data-name="<%= product.Name %>" title="Manage Variations">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z"/></svg>
                                         </button>
-                                        <form action="/Employee/Admin/Products/Delete/<%= product.ProductID %>" method="POST" style="display:inline;">
+                                        <form action="/Employee/Admin/Products/Delete/<%= product.ProductID %>" method="POST" style="display:inline-flex;margin:0;">
                                             <button type="submit" class="delete-btn" title="Archive">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
                                             </button>
                                         </form>
+                                        </div>
                                     </td>
                                 </tr>
                                 <!-- Variations Row (Hidden by default) -->
@@ -1267,7 +1366,6 @@
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Disposed</th>
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Price</th>
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Image</th>
-                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Actions</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody class="variations-table-body">
@@ -1392,6 +1490,10 @@
                         <label for="editImage">Product Image:</label><br>
                         <input type="file" id="editImage" name="image" accept="image/*"><br>
                         <img id="currentImagePreview" src="" alt="Current Image" style="max-width: 60px; max-height: 60px; margin-top: 5px; display: none; border-radius: 3px; border: 1px solid #ddd; box-shadow: 0 1px 2px rgba(0,0,0,0.1);" />
+                        <div id="editCurrentImagePathRow" style="display: none; margin-top: 10px;">
+                            <strong style="font-size: 12px; color: #333;">Current main image path / URL:</strong>
+                            <div id="editCurrentImagePathDisplay" style="font-size: 11px; font-family: Consolas, Monaco, monospace; word-break: break-all; background: #f8f9fa; padding: 8px 10px; border-radius: 4px; border: 1px solid #dee2e6; margin-top: 4px; color: #212529; max-height: 72px; overflow-y: auto;"></div>
+                        </div>
                         <br><br>
 
                         <label>Product Thumbnails (up to 4 images):</label><br>
@@ -1481,6 +1583,10 @@
                         <input type="file" id="editModel3d" name="model3d" accept=".glb,.gltf"><br>
                         <small style="color: #666;">Upload a 3D model file for 3D customization feature (GLB or GLTF format, max 30MB)</small><br>
                         <div id="currentModel3dPreview" style="margin-top: 10px;"></div>
+                        <div id="editCurrentModel3dPathRow" style="display: none; margin-top: 10px;">
+                            <strong style="font-size: 12px; color: #333;">Current 3D model path / URL:</strong>
+                            <div id="editCurrentModel3dPathDisplay" style="font-size: 11px; font-family: Consolas, Monaco, monospace; word-break: break-all; background: #f8f9fa; padding: 8px 10px; border-radius: 4px; border: 1px solid #dee2e6; margin-top: 4px; color: #212529; max-height: 96px; overflow-y: auto;"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -1507,14 +1613,6 @@
 
                 <button type="submit">Save Changes</button>
                 <button type="button" id="cancelEditProduct">Cancel</button>
-
-                <!-- Notification Popup inside Edit Product Modal (shown below buttons) -->
-                <div id="editProductModalNotification" class="modal-notification edit-product-notification">
-                    <div class="modal-notification-content">
-                        <span class="modal-notification-icon">✓</span>
-                        <span class="modal-notification-message"></span>
-                    </div>
-                </div>
             </form>
         </div>
     </div>
@@ -1538,14 +1636,6 @@
         <div class="modal-content" style="max-width: 800px; position: relative;">
             <span class="close-button" id="closeVariationsModal">&times;</span>
             <h3 id="variationsModalTitle">Manage Product Variations</h3>
-            
-            <!-- Notification Popup inside Modal -->
-            <div id="variationModalNotification" class="modal-notification">
-                <div class="modal-notification-content">
-                    <span class="modal-notification-icon">✓</span>
-                    <span class="modal-notification-message"></span>
-                </div>
-            </div>
             
             <!-- Add Variation Form -->
             <div style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
@@ -1609,14 +1699,6 @@
         <div class="modal-content" style="max-width: 600px; position: relative;">
             <span class="close-button" id="closeEditVariationModal">&times;</span>
             <h3>Edit Variation</h3>
-            
-            <!-- Notification Popup inside Edit Modal -->
-            <div id="editVariationModalNotification" class="modal-notification">
-                <div class="modal-notification-content">
-                    <span class="modal-notification-icon">✓</span>
-                    <span class="modal-notification-message"></span>
-                </div>
-            </div>
             
             <form id="editVariationForm" enctype="multipart/form-data">
                 <input type="hidden" id="editVariationID" name="variationID">
@@ -1990,9 +2072,14 @@
             }, 3000);
         }
 
-        // Function to show notification inside variation modal
+        // Function to show notification for variation modal (toast at top of page)
         function showVariationModalNotification(message, isError = false) {
             const notification = document.getElementById('variationModalNotification');
+            if (!notification) {
+                console.warn('variationModalNotification element not found.');
+                showCustomPopup(message, isError);
+                return;
+            }
             const notificationMessage = notification.querySelector('.modal-notification-message');
             const notificationIcon = notification.querySelector('.modal-notification-icon');
 
@@ -2011,28 +2098,30 @@
             }, 3000);
         }
 
-        // Function to show notification inside edit variation modal
+        // Toast for edit variation (top-right with other modal toasts)
         function showEditVariationModalNotification(message, isError = false) {
             const notification = document.getElementById('editVariationModalNotification');
+            if (!notification) {
+                console.warn('editVariationModalNotification element not found.');
+                showCustomPopup(message, isError);
+                return;
+            }
             const notificationMessage = notification.querySelector('.modal-notification-message');
             const notificationIcon = notification.querySelector('.modal-notification-icon');
 
             notificationMessage.textContent = message;
             notificationIcon.textContent = isError ? '✕' : '✓';
 
-            // Remove error class if it exists, add if needed
             notification.className = 'modal-notification' + (isError ? ' error' : '');
 
-            // Show notification
             notification.style.display = 'block';
 
-            // Hide notification after 3 seconds
             setTimeout(() => {
                 notification.style.display = 'none';
             }, 3000);
         }
 
-        // Function to show notification inside edit product modal
+        // Function to show notification for edit product (toast at top of page)
         function showEditProductModalNotification(message, isError = false) {
             const notification = document.getElementById('editProductModalNotification');
             if (!notification) {
@@ -2061,6 +2150,13 @@
 
         // Check for flash messages on page load
         // (Moved to a separate script block below to avoid linter errors and keep feature working)
+
+        function escapeHtml(str) {
+            if (str == null || str === '') return '';
+            const div = document.createElement('div');
+            div.textContent = String(str);
+            return div.innerHTML;
+        }
 
         // Edit Product Modal Logic
         const editProductModal = document.getElementById('editProductModal');
@@ -2102,8 +2198,24 @@
                     document.getElementById('editDimensionsNotes').value = '';
                 }
                 
-                if (imageUrl) {
-                    currentImagePreview.src = imageUrl;
+                const editImgPathRow = document.getElementById('editCurrentImagePathRow');
+                const editImgPathDisplay = document.getElementById('editCurrentImagePathDisplay');
+                const editModel3dPathRow = document.getElementById('editCurrentModel3dPathRow');
+                const editModel3dPathDisplay = document.getElementById('editCurrentModel3dPathDisplay');
+
+                const imageUrlTrim = (imageUrl || '').trim();
+                if (editImgPathRow && editImgPathDisplay) {
+                    if (imageUrlTrim) {
+                        editImgPathRow.style.display = 'block';
+                        editImgPathDisplay.textContent = imageUrlTrim;
+                    } else {
+                        editImgPathRow.style.display = 'none';
+                        editImgPathDisplay.textContent = '';
+                    }
+                }
+
+                if (imageUrlTrim) {
+                    currentImagePreview.src = imageUrlTrim;
                     currentImagePreview.style.display = 'inline-block';
                 } else {
                     currentImagePreview.style.display = 'none';
@@ -2111,12 +2223,24 @@
                 
                 // Handle 3D model preview
                 const currentModel3dPreview = document.getElementById('currentModel3dPreview');
-                if (model3dUrl) {
-                    currentModel3dPreview.innerHTML = `<small style="color: #666;">Current 3D model: ${model3dUrl.split('/').pop()}</small>`;
-                    // Auto-expand 3D model section if there's an existing model
-                    expandFormSection('edit', 'model3d');
-                } else {
-                    currentModel3dPreview.innerHTML = '';
+                const model3dTrim = (model3dUrl || '').trim();
+                if (editModel3dPathRow && editModel3dPathDisplay) {
+                    if (model3dTrim) {
+                        editModel3dPathRow.style.display = 'block';
+                        editModel3dPathDisplay.textContent = model3dTrim;
+                    } else {
+                        editModel3dPathRow.style.display = 'none';
+                        editModel3dPathDisplay.textContent = '';
+                    }
+                }
+                if (currentModel3dPreview) {
+                    if (model3dTrim) {
+                        const baseName = model3dTrim.split('/').pop() || model3dTrim;
+                        currentModel3dPreview.innerHTML = '<small style="color: #666;">Current 3D file: <strong>' + escapeHtml(baseName) + '</strong></small>';
+                        expandFormSection('edit', 'model3d');
+                    } else {
+                        currentModel3dPreview.innerHTML = '<small style="color: #888;">No 3D model on file.</small>';
+                    }
                 }
 
                 // Handle thumbnail previews
@@ -2515,11 +2639,7 @@
                 // If response is HTML (redirect happened), just reload the page
                 const contentType = response.headers.get('content-type') || '';
                 if (contentType.includes('text/html') || response.redirected) {
-                    if (isEditForm) {
-                        showEditProductModalNotification('Product saved successfully!');
-                    } else {
-                        showCustomPopup('Product saved successfully!');
-                    }
+                    showEditProductModalNotification('Product saved successfully!');
                     setTimeout(() => {
                         location.reload();
                     }, 1000);
@@ -2532,11 +2652,7 @@
                     console.log('Response data:', data);
                     if (data.success) {
                         const successMessage = data.message || 'Product saved successfully!';
-                        if (isEditForm) {
-                            showEditProductModalNotification(successMessage);
-                        } else {
-                            showCustomPopup(successMessage);
-                        }
+                        showEditProductModalNotification(successMessage);
                         setTimeout(() => {
                             location.reload();
                         }, 1000);
@@ -2546,11 +2662,7 @@
                     }
                 } else {
                     // Default: reload on success
-                    if (isEditForm) {
-                        showEditProductModalNotification('Product saved successfully!');
-                    } else {
-                        showCustomPopup('Product saved successfully!');
-                    }
+                    showEditProductModalNotification('Product saved successfully!');
                     setTimeout(() => {
                         location.reload();
                     }, 1000);
@@ -3674,13 +3786,6 @@
                                 ${variation.VariationImageURL 
                                     ? `<img src="${variation.VariationImageURL}" alt="Variation" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd;" onerror="this.src='/images/placeholder-avatar.jpg'">`
                                     : '<span style="color: #999;">No image</span>'}
-                            </td>
-                            <td style="text-align: center;">
-                                <a href="/Employee/Admin/ProductInventory?productId=${inventoryProductId || productId}&variationID=${variation.VariationID}" 
-                                   style="background: #17a2b8; color: white; padding: 4px 8px; border-radius: 4px; text-decoration: none; font-size: 0.85em; display: inline-block;"
-                                   title="View in Product Inventory">
-                                    View
-                                </a>
                             </td>
                         `;
                         tableBody.appendChild(row);

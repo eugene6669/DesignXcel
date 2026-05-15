@@ -500,7 +500,7 @@
     <!-- Custom Success/Error Popup -->
     <div id="customPopup" class="custom-popup">
         <div class="custom-popup-content">
-            <span class="custom-popup-icon">✓</span>
+            <span class="custom-popup-icon">âœ“</span>
             <span class="custom-popup-message"></span>
         </div>
     </div>
@@ -539,7 +539,7 @@
                     <div class="modal-content">
                         <span class="close-button" id="closeAddModal">&times;</span>
                         <h3>Create New Product</h3>
-                        <form id="addProductForm" action="/Employee/Admin/ProductInventory/Add" method="POST" enctype="multipart/form-data">
+                        <form id="addProductForm" action="/Employee/InventoryManager/ProductInventory/Add" method="POST" enctype="multipart/form-data">
                             <div class="form-group">
                                 <label for="name">Product Name:</label>
                                 <input type="text" id="name" name="name" required>
@@ -747,7 +747,36 @@
                                 const productName = item.InventoryProductName || 'N/A';
                                 const productSKU = item.InventoryProductSKU || 'N/A';
                                 const productCategory = item.InventoryProductCategory || 'N/A';
-                                const productImage = item.InventoryProductImageURL || null;
+                                const productImageRaw = item.InventoryProductImageURL || null;
+                                const productImageNormalized = productImageRaw ? String(productImageRaw).trim().replace(/\\/g, '/') : '';
+                                const ensureLeadingSlash = (value) => {
+                                    const v = String(value || '').trim();
+                                    if (!v) return '';
+                                    if (v.startsWith('http://') || v.startsWith('https://') || v.startsWith('data:')) return v;
+                                    return v.startsWith('/') ? v : `/${v}`;
+                                };
+                                const looksLikeFilename = (value) => /\.(png|jpe?g|gif|webp|svg)$/i.test(String(value || ''));
+
+                                // If DB stores only a filename (no path), assume uploads path.
+                                const normalizedForFilenameCheck = productImageNormalized.replace(/^\/+/, '');
+                                let productImage = ensureLeadingSlash(productImageNormalized);
+                                if (normalizedForFilenameCheck && looksLikeFilename(normalizedForFilenameCheck) && !normalizedForFilenameCheck.includes('/')) {
+                                    productImage = `/uploads/products/images/${normalizedForFilenameCheck}`;
+                                }
+
+                                let productImagePrimary = productImage || '';
+                                let productImageFallback = '';
+                                let productImageFallback2 = '';
+                                if (productImage && productImage.startsWith('/uploads/products/') && !productImage.startsWith('/uploads/products/images/')) {
+                                    productImagePrimary = productImage.replace('/uploads/products/', '/uploads/products/images/');
+                                    productImageFallback = productImage;
+                                } else if (productImage && productImage.startsWith('/uploads/products/images/')) {
+                                    productImageFallback = productImage.replace('/uploads/products/images/', '/uploads/products/');
+                                } else if (productImage && productImage.startsWith('/uploads/products/inventory/')) {
+                                    // Inventory images sometimes exist under /images instead.
+                                    productImageFallback = productImage.replace('/uploads/products/inventory/', '/uploads/products/images/');
+                                    productImageFallback2 = productImage.replace('/uploads/products/inventory/', '/uploads/products/');
+                                }
                                 const totalQuantity = item.TotalQuantity || 0;
                                 const availableQty = item.AvailableQuantity || 0;
                                 const damagedQty = item.DamagedQuantity || 0;
@@ -817,8 +846,15 @@
                                         <% } %>
                                     </td>
                                     <td>
-                                        <% if (productImage) { %>
-                                            <img src="<%= productImage %>" alt="Product Image" class="image-preview">
+                                        <% if (productImagePrimary) { %>
+                                            <img
+                                                src="<%= productImagePrimary %>"
+                                                alt="Product Image"
+                                                class="image-preview"
+                                                data-fallback-src="<%= productImageFallback %>"
+                                                data-fallback-src2="<%= productImageFallback2 %>"
+                                                onerror="if(this.dataset.fallbackSrc && this.src.indexOf(this.dataset.fallbackSrc) === -1){this.src=this.dataset.fallbackSrc;}else if(this.dataset.fallbackSrc2 && this.src.indexOf(this.dataset.fallbackSrc2) === -1){this.src=this.dataset.fallbackSrc2;}else{this.onerror=null;this.src='/images/placeholder-avatar.jpg';}"
+                                            >
                                         <% } else { %>
                                             <span style="color: #999;">No image</span>
                                         <% } %>
@@ -924,7 +960,7 @@
             const popupIcon = popup.querySelector('.custom-popup-icon');
             
             popupMessage.textContent = message;
-            popupIcon.textContent = isError ? '✕' : '✓';
+            popupIcon.textContent = isError ? 'âœ•' : 'âœ“';
             popup.className = 'custom-popup' + (isError ? ' error' : '');
             popup.style.display = 'block';
             
@@ -1466,7 +1502,7 @@
                 // Create a form and submit it
                 const form = document.createElement('form');
                 form.method = 'POST';
-                form.action = `/Employee/Admin/ProductInventory/Archive/${productId}`;
+                form.action = `/Employee/InventoryManager/ProductInventory/Archive/${productId}`;
                 form.style.display = 'none';
                 
                 // Add hidden input to indicate if it's from Products table (always false for InventoryProducts)
@@ -1642,9 +1678,9 @@
                                 
                                 // Show message
                                 if (totalDifference > 0) {
-                                    showCustomPopup(`Adding ${totalDifference} item(s) to Available stock. Total quantity: ${initialTotalValue} → ${newTotal}`);
+                                    showCustomPopup(`Adding ${totalDifference} item(s) to Available stock. Total quantity: ${initialTotalValue} â†’ ${newTotal}`);
                                 } else {
-                                    showCustomPopup(`Removing ${Math.abs(totalDifference)} item(s) from Available stock. Total quantity: ${initialTotalValue} → ${newTotal}`);
+                                    showCustomPopup(`Removing ${Math.abs(totalDifference)} item(s) from Available stock. Total quantity: ${initialTotalValue} â†’ ${newTotal}`);
                                 }
                             }
                         });
@@ -1875,9 +1911,9 @@
                         
                         // Explicit transfer: available decreases by X, damaged increases by X
                         // This ensures: (Available - X) + (Damaged + X) = Available + Damaged (constant)
-                        // Example: Available=10, Damaged=1, user enters 1 → Available=10-1=9, Damaged=1+1=2
+                        // Example: Available=10, Damaged=1, user enters 1 â†’ Available=10-1=9, Damaged=1+1=2
                         // Total before: 10 + 1 = 11
-                        // Total after: 9 + 2 = 11 (stays constant ✓)
+                        // Total after: 9 + 2 = 11 (stays constant âœ“)
                         newAvailable = intCurrentAvailable - intItemsToTransfer;
                         // ADDITIVE: Add itemsToTransfer to current damaged quantity
                         newDamaged = intCurrentDamaged + intItemsToTransfer;
@@ -1999,7 +2035,7 @@
                         
                         if (fromDamaged > 0) {
                             // Explicit transfer: damaged decreases, repaired increases, available increases
-                            // Example: Available=10, Repaired=1, Damaged=1, user enters 1 → Available=10+1=11, Repaired=1+1=2, Damaged=1-1=0
+                            // Example: Available=10, Repaired=1, Damaged=1, user enters 1 â†’ Available=10+1=11, Repaired=1+1=2, Damaged=1-1=0
                             // Total before: 10 + 1 + 1 = 12
                             // Total after: 11 + 2 + 0 = 13 (needs adjustment to stay constant)
                             // Since repaired items become available, we need to adjust calculation
@@ -2254,8 +2290,8 @@
             // Important: Repaired items become available for sale, so they're already counted in Available
             // Total = Available + Damaged (repaired items are included in Available, not separate)
             // This ensures total stays constant when repairing items:
-            // - Before repair: Available=10, Repaired=1, Damaged=1 → Total = 10 + 1 = 11 (repaired is in Available)
-            // - After repair: Available=11, Repaired=2, Damaged=0 → Total = 11 + 0 = 11 (stays constant)
+            // - Before repair: Available=10, Repaired=1, Damaged=1 â†’ Total = 10 + 1 = 11 (repaired is in Available)
+            // - After repair: Available=11, Repaired=2, Damaged=0 â†’ Total = 11 + 0 = 11 (stays constant)
             const currentTotal = currentAvailable + currentDamaged;
             const newTotal = available + damaged;
             const totalDifference = newTotal - currentTotal;
@@ -2575,26 +2611,26 @@
                     
                     // Show warning if removing items
                     if (totalItemsChange < 0) {
-                        changesHTML += `<div class="change-item" style="color: #dc3545; font-weight: bold; margin-bottom: 10px; padding: 10px; background-color: #fff3cd; border-radius: 4px;">⚠️ Warning: You are removing ${Math.abs(totalItemsChange)} item(s) from inventory. This will reduce the total from ${currentTotalItems} to ${newTotalItems}. This action cannot be easily reversed.</div>`;
+                        changesHTML += `<div class="change-item" style="color: #dc3545; font-weight: bold; margin-bottom: 10px; padding: 10px; background-color: #fff3cd; border-radius: 4px;">âš ï¸ Warning: You are removing ${Math.abs(totalItemsChange)} item(s) from inventory. This will reduce the total from ${currentTotalItems} to ${newTotalItems}. This action cannot be easily reversed.</div>`;
                     }
                     
                     if (availableChange !== 0) {
                         const changeClass = availableChange > 0 ? 'change-positive' : 'change-negative';
-                        changesHTML += `<div class="change-item">Available: ${currentAvailable} → ${newAvailableQty} <span class="${changeClass}">(${availableChange > 0 ? '+' : ''}${availableChange})</span></div>`;
+                        changesHTML += `<div class="change-item">Available: ${currentAvailable} â†’ ${newAvailableQty} <span class="${changeClass}">(${availableChange > 0 ? '+' : ''}${availableChange})</span></div>`;
                     }
                     if (damagedChange !== 0) {
                         const changeClass = damagedChange > 0 ? 'change-positive' : 'change-negative';
-                        changesHTML += `<div class="change-item">Damaged: ${currentDamaged} → ${newDamagedQty} <span class="${changeClass}">(${damagedChange > 0 ? '+' : ''}${damagedChange})</span></div>`;
+                        changesHTML += `<div class="change-item">Damaged: ${currentDamaged} â†’ ${newDamagedQty} <span class="${changeClass}">(${damagedChange > 0 ? '+' : ''}${damagedChange})</span></div>`;
                     }
                     if (repairedChange !== 0) {
                         const changeClass = repairedChange > 0 ? 'change-positive' : 'change-negative';
-                        changesHTML += `<div class="change-item">Repaired: ${currentRepaired} → ${newRepairedQty} <span class="${changeClass}">(${repairedChange > 0 ? '+' : ''}${repairedChange})</span></div>`;
+                        changesHTML += `<div class="change-item">Repaired: ${currentRepaired} â†’ ${newRepairedQty} <span class="${changeClass}">(${repairedChange > 0 ? '+' : ''}${repairedChange})</span></div>`;
                     }
                     if (disposedChange !== 0) {
                         const changeClass = disposedChange > 0 ? 'change-positive' : 'change-negative';
-                        changesHTML += `<div class="change-item">Disposed: ${currentDisposed} → ${newDisposedQty} <span class="${changeClass}">(${disposedChange > 0 ? '+' : ''}${disposedChange})</span></div>`;
+                        changesHTML += `<div class="change-item">Disposed: ${currentDisposed} â†’ ${newDisposedQty} <span class="${changeClass}">(${disposedChange > 0 ? '+' : ''}${disposedChange})</span></div>`;
                     }
-                    changesHTML += `<div class="change-item" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd;">Total Quantity: ${currentTotal} → ${newTotal}<br><small style="color: #666;">(Available + Damaged, Repaired items are included in Available)</small></div>`;
+                    changesHTML += `<div class="change-item" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #ddd;">Total Quantity: ${currentTotal} â†’ ${newTotal}<br><small style="color: #666;">(Available + Damaged, Repaired items are included in Available)</small></div>`;
                     
                     changesList.innerHTML = changesHTML;
                     
@@ -2628,11 +2664,11 @@
                 } else {
                     // Fallback to confirm if modal not found
                     let changeMessage = 'Inventory Changes:\n\n';
-                    if (availableChange !== 0) changeMessage += `Available: ${currentAvailable} → ${newAvailableQty} (${availableChange > 0 ? '+' : ''}${availableChange})\n`;
-                    if (damagedChange !== 0) changeMessage += `Damaged: ${currentDamaged} → ${newDamagedQty} (${damagedChange > 0 ? '+' : ''}${damagedChange})\n`;
-                    if (repairedChange !== 0) changeMessage += `Repaired: ${currentRepaired} → ${newRepairedQty} (${repairedChange > 0 ? '+' : ''}${repairedChange})\n`;
-                    if (disposedChange !== 0) changeMessage += `Disposed: ${currentDisposed} → ${newDisposedQty} (${disposedChange > 0 ? '+' : ''}${disposedChange})\n`;
-                    changeMessage += `\nTotal Quantity: ${currentTotal} → ${newTotal} (Available + Damaged, Repaired items are included in Available)`;
+                    if (availableChange !== 0) changeMessage += `Available: ${currentAvailable} â†’ ${newAvailableQty} (${availableChange > 0 ? '+' : ''}${availableChange})\n`;
+                    if (damagedChange !== 0) changeMessage += `Damaged: ${currentDamaged} â†’ ${newDamagedQty} (${damagedChange > 0 ? '+' : ''}${damagedChange})\n`;
+                    if (repairedChange !== 0) changeMessage += `Repaired: ${currentRepaired} â†’ ${newRepairedQty} (${repairedChange > 0 ? '+' : ''}${repairedChange})\n`;
+                    if (disposedChange !== 0) changeMessage += `Disposed: ${currentDisposed} â†’ ${newDisposedQty} (${disposedChange > 0 ? '+' : ''}${disposedChange})\n`;
+                    changeMessage += `\nTotal Quantity: ${currentTotal} â†’ ${newTotal} (Available + Damaged, Repaired items are included in Available)`;
                     
                     if (!confirm(changeMessage + '\n\nProceed with these changes?')) {
                         return;
@@ -3170,9 +3206,9 @@
                                 });
                                 
                                 if (totalDifference > 0) {
-                                    showCustomPopup(`Adding ${totalDifference} item(s) to Available stock. Total quantity: ${initialTotalValue} → ${newTotal}`);
+                                    showCustomPopup(`Adding ${totalDifference} item(s) to Available stock. Total quantity: ${initialTotalValue} â†’ ${newTotal}`);
                                 } else {
-                                    showCustomPopup(`Removing ${Math.abs(totalDifference)} item(s) from Available stock. Total quantity: ${initialTotalValue} → ${newTotal}`);
+                                    showCustomPopup(`Removing ${Math.abs(totalDifference)} item(s) from Available stock. Total quantity: ${initialTotalValue} â†’ ${newTotal}`);
                                 }
                             }
                         });
@@ -3881,7 +3917,7 @@
 
         // Delete variation permanently
         function deleteVariationPermanently(variationId, variationName, quantity) {
-            if (confirm(`⚠️ WARNING: Are you sure you want to PERMANENTLY DELETE "${variationName}"?\n\nThis action cannot be undone. The variation and all its data will be permanently removed from the database.\n\nQuantity: ${quantity}\n\nType "DELETE" to confirm:`)) {
+            if (confirm(`âš ï¸ WARNING: Are you sure you want to PERMANENTLY DELETE "${variationName}"?\n\nThis action cannot be undone. The variation and all its data will be permanently removed from the database.\n\nQuantity: ${quantity}\n\nType "DELETE" to confirm:`)) {
                 const confirmation = prompt('Type "DELETE" to confirm permanent deletion:');
                 if (confirmation === 'DELETE') {
                     fetch(`/api/admin/inventory-product-variations/delete-permanent/${variationId}`, {
@@ -4213,7 +4249,7 @@
             const notificationIcon = notification.querySelector('.modal-notification-icon');
             
             if (notificationMessage) notificationMessage.textContent = message;
-            if (notificationIcon) notificationIcon.textContent = isError ? '✕' : '✓';
+            if (notificationIcon) notificationIcon.textContent = isError ? 'âœ•' : 'âœ“';
             notification.className = 'modal-notification' + (isError ? ' error' : '');
             notification.style.display = 'block';
             
@@ -4271,7 +4307,7 @@
             <!-- Notification Popup inside Modal -->
             <div id="variationModalNotification" class="modal-notification" style="display: none; position: absolute; top: 20px; right: 20px; background-color: #4CAF50; color: white; padding: 15px 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 10001; animation: slideIn 0.5s ease-out; max-width: 300px;">
                 <div class="modal-notification-content" style="display: flex; align-items: center; gap: 12px;">
-                    <span class="modal-notification-icon">✓</span>
+                    <span class="modal-notification-icon">âœ“</span>
                     <span class="modal-notification-message"></span>
                 </div>
             </div>
@@ -4304,12 +4340,9 @@
                             <input type="number" id="variationPrice" name="price" step="0.01" min="0" placeholder="0.00">
                         </div>
                     </div>
-                    <!-- Variation image is managed in Admin Products/Variations. Display only, no upload here. -->
                     <div style="margin-bottom: 10px;">
-                        <label>Variation Image:</label>
-                        <p style="color: #666; font-size: 0.9em; margin-bottom: 6px;">
-                            Variation images are configured in the Products page. You cannot change them from inventory.
-                        </p>
+                        <label for="variationImage">Variation Image:</label>
+                        <input type="file" id="variationImage" name="variationImage" accept="image/*">
                     </div>
                     <button type="submit" style="background: #28a745; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Add Variation</button>
                 </form>
@@ -4334,7 +4367,7 @@
             <!-- Notification Popup inside Edit Modal -->
             <div id="editVariationModalNotification" class="modal-notification" style="display: none; position: absolute; top: 20px; right: 20px; background-color: #4CAF50; color: white; padding: 15px 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 10001; animation: slideIn 0.5s ease-out; max-width: 300px;">
                 <div class="modal-notification-content" style="display: flex; align-items: center; gap: 12px;">
-                    <span class="modal-notification-icon">✓</span>
+                    <span class="modal-notification-icon">âœ“</span>
                     <span class="modal-notification-message"></span>
                 </div>
             </div>
@@ -4429,12 +4462,9 @@
                     <strong>Current:</strong> Available: <span id="currentVariationStatusAvailableQty">0</span> | Damaged: <span id="currentVariationStatusDamagedQty">0</span> | Repaired: <span id="currentVariationStatusRepairedQty">0</span> | Disposed: <span id="currentVariationStatusDisposedQty">0</span>
                 </div>
 
-                <!-- Variation image is managed in Admin Products/Variations. Display only, no upload here. -->
                 <div class="form-group">
-                    <label>Variation Image:</label>
-                    <p style="color: #666; font-size: 0.9em; margin-bottom: 6px;">
-                        Variation images are configured in the Products page. You cannot change them from inventory.
-                    </p>
+                    <label for="editVariationStatusImage">Variation Image:</label>
+                    <input type="file" id="editVariationStatusImage" name="variationImage" accept="image/*" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 1em;" onchange="previewVariationImage(event)">
                     <div id="editVariationStatusImagePreview" style="margin-top: 10px;"></div>
                 </div>
 

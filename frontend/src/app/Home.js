@@ -60,7 +60,7 @@ const Home = () => {
         try {
             // Try to get from the frontend API endpoint to get featured products with discounts
             const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-            const response = await fetch(`${apiBase}/api/products`, { cache: 'no-store' });
+            const response = await fetch(`${apiBase}/api/products`);
             if (response.ok) {
                 const data = await response.json();
                 if (data.success && data.products) {

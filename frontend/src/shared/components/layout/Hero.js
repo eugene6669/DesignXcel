@@ -33,13 +33,24 @@ const Hero = () => {
                 if (data.success && data.heroBanner) {
                     console.log('Hero banner data loaded successfully:', data.heroBanner);
                     images = Array.isArray(data.heroBanner.heroBannerImages) ? data.heroBanner.heroBannerImages.map(img => {
-                        // Handle both string filenames and object with filename property
-                        const filename = typeof img === 'string' ? img : img.filename;
-                        const imageUrl = getImageUrl(`hero-banners/${filename}`);
+                        // img.path contains the full Azure URL (or a local path for non-Azure setups)
+                        // img.filename is the blob key or local filename
+                        if (typeof img === 'string') {
+                            // Plain string — could be a full URL or filename
+                            return getImageUrl(img);
+                        }
+                        // Prefer the stored path field — it holds the full Azure URL after backend fix
+                        if (img.path && (img.path.startsWith('http://') || img.path.startsWith('https://'))) {
+                            return img.path;
+                        }
+                        // Fallback: reconstruct from filename for local/legacy setups
+                        const filename = img.filename || img.path || '';
+                        const cleanFilename = filename.startsWith('hero-banners/') ? filename.replace('hero-banners/', '') : filename;
+                        const imageUrl = getImageUrl(`hero-banners/${cleanFilename}`);
                         console.log('Hero: Image URL constructed:', imageUrl);
                         return imageUrl;
                     }) : [];
-                    
+
                     setHero({
                         mainHeading: data.heroBanner.mainHeading || 'Premium Office Furniture Solutions',
                         descriptionLine1: data.heroBanner.descriptionLine1 || 'Transform your workspace with our premium collection of office furniture',
@@ -78,7 +89,7 @@ const Hero = () => {
     const backgroundImages = hero.heroBannerImages && hero.heroBannerImages.length > 0
         ? hero.heroBannerImages
         : [];
-    
+
 
     // Auto-slide functionality
     useEffect(() => {
@@ -88,19 +99,19 @@ const Hero = () => {
         }, 5000);
         return () => clearInterval(interval);
     }, [backgroundImages.length]);
-    
+
     const handleSlideChange = (index) => {
         setCurrentSlide(index);
     };
-    
+
     const handlePreviousSlide = () => {
         setCurrentSlide((prev) => (prev - 1 + backgroundImages.length) % backgroundImages.length);
     };
-    
+
     const handleNextSlide = () => {
         setCurrentSlide((prev) => (prev + 1) % backgroundImages.length);
     };
-    
+
     return (
         <section className="hero">
             {/* Background Image Slider */}
@@ -110,7 +121,7 @@ const Hero = () => {
                         <div
                             key={index}
                             className={`bg-slide ${index === currentSlide ? 'active' : ''}`}
-                            style={{ 
+                            style={{
                                 backgroundImage: `url(${image})`,
                                 backgroundSize: 'cover',
                                 backgroundPosition: 'center',
@@ -127,10 +138,10 @@ const Hero = () => {
                     }} />
                 )}
             </div>
-            
+
             {/* Background Overlay */}
             <div className="hero-bg-overlay"></div>
-            
+
             <div className="hero-container">
                 <div className="hero-content">
                     <h1 className="hero-title" style={{ color: hero.textColor }}>
@@ -166,32 +177,32 @@ const Hero = () => {
                     </div>
                 </div>
             </div>
-            
+
             {/* Arrow Navigation */}
             {backgroundImages.length > 1 && (
                 <>
-                    <button 
+                    <button
                         className="slider-arrow slider-arrow-left"
                         onClick={handlePreviousSlide}
                         aria-label="Previous slide"
                     >
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M15 18L9 12L15 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M15 18L9 12L15 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                     </button>
-                    
-                    <button 
+
+                    <button
                         className="slider-arrow slider-arrow-right"
                         onClick={handleNextSlide}
                         aria-label="Next slide"
                     >
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                     </button>
                 </>
             )}
-            
+
             {/* Minimal Slider Indicators */}
             {backgroundImages.length > 1 && (
                 <div className="slider-indicators">

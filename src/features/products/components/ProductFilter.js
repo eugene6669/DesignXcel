@@ -57,6 +57,38 @@ const ProductFilter = ({ categories, products, filters, onFilterChange, onClearF
     handlePriceRangeChange([priceRange[0], newMax]);
   };
 
+  const extractMaterialsFromProducts = (productList = []) => {
+    const materials = productList
+      .map((product) => product?.material || product?.Material || product?.materialName)
+      .filter(Boolean)
+      .flatMap((materialValue) =>
+        String(materialValue)
+          .split(",")
+          .map((material) => material.trim())
+          .filter((material) => material.length > 0)
+      );
+
+    return [...new Set(materials)];
+  };
+
+  const extractNumericProductId = (product) => {
+    const directId = Number(product?.id);
+    if (Number.isFinite(directId) && directId > 0) {
+      return directId;
+    }
+
+    const slug = String(product?.slug || "");
+    const slugMatch = slug.match(/(\d+)$/);
+    if (slugMatch) {
+      const parsed = Number(slugMatch[1]);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+
+    return null;
+  };
+
   // Use props data first, then fetch from API if needed
   useEffect(() => {
     // If categories are provided as props, use them
@@ -82,6 +114,13 @@ const ProductFilter = ({ categories, products, filters, onFilterChange, onClearF
       }
     }
     
+    const productMaterials = extractMaterialsFromProducts(products || []);
+    if (productMaterials.length > 0) {
+      setRealMaterials(productMaterials);
+    } else {
+      setRealMaterials([]);
+    }
+
     // Fetch additional data from API (price range, stock status, materials)
     const fetchAdditionalData = async () => {
       try {
@@ -93,11 +132,43 @@ const ProductFilter = ({ categories, products, filters, onFilterChange, onClearF
           apiClient.get('/api/public/stock-status')
         ]);
         
-        // Set materials
+        // Set materials (only if backend returns real values)
         if (materialsResponse.success && materialsResponse.materials) {
-          setRealMaterials(materialsResponse.materials.map(mat => 
+          const apiMaterials = materialsResponse.materials.map(mat => 
             typeof mat === 'object' && mat.name ? mat.name : String(mat || '').trim()
-          ).filter(mat => mat.length > 0));
+          ).filter(mat => mat.length > 0);
+
+          if (apiMaterials.length > 0) {
+            setRealMaterials([...new Set(apiMaterials)]);
+          } else {
+            // Fallback: derive materials from product-level materials endpoint.
+            const numericIds = [...new Set((products || [])
+              .map(extractNumericProductId)
+              .filter(Boolean))];
+
+            if (numericIds.length > 0) {
+              const materialResults = await Promise.all(
+                numericIds.map(async (productId) => {
+                  try {
+                    const response = await apiClient.get(`/api/products/${productId}/materials`);
+                    if (response?.success && Array.isArray(response.materials)) {
+                      return response.materials
+                        .map((item) => String(item?.MaterialName || "").trim())
+                        .filter((name) => name.length > 0);
+                    }
+                  } catch (materialFetchError) {
+                    console.warn(`Failed loading materials for product ${productId}:`, materialFetchError);
+                  }
+                  return [];
+                })
+              );
+
+              const derivedMaterials = [...new Set(materialResults.flat())];
+              if (derivedMaterials.length > 0) {
+                setRealMaterials(derivedMaterials);
+              }
+            }
+          }
         }
         
         // Set price range
@@ -129,9 +200,6 @@ const ProductFilter = ({ categories, products, filters, onFilterChange, onClearF
         
       } catch (error) {
         console.error('Error fetching additional filter data:', error);
-        
-        // Fallback materials
-        setRealMaterials(['Metal', 'Wood', 'Upholstered', 'Glass', 'Plastic', 'Fabric', 'Leather', 'Steel', 'Aluminum']);
         
         // Fallback: calculate stock status from products data
         if (products && products.length > 0) {
@@ -257,27 +325,29 @@ const ProductFilter = ({ categories, products, filters, onFilterChange, onClearF
 
 
       {/* Material */}
-      <div className="filter-section-new">
-        <h4>Material</h4>
-        <div className="material-options">
-          {materials.map(material => {
-            // Handle both string and object formats
-            const materialName = typeof material === 'object' && material.name ? material.name : String(material || '').trim();
-            const materialLower = materialName.toLowerCase();
-            return (
-              <label key={materialName} className="material-option">
-                <input
-                  type="checkbox"
-                  checked={(filters.materials || []).includes(materialLower)}
-                  onChange={() => handleMaterialChange(materialLower)}
-                />
-                <span className="material-checkbox"></span>
-                <span className="material-name">{materialName}</span>
-              </label>
-            );
-          })}
+      {materials.length > 0 && (
+        <div className="filter-section-new">
+          <h4>Material</h4>
+          <div className="material-options">
+            {materials.map(material => {
+              // Handle both string and object formats
+              const materialName = typeof material === 'object' && material.name ? material.name : String(material || '').trim();
+              const materialLower = materialName.toLowerCase();
+              return (
+                <label key={materialName} className="material-option">
+                  <input
+                    type="checkbox"
+                    checked={(filters.materials || []).includes(materialLower)}
+                    onChange={() => handleMaterialChange(materialLower)}
+                  />
+                  <span className="material-checkbox"></span>
+                  <span className="material-name">{materialName}</span>
+                </label>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Availability */}
       <div className="filter-section-new">

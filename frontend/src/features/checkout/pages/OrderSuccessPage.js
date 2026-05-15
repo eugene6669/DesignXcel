@@ -3,6 +3,7 @@ import { useParams, useLocation, Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../../shared/hooks/useAuth';
 import paymentService from '../services/paymentService';
 import stripeService from '../services/stripeService';
+import paymongoService from '../services/paymongoService';
 import apiClient from '../../../shared/services/api/apiClient';
 import './order-success.css';
 
@@ -15,10 +16,18 @@ const CartIcon = () => (
     </svg>
 );
 
+const getNotificationStorageKey = (baseKey, user) => {
+    const userId = user?.id || user?.CustomerID || user?.email || 'guest';
+    return `${baseKey}:${String(userId).toLowerCase()}`;
+};
+
 /** Persist each order receipt separately so older receipts are not overwritten by newer checkouts. */
-const persistOrderReceiptNotification = (orderNumber) => {
+const persistOrderReceiptNotification = (orderNumber, user) => {
     if (!orderNumber) return;
     const receiptId = `order-receipt-${String(orderNumber)}`;
+    const receiptKey = getNotificationStorageKey('orderReceiptNotifications', user);
+    const legacyReceiptKey = getNotificationStorageKey('orderReceiptNotification', user);
+    const readReceiptKey = getNotificationStorageKey('readReceiptNotifications', user);
     const notificationData = {
         id: receiptId,
         orderNumber: String(orderNumber),
@@ -26,26 +35,95 @@ const persistOrderReceiptNotification = (orderNumber) => {
         dismissed: false
     };
     try {
-        const existing = JSON.parse(localStorage.getItem('orderReceiptNotifications') || '[]');
+        const existing = JSON.parse(localStorage.getItem(receiptKey) || '[]');
         const withoutCurrent = existing.filter((item) => item.id !== receiptId);
         const next = [notificationData, ...withoutCurrent];
-        localStorage.setItem('orderReceiptNotifications', JSON.stringify(next));
+        localStorage.setItem(receiptKey, JSON.stringify(next));
     } catch {
-        localStorage.setItem('orderReceiptNotifications', JSON.stringify([notificationData]));
+        localStorage.setItem(receiptKey, JSON.stringify([notificationData]));
     }
 
     // Backward compatibility for components still checking the legacy single-item key.
-    localStorage.setItem('orderReceiptNotification', JSON.stringify(notificationData));
+    localStorage.setItem(legacyReceiptKey, JSON.stringify(notificationData));
 
     try {
-        const read = JSON.parse(localStorage.getItem('readReceiptNotifications') || '[]');
+        const read = JSON.parse(localStorage.getItem(readReceiptKey) || '[]');
         const next = read.filter((id) => id !== receiptId);
-        localStorage.setItem('readReceiptNotifications', JSON.stringify(next));
+        localStorage.setItem(readReceiptKey, JSON.stringify(next));
     } catch {
-        localStorage.setItem('readReceiptNotifications', '[]');
+        localStorage.setItem(readReceiptKey, '[]');
     }
     window.dispatchEvent(new CustomEvent('notificationUpdated'));
     window.dispatchEvent(new Event('storage'));
+};
+
+/** Collapse duplicated gateway transaction ids (e.g. pay_x,pay_x or doubled string). */
+const normalizeDisplayTransactionId = (tid) => {
+    if (tid == null || tid === '') return tid;
+    const s = String(tid).trim();
+    if (s.includes(',')) {
+        const parts = s.split(',').map((p) => p.trim()).filter(Boolean);
+        const uniq = [...new Set(parts)];
+        if (uniq.length === 1) return uniq[0];
+        const payPick = uniq.find((p) => /^pay_[a-zA-Z0-9]+$/i.test(p));
+        return payPick || uniq[0];
+    }
+    const half = Math.floor(s.length / 2);
+    if (half > 10 && s.slice(0, half) === s.slice(half)) return s.slice(0, half);
+    return s;
+};
+
+/** Line items for receipt UI from Stripe Checkout metadata (bulk: items JSON; regular: cart JSON). */
+const buildLineItemsFromStripeSession = (session) => {
+    const md = session?.metadata || {};
+    const orderType = String(md.orderType || '').toLowerCase();
+    let raw = [];
+    try {
+        if (orderType === 'bulk' && md.items) {
+            raw = JSON.parse(md.items);
+        } else if (md.cart) {
+            raw = JSON.parse(md.cart);
+        }
+    } catch {
+        raw = [];
+    }
+    if (!Array.isArray(raw)) return [];
+    return raw.map((item, idx) => ({
+        OrderItemID: `stripe-md-${idx}`,
+        ProductName: item.name || item.productName || item.Name || 'Product',
+        Name: item.name || item.productName,
+        Quantity: parseInt(item.quantity, 10) || 0,
+        PriceAtPurchase: parseFloat(item.unitPrice ?? item.price ?? item.Price ?? 0) || 0,
+        SKU: item.sku || item.SKU || '',
+        VariationName: item.variationName || item.VariationName || null
+    }));
+};
+
+const enrichPaymentDetailsFromStripeSession = (session, base = {}) => {
+    const md = session?.metadata || {};
+    const orderType = String(md.orderType || 'regular').toLowerCase();
+    const pickupRaw = String(md.pickupDate || md.pickupDateTime || '').trim();
+    const subMeta = parseFloat(md.subtotal);
+    const totalMeta = parseFloat(md.total);
+    const discountMeta = parseFloat(md.discount);
+    const amountFromStripe = session?.amount_total != null ? session.amount_total / 100 : null;
+
+    return {
+        ...base,
+        orderType,
+        isBulkOrder: orderType === 'bulk' || md.isBulkOrder === 'true',
+        pickupDate: base.pickupDate || (pickupRaw && pickupRaw !== 'null' ? pickupRaw : null),
+        deliveryType: base.deliveryType || md.deliveryType || (orderType === 'bulk' ? 'pickup' : base.deliveryType),
+        deliveryTypeName: base.deliveryTypeName || (orderType === 'bulk' ? 'Pick up' : base.deliveryTypeName),
+        customerNameFromStripe: md.customerName || null,
+        subtotal: Number.isFinite(subMeta) && subMeta > 0 ? subMeta : (base.subtotal ?? 0),
+        amount: Number.isFinite(totalMeta) && totalMeta > 0 ? totalMeta : (base.amount ?? amountFromStripe ?? 0),
+        discount: Number.isFinite(discountMeta) ? discountMeta : (base.discount ?? 0),
+        stripeSessionId: session?.id || base.stripeSessionId,
+        paymentIntentId: typeof session?.payment_intent === 'string'
+            ? session.payment_intent
+            : (session?.payment_intent?.id || base.paymentIntentId)
+    };
 };
 
 const OrderSuccessPage = () => {
@@ -77,42 +155,48 @@ const OrderSuccessPage = () => {
                     const calculatedSubtotal = orderTotal - orderShipping - orderExtraDeliveryFee;
                     
                     if (order.ReferenceNumber || order.OrderID) {
-                        persistOrderReceiptNotification(order.ReferenceNumber || order.OrderID);
+                        persistOrderReceiptNotification(order.ReferenceNumber || order.OrderID, user);
                     }
                     
-                    setPaymentDetails(prev => ({
-                        ...prev,
-                        orderId: order.ReferenceNumber || order.OrderID,
-                        referenceNumber: order.ReferenceNumber,
-                        transactionId: order.TransactionID,
-                        status: order.Status,
-                        paymentStatus: order.PaymentStatus,
-                        deliveryType: order.DeliveryType,
-                        deliveryTypeName: order.DeliveryTypeName,
-                        deliveryCost: order.DeliveryCost,
-                        extraDeliveryFee: orderExtraDeliveryFee,
-                        pickupDate: order.PickupDate,
-                        subtotal: calculatedSubtotal,
-                        customerInfo: {
-                            name: order.FullName,
-                            email: order.Email
-                        },
-                        address: {
-                            houseNumber: order.HouseNumber,
-                            street: order.Street,
-                            barangay: order.Barangay,
-                            city: order.City,
-                            province: order.Province,
-                            postalCode: order.PostalCode,
-                            country: order.Country,
-                            phoneNumber: order.PhoneNumber
-                        }
-                    }));
-                    
-                    // Set order items if available
-                    if (order.items && Array.isArray(order.items)) {
-                        setOrderItems(order.items);
-                    }
+                    setPaymentDetails((prev) =>
+                        enrichPaymentDetailsFromStripeSession(session, {
+                            ...prev,
+                            method: order.PaymentMethodDisplay || order.PaymentMethod || prev?.method || 'E-Wallet',
+                            orderId: order.ReferenceNumber || order.OrderID,
+                            referenceNumber: order.ReferenceNumber,
+                            transactionId: normalizeDisplayTransactionId(order.TransactionID) || prev?.transactionId,
+                            status: order.Status,
+                            paymentStatus: order.PaymentStatus,
+                            deliveryType: order.DeliveryType || prev?.deliveryType,
+                            deliveryTypeName: order.DeliveryTypeName || prev?.deliveryTypeName,
+                            deliveryCost: order.DeliveryCost,
+                            extraDeliveryFee: orderExtraDeliveryFee,
+                            pickupDate: order.PickupDate || prev?.pickupDate,
+                            subtotal:
+                                calculatedSubtotal > 0
+                                    ? calculatedSubtotal
+                                    : parseFloat(session.metadata?.subtotal) || prev?.subtotal,
+                            amount: parseFloat(order.TotalAmount) || prev?.amount,
+                            customerInfo: {
+                                name: order.FullName || prev?.customerInfo?.name || session.metadata?.customerName,
+                                email: order.Email || prev?.customerInfo?.email || session.customer_email
+                            },
+                            address: {
+                                houseNumber: order.HouseNumber,
+                                street: order.Street,
+                                barangay: order.Barangay,
+                                city: order.City,
+                                province: order.Province,
+                                postalCode: order.PostalCode,
+                                country: order.Country,
+                                phoneNumber: order.PhoneNumber
+                            }
+                        })
+                    );
+
+                    const sessionLineItemsEarly = buildLineItemsFromStripeSession(session);
+                    const dbItemsEarly = order.items && Array.isArray(order.items) ? order.items : [];
+                    setOrderItems(dbItemsEarly.length > 0 ? dbItemsEarly : sessionLineItemsEarly);
                     return;
                 }
             } catch (err) {
@@ -193,42 +277,44 @@ const OrderSuccessPage = () => {
                             const orderExtraDeliveryFee = parseFloat(order.ExtraDeliveryFee) || extraDeliveryFeeFromMetadata || 0;
                             
                             if (order.ReferenceNumber || order.OrderID) {
-                                persistOrderReceiptNotification(order.ReferenceNumber || order.OrderID);
+                                persistOrderReceiptNotification(order.ReferenceNumber || order.OrderID, user);
                             }
                             
-                            setPaymentDetails(prev => ({
-                                ...prev,
-                                orderId: order.ReferenceNumber || order.OrderID,
-                                referenceNumber: order.ReferenceNumber,
-                                transactionId: order.TransactionID,
-                                status: order.Status,
-                                paymentStatus: order.PaymentStatus,
-                                deliveryType: order.DeliveryType,
-                                deliveryTypeName: order.DeliveryTypeName,
-                                deliveryCost: order.DeliveryCost,
-                                extraDeliveryFee: orderExtraDeliveryFee,
-                                pickupDate: order.PickupDate,
-                                subtotal: subtotalFromMetadata,
-                                customerInfo: {
-                                    name: order.FullName,
-                                    email: order.Email
-                                },
-                                address: {
-                                    houseNumber: order.HouseNumber,
-                                    street: order.Street,
-                                    barangay: order.Barangay,
-                                    city: order.City,
-                                    province: order.Province,
-                                    postalCode: order.PostalCode,
-                                    country: order.Country,
-                                    phoneNumber: order.PhoneNumber
-                                }
-                            }));
-                            
-                            // Set order items if available
-                            if (order.items && Array.isArray(order.items)) {
-                                setOrderItems(order.items);
-                            }
+                            setPaymentDetails((prev) =>
+                                enrichPaymentDetailsFromStripeSession(session, {
+                                    ...prev,
+                                    method: order.PaymentMethodDisplay || order.PaymentMethod || prev?.method || 'E-Wallet',
+                                    orderId: order.ReferenceNumber || order.OrderID,
+                                    referenceNumber: order.ReferenceNumber,
+                                    transactionId: normalizeDisplayTransactionId(order.TransactionID) || prev?.transactionId,
+                                    status: order.Status,
+                                    paymentStatus: order.PaymentStatus,
+                                    deliveryType: order.DeliveryType || prev?.deliveryType,
+                                    deliveryTypeName: order.DeliveryTypeName || prev?.deliveryTypeName,
+                                    deliveryCost: order.DeliveryCost,
+                                    extraDeliveryFee: orderExtraDeliveryFee,
+                                    pickupDate: order.PickupDate || prev?.pickupDate,
+                                    subtotal: subtotalFromMetadata || prev?.subtotal,
+                                    customerInfo: {
+                                        name: order.FullName || prev?.customerInfo?.name || session.metadata?.customerName,
+                                        email: order.Email || prev?.customerInfo?.email || session.customer_email
+                                    },
+                                    address: {
+                                        houseNumber: order.HouseNumber,
+                                        street: order.Street,
+                                        barangay: order.Barangay,
+                                        city: order.City,
+                                        province: order.Province,
+                                        postalCode: order.PostalCode,
+                                        country: order.Country,
+                                        phoneNumber: order.PhoneNumber
+                                    }
+                                })
+                            );
+
+                            const sessionLineItemsAfter = buildLineItemsFromStripeSession(session);
+                            const dbItemsAfter = order.items && Array.isArray(order.items) ? order.items : [];
+                            setOrderItems(dbItemsAfter.length > 0 ? dbItemsAfter : sessionLineItemsAfter);
                         }
                     } catch (err) {
                         console.error('Failed to fetch newly created order:', err);
@@ -243,7 +329,17 @@ const OrderSuccessPage = () => {
     };
 
     useEffect(() => {
-        const sessionId = searchParams.get('session_id');
+        const sessionIdFromUrl = searchParams.get('session_id');
+        const provider = searchParams.get('provider');
+        const paymongoSessionIdFromUrl = searchParams.get('paymongo_session_id');
+        const cachedPaymongoSessionId = localStorage.getItem('lastPaymongoSessionId');
+        const lastPaymentProvider = localStorage.getItem('lastPaymentProvider');
+        const hasPlaceholderSession = (value) => value && String(value).includes('{CHECKOUT_SESSION_ID}');
+        const validSessionIdFromUrl = hasPlaceholderSession(sessionIdFromUrl) ? null : sessionIdFromUrl;
+        const validPaymongoSessionFromUrl = hasPlaceholderSession(paymongoSessionIdFromUrl) ? null : paymongoSessionIdFromUrl;
+        const isPaymongoFlow = provider === 'paymongo' || lastPaymentProvider === 'paymongo' || !!validPaymongoSessionFromUrl;
+        const paymongoSessionId = validPaymongoSessionFromUrl || (isPaymongoFlow ? (validSessionIdFromUrl || cachedPaymongoSessionId) : cachedPaymongoSessionId);
+        const sessionId = !isPaymongoFlow ? validSessionIdFromUrl : null;
         
         // Check if we need to restore session after Stripe redirect
         const restoreSessionIfNeeded = async () => {
@@ -282,87 +378,96 @@ const OrderSuccessPage = () => {
                         const session = result.session;
                         console.log('Retrieved Stripe session details:', session);
 
-                        // Extract subtotal, extra delivery fee, and total from metadata
+                        const sessionLineItems = buildLineItemsFromStripeSession(session);
+
                         const subtotal = parseFloat(session.metadata?.subtotal) || 0;
                         const shippingCost = parseFloat(session.metadata?.shippingCost) || 0;
                         const extraDeliveryFee = parseFloat(session.metadata?.extraDeliveryFee) || 0;
-                        
-                        setPaymentDetails({
-                            status: session.payment_status || 'completed',
-                            method: 'stripe',
-                            amount: session.amount_total / 100, // Convert from cents
-                            currency: session.currency || 'PHP',
-                            customerEmail: session.customer_email,
-                            subtotal: subtotal,
-                            shippingCost: shippingCost,
-                            extraDeliveryFee: extraDeliveryFee,
-                            completedAt: new Date().toISOString()
-                        });
 
-                        // Try to restore session after successful payment
+                        setPaymentDetails(
+                            enrichPaymentDetailsFromStripeSession(session, {
+                                status: session.payment_status || 'completed',
+                                method: 'Bank Card',
+                                amount: session.amount_total / 100,
+                                currency: session.currency || 'PHP',
+                                customerEmail: session.customer_email,
+                                customerInfo: {
+                                    name: session.metadata?.customerName || null,
+                                    email: session.customer_email
+                                },
+                                subtotal,
+                                shippingCost,
+                                extraDeliveryFee,
+                                completedAt: new Date().toISOString()
+                            })
+                        );
+                        setOrderItems(sessionLineItems);
+
                         restoreSessionIfNeeded();
 
-                        // Also try to fetch the actual order from the database using Stripe session ID
-                        apiClient.get(`/api/order/stripe-session/${sessionId}`)
-                            .then(orderResult => {
-                                if (orderResult.success && orderResult.order) {
-                                    const order = orderResult.order;
-                                    console.log('Found order in database by session ID:', order);
-                                    
-                                    if (order.ReferenceNumber || order.OrderID) {
-                                        persistOrderReceiptNotification(order.ReferenceNumber || order.OrderID);
+                        const applyOrderToState = (order) => {
+                            if (order.ReferenceNumber || order.OrderID) {
+                                persistOrderReceiptNotification(order.ReferenceNumber || order.OrderID, user);
+                            }
+                            const subtotalFromMetadata = parseFloat(session.metadata?.subtotal) || 0;
+                            const extraDeliveryFeeFromMetadata = parseFloat(session.metadata?.extraDeliveryFee) || 0;
+                            const orderExtraDeliveryFee = parseFloat(order.ExtraDeliveryFee) || extraDeliveryFeeFromMetadata || 0;
+                            const pickupFromOrder = order.PickupDate
+                                ? (typeof order.PickupDate === 'string' ? order.PickupDate : new Date(order.PickupDate).toISOString())
+                                : null;
+
+                            setPaymentDetails((prev) =>
+                                enrichPaymentDetailsFromStripeSession(session, {
+                                    ...prev,
+                                    method: order.PaymentMethodDisplay || order.PaymentMethod || prev?.method || 'Bank Card',
+                                    orderId: order.ReferenceNumber || order.OrderID,
+                                    referenceNumber: order.ReferenceNumber,
+                                    transactionId: normalizeDisplayTransactionId(order.TransactionID) || prev?.transactionId,
+                                    status: order.Status || prev?.status,
+                                    paymentStatus: order.PaymentStatus || prev?.paymentStatus,
+                                    deliveryType: order.DeliveryType || prev?.deliveryType,
+                                    deliveryTypeName: order.DeliveryTypeName || prev?.deliveryTypeName,
+                                    deliveryCost: order.DeliveryCost,
+                                    extraDeliveryFee: orderExtraDeliveryFee,
+                                    pickupDate: pickupFromOrder || prev?.pickupDate,
+                                    subtotal: subtotalFromMetadata || prev?.subtotal,
+                                    customerInfo: {
+                                        name: order.FullName || prev?.customerInfo?.name || session.metadata?.customerName,
+                                        email: order.Email || prev?.customerInfo?.email || session.customer_email
+                                    },
+                                    address: {
+                                        houseNumber: order.HouseNumber,
+                                        street: order.Street,
+                                        barangay: order.Barangay,
+                                        city: order.City,
+                                        province: order.Province,
+                                        postalCode: order.PostalCode,
+                                        country: order.Country,
+                                        phoneNumber: order.PhoneNumber
                                     }
-                                    
-                                    // Update payment details with actual order information
-                                    // Extract extra delivery fee from session metadata if available
-                                    const subtotalFromMetadata = parseFloat(session.metadata?.subtotal) || 0;
-                                    const extraDeliveryFeeFromMetadata = parseFloat(session.metadata?.extraDeliveryFee) || 0;
-                                    const orderExtraDeliveryFee = parseFloat(order.ExtraDeliveryFee) || extraDeliveryFeeFromMetadata || 0;
-                                    
-                                    setPaymentDetails(prev => ({
-                                        ...prev,
-                                        orderId: order.ReferenceNumber || order.OrderID,
-                                        referenceNumber: order.ReferenceNumber,
-                                        transactionId: order.TransactionID,
-                                        status: order.Status,
-                                        paymentStatus: order.PaymentStatus,
-                                        deliveryType: order.DeliveryType,
-                                        deliveryTypeName: order.DeliveryTypeName,
-                                        deliveryCost: order.DeliveryCost,
-                                        extraDeliveryFee: orderExtraDeliveryFee,
-                                        pickupDate: order.PickupDate,
-                                        subtotal: subtotalFromMetadata,
-                                        customerInfo: {
-                                            name: order.FullName,
-                                            email: order.Email
-                                        },
-                                        address: {
-                                            houseNumber: order.HouseNumber,
-                                            street: order.Street,
-                                            barangay: order.Barangay,
-                                            city: order.City,
-                                            province: order.Province,
-                                            postalCode: order.PostalCode,
-                                            country: order.Country,
-                                            phoneNumber: order.PhoneNumber
-                                        }
-                                    }));
-                                    
-                                    // Set order items if available
-                                    if (order.items && Array.isArray(order.items)) {
-                                        setOrderItems(order.items);
+                                })
+                            );
+
+                            const dbItems = order.items && Array.isArray(order.items) ? order.items : [];
+                            setOrderItems(dbItems.length > 0 ? dbItems : sessionLineItems);
+                        };
+
+                        void (async () => {
+                            for (let attempt = 0; attempt < 5; attempt += 1) {
+                                try {
+                                    const orderResult = await apiClient.get(`/api/order/stripe-session/${sessionId}`);
+                                    if (orderResult.success && orderResult.order) {
+                                        applyOrderToState(orderResult.order);
+                                        return;
                                     }
-                                } else {
-                                    // Order not found in database - trigger webhook simulation for development
-                                    console.log('Order not found in database, triggering webhook simulation...');
-                                    triggerWebhookSimulation(session);
+                                } catch (err) {
+                                    console.log(`Order lookup attempt ${attempt + 1}/5:`, err?.message || err);
                                 }
-                            })
-                            .catch(err => {
-                                console.log('Could not fetch order by session ID, trying webhook simulation:', err);
-                                // Trigger webhook simulation for development
-                                triggerWebhookSimulation(session);
-                            });
+                                await new Promise((r) => setTimeout(r, 650));
+                            }
+                            console.log('Order not found in database after retries, triggering webhook simulation...');
+                            triggerWebhookSimulation(session);
+                        })();
                     }
                 })
                 .catch(err => {
@@ -372,6 +477,105 @@ const OrderSuccessPage = () => {
                 .finally(() => {
                     setLoading(false);
                 });
+        } else if (paymongoSessionId) {
+            setLoading(true);
+            (async () => {
+                try {
+                    let paymongoMethod = 'E-Wallet';
+                    try {
+                        const result = await paymongoService.getCheckoutSession(paymongoSessionId);
+                        if (result.success) {
+                            const session = result.session;
+                            const metadata = session?.attributes?.metadata || {};
+                            const amountFromMetadata = parseFloat(metadata.total) || 0;
+                            const sourceType = String(session?.attributes?.payments?.[0]?.attributes?.source?.type || '').toLowerCase();
+                            paymongoMethod = ['gcash', 'paymaya', 'grab_pay', 'qrph'].includes(sourceType) ? 'E-Wallet' : 'Bank Transfer';
+                            setPaymentDetails({
+                                status: session?.attributes?.payment_intent?.attributes?.status || 'paid',
+                                method: paymongoMethod,
+                                amount: amountFromMetadata,
+                                currency: 'PHP',
+                                customerEmail: session?.attributes?.billing?.email || user?.email || '',
+                                subtotal: parseFloat(metadata.subtotal) || 0,
+                                shippingCost: parseFloat(metadata.shippingCost) || 0,
+                                extraDeliveryFee: parseFloat(metadata.extraDeliveryFee) || 0,
+                                completedAt: new Date().toISOString()
+                            });
+                        }
+                    } catch (e) {
+                        // Keep going; we can still resolve full order from DB/finalize endpoint.
+                        console.warn('PayMongo session fetch failed, continuing with order lookup flow:', e);
+                    }
+
+                    // Ensure order exists for this session (covers delayed webhooks).
+                    await apiClient.post(`/api/paymongo/finalize-checkout-session/${paymongoSessionId}`).catch(() => {});
+
+                    // Retry DB lookup so PayMongo page matches Stripe rich summary.
+                    let resolvedOrder = null;
+                    for (let attempt = 0; attempt < 5; attempt += 1) {
+                        try {
+                            const orderResult = await apiClient.get(`/api/order/stripe-session/${paymongoSessionId}`);
+                            if (orderResult.success && orderResult.order) {
+                                resolvedOrder = orderResult.order;
+                                break;
+                            }
+                        } catch (err) {
+                            // retry below
+                        }
+                        await new Promise((resolve) => setTimeout(resolve, 700));
+                    }
+
+                    if (!resolvedOrder) {
+                        throw new Error('Order not found for PayMongo session');
+                    }
+
+                    localStorage.removeItem('lastPaymongoSessionId');
+                    localStorage.removeItem('lastPaymentProvider');
+                    if (resolvedOrder.ReferenceNumber || resolvedOrder.OrderID) {
+                        persistOrderReceiptNotification(resolvedOrder.ReferenceNumber || resolvedOrder.OrderID, user);
+                    }
+                    setPaymentDetails(prev => ({
+                        ...prev,
+                        method: prev?.method || resolvedOrder.PaymentMethodDisplay || resolvedOrder.PaymentMethod || paymongoMethod,
+                        orderId: resolvedOrder.ReferenceNumber || resolvedOrder.OrderID,
+                        referenceNumber: resolvedOrder.ReferenceNumber,
+                        transactionId: normalizeDisplayTransactionId(resolvedOrder.TransactionID),
+                        status: resolvedOrder.Status,
+                        paymentStatus: resolvedOrder.PaymentStatus,
+                        deliveryType: resolvedOrder.DeliveryType,
+                        deliveryTypeName: resolvedOrder.DeliveryTypeName,
+                        deliveryCost: resolvedOrder.DeliveryCost,
+                        extraDeliveryFee: parseFloat(resolvedOrder.ExtraDeliveryFee) || 0,
+                        pickupDate: resolvedOrder.PickupDate,
+                        subtotal: (parseFloat(resolvedOrder.TotalAmount) || 0) - (parseFloat(resolvedOrder.DeliveryCost) || 0) - (parseFloat(resolvedOrder.ExtraDeliveryFee) || 0),
+                        amount: parseFloat(resolvedOrder.TotalAmount) || 0,
+                        customerEmail: resolvedOrder.Email || prev?.customerEmail || user?.email || '',
+                        completedAt: new Date().toISOString(),
+                        customerInfo: {
+                            name: resolvedOrder.FullName,
+                            email: resolvedOrder.Email
+                        },
+                        address: {
+                            houseNumber: resolvedOrder.HouseNumber,
+                            street: resolvedOrder.Street,
+                            barangay: resolvedOrder.Barangay,
+                            city: resolvedOrder.City,
+                            province: resolvedOrder.Province,
+                            postalCode: resolvedOrder.PostalCode,
+                            country: resolvedOrder.Country,
+                            phoneNumber: resolvedOrder.PhoneNumber
+                        }
+                    }));
+                    if (resolvedOrder.items && Array.isArray(resolvedOrder.items)) {
+                        setOrderItems(resolvedOrder.items);
+                    }
+                } catch (err) {
+                    console.error('Failed to load finalized PayMongo order details:', err);
+                    setError('Failed to load PayMongo payment details. Please contact support if your payment was successful.');
+                } finally {
+                    setLoading(false);
+                }
+            })();
         } else if (order) {
             // Track successful order completion for non-Stripe payments
             console.log('Order completed successfully:', {
@@ -407,14 +611,18 @@ const OrderSuccessPage = () => {
                 completedAt: new Date().toISOString()
             });
         }
-    }, [order, orderId, paymentStatus, paymentMethod, searchParams]);
+    }, [order, orderId, paymentStatus, paymentMethod, searchParams, user?.email]);
 
     if (loading) {
         return (
-            <div className="order-success-page">
-                <div className="success-container">
-                    <div className="loading-state">
-                        <p>Loading payment details...</p>
+            <div className="order-success-page order-success-page--loading">
+                <div className="order-success-loading-wrap" role="status" aria-live="polite">
+                    <div className="order-success-loading-card">
+                        <div className="order-success-loading-spinner" aria-hidden="true" />
+                        <h2 className="order-success-loading-title">Loading payment details</h2>
+                        <p className="order-success-loading-subtitle">
+                            Please wait while we confirm your order and receipt.
+                        </p>
                     </div>
                 </div>
             </div>
@@ -518,13 +726,25 @@ const OrderSuccessPage = () => {
                                         <span className="order-detail-value">#{paymentDetails.referenceNumber || paymentDetails.orderId}</span>
                                     </div>
                                 )}
+                                {(paymentDetails.orderType === 'bulk' || paymentDetails.isBulkOrder) && (
+                                    <div className="order-detail-item">
+                                        <span className="order-detail-label">Order type:</span>
+                                        <span className="order-detail-value">Bulk order (store pickup)</span>
+                                    </div>
+                                )}
                                 <div className="order-detail-item">
                                     <span className="order-detail-label">Order Status:</span>
                                     <span className="order-detail-value status-success">{paymentDetails.status}</span>
                                 </div>
                                 <div className="order-detail-item">
                                     <span className="order-detail-label">Payment Method:</span>
-                                    <span className="order-detail-value">E-Wallet</span>
+                                    <span className="order-detail-value">
+                                        {(() => {
+                                            const sid = (searchParams.get('session_id') || '').trim();
+                                            if (/^cs_(test_|live_)/i.test(sid)) return 'Bank Card';
+                                            return paymentDetails.method || paymentMethod || 'E-Wallet';
+                                        })()}
+                                    </span>
                                 </div>
                                 {paymentDetails.paymentStatus && (
                                     <div className="order-detail-item">
@@ -532,13 +752,15 @@ const OrderSuccessPage = () => {
                                         <span className="order-detail-value status-success">{paymentDetails.paymentStatus}</span>
                                     </div>
                                 )}
-                                {paymentDetails.transactionId && (
+                                {(paymentDetails.transactionId || paymentDetails.paymentIntentId) && (
                                     <div className="order-detail-item">
-                                        <span className="order-detail-label">Transaction ID:</span>
-                                        <span className="order-detail-value" style={{ fontFamily: 'monospace', fontSize: '0.9em', color: '#64748b' }}>{paymentDetails.transactionId}</span>
+                                        <span className="order-detail-label">Payment reference:</span>
+                                        <span className="order-detail-value" style={{ fontFamily: 'monospace', fontSize: '0.9em', color: '#64748b' }}>
+                                            {normalizeDisplayTransactionId(paymentDetails.transactionId || paymentDetails.paymentIntentId)}
+                                        </span>
                                     </div>
                                 )}
-                                {paymentDetails.deliveryType && (
+                                {(paymentDetails.deliveryType || paymentDetails.deliveryTypeName || paymentDetails.isBulkOrder) && (
                                     <div className="order-detail-item">
                                         <span className="order-detail-label">Service Type:</span>
                                         <span className="order-detail-value">
@@ -561,22 +783,28 @@ const OrderSuccessPage = () => {
                                         </span>
                                     </div>
                                 )}
-                                {(paymentDetails.deliveryType === 'pickup' || paymentDetails.deliveryTypeName === 'Pick up') && paymentDetails.pickupDate && (
+                                {(paymentDetails.isBulkOrder || paymentDetails.deliveryType === 'pickup' || paymentDetails.deliveryTypeName === 'Pick up') && paymentDetails.pickupDate && (
                                     <div className="order-detail-item">
                                         <span className="order-detail-label">Pickup Date & Time:</span>
                                         <span className="order-detail-value" style={{ color: '#27ae60', fontWeight: '600' }}>
-                                            {new Date(paymentDetails.pickupDate).toLocaleString('en-US', {
-                                                year: 'numeric',
-                                                month: 'long',
-                                                day: 'numeric',
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                                hour12: true
-                                            })}
+                                            {(() => {
+                                                const d = new Date(paymentDetails.pickupDate);
+                                                if (Number.isNaN(d.getTime())) {
+                                                    return String(paymentDetails.pickupDate);
+                                                }
+                                                return d.toLocaleString('en-US', {
+                                                    year: 'numeric',
+                                                    month: 'long',
+                                                    day: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                    hour12: true
+                                                });
+                                            })()}
                                         </span>
                                     </div>
                                 )}
-                                {paymentDetails.deliveryCost && paymentDetails.deliveryCost > 0 && (
+                                {(Number(paymentDetails.deliveryCost) || 0) > 0 && (
                                     <div className="order-detail-item">
                                         <span className="order-detail-label">Shipping Cost:</span>
                                         <span className="order-detail-value shipping-cost">
@@ -587,7 +815,7 @@ const OrderSuccessPage = () => {
                                         </span>
                                     </div>
                                 )}
-                                {paymentDetails.extraDeliveryFee && paymentDetails.extraDeliveryFee > 0 && (
+                                {(Number(paymentDetails.extraDeliveryFee) || 0) > 0 && (
                                     <div className="order-detail-item">
                                         <span className="order-detail-label">Extra Delivery Fee (Qty &gt; 4):</span>
                                         <span className="order-detail-value extra-delivery-fee">
@@ -598,7 +826,7 @@ const OrderSuccessPage = () => {
                                         </span>
                                     </div>
                                 )}
-                                {paymentDetails.subtotal && paymentDetails.subtotal > 0 && (
+                                {(Number(paymentDetails.subtotal) || 0) > 0 && (
                                     <div className="order-detail-item">
                                         <span className="order-detail-label">Subtotal:</span>
                                         <span className="order-detail-value">
@@ -609,7 +837,18 @@ const OrderSuccessPage = () => {
                                         </span>
                                     </div>
                                 )}
-                                {paymentDetails.amount && paymentDetails.amount > 0 && (
+                                {(Number(paymentDetails.discount) || 0) > 0 && (
+                                    <div className="order-detail-item">
+                                        <span className="order-detail-label">Discount:</span>
+                                        <span className="order-detail-value">
+                                            −{new Intl.NumberFormat('en-PH', {
+                                                style: 'currency',
+                                                currency: 'PHP'
+                                            }).format(paymentDetails.discount)}
+                                        </span>
+                                    </div>
+                                )}
+                                {(Number(paymentDetails.amount) || 0) > 0 && (
                                     <div className="order-detail-item">
                                         <span className="order-detail-label">Total Amount:</span>
                                         <span className="order-detail-value total-amount">
@@ -617,6 +856,14 @@ const OrderSuccessPage = () => {
                                                 style: 'currency',
                                                 currency: paymentDetails.currency || 'PHP'
                                             }).format(paymentDetails.amount)}
+                                        </span>
+                                    </div>
+                                )}
+                                {(paymentDetails.customerInfo?.name || paymentDetails.customerNameFromStripe) && (
+                                    <div className="order-detail-item">
+                                        <span className="order-detail-label">Customer name:</span>
+                                        <span className="order-detail-value">
+                                            {paymentDetails.customerInfo?.name || paymentDetails.customerNameFromStripe}
                                         </span>
                                     </div>
                                 )}
@@ -632,6 +879,14 @@ const OrderSuccessPage = () => {
                                         {new Date(paymentDetails.completedAt).toLocaleString()}
                                     </span>
                                 </div>
+                                {paymentDetails.stripeSessionId && (
+                                    <div className="order-detail-item">
+                                        <span className="order-detail-label">Checkout session:</span>
+                                        <span className="order-detail-value" style={{ wordBreak: 'break-all', fontSize: '0.85em' }}>
+                                            {paymentDetails.stripeSessionId}
+                                        </span>
+                                    </div>
+                                )}
                             {paymentDetails.address && (
                                 <>
                                     <div className="order-detail-item">

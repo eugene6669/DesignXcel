@@ -136,7 +136,7 @@ class PaymentService {
             'gcash': 'GCash',
             'grabpay': 'GrabPay',
             'paymaya': 'PayMaya',
-            'stripe': 'E-Wallet',
+            'stripe': 'Bank Card',
             'E-Wallet': 'E-Wallet'
         };
         return displayNames[type] || type;

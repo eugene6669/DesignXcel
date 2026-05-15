@@ -5,6 +5,7 @@ import ProductFilter from '../../products/components/ProductFilter';
 import PageHeader from '../../../shared/components/layout/PageHeader';
 import { getAllProducts, getCategories } from '../../products/services/productService';
 import AudioLoader from '../../../shared/components/ui/AudioLoader';
+import apiClient from '../../../shared/services/api/apiClient';
 import '../../../app/pages.css';
 
 const ThreeDProductsFurniture = () => {
@@ -26,6 +27,19 @@ const ThreeDProductsFurniture = () => {
     });
     const [filteredProducts, setFilteredProducts] = useState([]);
     const [selectedCategoryName, setSelectedCategoryName] = useState('');
+
+    const has3DModel = (product) => {
+        if (!product) return false;
+        return Boolean(
+            product.Has3DModel ||
+            product.has3DModel ||
+            product.has3dModel ||
+            product.model3D ||
+            product.model3d ||
+            product.Model3D ||
+            product.model3DURL
+        );
+    };
 
     // Parse URL parameters
     useEffect(() => {
@@ -59,11 +73,68 @@ const ThreeDProductsFurniture = () => {
                 getCategories()
             ]);
             const productsData = productsResponse.products || [];
+
+            // Hydrate materials per product so material filter matches real data.
+            const hydrateMaterials = async (list) => {
+                const uniqueIds = [...new Set(
+                    (list || [])
+                        .map((p) => String(p?.id || p?.ProductID || '').trim())
+                        .filter((v) => v.length > 0)
+                )];
+                if (uniqueIds.length === 0) return list;
+
+                const cacheKey = 'productMaterialsCache:v1';
+                let cache = {};
+                try {
+                    cache = JSON.parse(sessionStorage.getItem(cacheKey) || '{}') || {};
+                } catch {
+                    cache = {};
+                }
+
+                const CONCURRENCY = 6;
+                let idx = 0;
+                const results = {};
+                const workers = new Array(CONCURRENCY).fill(null).map(async () => {
+                    while (idx < uniqueIds.length) {
+                        const productId = uniqueIds[idx];
+                        idx += 1;
+
+                        if (cache[productId]) {
+                            results[productId] = cache[productId];
+                            continue;
+                        }
+
+                        try {
+                            const response = await apiClient.get(`/api/products/${encodeURIComponent(productId)}/materials`);
+                            const names = (response?.success && Array.isArray(response.materials))
+                                ? response.materials
+                                    .map((m) => String(m?.MaterialName || m?.name || m || '').trim())
+                                    .filter(Boolean)
+                                : [];
+                            const text = names.join(', ');
+                            results[productId] = text;
+                            cache[productId] = text;
+                        } catch {
+                            results[productId] = '';
+                            cache[productId] = '';
+                        }
+                    }
+                });
+
+                await Promise.all(workers);
+                try {
+                    sessionStorage.setItem(cacheKey, JSON.stringify(cache));
+                } catch {}
+
+                return (list || []).map((p) => {
+                    const productId = String(p?.id || p?.ProductID || '').trim();
+                    const hydrated = productId ? (results[productId] ?? cache[productId] ?? '') : '';
+                    return { ...p, __materialsText: hydrated };
+                });
+            };
             
             // Filter products to only include those with 3D models (check Has3DModel field)
-            const customFurnitureProducts = productsData.filter(product => 
-                product.Has3DModel || product.model3d || product.has3dModel
-            );
+            const customFurnitureProducts = await hydrateMaterials(productsData.filter(has3DModel));
             
             const categoriesData = categoriesResponse.categories || [];
             
@@ -155,11 +226,26 @@ const ThreeDProductsFurniture = () => {
 
         // Material filter
         if (filters.materials && filters.materials.length > 0) {
-            filtered = filtered.filter(product => 
-                filters.materials.some(material => 
-                    product.material && product.material.toLowerCase().includes(material)
-                )
-            );
+            filtered = filtered.filter((product) => {
+                const materialValue =
+                    product?.__materialsText ??
+                    product?.material ??
+                    product?.Material ??
+                    product?.materialName ??
+                    product?.MaterialName ??
+                    product?.Materials ??
+                    product?.materials ??
+                    '';
+
+                const materialText = Array.isArray(materialValue)
+                    ? materialValue
+                        .map((m) => (m?.name ?? m?.MaterialName ?? m?.material ?? m ?? ''))
+                        .join(', ')
+                    : String(materialValue);
+
+                const normalized = materialText.toLowerCase();
+                return filters.materials.some((material) => normalized.includes(String(material).toLowerCase()));
+            });
         }
 
         // Sort

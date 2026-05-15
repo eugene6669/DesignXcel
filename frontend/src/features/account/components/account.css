@@ -2609,6 +2609,39 @@ body.theme-dark .delete-image-cancel-btn:hover {
 
 
 
+.account-theme-switcher-card {
+    background: #f8f9fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+}
+
+.account-theme-switcher-card:hover {
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.account-theme-switcher-card .theme-toggle-wrapper:hover {
+    transform: none;
+}
+
+.account-theme-switcher-card.theme-switcher-small .theme-toggle-switch {
+    width: 66px;
+    height: 34px;
+    border-radius: 18px;
+}
+
+.account-theme-switcher-card.theme-switcher-small .theme-toggle-thumb {
+    width: 26px;
+    height: 26px;
+}
+
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -2792,6 +2825,15 @@ body.theme-dark .delete-image-cancel-btn:hover {
     width: 100%;
 }
 
+.quick-action-theme-card {
+    justify-content: space-between;
+    align-items: center;
+}
+
+.quick-action-theme-card .action-content {
+    flex: 1;
+}
+
 .quick-action-card:hover {
     background: #ffffff;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -2872,8 +2914,13 @@ body.theme-dark .delete-image-cancel-btn:hover {
 }
 
 .payment-method-icon.ewallet {
-    background: #e0f2fe;
-    color: #0288d1;
+    background: #fff8e1;
+    color: #F0B21B;
+}
+
+.payment-method-icon.card {
+    background: #fff8e1;
+    color: #F0B21B;
 }
 
 .payment-method-info {

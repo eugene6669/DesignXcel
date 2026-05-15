@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1257,7 +1257,7 @@
                                             Order #<%= order.ReferenceNumber %>
                                         </div>
                                         <div class="log-user" style="font-size: 0.8rem;">
-                                            <%= order.CustomerName.length > 25 ? order.CustomerName.substring(0, 25) + '...' : order.CustomerName %> &bull; â‚±<%= parseFloat(order.TotalAmount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 }) %>
+                                            <%= order.CustomerName.length > 25 ? order.CustomerName.substring(0, 25) + '...' : order.CustomerName %> &bull; ₱<%= parseFloat(order.TotalAmount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 }) %>
                                         </div>
                                     </div>
                                     <div class="log-time" style="font-size: 0.75rem; color: var(--primary-dark); font-weight: 600; white-space: nowrap;">
@@ -1306,7 +1306,7 @@
                                             Order #<%= order.ReferenceNumber %>
                                         </div>
                                         <div class="log-user" style="font-size: 0.8rem;">
-                                            <%= order.CustomerName.length > 25 ? order.CustomerName.substring(0, 25) + '...' : order.CustomerName %> &bull; â‚±<%= parseFloat(order.TotalAmount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 }) %>
+                                            <%= order.CustomerName.length > 25 ? order.CustomerName.substring(0, 25) + '...' : order.CustomerName %> &bull; ₱<%= parseFloat(order.TotalAmount || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 }) %>
                                         </div>
                                     </div>
                                     <div class="log-time" style="font-size: 0.75rem; color: #dc2626; font-weight: 600; white-space: nowrap;">
@@ -1824,7 +1824,7 @@
                     stockText = `${stockQty} (Low)`;
                 }
                 
-                const price = product.Price ? `â‚±${Number(product.Price).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'N/A';
+                const price = product.Price ? `₱${Number(product.Price).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'N/A';
                 const category = product.Category || 'Uncategorized';
                 const sku = product.SKU || 'N/A';
                 
@@ -1976,7 +1976,7 @@
             
             orders.forEach(order => {
                 const orderDate = order.OrderDate ? new Date(order.OrderDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
-                const totalAmount = order.TotalAmount ? `â‚±${Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'N/A';
+                const totalAmount = order.TotalAmount ? `₱${Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'N/A';
                 const deliveryType = order.DeliveryType || 'N/A';
                 
                 const item = document.createElement('div');
@@ -2005,7 +2005,7 @@
             const totalAmount = orders.reduce((sum, o) => sum + (parseFloat(o.TotalAmount) || 0), 0);
             
             document.getElementById('pendingOrdersModalTotal').textContent = totalOrders;
-            document.getElementById('pendingOrdersModalAmount').textContent = `â‚±${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+            document.getElementById('pendingOrdersModalAmount').textContent = `₱${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
         }
 
         // Alerts Modal
@@ -2223,7 +2223,7 @@
             const totalAmount = orders.reduce((sum, o) => sum + (parseFloat(o.TotalAmount) || 0), 0);
             
             document.getElementById('canceledOrdersModalTotal').textContent = totalOrders;
-            document.getElementById('canceledOrdersModalAmount').textContent = `â‚±${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+            document.getElementById('canceledOrdersModalAmount').textContent = `₱${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
         }
 
         // Close modals on overlay click
@@ -2338,7 +2338,7 @@
                 </div>
                 <div class="dashboard-modal-stat">
                     <span class="dashboard-modal-stat-label">Total Amount</span>
-                    <span class="dashboard-modal-stat-value" id="pendingOrdersModalAmount">â‚±0.00</span>
+                    <span class="dashboard-modal-stat-value" id="pendingOrdersModalAmount">₱0.00</span>
                 </div>
             </div>
             <div class="dashboard-modal-body" id="pendingOrdersModalBody">
@@ -2426,7 +2426,7 @@
                 </div>
                 <div class="dashboard-modal-stat">
                     <span class="dashboard-modal-stat-label">Total Amount</span>
-                    <span class="dashboard-modal-stat-value" id="canceledOrdersModalAmount">â‚±0.00</span>
+                    <span class="dashboard-modal-stat-value" id="canceledOrdersModalAmount">₱0.00</span>
                 </div>
             </div>
             <div class="dashboard-modal-body" id="canceledOrdersModalBody">

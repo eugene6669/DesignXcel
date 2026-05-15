@@ -27,11 +27,111 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
     const [token, setToken] = useState(null);
     const [sessionId, setSessionId] = useState(null);
+    const isCheckoutFlowRoute = () =>
+        window.location.pathname === '/checkout' || window.location.pathname === '/payment';
+
+    const migrateNotificationKeysForUser = useCallback((userData) => {
+        try {
+            const email = String(userData?.email || '').toLowerCase().trim();
+            const id = userData?.id != null ? String(userData.id).toLowerCase().trim() : '';
+            const customerId = userData?.CustomerID != null ? String(userData.CustomerID).toLowerCase().trim() : '';
+            const candidates = [email, id, customerId].filter((v) => v && v !== 'guest');
+            if (!email || candidates.length === 0) return;
+
+            const prefixes = [
+                'orderReceiptNotifications',
+                'orderReceiptNotification',
+                'readReceiptNotifications',
+                'orderRefundNotification',
+                'readRefundNotifications',
+                'dismissedOrderNotifications',
+                'readOrderNotifications'
+            ];
+
+            const readArray = (key) => {
+                try {
+                    const val = JSON.parse(localStorage.getItem(key) || 'null');
+                    return Array.isArray(val) ? val : null;
+                } catch {
+                    return null;
+                }
+            };
+
+            const mergeArrays = (arrays) => [...new Set(arrays.flat().filter(Boolean))];
+
+            prefixes.forEach((prefix) => {
+                const canonicalKey = `${prefix}:${email}`;
+                const collected = [];
+                candidates.forEach((c) => {
+                    const k = `${prefix}:${c}`;
+                    if (k === canonicalKey) return;
+                    const arr = readArray(k);
+                    if (arr) collected.push(arr);
+                    const raw = localStorage.getItem(k);
+                    if (raw && !arr) {
+                        // For object-like notifications, keep the newest by timestamp
+                        try {
+                            const obj = JSON.parse(raw);
+                            if (obj && typeof obj === 'object') {
+                                const existingRaw = localStorage.getItem(canonicalKey);
+                                let existing = null;
+                                try { existing = existingRaw ? JSON.parse(existingRaw) : null; } catch { existing = null; }
+                                const existingTs = existing?.timestamp ? new Date(existing.timestamp).getTime() : 0;
+                                const objTs = obj?.timestamp ? new Date(obj.timestamp).getTime() : 0;
+                                if (!existing || objTs >= existingTs) {
+                                    localStorage.setItem(canonicalKey, JSON.stringify(obj));
+                                }
+                            }
+                        } catch {
+                            // ignore invalid json
+                        }
+                    }
+                });
+
+                if (collected.length > 0) {
+                    const existing = readArray(canonicalKey) || [];
+                    const merged = mergeArrays([existing, ...collected]);
+                    localStorage.setItem(canonicalKey, JSON.stringify(merged));
+                }
+            });
+        } catch {
+            // ignore
+        }
+    }, []);
 
     /**
      * Clear authentication data
      */
     const clearAuthData = useCallback(() => {
+        // Clear customer-scoped notification state to prevent cross-account leakage.
+        // Also remove legacy global keys that were previously shared across accounts.
+        try {
+            const rawUser = localStorage.getItem('userData');
+            const parsedUser = rawUser ? JSON.parse(rawUser) : null;
+            const userId = parsedUser?.id || parsedUser?.CustomerID || parsedUser?.email;
+            const scopedPrefixes = [
+                'orderReceiptNotifications',
+                'orderReceiptNotification',
+                'readReceiptNotifications',
+                'orderRefundNotification',
+                'readRefundNotifications',
+                'dismissedOrderNotifications',
+                'readOrderNotifications'
+            ];
+
+            if (userId) {
+                const normalized = String(userId).toLowerCase();
+                scopedPrefixes.forEach((prefix) => {
+                    localStorage.removeItem(`${prefix}:${normalized}`);
+                });
+            }
+
+            // Legacy global keys (pre-scope)
+            scopedPrefixes.forEach((key) => localStorage.removeItem(key));
+        } catch (e) {
+            // Keep auth clear resilient even if localStorage parsing fails.
+        }
+
         setUser(null);
         setToken(null);
         setSessionId(null);
@@ -55,12 +155,27 @@ export const AuthProvider = ({ children }) => {
                 // Update localStorage if we have user data
                 if (userData) {
                     localStorage.setItem('userData', JSON.stringify(userData));
+                    migrateNotificationKeysForUser(userData);
                 }
                 
                 return true;
             } else {
                 // Only clear auth data if server explicitly says not authenticated
                 // Don't clear on network errors or other failures
+                if (isCheckoutFlowRoute()) {
+                    const savedUser = localStorage.getItem('userData');
+                    if (savedUser) {
+                        try {
+                            const userData = JSON.parse(savedUser);
+                            if (userData && userData.email) {
+                                setUser(userData);
+                                return true;
+                            }
+                        } catch (e) {
+                            // fall through to clear
+                        }
+                    }
+                }
                 clearAuthData();
                 return false;
             }
@@ -69,6 +184,20 @@ export const AuthProvider = ({ children }) => {
             
             // Only clear auth data on 401 (unauthorized) - not on network errors
             if (error.response?.status === 401) {
+                if (isCheckoutFlowRoute()) {
+                    const savedUser = localStorage.getItem('userData');
+                    if (savedUser) {
+                        try {
+                            const userData = JSON.parse(savedUser);
+                            if (userData && userData.email) {
+                                setUser(userData);
+                                return true;
+                            }
+                        } catch (e) {
+                            // fall through to clear
+                        }
+                    }
+                }
                 clearAuthData();
                 return false;
             }
@@ -206,6 +335,7 @@ export const AuthProvider = ({ children }) => {
                 }
                 
                 localStorage.setItem('userData', JSON.stringify(userData));
+                migrateNotificationKeysForUser(userData);
                 
                 return {
                     success: true,
@@ -472,6 +602,9 @@ export const AuthProvider = ({ children }) => {
                         return apiClient.client.request(error.config);
                     } else {
                         // Refresh failed, logout user
+                        if (isCheckoutFlowRoute()) {
+                            return Promise.reject(error);
+                        }
                         clearAuthData();
                     }
                 }
@@ -505,7 +638,8 @@ export const AuthProvider = ({ children }) => {
         changePassword,
         refreshToken,
         checkAuthStatus,
-        
+        refreshAuth: checkAuthStatus,
+
         // Utilities
         isAuthenticated,
         isCustomer,

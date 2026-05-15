@@ -2,6 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FaEnvelope, FaTimes } from 'react-icons/fa';
 import './OrderReceiptNotification.css';
 
+const getCurrentUserStorageKey = (baseKey) => {
+  try {
+    const raw = localStorage.getItem('userData');
+    const parsed = raw ? JSON.parse(raw) : null;
+    const userId = parsed?.id || parsed?.CustomerID || parsed?.email || 'guest';
+    return `${baseKey}:${String(userId).toLowerCase()}`;
+  } catch (e) {
+    return `${baseKey}:guest`;
+  }
+};
+
 const OrderReceiptNotification = ({ isOpen, onClose, onOpenGmail }) => {
   const [orderNumber, setOrderNumber] = useState(null);
   const [currentReceiptId, setCurrentReceiptId] = useState(null);
@@ -12,9 +23,19 @@ const OrderReceiptNotification = ({ isOpen, onClose, onOpenGmail }) => {
     // Check if there's a pending notification in localStorage
     const checkForNotification = () => {
       try {
-        const receipts = JSON.parse(localStorage.getItem('orderReceiptNotifications') || '[]');
+        const receiptKey = getCurrentUserStorageKey('orderReceiptNotifications');
+        const legacyReceiptKey = getCurrentUserStorageKey('orderReceiptNotification');
+        const readReceiptKey = getCurrentUserStorageKey('readReceiptNotifications');
+        const receipts = JSON.parse(localStorage.getItem(receiptKey) || '[]');
         const validReceipts = Array.isArray(receipts) ? receipts : [];
-        const activeReceipts = validReceipts;
+        const readReceipts = JSON.parse(localStorage.getItem(readReceiptKey) || '[]');
+        const normalizedRead = Array.isArray(readReceipts) ? readReceipts : [];
+
+        // Only show the popup for receipts that are still unread.
+        const activeReceipts = validReceipts.filter((r) => {
+          const id = r?.id || (r?.orderNumber ? `order-receipt-${r.orderNumber}` : null);
+          return id && !normalizedRead.includes(id);
+        });
 
         if (activeReceipts.length > 0) {
           const latest = activeReceipts.sort(
@@ -23,18 +44,21 @@ const OrderReceiptNotification = ({ isOpen, onClose, onOpenGmail }) => {
           setHasNotification(true);
           setOrderNumber(latest.orderNumber || null);
           setCurrentReceiptId(latest.id || `order-receipt-${latest.orderNumber || ''}`);
-          localStorage.setItem('orderReceiptNotification', JSON.stringify(latest));
+          localStorage.setItem(legacyReceiptKey, JSON.stringify(latest));
           return;
         }
 
         // Fallback for legacy single receipt key
-        const notificationData = localStorage.getItem('orderReceiptNotification');
+        const notificationData = localStorage.getItem(legacyReceiptKey);
         if (notificationData) {
           const data = JSON.parse(notificationData);
-          setHasNotification(true);
-          setOrderNumber(data.orderNumber || null);
-          setCurrentReceiptId(data.id || `order-receipt-${data.orderNumber || ''}`);
-          return;
+          const legacyId = data.id || (data.orderNumber ? `order-receipt-${data.orderNumber}` : null);
+          if (legacyId && !normalizedRead.includes(legacyId)) {
+            setHasNotification(true);
+            setOrderNumber(data.orderNumber || null);
+            setCurrentReceiptId(legacyId);
+            return;
+          }
         }
 
         setHasNotification(false);
@@ -52,7 +76,8 @@ const OrderReceiptNotification = ({ isOpen, onClose, onOpenGmail }) => {
 
     // Listen for new order notifications (from order success page)
     const handleStorageChange = (e) => {
-      if (e.key === 'orderReceiptNotification' || e.key === 'orderReceiptNotifications') {
+      if (e.key === 'orderReceiptNotification' || e.key === 'orderReceiptNotifications' ||
+        e.key?.startsWith('orderReceiptNotification:') || e.key?.startsWith('orderReceiptNotifications:')) {
         checkForNotification();
       }
     };
@@ -71,20 +96,33 @@ const OrderReceiptNotification = ({ isOpen, onClose, onOpenGmail }) => {
   // Removed click outside handler - notification should persist until explicitly dismissed
 
   const handleDismiss = () => {
-    // Mark as dismissed in localStorage
+    // Dismiss = remove receipt from storage completely.
     try {
-      const receipts = JSON.parse(localStorage.getItem('orderReceiptNotifications') || '[]');
+      const receiptKey = getCurrentUserStorageKey('orderReceiptNotifications');
+      const legacyReceiptKey = getCurrentUserStorageKey('orderReceiptNotification');
+      const readReceiptKey = getCurrentUserStorageKey('readReceiptNotifications');
+      const receipts = JSON.parse(localStorage.getItem(receiptKey) || '[]');
       const validReceipts = Array.isArray(receipts) ? receipts : [];
-      const updatedReceipts = validReceipts;
-      localStorage.setItem('orderReceiptNotifications', JSON.stringify(updatedReceipts));
+      const nextReceipts = currentReceiptId
+        ? validReceipts.filter((r) => (r?.id || (r?.orderNumber ? `order-receipt-${r.orderNumber}` : null)) !== currentReceiptId)
+        : validReceipts;
+      localStorage.setItem(receiptKey, JSON.stringify(nextReceipts));
 
-      const latestActive = updatedReceipts[0];
+      const latestActive = nextReceipts[0];
       if (latestActive) {
-        localStorage.setItem('orderReceiptNotification', JSON.stringify(latestActive));
+        localStorage.setItem(legacyReceiptKey, JSON.stringify(latestActive));
       } else {
-        localStorage.removeItem('orderReceiptNotification');
+        localStorage.removeItem(legacyReceiptKey);
       }
 
+      if (currentReceiptId) {
+        const read = JSON.parse(localStorage.getItem(readReceiptKey) || '[]');
+        const normalized = Array.isArray(read) ? read : [];
+        if (!normalized.includes(currentReceiptId)) {
+          normalized.push(currentReceiptId);
+          localStorage.setItem(readReceiptKey, JSON.stringify(normalized));
+        }
+      }
       setHasNotification(false);
     } catch (error) {
       console.error('Error updating notification data:', error);

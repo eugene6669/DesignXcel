@@ -33,6 +33,29 @@ module.exports = {
       webpackConfig.plugins = webpackConfig.plugins.filter(
         plugin => plugin.constructor.name !== 'ESLintWebpackPlugin'
       );
+
+      // Exclude @mediapipe/tasks-vision from source-map-loader (package ships missing map file).
+      const mediapipeRegex = /@mediapipe[\\/]tasks-vision/;
+      const patchSourceMapLoaderRule = (rules = []) => {
+        rules.forEach((rule) => {
+          if (Array.isArray(rule.oneOf)) {
+            patchSourceMapLoaderRule(rule.oneOf);
+          }
+          if (Array.isArray(rule.rules)) {
+            patchSourceMapLoaderRule(rule.rules);
+          }
+          if (typeof rule.loader === 'string' && rule.loader.includes('source-map-loader')) {
+            if (Array.isArray(rule.exclude)) {
+              rule.exclude.push(mediapipeRegex);
+            } else if (rule.exclude) {
+              rule.exclude = [rule.exclude, mediapipeRegex];
+            } else {
+              rule.exclude = [mediapipeRegex];
+            }
+          }
+        });
+      };
+      patchSourceMapLoaderRule(webpackConfig.module?.rules || []);
       
       return webpackConfig;
     }

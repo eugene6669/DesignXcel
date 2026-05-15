@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { formatManilaTimeShort } from '../../utils/manilaTime';
 import './MessageFloatingIcon.css';
 
 const MessageFloatingIcon = () => {
@@ -33,6 +34,7 @@ const MessageFloatingIcon = () => {
               
               if (chatData.success && Array.isArray(chatData.messages)) {
                 const chatMessages = chatData.messages.map(msg => ({
+                  id: msg.MessageID,
                   from: msg.SenderType === 'customer' ? 'user' : 'support',
                   text: msg.MessageText,
                   sentAt: msg.SentAt,
@@ -63,6 +65,7 @@ const MessageFloatingIcon = () => {
                 setIsLoggedIn(true);
                 if (Array.isArray(chatCheckData.messages)) {
                   const chatMessages = chatCheckData.messages.map(msg => ({
+                    id: msg.MessageID,
                     from: msg.SenderType === 'customer' ? 'user' : 'support',
                     text: msg.MessageText,
                     sentAt: msg.SentAt,
@@ -109,6 +112,56 @@ const MessageFloatingIcon = () => {
     }
   }, [open]);
 
+  // Live updates while chat is open: polling (reliable cross-origin + session cookies).
+  // EventSource was pointed at /api/chat/stream which is not implemented and can block fallback.
+  useEffect(() => {
+    if (!open || isLoggedIn !== true) return undefined;
+
+    const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    let cancelled = false;
+    let pollTimer = null;
+
+    const applyServerMessages = (list) => {
+      if (!Array.isArray(list)) return;
+      setMessages(
+        list.map((msg) => ({
+          id: msg.MessageID,
+          from: msg.SenderType === 'customer' ? 'user' : 'support',
+          text: msg.MessageText,
+          sentAt: msg.SentAt,
+          sent: true
+        }))
+      );
+      if (list.length > 0) setShowFaqs(false);
+    };
+
+    const fetchLatest = async () => {
+      try {
+        const res = await fetch(`${apiBase}/api/chat/messages`, {
+          credentials: 'include',
+          cache: 'no-store',
+          headers: { Accept: 'application/json' }
+        });
+        const data = await res.json();
+        if (cancelled || !data.success || !Array.isArray(data.messages)) return;
+        applyServerMessages(data.messages);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    fetchLatest();
+    pollTimer = setInterval(fetchLatest, 2500);
+
+    return () => {
+      cancelled = true;
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+  }, [open, isLoggedIn]);
+
   const handleIconClick = () => setOpen(true);
   const handleClose = () => setOpen(false);
 
@@ -126,7 +179,7 @@ const MessageFloatingIcon = () => {
       // Add user message immediately
       setMessages(prev => [
         ...prev,
-        { from: 'user', text: messageToSend, sentAt: new Date().toISOString(), sent: true }
+        { id: `local-${Date.now()}`, from: 'user', text: messageToSend, sentAt: new Date().toISOString(), sent: true }
       ]);
 
       // Choose endpoint based on login status
@@ -150,7 +203,7 @@ const MessageFloatingIcon = () => {
         if (data.autoReply) {
           setMessages(prev => [
             ...prev,
-            { from: 'support', text: data.autoReply, sentAt: new Date().toISOString(), sent: true }
+            { id: `local-ar-${Date.now()}`, from: 'support', text: data.autoReply, sentAt: new Date().toISOString(), sent: true }
           ]);
         }
         
@@ -158,11 +211,12 @@ const MessageFloatingIcon = () => {
         if (isLoggedIn) {
           setTimeout(() => {
             const apiBase3 = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-            fetch(`${apiBase3}/api/chat/messages`, { credentials: 'include' })
+            fetch(`${apiBase3}/api/chat/messages`, { credentials: 'include', cache: 'no-store' })
               .then(res => res.json())
               .then(data => {
                 if (data.success && Array.isArray(data.messages)) {
                   setMessages(data.messages.map(msg => ({
+                    id: msg.MessageID,
                     from: msg.SenderType === 'customer' ? 'user' : 'support',
                     text: msg.MessageText,
                     sentAt: msg.SentAt,
@@ -180,7 +234,7 @@ const MessageFloatingIcon = () => {
         // Show error message to user
         setMessages(prev => [
           ...prev,
-          { from: 'support', text: `Error: ${data.message || 'Failed to send message'}`, sentAt: new Date().toISOString(), sent: true }
+          { id: `local-err-${Date.now()}`, from: 'support', text: `Error: ${data.message || 'Failed to send message'}`, sentAt: new Date().toISOString(), sent: true }
         ]);
       }
     } catch (err) {
@@ -188,7 +242,7 @@ const MessageFloatingIcon = () => {
       // Show error message to user
       setMessages(prev => [
         ...prev,
-        { from: 'support', text: 'Error: Failed to send message. Please try again.', sentAt: new Date().toISOString(), sent: true }
+        { id: `local-err-${Date.now()}`, from: 'support', text: 'Error: Failed to send message. Please try again.', sentAt: new Date().toISOString(), sent: true }
       ]);
     }
   };
@@ -201,15 +255,8 @@ const MessageFloatingIcon = () => {
     if (input.length > MAX_MESSAGE_LENGTH) {
       setMessages(prev => [
         ...prev,
-        { from: 'support', text: `Message too long. Please keep messages under ${MAX_MESSAGE_LENGTH} characters.`, sentAt: new Date().toISOString(), sent: true }
+        { id: `local-err-${Date.now()}`, from: 'support', text: `Message too long. Please keep messages under ${MAX_MESSAGE_LENGTH} characters.`, sentAt: new Date().toISOString(), sent: true }
       ]);
-      return;
-    }
-
-    // Check if user is logged in
-    if (isLoggedIn !== true) {
-      // Redirect to login page
-      window.location.href = '/login';
       return;
     }
 
@@ -223,7 +270,7 @@ const MessageFloatingIcon = () => {
     if (q.length > MAX_MESSAGE_LENGTH) {
       setMessages(prev => [
         ...prev,
-        { from: 'support', text: `FAQ question too long. Please keep questions under ${MAX_MESSAGE_LENGTH} characters.`, sentAt: new Date().toISOString(), sent: true }
+        { id: `local-err-${Date.now()}`, from: 'support', text: `FAQ question too long. Please keep questions under ${MAX_MESSAGE_LENGTH} characters.`, sentAt: new Date().toISOString(), sent: true }
       ]);
       return;
     }
@@ -292,7 +339,7 @@ const MessageFloatingIcon = () => {
               </div>
             )}
             {messages.map((msg, idx) => (
-              <div key={idx} className={`chat-message ${msg.from}`}>
+              <div key={msg.id != null ? String(msg.id) : `idx-${idx}`} className={`chat-message ${msg.from}`}>
                 <div className="chat-message-content">
                   <div className="chat-message-text">{msg.text}</div>
                   {msg.from === 'user' && msg.sent && (
@@ -304,7 +351,7 @@ const MessageFloatingIcon = () => {
                   )}
                 </div>
                 <div className="chat-message-time">
-                  {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {formatManilaTimeShort(msg.sentAt)}
                 </div>
               </div>
             ))}

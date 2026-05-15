@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Returned Orders - User Manager</title>
+    <title>Returned Orders - Admin</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1104,10 +1104,10 @@
                             <label for="amountFilter">Amount Range</label>
                             <select id="amountFilter">
                                 <option value="">All Amounts</option>
-                                <option value="0-1000">â‚±0 - â‚±1,000</option>
-                                <option value="1000-5000">â‚±1,000 - â‚±5,000</option>
-                                <option value="5000-10000">â‚±5,000 - â‚±10,000</option>
-                                <option value="10000+">â‚±10,000+</option>
+                                <option value="0-1000">₱0 - ₱1,000</option>
+                                <option value="1000-5000">₱1,000 - ₱5,000</option>
+                                <option value="5000-10000">₱5,000 - ₱10,000</option>
+                                <option value="10000+">₱10,000+</option>
                             </select>
                         </div>
                         <div class="filter-group">
@@ -1213,7 +1213,7 @@
                                     </div>
                                     <div class="order-card-summary-secondary">
                                         <span class="order-card-total-label">Total</span>
-                                        <span class="order-card-total-value">â‚±<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></span>
+                                        <span class="order-card-total-value">₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></span>
                                     </div>
                                 </div>
 
@@ -1224,7 +1224,7 @@
                                         data-toggle-target="<%= order.OrderID %>"
                                         aria-expanded="false"
                                     >
-                                        <span class="toggle-icon">âŒ„</span>
+                                        <span class="toggle-icon">⌄</span>
                                         <span class="toggle-label">View Details</span>
                                     </button>
                                 </div>
@@ -1267,7 +1267,7 @@
                                                             <% if (item.ImageURL) { %>
                                                                 <img src="<%= item.ImageURL %>" alt="<%= item.Name %>">
                                                             <% } else { %>
-                                                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem;">ðŸ–¼ï¸</div>
+                                                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem;">🖼️</div>
                                                             <% } %>
                                                         </div>
                                                         <div class="order-product-details">
@@ -1285,11 +1285,11 @@
                                                                     <span>Qty: <%= item.Quantity %></span>
                                                                 <% } %>
                                                                 <% if (item.VariationName) { %>
-                                                                    <span>â€¢ <%= item.VariationName %><% if (item.Color) { %> (<%= item.Color %>)<% } %></span>
+                                                                    <span>• <%= item.VariationName %><% if (item.Color) { %> (<%= item.Color %>)<% } %></span>
                                                                 <% } %>
                                                             </div>
                                                         </div>
-                                                        <div class="order-product-price">â‚±<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
+                                                        <div class="order-product-price">₱<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
                                                     </div>
                                                 <% }); %>
                                             <% } else { %>
@@ -1304,7 +1304,7 @@
                                             <div>
                                                 Payment Method:
                                                 <strong><%= order.PaymentMethod || 'N/A' %></strong>
-                                                <% if (order.StripeSessionID) { %>
+                                                <% if (order.StripeSessionID || order.TransactionID || String((order.PaymentMethodDisplay||order.PaymentMethod||'')).toLowerCase().includes('cash')) { %>
                                                     <button
                                                         type="button"
                                                         class="btn-filter btn-filter-primary js-check-payment"
@@ -1316,24 +1316,24 @@
                                                 <% } %>
                                             </div>
                                             <% if (order.TransactionID) { %>
-                                            <div>Transaction ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                            <div>Payment ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
                                             <% } %>
                                             <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
-                                            <div>Delivery Cost: <strong>â‚±<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
+                                            <div>Delivery Cost: <strong>₱<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
                                             <% 
                                                 const extraFee = typeof order.ExtraDeliveryFee !== 'undefined' && order.ExtraDeliveryFee !== null 
                                                     ? Number(order.ExtraDeliveryFee) 
                                                     : 0;
                                             %>
                                             <% if (extraFee > 0) { %>
-                                            <div>Extra Delivery Fee (Qty &gt; 4): <strong>â‚±<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
+                                            <div>Extra Delivery Fee (Qty &gt; 4): <strong>₱<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
                                             <% } %>
                                         </div>
                                     </div>
 
                                     <div class="order-section">
                                         <span class="order-section-title">Order Total</span>
-                                        <div class="order-section-body"><strong>â‚±<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
+                                        <div class="order-section-body"><strong>₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
                                     </div>
 
                                     <% 
@@ -1398,7 +1398,7 @@
                                         <span class="order-section-title" style="font-size: 1rem; font-weight: 700; color: #111827; margin-bottom: 1rem;">Return Conditions Checklist</span>
                                         <div class="order-section-body" style="display: flex; flex-direction: column; gap: 0.5rem;">
                                             <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 6px; background: <%= order.OriginalPackaging ? '#f0fdf4' : '#fef2f2' %>; border: 1px solid <%= order.OriginalPackaging ? '#10b981' : '#ef4444' %>;">
-                                                <span style="font-size: 1.2rem;"><%= order.OriginalPackaging ? 'âœ…' : 'âŒ' %></span>
+                                                <span style="font-size: 1.2rem;"><%= order.OriginalPackaging ? '✅' : '❌' %></span>
                                                 <span style="flex: 1; color: <%= order.OriginalPackaging ? '#059669' : '#dc2626' %>; font-weight: <%= order.OriginalPackaging ? '500' : '600' %>;">
                                                     Item is in original, undamaged packaging
                                                 </span>
@@ -1408,7 +1408,7 @@
                                             </div>
                                             
                                             <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 6px; background: <%= order.AllParts ? '#f0fdf4' : '#fef2f2' %>; border: 1px solid <%= order.AllParts ? '#10b981' : '#ef4444' %>;">
-                                                <span style="font-size: 1.2rem;"><%= order.AllParts ? 'âœ…' : 'âŒ' %></span>
+                                                <span style="font-size: 1.2rem;"><%= order.AllParts ? '✅' : '❌' %></span>
                                                 <span style="flex: 1; color: <%= order.AllParts ? '#059669' : '#dc2626' %>; font-weight: <%= order.AllParts ? '500' : '600' %>;">
                                                     All parts, accessories, and documentation are included
                                                 </span>
@@ -1418,7 +1418,7 @@
                                             </div>
                                             
                                             <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 6px; background: <%= order.Unused ? '#f0fdf4' : '#fef2f2' %>; border: 1px solid <%= order.Unused ? '#10b981' : '#ef4444' %>;">
-                                                <span style="font-size: 1.2rem;"><%= order.Unused ? 'âœ…' : 'âŒ' %></span>
+                                                <span style="font-size: 1.2rem;"><%= order.Unused ? '✅' : '❌' %></span>
                                                 <span style="flex: 1; color: <%= order.Unused ? '#059669' : '#dc2626' %>; font-weight: <%= order.Unused ? '500' : '600' %>;">
                                                     Item is unused and unmodified
                                                 </span>
@@ -1428,7 +1428,7 @@
                                             </div>
                                             
                                             <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 6px; background: <%= order.ProofOfPurchase ? '#f0fdf4' : '#fef2f2' %>; border: 1px solid <%= order.ProofOfPurchase ? '#10b981' : '#ef4444' %>;">
-                                                <span style="font-size: 1.2rem;"><%= order.ProofOfPurchase ? 'âœ…' : 'âŒ' %></span>
+                                                <span style="font-size: 1.2rem;"><%= order.ProofOfPurchase ? '✅' : '❌' %></span>
                                                 <span style="flex: 1; color: <%= order.ProofOfPurchase ? '#059669' : '#dc2626' %>; font-weight: <%= order.ProofOfPurchase ? '500' : '600' %>;">
                                                     I have proof of purchase (Order #<%= order.ReferenceNumber || order.OrderID %>)
                                                 </span>
@@ -1561,7 +1561,7 @@
                                             <span class="order-section-title">Refund Status</span>
                                             <div class="order-section-body" style="padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
                                                 <p style="margin: 0; color: #059669; font-weight: 600; font-size: 14px;">
-                                                    âœ… Order has been refunded. Payment refunded in Stripe Dashboard.
+                                                    ✅ Order has been refunded. Payment refunded in Stripe Dashboard.
                                                 </p>
                                             </div>
                                         </div>
@@ -1570,7 +1570,7 @@
                                             <span class="order-section-title">Return Status</span>
                                             <div class="order-section-body" style="padding: 12px; background: #fef2f2; border: 1px solid #ef4444; border-radius: 6px;">
                                                 <p style="margin: 0; color: #dc2626; font-weight: 600; font-size: 14px;">
-                                                    âŒ Return request has been declined.
+                                                    ❌ Return request has been declined.
                                                 </p>
                                             </div>
                                         </div>
@@ -1588,7 +1588,7 @@
                             <div class="payment-modal-content">
                                 <div class="payment-modal-header">
                                     <h3>Payment Details</h3>
-                                    <button class="payment-modal-close" onclick="closePaymentModal(<%= order.OrderID %>)">Ã—</button>
+                                    <button class="payment-modal-close" onclick="closePaymentModal(<%= order.OrderID %>)">×</button>
                                 </div>
                                 <div class="payment-modal-body" id="payment-modal-body-<%= order.OrderID %>">
                                     <div style="text-align: center; padding: 2rem;">
@@ -1610,7 +1610,7 @@
                                 <div class="return-media-modal-content">
                                     <div class="return-media-modal-header">
                                         <h3>Return Evidence</h3>
-                                        <button class="return-media-modal-close" onclick="closeReturnMediaModal(<%= order.OrderID %>)">Ã—</button>
+                                        <button class="return-media-modal-close" onclick="closeReturnMediaModal(<%= order.OrderID %>)">×</button>
                                     </div>
                                     <div class="return-media-modal-body" id="return-media-body-<%= order.OrderID %>">
                                         <!-- Content will be loaded dynamically -->
@@ -1878,7 +1878,7 @@
                                             <%= order.PaymentMethod || 'N/A' %>
                                         </td>
                                         <td style="padding: 1rem; text-align: right; font-weight: 700; color: #111827;">
-                                            â‚±<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
+                                            ₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
                                         </td>
                                         <td style="padding: 1rem; text-align: center;">
                                             <button class="order-card-toggle" type="button" data-toggle-target="<%= order.OrderID %>" style="background: #F0B21B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem;" onclick="toggleOrderDetails(<%= order.OrderID %>)">View</button>
@@ -1929,7 +1929,7 @@
                                                                         <% } else if (item.ImageURL) { %>
                                                                             <img src="<%= item.ImageURL %>" alt="<%= item.Name %>" style="width: 100%; height: 100%; object-fit: cover;">
                                                                         <% } else { %>
-                                                                            <div style="color: #94a3b8; font-size: 1.5rem;">ðŸ–¼ï¸</div>
+                                                                            <div style="color: #94a3b8; font-size: 1.5rem;">🖼️</div>
                                                                         <% } %>
                                                                     </div>
                                                                     <div style="flex: 1; min-width: 0;">
@@ -1954,7 +1954,7 @@
                                                                         </div>
                                                                     </div>
                                                                     <div style="font-weight: 700; color: #111827; font-size: 0.9rem;">
-                                                                        â‚±<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
+                                                                        ₱<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
                                                                     </div>
                                                                 </div>
                                                             <% }); %>
@@ -1970,12 +1970,12 @@
                                                     <div style="font-size: 0.875rem; color: #111827; line-height: 1.6; display: flex; flex-direction: column; gap: 0.5rem;">
                                                         <div>
                                                             Payment Method: <strong><%= order.PaymentMethod || 'N/A' %></strong>
-                                                            <% if (order.StripeSessionID) { %>
+                                                            <% if (order.StripeSessionID || order.TransactionID || String((order.PaymentMethodDisplay||order.PaymentMethod||'')).toLowerCase().includes('cash')) { %>
                                                                 <button type="button" class="btn-filter btn-filter-primary js-check-payment" style="padding:0.35rem 0.65rem;font-size:0.7rem;margin-left:0.5rem;" data-order-id="<%= order.OrderID %>">Check Payment</button>
                                                             <% } %>
                                                         </div>
                                                         <% if (order.TransactionID) { %>
-                                                        <div>Transaction ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                                        <div>Payment ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
                                                         <% } %>
                                                         <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
                                                         <% if ((order.DeliveryTypeName === 'Pick up' || order.DeliveryType === 'pickup') && order.PickupDate) { %>
@@ -1992,12 +1992,12 @@
                                                     <div style="font-size: 0.875rem; color: #111827; display: flex; flex-direction: column; gap: 0.5rem;">
                                                         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
                                                             <span>Subtotal:</span>
-                                                            <strong>â‚±<%= Number(order.Subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                            <strong>₱<%= Number(order.Subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
                                                         </div>
                                                         <% if (!order.IsBulkOrder) { %>
                                                         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
                                                             <span>Shipping Fee:</span>
-                                                            <strong>â‚±<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                            <strong>₱<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
                                                         </div>
                                                         <% } %>
                                                         <% 
@@ -2019,12 +2019,12 @@
                                                         <% if (extraFee > 0) { %>
                                                         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
                                                             <span>Extra Delivery Fee (Qty &gt; 4):</span>
-                                                            <strong>â‚±<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                            <strong>₱<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
                                                         </div>
                                                         <% } %>
                                                         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; margin-top: 0.5rem; border-top: 2px solid #0f172a;">
                                                             <span style="font-weight: 700; font-size: 1.05rem;">Total:</span>
-                                                            <strong style="font-weight: 700; font-size: 1.05rem; color: #0f172a;">â‚±<%= Number(order.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                            <strong style="font-weight: 700; font-size: 1.05rem; color: #0f172a;">₱<%= Number(order.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2081,7 +2081,7 @@
     <div id="order-success-popup"></div>
 
     <!-- Loading Spinner Utility -->
-    <script src="/js/Employee/Admin/admin-loading-spinner.js"></script>
+    <script src="/js/Employee/UserManager/admin-loading-spinner.js"></script>
     
     <script>
         // Loading Spinner Helper (if utility not loaded)
@@ -2313,7 +2313,7 @@
                 if (amountFilter) {
                     const [min, max] = amountFilter === '10000+' 
                         ? [10000, Infinity]
-                        : amountFilter.split('-').map(v => v.replace(/[â‚±,]/g, ''));
+                        : amountFilter.split('-').map(v => v.replace(/[₱,]/g, ''));
                     if (amount < parseFloat(min) || (max !== 'Infinity' && amount > parseFloat(max))) {
                         shouldShow = false;
                     }
@@ -2407,7 +2407,7 @@
                 if (amountFilter) {
                     const [min, max] = amountFilter === '10000+' 
                         ? [10000, Infinity]
-                        : amountFilter.split('-').map(v => v.replace(/[â‚±,]/g, ''));
+                        : amountFilter.split('-').map(v => v.replace(/[₱,]/g, ''));
                     if (amount < parseFloat(min) || (max !== 'Infinity' && amount > parseFloat(max))) {
                         shouldShow = false;
                     }
@@ -2549,7 +2549,7 @@
                             </div>
                             <div class="payment-info-row">
                                 <span class="payment-info-label">Total Amount</span>
-                                <span class="payment-info-value amount">â‚±${Number(details.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                <span class="payment-info-value amount">₱${Number(details.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div class="payment-info-row">
                                 <span class="payment-info-label">Order Date</span>
@@ -2563,11 +2563,21 @@
                             </div>
                     `;
                     
-                    if (details.StripeSessionID) {
+                    const paymentIdentifier = details.PaymentIdentifier || details.StripeSessionID || details.TransactionID;
+                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment / transaction ID';
+                    if (paymentIdentifier) {
                         html += `
                             <div class="payment-info-row">
-                                <span class="payment-info-label">Stripe Session ID</span>
-                                <span class="payment-info-value" style="font-size: 0.75rem; word-break: break-all;">${details.StripeSessionID}</span>
+                                <span class="payment-info-label">${paymentIdentifierLabel}</span>
+                                <span class="payment-info-value" style="font-size: 0.75rem; word-break: break-all;">${paymentIdentifier}</span>
+                            </div>
+                        `;
+                    }
+                    if (details.CheckoutSessionValue && details.CheckoutSessionLabel) {
+                        html += `
+                            <div class="payment-info-row">
+                                <span class="payment-info-label">${details.CheckoutSessionLabel}</span>
+                                <span class="payment-info-value" style="font-size: 0.75rem; word-break: break-all;">${details.CheckoutSessionValue}</span>
                             </div>
                         `;
                     }
@@ -2575,29 +2585,37 @@
                     html += `</div>`;
                     
                     if (details.stripeDetails) {
-                        const stripeStatus = (details.stripeDetails.payment_status || 'unknown').toLowerCase();
+                        const gw = details.stripeDetails || {};
+                        const stripeStatusRaw = gw.payment_status || details.PaymentStatus || 'unknown';
+                        const stripeStatus = String(stripeStatusRaw).toLowerCase();
                         const stripeStatusClass = stripeStatus === 'paid' || stripeStatus === 'complete' ? 'paid' : 
                                                   stripeStatus === 'pending' || stripeStatus === 'unpaid' ? 'pending' : 'failed';
+                        const cents = Number(gw.amount_total);
+                        const orderTotalNum = Number(details.TotalAmount || 0);
+                        const amountPhp = (Number.isFinite(cents) && cents > 0) ? (cents / 100) : orderTotalNum;
+                        const pmLabel = (details.DisplayPaymentMethod || details.PaymentMethod || '').toString();
+                        const gwTitle = pmLabel.toLowerCase().includes('stripe') ? 'Stripe Details' : pmLabel.toLowerCase().includes('paymongo') ? 'PayMongo Details' : 'Gateway Details';
+                        const custEmail = gw.customer_email || details.CustomerEmail || 'N/A';
                         
                         html += `
                             <div class="payment-section">
-                                <div class="payment-section-title">Stripe Details</div>
+                                <div class="payment-section-title">${gwTitle}</div>
                                 <div class="stripe-details-section">
                                     <div class="payment-info-row">
                                         <span class="payment-info-label">Payment Status</span>
-                                        <span class="payment-info-value status ${stripeStatusClass}">${details.stripeDetails.payment_status || 'Unknown'}</span>
+                                        <span class="payment-info-value status ${stripeStatusClass}">${gw.payment_status || details.PaymentStatus || 'Unknown'}</span>
                                     </div>
                                     <div class="payment-info-row">
                                         <span class="payment-info-label">Amount Paid</span>
-                                        <span class="payment-info-value amount">â‚±${(details.stripeDetails.amount_total / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                        <span class="payment-info-value amount">₱${amountPhp.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
                                     <div class="payment-info-row">
                                         <span class="payment-info-label">Currency</span>
-                                        <span class="payment-info-value">${(details.stripeDetails.currency || 'php').toUpperCase()}</span>
+                                        <span class="payment-info-value">${(gw.currency || 'php').toUpperCase()}</span>
                                     </div>
                                     <div class="payment-info-row">
                                         <span class="payment-info-label">Customer Email</span>
-                                        <span class="payment-info-value">${details.stripeDetails.customer_email || 'N/A'}</span>
+                                        <span class="payment-info-value">${custEmail}</span>
                                     </div>
                                 </div>
                             </div>
@@ -2608,7 +2626,7 @@
                 } else {
                     modalBody.innerHTML = `
                         <div style="text-align: center; padding: 2rem;">
-                            <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">âš ï¸</div>
+                            <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
                             <p style="color: #6b7280; font-size: 1rem;">${result.message || 'Failed to retrieve payment details'}</p>
                         </div>
                     `;
@@ -2617,7 +2635,7 @@
                 console.error('Error checking payment status:', error);
                 modalBody.innerHTML = `
                     <div style="text-align: center; padding: 2rem;">
-                        <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">âš ï¸</div>
+                        <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
                         <p style="color: #6b7280; font-size: 1rem;">Error checking payment status. Please try again.</p>
                     </div>
                 `;
@@ -2729,10 +2747,10 @@
                     if (result.fees) {
                         detailsHtml = '<div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">';
                         if (result.fees.returnShippingFee > 0) {
-                            detailsHtml += `<p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px;">Return Shipping Fee: â‚±${Number(result.fees.returnShippingFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>`;
+                            detailsHtml += `<p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px;">Return Shipping Fee: ₱${Number(result.fees.returnShippingFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>`;
                         }
                         if (result.fees.refundAmount > 0) {
-                            detailsHtml += `<p style="margin: 8px 0 0 0; color: #10b981; font-size: 16px; font-weight: 600;">Refund Amount: â‚±${Number(result.fees.refundAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>`;
+                            detailsHtml += `<p style="margin: 8px 0 0 0; color: #10b981; font-size: 16px; font-weight: 600;">Refund Amount: ₱${Number(result.fees.refundAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>`;
                         }
                         detailsHtml += '</div>';
                     }
@@ -2777,10 +2795,10 @@
                     let message = 'Return request approved successfully. An approval email has been sent to the customer.';
                     if (result.fees) {
                         if (result.fees.returnShippingFee > 0) {
-                            message += `\nReturn Shipping Fee: â‚±${Number(result.fees.returnShippingFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+                            message += `\nReturn Shipping Fee: ₱${Number(result.fees.returnShippingFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
                         }
                         if (result.fees.refundAmount > 0) {
-                            message += `\nRefund Amount: â‚±${Number(result.fees.refundAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+                            message += `\nRefund Amount: ₱${Number(result.fees.refundAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
                         }
                     }
                     alert(message);
@@ -3124,7 +3142,7 @@
                 if (result.success) {
                     let message = 'Refund processed successfully. The money has been refunded to the customer.';
                     if (result.refundAmount) {
-                        message += ` Refund Amount: â‚±${Number(result.refundAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+                        message += ` Refund Amount: ₱${Number(result.refundAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
                     }
                     if (result.stripeRefundId) {
                         message += ` Stripe Refund ID: ${result.stripeRefundId}`;

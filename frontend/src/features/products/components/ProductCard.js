@@ -114,8 +114,18 @@ const ProductCard = ({ product }) => {
 
   const stockStatus = getStockStatus();
 
-  // Check if product has 3D model
-  const has3DModelData = has3DModel || Has3DModel || model3D || Model3D;
+  // Check if product has 3D model (supports all backend/frontend key variants)
+  const has3DModelData = Boolean(
+    has3DModel ||
+    Has3DModel ||
+    product?.has3dModel ||
+    product?.has3DModel ||
+    model3D ||
+    Model3D ||
+    product?.model3d ||
+    product?.model3D ||
+    product?.model3DURL
+  );
 
   // Use the utility function to get the primary image URL
   const imageUrl = getPrimaryImageUrl(product);

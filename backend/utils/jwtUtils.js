@@ -23,6 +23,9 @@ class JWTUtils {
             fullName: payload.fullName,
             iat: Math.floor(Date.now() / 1000)
         };
+        if (payload.requiresPasswordSetup === true) {
+            tokenPayload.requiresPasswordSetup = true;
+        }
 
         return jwt.sign(tokenPayload, this.jwtSecret, {
             expiresIn: this.accessTokenExpiry,

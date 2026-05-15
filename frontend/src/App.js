@@ -8,6 +8,7 @@ import './styles/themes/christmas-theme.css';
 import './shared/components/ui/components.css';
 
 // Shared contexts and providers
+import { QueryProvider } from './shared/query';
 import { AuthProvider, useAuth } from './shared/hooks/useAuth';
 import { CartProvider } from './shared/contexts/CartContext';
 import { CurrencyProvider } from './shared/contexts/CurrencyContext';
@@ -166,21 +167,23 @@ function App() {
     }, []);
 
     return (
-        <AuthProvider>
-            <CurrencyProvider>
-                <LanguageProvider>
-                    <WishlistProviderWithUserId>
-                        <CartProviderWithUserId>
-                            <Router>
-                                <Layout>
-                                    <AppRoutes />
-                                </Layout>
-                            </Router>
-                        </CartProviderWithUserId>
-                    </WishlistProviderWithUserId>
-                </LanguageProvider>
-            </CurrencyProvider>
-        </AuthProvider>
+        <QueryProvider>
+            <AuthProvider>
+                <CurrencyProvider>
+                    <LanguageProvider>
+                        <WishlistProviderWithUserId>
+                            <CartProviderWithUserId>
+                                <Router>
+                                    <Layout>
+                                        <AppRoutes />
+                                    </Layout>
+                                </Router>
+                            </CartProviderWithUserId>
+                        </WishlistProviderWithUserId>
+                    </LanguageProvider>
+                </CurrencyProvider>
+            </AuthProvider>
+        </QueryProvider>
     );
 }
 

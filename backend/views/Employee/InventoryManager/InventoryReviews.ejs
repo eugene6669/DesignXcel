@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Customer Reviews - Admin Panel</title>
+    <title>Manage Customer Reviews - Inventory Manager Panel</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -538,7 +538,7 @@
         function generateStars(rating) {
             const stars = [];
             for (let i = 1; i <= 5; i++) {
-                stars.push(`<span class="star ${i <= rating ? '' : 'empty'}">★</span>`);
+                stars.push(`<span class="star ${i <= rating ? '' : 'empty'}">â˜…</span>`);
             }
             return stars.join('');
         }

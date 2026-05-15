@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Delivery Rates - User Manager</title>
+    <title>Delivery Rates - Admin</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -151,7 +151,7 @@
                                 <input type="text" id="city" name="city" required placeholder="e.g., Metro Manila, Santa Rosa" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
                             </div>
                             <div>
-                                <label style="display:block;margin-bottom:4px;font-weight:500;">Price (â‚±) <span style="color:red;">*</span></label>
+                                <label style="display:block;margin-bottom:4px;font-weight:500;">Price (₱) <span style="color:red;">*</span></label>
                                 <input type="number" id="price" name="price" step="0.01" min="0" required placeholder="300.00" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
                             </div>
                             <div>
@@ -216,7 +216,7 @@
         setTimeout(()=>{ popup.style.display='none'; }, 1800);
     }
 
-    function fmt(n){ return 'â‚±' + Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2}); }
+    function fmt(n){ return '₱' + Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2}); }
     function dateFmt(d){ try { return new Date(d).toLocaleString(); } catch(e){ return d; } }
 
     // ===== REGION-BASED RATES =====
@@ -472,4 +472,3 @@
 
 </body>
 </html>
-

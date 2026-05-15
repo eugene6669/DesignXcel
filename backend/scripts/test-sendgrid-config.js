@@ -26,7 +26,7 @@ try {
     
     // Test sending a simple email
     const testEmail = process.argv[2] || process.env.TEST_EMAIL || 'design.xcel01@gmail.com';
-    const fromEmail = process.env.OTP_EMAIL_USER || process.env.SENDGRID_FROM_EMAIL || 'design.xcel01@gmail.com';
+    const fromEmail = process.env.SENDGRID_FROM_EMAIL || process.env.OTP_EMAIL_USER || 'design.xcel01@gmail.com';
     
     console.log('📧 Test Email Configuration:');
     console.log('  From:', fromEmail);

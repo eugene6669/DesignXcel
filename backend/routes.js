@@ -17,10 +17,88 @@ const { generateTransactionId } = require('./utils/generateTransactionId');
 const { generateProductIdentifiers, generateTemporaryPublicId, generateGuid } = require('./utils/generateProductIdentifiers');
 const { calculateEstimatedDeliveryDate, formatEstimatedDeliveryDate } = require('./utils/deliveryEstimate');
 const { cleanupExpiredDiscountsSafe } = require('./utils/cleanupExpiredDiscounts');
+const { isAzureBlobConfigured, uploadBufferToAzureBlob, getBlobPublicUrl } = require('./utils/azureBlobStorage');
+const {
+    isAzureProductAssetMode,
+    publicUrlFromMulterProductFile,
+    normalizeProductAssetUrl
+} = require('./utils/productAssetUrls');
+const { isCommonPassword } = require('./utils/passwordValidator');
+const { dedupeDoubledTransactionId, paymentMethodDisplayForOrder, isStripeCheckoutSessionId } = require('./utils/orderDisplayHelpers');
+const { processGatewayRefund } = require('./utils/processGatewayRefund');
 // All encryption removed - using plain text storage
 
 module.exports = function (sql, pool, getStripe = null) {
     const router = express.Router();
+
+    /** Stripe/PayMongo full refund for a Pending order; throws if gateway refund was required and failed. */
+    async function refundGatewayForPendingCancel(orderId, logPrefix) {
+        const row = await pool
+            .request()
+            .input('orderId', sql.Int, orderId)
+            .query(`
+                SELECT OrderID, Status, StripeSessionID, TransactionID, PaymentMethod, TotalAmount, PaymentStatus
+                FROM Orders WHERE OrderID = @orderId
+            `);
+        if (!row.recordset.length) {
+            throw new Error('Order not found');
+        }
+        const o = row.recordset[0];
+        if (o.Status !== 'Pending') {
+            throw new Error('Order is not pending');
+        }
+        const refundRes = await processGatewayRefund(o, getStripe, {
+            refundAmountPhp: parseFloat(o.TotalAmount || 0),
+            logPrefix,
+            context: 'employee_pending_cancel',
+            refundInitiator: 'admin'
+        });
+        if (
+            refundRes.gatewayAttempted &&
+            refundRes.refundError &&
+            !refundRes.stripeRefundId &&
+            !refundRes.paymongoRefundId &&
+            !refundRes.alreadyFullyRefunded
+        ) {
+            throw new Error(refundRes.refundError);
+        }
+    }
+
+    /**
+     * Same gateway rules as pending cancel: Stripe/PayMongo full refund for paid orders; COD skipped.
+     * Used when admin cancels from Processing, Shipping, or Delivery.
+     */
+    async function refundGatewayForAdminFulfilmentStageCancel(orderId, expectedStatus, logPrefix, contextSlug) {
+        const row = await pool
+            .request()
+            .input('orderId', sql.Int, orderId)
+            .query(`
+                SELECT OrderID, Status, StripeSessionID, TransactionID, PaymentMethod, TotalAmount, PaymentStatus
+                FROM Orders WHERE OrderID = @orderId
+            `);
+        if (!row.recordset.length) {
+            throw new Error('Order not found');
+        }
+        const o = row.recordset[0];
+        if (o.Status !== expectedStatus) {
+            throw new Error(`Order is not in ${expectedStatus} status`);
+        }
+        const refundRes = await processGatewayRefund(o, getStripe, {
+            refundAmountPhp: parseFloat(o.TotalAmount || 0),
+            logPrefix,
+            context: `admin_${contextSlug}_cancel`,
+            refundInitiator: 'admin'
+        });
+        if (
+            refundRes.gatewayAttempted &&
+            refundRes.refundError &&
+            !refundRes.stripeRefundId &&
+            !refundRes.paymongoRefundId &&
+            !refundRes.alreadyFullyRefunded
+        ) {
+            throw new Error(refundRes.refundError);
+        }
+    }
 
     // =============================================================================
     // HELPER FUNCTIONS
@@ -185,6 +263,66 @@ module.exports = function (sql, pool, getStripe = null) {
             console.error(`[VARIATION SYNC] Error stack:`, err.stack);
             return false;
         }
+    }
+
+    /**
+     * When an InventoryProducts row is archived from Product Inventory, mirror to CMS:
+     * soft-archive all matching InventoryProductVariations, ProductVariations (shared VariationID),
+     * and linked Products (via InventoryProducts.ProductID or legacy InventoryProductID = Products.ProductID).
+     */
+    async function cascadeArchiveCmsFromInventoryProductArchived(inventoryProductId) {
+        const invId = parseInt(inventoryProductId, 10);
+        if (!invId || Number.isNaN(invId)) return;
+
+        await pool.request().input('inventoryProductId', sql.Int, invId).query(`
+            UPDATE ipv SET ipv.IsActive = 0, ipv.UpdatedAt = GETDATE()
+            FROM InventoryProductVariations ipv
+            WHERE ipv.IsActive = 1
+              AND (ipv.InventoryProductID = @inventoryProductId OR ipv.ProductID = @inventoryProductId)
+        `);
+
+        await pool.request().input('inventoryProductId', sql.Int, invId).query(`
+            UPDATE pv SET pv.IsActive = 0, pv.UpdatedAt = GETDATE()
+            FROM ProductVariations pv
+            WHERE pv.IsActive = 1
+              AND EXISTS (
+                SELECT 1 FROM InventoryProductVariations ipv
+                WHERE ipv.InventoryProductID = @inventoryProductId OR ipv.ProductID = @inventoryProductId
+                  AND ipv.VariationID = pv.VariationID
+              )
+        `);
+
+        await pool.request().input('inventoryProductId', sql.Int, invId).query(`
+            UPDATE p SET p.IsActive = 0, p.UpdatedAt = GETDATE()
+            FROM Products p
+            WHERE p.IsActive = 1
+              AND (
+                EXISTS (
+                    SELECT 1 FROM InventoryProducts ip
+                    WHERE ip.InventoryProductID = @inventoryProductId
+                      AND ip.ProductID IS NOT NULL
+                      AND ip.ProductID = p.ProductID
+                )
+                OR EXISTS (
+                    SELECT 1 FROM InventoryProducts ip
+                    WHERE ip.InventoryProductID = @inventoryProductId
+                      AND ip.InventoryProductID = p.ProductID
+                )
+              )
+        `);
+    }
+
+    /**
+     * When a single InventoryProductVariation is archived, deactivate linked CMS ProductVariation (same VariationID).
+     */
+    async function cascadeArchiveCmsProductVariationFromInventoryVariationArchived(variationId) {
+        const vid = parseInt(variationId, 10);
+        if (!vid || Number.isNaN(vid)) return;
+        await pool.request().input('variationID', sql.Int, vid).query(`
+            UPDATE ProductVariations
+            SET IsActive = 0, UpdatedAt = GETDATE()
+            WHERE VariationID = @variationID
+        `);
     }
 
     // Helper function to sync stock from InventoryProducts to Products (for CMS display)
@@ -1160,39 +1298,48 @@ module.exports = function (sql, pool, getStripe = null) {
     // FILE UPLOAD CONFIGURATION
     // =============================================================================
 
-    // Configure multer for file uploads
-    const storage = multer.diskStorage({
-        destination: function (req, file, cb) {
-            const uploadDir = path.join(__dirname, 'public', 'uploads');
-            const heroBannersDir = path.join(uploadDir, 'hero-banners');
-
-            // Ensure directory exists
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
-            }
-            if (!fs.existsSync(heroBannersDir)) {
-                fs.mkdirSync(heroBannersDir, { recursive: true });
-            }
-
-            cb(null, heroBannersDir);
-        },
-        filename: function (req, file, cb) {
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    // Configure multer for file uploads (hero banners) – Azure-aware
+    const heroBannerStorageEngine = isAzureBlobConfigured()
+        ? {
+            _handleFile: async (req, file, cb) => {
+                try {
+                    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+                    const ext = path.extname(file.originalname) || '.jpg';
+                    const blobPath = `hero-banners/${file.fieldname}-${uniqueSuffix}${ext}`;
+                    const chunks = [];
+                    file.stream.on('data', (c) => chunks.push(c));
+                    file.stream.on('error', cb);
+                    file.stream.on('end', async () => {
+                        try {
+                            const buffer = Buffer.concat(chunks);
+                            const url = await uploadBufferToAzureBlob(blobPath, buffer, file.mimetype);
+                            cb(null, { filename: blobPath, destination: 'azure-blob', size: buffer.length, path: blobPath, azureUrl: url });
+                        } catch (e) { cb(e); }
+                    });
+                } catch (e) { cb(e); }
+            },
+            _removeFile: (req, file, cb) => cb(null)
         }
-    });
+        : multer.diskStorage({
+            destination: function (req, file, cb) {
+                const uploadDir = path.join(__dirname, 'public', 'uploads');
+                const heroBannersDir = path.join(uploadDir, 'hero-banners');
+                if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+                if (!fs.existsSync(heroBannersDir)) fs.mkdirSync(heroBannersDir, { recursive: true });
+                cb(null, heroBannersDir);
+            },
+            filename: function (req, file, cb) {
+                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+                cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+            }
+        });
 
     const upload = multer({
-        storage: storage,
-        limits: {
-            fileSize: 10 * 1024 * 1024 // 10MB limit
-        },
+        storage: heroBannerStorageEngine,
+        limits: { fileSize: 10 * 1024 * 1024 },
         fileFilter: function (req, file, cb) {
-            if (file.mimetype.startsWith('image/')) {
-                cb(null, true);
-            } else {
-                cb(new Error('Only image files are allowed!'), false);
-            }
+            if (file.mimetype.startsWith('image/')) { cb(null, true); }
+            else { cb(new Error('Only image files are allowed!'), false); }
         }
     });
 
@@ -1233,8 +1380,62 @@ module.exports = function (sql, pool, getStripe = null) {
     });
 
     // Configure multer for product uploads
-    const productUpload = multer({
-        storage: multer.diskStorage({
+    // If Azure Blob is configured, files are uploaded directly to blob storage.
+    const getProductSubdirectory = (fieldname = '') => {
+        if (fieldname === 'image') return 'images';
+        if (fieldname === 'thumbnails') return 'thumbnails';
+        if (fieldname.startsWith('thumbnail')) return 'thumbnails';
+        if (fieldname === 'model3d') return 'models';
+        if (fieldname === 'inventoryImage' || fieldname === 'productImage') return 'inventory';
+        return '';
+    };
+
+    const sanitizeFileName = (name = 'file') => {
+        return String(name).replace(/[^a-zA-Z0-9._-]/g, '_');
+    };
+
+    const productStorage = isAzureProductAssetMode()
+        ? {
+            _handleFile: async (req, file, cb) => {
+                try {
+                    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+                    const safeOriginalName = sanitizeFileName(file.originalname || 'upload.bin');
+                    const finalName = `${uniqueSuffix}-${safeOriginalName}`;
+                    const subdirectory = getProductSubdirectory(file.fieldname);
+                    const blobPath = subdirectory
+                        ? `products/${subdirectory}/${finalName}`
+                        : `products/${finalName}`;
+
+                    const chunks = [];
+                    file.stream.on('data', (chunk) => chunks.push(chunk));
+                    file.stream.on('error', (error) => cb(error));
+                    file.stream.on('end', async () => {
+                        try {
+                            const buffer = Buffer.concat(chunks);
+                            await uploadBufferToAzureBlob(blobPath, buffer, file.mimetype);
+
+                            // Backward compatibility for legacy routes that save `/uploads/products/<filename>`
+                            if (file.fieldname === 'image') {
+                                await uploadBufferToAzureBlob(`products/${finalName}`, buffer, file.mimetype);
+                            }
+
+                            cb(null, {
+                                filename: finalName,
+                                destination: 'azure-blob',
+                                size: buffer.length,
+                                path: blobPath
+                            });
+                        } catch (uploadError) {
+                            cb(uploadError);
+                        }
+                    });
+                } catch (error) {
+                    cb(error);
+                }
+            },
+            _removeFile: (req, file, cb) => cb(null)
+        }
+        : multer.diskStorage({
             destination: function (req, file, cb) {
                 let dest;
                 if (file.fieldname === 'image') {
@@ -1249,7 +1450,6 @@ module.exports = function (sql, pool, getStripe = null) {
                     dest = path.join(__dirname, 'public', 'uploads', 'products');
                 }
 
-                // Ensure directory exists
                 if (!fs.existsSync(dest)) {
                     fs.mkdirSync(dest, { recursive: true });
                 }
@@ -1259,7 +1459,10 @@ module.exports = function (sql, pool, getStripe = null) {
                 const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
                 cb(null, uniqueSuffix + '-' + file.originalname);
             }
-        }),
+        });
+
+    const productUpload = multer({
+        storage: productStorage,
         limits: {
             fileSize: function (req, file) {
                 // 30MB limit for 3D models, 10MB for other files
@@ -1438,9 +1641,32 @@ module.exports = function (sql, pool, getStripe = null) {
                     await pool.request().query(`ALTER TABLE dbo.Customers ADD ${col.name} ${col.type} NULL`);
                 }
             }
+
+            const pwdCol = await pool.request().query(`
+                SELECT COUNT(*) AS cnt
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Customers' AND COLUMN_NAME = 'PasswordSetupCompleted'
+            `);
+            if (pwdCol.recordset[0].cnt === 0) {
+                await pool.request().query(`
+                    ALTER TABLE dbo.Customers ADD PasswordSetupCompleted BIT NOT NULL
+                    CONSTRAINT DF_Customers_PasswordSetupCompleted DEFAULT 1
+                `);
+                await pool.request().query(`
+                    UPDATE dbo.Customers SET PasswordSetupCompleted = 0 WHERE GoogleSub IS NOT NULL
+                `);
+            }
         } catch (e) {
             console.error('[GOOGLE AUTH] ensureCustomerGoogleAuthColumns:', e.message);
         }
+    }
+
+    /** True when customer must set a local password (e.g. after Google signup). */
+    function customerRequiresPasswordSetup(row) {
+        if (!row) return false;
+        const v = row.PasswordSetupCompleted;
+        if (v === undefined || v === null) return false;
+        return v === false || v === 0;
     }
 
     function buildGoogleCustomerCallbackUrl() {
@@ -1477,7 +1703,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 let bySub = await pool.request()
                     .input('sub', sql.NVarChar(255), googleSub)
                     .query(`
-                        SELECT TOP 1 CustomerID, Email, FullName, PhoneNumber, IsActive, ProfileImage, GoogleSub, AuthProvider
+                        SELECT TOP 1 CustomerID, Email, FullName, PhoneNumber, IsActive, ProfileImage, GoogleSub, AuthProvider, PasswordSetupCompleted
                         FROM Customers
                         WHERE GoogleSub = @sub
                     `);
@@ -1488,7 +1714,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     const byEmail = await pool.request()
                         .input('email', sql.NVarChar(255), email)
                         .query(`
-                            SELECT TOP 1 CustomerID, Email, FullName, PhoneNumber, IsActive, ProfileImage, GoogleSub, AuthProvider
+                            SELECT TOP 1 CustomerID, Email, FullName, PhoneNumber, IsActive, ProfileImage, GoogleSub, AuthProvider, PasswordSetupCompleted
                             FROM Customers
                             WHERE Email = @email
                         `);
@@ -1523,7 +1749,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         phoneNumber: customer.PhoneNumber,
                         role: 'Customer',
                         type: 'customer',
-                        profileImage: customer.ProfileImage || null
+                        profileImage: customer.ProfileImage || null,
+                        requiresPasswordSetup: customerRequiresPasswordSetup(customer)
                     };
                     return done(null, customerData);
                 }
@@ -1534,9 +1761,9 @@ module.exports = function (sql, pool, getStripe = null) {
                         .input('email', sql.NVarChar(255), email)
                         .input('sub', sql.NVarChar(255), googleSub)
                         .query(`
-                            INSERT INTO Customers (FullName, Email, PhoneNumber, PasswordHash, IsActive, CreatedAt, GoogleSub, AuthProvider)
+                            INSERT INTO Customers (FullName, Email, PhoneNumber, PasswordHash, IsActive, CreatedAt, GoogleSub, AuthProvider, PasswordSetupCompleted)
                             OUTPUT INSERTED.CustomerID, INSERTED.FullName, INSERTED.Email, INSERTED.PhoneNumber, INSERTED.ProfileImage
-                            VALUES (@fullName, @email, NULL, NULL, 1, GETDATE(), @sub, 'google')
+                            VALUES (@fullName, @email, NULL, NULL, 1, GETDATE(), @sub, 'google', 0)
                         `);
                     const row = insertResult.recordset[0];
                     const customerData = {
@@ -1546,7 +1773,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         phoneNumber: row.PhoneNumber,
                         role: 'Customer',
                         type: 'customer',
-                        profileImage: row.ProfileImage || null
+                        profileImage: row.ProfileImage || null,
+                        requiresPasswordSetup: true
                     };
                     return done(null, customerData);
                 } catch (insertErr) {
@@ -1557,9 +1785,9 @@ module.exports = function (sql, pool, getStripe = null) {
                         .input('sub', sql.NVarChar(255), googleSub)
                         .input('passwordHash', sql.NVarChar(255), randomHash)
                         .query(`
-                            INSERT INTO Customers (FullName, Email, PhoneNumber, PasswordHash, IsActive, CreatedAt, GoogleSub, AuthProvider)
+                            INSERT INTO Customers (FullName, Email, PhoneNumber, PasswordHash, IsActive, CreatedAt, GoogleSub, AuthProvider, PasswordSetupCompleted)
                             OUTPUT INSERTED.CustomerID, INSERTED.FullName, INSERTED.Email, INSERTED.PhoneNumber, INSERTED.ProfileImage
-                            VALUES (@fullName, @email, NULL, @passwordHash, 1, GETDATE(), @sub, 'google')
+                            VALUES (@fullName, @email, NULL, @passwordHash, 1, GETDATE(), @sub, 'google', 0)
                         `);
                     const row = insertResult.recordset[0];
                     const customerData = {
@@ -1569,7 +1797,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         phoneNumber: row.PhoneNumber,
                         role: 'Customer',
                         type: 'customer',
-                        profileImage: row.ProfileImage || null
+                        profileImage: row.ProfileImage || null,
+                        requiresPasswordSetup: true
                     };
                     return done(null, customerData);
                 }
@@ -1587,17 +1816,12 @@ module.exports = function (sql, pool, getStripe = null) {
      * Enhanced middleware to check if user is logged in (supports both session and JWT)
      */
     function isAuthenticated(req, res, next) {
-        console.log('=== AUTHENTICATION CHECK ===');
-        console.log('Session ID:', req.sessionID);
-        console.log('Session exists:', !!req.session);
-        console.log('User in session:', req.session?.user);
-        console.log('Request URL:', req.url);
-        console.log('Request method:', req.method);
-        console.log('============================');
+        if (process.env.NODE_ENV === 'development' || process.env.DEBUG_AUTH === 'true') {
+            console.log('=== AUTHENTICATION CHECK ===', req.method, req.url);
+        }
 
         // Check session-based authentication first
         if (req.session && req.session.user) {
-            console.log('Authentication: PASSED (Session)');
             return next();
         }
 
@@ -1616,10 +1840,11 @@ module.exports = function (sql, pool, getStripe = null) {
                     type: decoded.type,
                     fullName: decoded.fullName
                 };
-                console.log('Authentication: PASSED (JWT)');
                 return next();
             } catch (error) {
-                console.log('JWT Authentication failed:', error.message);
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('JWT Authentication failed:', error.message);
+                }
                 // Fall through to check legacy tokens
             }
         }
@@ -2234,7 +2459,17 @@ module.exports = function (sql, pool, getStripe = null) {
                         ip.SKU as InventoryProductSKU,
                         ip.Category as InventoryProductCategory,
                         ip.Price as InventoryProductPrice,
-                        ip.ImageURL as InventoryProductImageURL,
+                        COALESCE(
+                            -- Prefer customer-facing product URLs (often already Azure/public)
+                            NULLIF(pLinked.ImageURL, ''),
+                            NULLIF(pById.ImageURL, ''),
+                            NULLIF(pBySku.ImageURL, ''),
+                            NULLIF(JSON_VALUE(pLinked.ThumbnailURLs, '$[0]'), ''),
+                            NULLIF(JSON_VALUE(pById.ThumbnailURLs, '$[0]'), ''),
+                            NULLIF(JSON_VALUE(pBySku.ThumbnailURLs, '$[0]'), ''),
+                            -- Fallback to InventoryProducts.ImageURL (often local /uploads path)
+                            NULLIF(ip.ImageURL, '')
+                        ) as InventoryProductImageURL,
                         ip.DateAdded,
                         (COALESCE(ip.AvailableQuantity, 0) + COALESCE(ip.DamagedQuantity, 0)) as TotalQuantity,
                         COALESCE(ip.AvailableQuantity, 0) as AvailableQuantity,
@@ -2254,6 +2489,11 @@ module.exports = function (sql, pool, getStripe = null) {
                         ip.InventoryNotes as Notes,
                         ip.DateUpdated
                     FROM InventoryProducts ip
+                    LEFT JOIN Products pLinked ON pLinked.ProductID = ip.ProductID AND pLinked.IsActive = 1
+                    LEFT JOIN Products pById ON pById.ProductID = ip.InventoryProductID AND pById.IsActive = 1
+                    LEFT JOIN Products pBySku 
+                        ON UPPER(LTRIM(RTRIM(pBySku.SKU))) = UPPER(LTRIM(RTRIM(ip.SKU))) 
+                        AND pBySku.IsActive = 1
                     WHERE ip.IsActive = 1
                     ORDER BY ip.DateAdded DESC
                 `);
@@ -2409,7 +2649,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     // Handle main image
                     if (req.files.image) {
                         const imageFile = req.files.image[0];
-                        const imageUrl = `/uploads/products/images/${imageFile.filename}`;
+                        const imageUrl = publicUrlFromMulterProductFile(imageFile);
                         await transaction.request()
                             .input('productId', sql.Int, productId)
                             .input('imageUrl', sql.NVarChar, imageUrl)
@@ -2421,7 +2661,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     for (let i = 1; i <= 4; i++) {
                         if (req.files[`thumbnail${i}`]) {
                             const thumbnailFile = req.files[`thumbnail${i}`][0];
-                            thumbnails.push(`/uploads/products/thumbnails/${thumbnailFile.filename}`);
+                            thumbnails.push(publicUrlFromMulterProductFile(thumbnailFile));
                         }
                     }
 
@@ -2601,7 +2841,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         await deleteOldImageFile(currentImageUrl);
 
                         const imageFile = req.files.image[0];
-                        const imageUrl = `/uploads/products/images/${imageFile.filename}`;
+                        const imageUrl = publicUrlFromMulterProductFile(imageFile);
                         await transaction.request()
                             .input('productId', sql.Int, productid)
                             .input('imageUrl', sql.NVarChar, imageUrl)
@@ -2637,7 +2877,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     if (req.files.thumbnails && req.files.thumbnails.length > 0) {
                         const bulkThumbs = req.files.thumbnails
                             .slice(0, slots)
-                            .map(file => `/uploads/products/thumbnails/${file.filename}`);
+                            .map(file => publicUrlFromMulterProductFile(file));
 
                         thumbnailSlots = bulkThumbs;
                         thumbnailsChanged = true;
@@ -2648,7 +2888,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         for (let i = 1; i <= slots; i++) {
                             if (req.files[`thumbnail${i}`]) {
                                 const thumbnailFile = req.files[`thumbnail${i}`][0];
-                                const newPath = `/uploads/products/thumbnails/${thumbnailFile.filename}`;
+                                const newPath = publicUrlFromMulterProductFile(thumbnailFile);
                                 thumbnailSlots[i - 1] = newPath;
                                 thumbnailsChanged = true;
                             }
@@ -2920,11 +3160,11 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/Employee/InventoryManager/InventoryMaterials', isAuthenticated, checkPermission('inventory_materials'), async (req, res) => {
         try {
             await pool.connect();
-            
+
             // Fetch raw materials
             const result = await pool.request().query('SELECT * FROM RawMaterials WHERE IsActive = 1');
             const materials = result.recordset;
-            
+
             // Fetch measurement units
             let units = [];
             try {
@@ -2945,7 +3185,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             ('sheet'), ('board'), ('panel'), ('ft');
                     END
                 `);
-                
+
                 const unitsResult = await pool.request().query('SELECT UnitID, UnitName FROM MeasurementUnits WHERE IsActive = 1 ORDER BY UnitName');
                 units = unitsResult.recordset;
             } catch (unitsErr) {
@@ -2959,16 +3199,16 @@ module.exports = function (sql, pool, getStripe = null) {
                     { UnitID: 5, UnitName: 'l' }
                 ];
             }
-            
-            res.render('Employee/InventoryManager/InventoryMaterials', { 
-                user: req.session.user, 
+
+            res.render('Employee/InventoryManager/InventoryMaterials', {
+                user: req.session.user,
                 materials: materials,
                 units: units
             });
         } catch (err) {
             console.error('Error fetching raw materials:', err);
-            res.render('Employee/InventoryManager/InventoryMaterials', { 
-                user: req.session.user, 
+            res.render('Employee/InventoryManager/InventoryMaterials', {
+                user: req.session.user,
                 materials: [],
                 units: []
             });
@@ -3682,16 +3922,16 @@ module.exports = function (sql, pool, getStripe = null) {
             `);
             const bulkOrders = result.recordset;
 
-            res.render('Employee/InventoryManager/InventoryBulkOrders', { 
-                user: req.session.user, 
+            res.render('Employee/InventoryManager/InventoryBulkOrders', {
+                user: req.session.user,
                 bulkOrders,
                 activePage: 'bulk-orders'
             });
         } catch (err) {
             console.error('Error fetching bulk orders:', err);
-            res.render('Employee/InventoryManager/InventoryBulkOrders', { 
-                user: req.session.user, 
-                bulkOrders: [], 
+            res.render('Employee/InventoryManager/InventoryBulkOrders', {
+                user: req.session.user,
+                bulkOrders: [],
                 error: 'Failed to load bulk orders.',
                 activePage: 'bulk-orders'
             });
@@ -3865,12 +4105,12 @@ module.exports = function (sql, pool, getStripe = null) {
         router.get(`/Employee/InventoryManager/${route}`, isAuthenticated, checkPermission(permission), async (req, res) => {
             try {
                 await pool.connect();
-                
+
                 // Pagination parameters
                 const page = parseInt(req.query.page) || 1;
                 const limit = parseInt(req.query.limit) || 20;
                 const offset = (page - 1) * limit;
-                
+
                 // Get total count of orders
                 const countResult = await pool.request()
                     .input('status', sql.NVarChar, status)
@@ -3879,10 +4119,10 @@ module.exports = function (sql, pool, getStripe = null) {
                         FROM Orders o
                         WHERE o.Status = @status
                     `);
-                
+
                 const totalOrders = countResult.recordset[0].totalOrders;
                 const totalPages = Math.ceil(totalOrders / limit);
-                
+
                 // Fetch orders with pagination
                 const ordersResult = await pool.request()
                     .input('status', sql.NVarChar, status)
@@ -4880,14 +5120,14 @@ module.exports = function (sql, pool, getStripe = null) {
                     .input('stockquantity', sql.Int, parseInt(stockquantity))
                     .input('category', sql.NVarChar, category)
                     .input('dimensions', sql.NVarChar, dimensionsJson)
-                    .input('image', sql.NVarChar, req.files?.image ? `/uploads/products/${req.files.image[0].filename}` : null)
+                    .input('image', sql.NVarChar, req.files?.image ? publicUrlFromMulterProductFile(req.files.image[0]) : null)
                     .input('thumbnails', sql.NVarChar, req.files ? JSON.stringify([
-                        req.files.thumbnail1?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail1[0].filename}` : null,
-                        req.files.thumbnail2?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail2[0].filename}` : null,
-                        req.files.thumbnail3?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail3[0].filename}` : null,
-                        req.files.thumbnail4?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail4[0].filename}` : null
+                        req.files.thumbnail1?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail1[0]) : null,
+                        req.files.thumbnail2?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail2[0]) : null,
+                        req.files.thumbnail3?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail3[0]) : null,
+                        req.files.thumbnail4?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail4[0]) : null
                     ].filter(Boolean)) : null)
-                    .input('model3d', sql.NVarChar, req.files?.model3d ? `/uploads/products/models/${req.files.model3d[0].filename}` : null)
+                    .input('model3d', sql.NVarChar, req.files?.model3d ? publicUrlFromMulterProductFile(req.files.model3d[0]) : null)
                     .input('tempSku', sql.NVarChar, tempSku)
                     .input('tempSlug', sql.NVarChar, tempSlug)
                     .query(`
@@ -4997,14 +5237,14 @@ module.exports = function (sql, pool, getStripe = null) {
                     price: price ? parseFloat(price) : oldProduct.Price,
                     stockquantity: stockquantity ? parseInt(stockquantity) : oldProduct.StockQuantity,
                     category: category || oldProduct.Category,
-                    image: req.files?.image ? `/uploads/products/${req.files.image[0].filename}` : oldProduct.ImageURL,
+                    image: req.files?.image ? publicUrlFromMulterProductFile(req.files.image[0]) : oldProduct.ImageURL,
                     thumbnails: req.files ? JSON.stringify([
-                        req.files.thumbnail1?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail1[0].filename}` : null,
-                        req.files.thumbnail2?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail2[0].filename}` : null,
-                        req.files.thumbnail3?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail3[0].filename}` : null,
-                        req.files.thumbnail4?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail4[0].filename}` : null
+                        req.files.thumbnail1?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail1[0]) : null,
+                        req.files.thumbnail2?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail2[0]) : null,
+                        req.files.thumbnail3?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail3[0]) : null,
+                        req.files.thumbnail4?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail4[0]) : null
                     ].filter(Boolean)) : oldProduct.ThumbnailURLs,
-                    model3d: req.files?.model3d ? `/uploads/products/models/${req.files.model3d[0].filename}` : oldProduct.Model3DURL
+                    model3d: req.files?.model3d ? publicUrlFromMulterProductFile(req.files.model3d[0]) : oldProduct.Model3DURL
                 };
 
                 // Update product
@@ -6151,59 +6391,24 @@ module.exports = function (sql, pool, getStripe = null) {
             await pool.connect();
             const orderId = parseInt(req.params.orderId);
 
-            // Get order items before cancelling to restore stock
-            const orderItemsResult = await pool.request()
-                .input('orderId', sql.Int, orderId)
-                .query(`
-                    SELECT oi.ProductID, oi.Quantity, oi.VariationID
-                    FROM OrderItems oi
-                    WHERE oi.OrderID = @orderId
-                `);
-
-            // Restore stock for each item (cancelled orders should NOT add to ReturnedQuantity)
-            for (const item of orderItemsResult.recordset) {
-                if (item.VariationID) {
-                    // Update variation stock
-                    await pool.request()
-                        .input('variationID', sql.Int, item.VariationID)
-                        .input('quantity', sql.Int, item.Quantity)
-                        .query(`UPDATE ProductVariations SET StockQuantity = StockQuantity + @quantity WHERE VariationID = @variationID`);
-
-                    // Also update InventoryProductVariations available quantity if linked (NOT ReturnedQuantity)
-                    await pool.request()
-                        .input('variationID', sql.Int, item.VariationID)
-                        .input('quantity', sql.Int, item.Quantity)
-                        .query(`
-                            UPDATE InventoryProductVariations 
-                            SET AvailableQuantity = AvailableQuantity + @quantity,
-                                UpdatedAt = GETDATE()
-                            WHERE VariationID = @variationID
-                        `);
-                } else {
-                    // Update Products table stock
-                    await pool.request()
-                        .input('productId', sql.Int, item.ProductID)
-                        .input('quantity', sql.Int, item.Quantity)
-                        .query(`UPDATE Products SET StockQuantity = StockQuantity + @quantity WHERE ProductID = @productId`);
-
-                    // Update InventoryProducts available quantity if linked (NOT ReturnedQuantity)
-                    // Check if product is linked to InventoryProducts via ProductID or InventoryProductID
-                    await pool.request()
-                        .input('productId', sql.Int, item.ProductID)
-                        .input('quantity', sql.Int, item.Quantity)
-                        .query(`
-                            UPDATE InventoryProducts 
-                            SET AvailableQuantity = AvailableQuantity + @quantity,
-                                DateUpdated = GETDATE()
-                            WHERE ProductID = @productId OR InventoryProductID = @productId
-                        `);
-                }
+            try {
+                await refundGatewayForPendingCancel(orderId, '[TM-PENDING-CANCEL-REFUND]');
+            } catch (refundErr) {
+                console.error('[TRANSACTION MANAGER ORDER CANCELLATION] Refund failed:', refundErr);
+                return res.json({
+                    success: false,
+                    message: `Refund failed: ${refundErr.message}. Order was not cancelled.`
+                });
             }
 
-            // Update order status to cancelled
-            await pool.request()
+            const cancelResult = await pool.request()
                 .input('orderId', sql.Int, orderId)
-                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId`);
+                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId AND Status = N'Pending'`);
+            if (!cancelResult.rowsAffected || cancelResult.rowsAffected[0] === 0) {
+                return res.json({ success: false, message: 'Order not found or not in Pending status.' });
+            }
+
+            await updateBulkOrderStatus(orderId, 'Cancelled').catch((e) => console.error('[BULK ORDER UPDATE]', e));
 
             // Log the activity
             await logActivity(
@@ -6712,14 +6917,14 @@ module.exports = function (sql, pool, getStripe = null) {
                     .input('stockquantity', sql.Int, parseInt(stockquantity))
                     .input('category', sql.NVarChar, category)
                     .input('dimensions', sql.NVarChar, dimensionsJson)
-                    .input('image', sql.NVarChar, req.files?.image ? `/uploads/products/${req.files.image[0].filename}` : null)
+                    .input('image', sql.NVarChar, req.files?.image ? publicUrlFromMulterProductFile(req.files.image[0]) : null)
                     .input('thumbnails', sql.NVarChar, req.files ? JSON.stringify([
-                        req.files.thumbnail1?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail1[0].filename}` : null,
-                        req.files.thumbnail2?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail2[0].filename}` : null,
-                        req.files.thumbnail3?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail3[0].filename}` : null,
-                        req.files.thumbnail4?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail4[0].filename}` : null
+                        req.files.thumbnail1?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail1[0]) : null,
+                        req.files.thumbnail2?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail2[0]) : null,
+                        req.files.thumbnail3?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail3[0]) : null,
+                        req.files.thumbnail4?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail4[0]) : null
                     ].filter(Boolean)) : null)
-                    .input('model3d', sql.NVarChar, req.files?.model3d ? `/uploads/products/models/${req.files.model3d[0].filename}` : null)
+                    .input('model3d', sql.NVarChar, req.files?.model3d ? publicUrlFromMulterProductFile(req.files.model3d[0]) : null)
                     .input('tempSku', sql.NVarChar, tempSku)
                     .input('tempSlug', sql.NVarChar, tempSlug)
                     .query(`
@@ -6887,14 +7092,14 @@ module.exports = function (sql, pool, getStripe = null) {
                     price: price ? parseFloat(price) : oldProduct.Price,
                     stockquantity: stockquantity ? parseInt(stockquantity) : oldProduct.StockQuantity,
                     category: category || oldProduct.Category,
-                    image: req.files?.image ? `/uploads/products/${req.files.image[0].filename}` : oldProduct.ImageURL,
+                    image: req.files?.image ? publicUrlFromMulterProductFile(req.files.image[0]) : oldProduct.ImageURL,
                     thumbnails: req.files ? JSON.stringify([
-                        req.files.thumbnail1?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail1[0].filename}` : null,
-                        req.files.thumbnail2?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail2[0].filename}` : null,
-                        req.files.thumbnail3?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail3[0].filename}` : null,
-                        req.files.thumbnail4?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail4[0].filename}` : null
+                        req.files.thumbnail1?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail1[0]) : null,
+                        req.files.thumbnail2?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail2[0]) : null,
+                        req.files.thumbnail3?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail3[0]) : null,
+                        req.files.thumbnail4?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail4[0]) : null
                     ].filter(Boolean)) : oldProduct.ThumbnailURLs,
-                    model3d: req.files?.model3d ? `/uploads/products/models/${req.files.model3d[0].filename}` : oldProduct.Model3DURL
+                    model3d: req.files?.model3d ? publicUrlFromMulterProductFile(req.files.model3d[0]) : oldProduct.Model3DURL
                 };
 
                 // Update product
@@ -7608,72 +7813,31 @@ module.exports = function (sql, pool, getStripe = null) {
             await pool.connect();
             const orderId = parseInt(req.params.orderId);
 
-            // Get order items before cancelling to restore stock
-            const orderItemsResult = await pool.request()
-                .input('orderId', sql.Int, orderId)
-                .query(`
-                    SELECT oi.ProductID, oi.Quantity, oi.VariationID
-                    FROM OrderItems oi
-                    WHERE oi.OrderID = @orderId
-                `);
-
-            // Restore stock for each item (cancelled orders should NOT add to ReturnedQuantity)
-            for (const item of orderItemsResult.recordset) {
-                if (item.VariationID) {
-                    // Update variation stock
-                    await pool.request()
-                        .input('variationID', sql.Int, item.VariationID)
-                        .input('quantity', sql.Int, item.Quantity)
-                        .query(`UPDATE ProductVariations SET StockQuantity = StockQuantity + @quantity WHERE VariationID = @variationID`);
-
-                    // Also update InventoryProductVariations available quantity if linked (NOT ReturnedQuantity)
-                    await pool.request()
-                        .input('variationID', sql.Int, item.VariationID)
-                        .input('quantity', sql.Int, item.Quantity)
-                        .query(`
-                            UPDATE InventoryProductVariations 
-                            SET AvailableQuantity = AvailableQuantity + @quantity,
-                                UpdatedAt = GETDATE()
-                            WHERE VariationID = @variationID
-                        `);
-                } else {
-                    // Update Products table stock
-                    await pool.request()
-                        .input('productId', sql.Int, item.ProductID)
-                        .input('quantity', sql.Int, item.Quantity)
-                        .query(`UPDATE Products SET StockQuantity = StockQuantity + @quantity WHERE ProductID = @productId`);
-
-                    // Update InventoryProducts available quantity if linked (NOT ReturnedQuantity)
-                    // Check if product is linked to InventoryProducts via ProductID or InventoryProductID
-                    await pool.request()
-                        .input('productId', sql.Int, item.ProductID)
-                        .input('quantity', sql.Int, item.Quantity)
-                        .query(`
-                            UPDATE InventoryProducts 
-                            SET AvailableQuantity = AvailableQuantity + @quantity,
-                                DateUpdated = GETDATE()
-                            WHERE ProductID = @productId OR InventoryProductID = @productId
-                        `);
-                }
+            try {
+                await refundGatewayForPendingCancel(orderId, '[UM-PENDING-CANCEL-REFUND]');
+            } catch (refundErr) {
+                console.error('[USER MANAGER ORDER CANCELLATION] Refund failed:', refundErr);
+                return res.json({
+                    success: false,
+                    message: `Refund failed: ${refundErr.message}. Order was not cancelled.`
+                });
             }
 
-            // Update order status to cancelled
-            await pool.request()
+            const cancelResult = await pool.request()
                 .input('orderId', sql.Int, orderId)
-                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId`);
+                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId AND Status = N'Pending'`);
+            if (!cancelResult.rowsAffected || cancelResult.rowsAffected[0] === 0) {
+                return res.json({ success: false, message: 'Order not found or not in Pending status.' });
+            }
 
-            // Log the activity
+            await updateBulkOrderStatus(orderId, 'Cancelled').catch((e) => console.error('[BULK ORDER UPDATE]', e));
+
             await logActivity(
                 req.session.user.id,
                 'CANCEL',
+                'Orders',
                 orderId,
-                `Order #${orderId} cancelled by User Manager - stock restored`,
-                {
-                    oldStatus: 'Pending',
-                    newStatus: 'Cancelled',
-                    itemsRestored: orderItemsResult.recordset.length
-                },
-                'UserManager'
+                `Order #${orderId} cancelled by User Manager`
             );
 
             res.json({ success: true });
@@ -8636,14 +8800,14 @@ module.exports = function (sql, pool, getStripe = null) {
                     .input('stockquantity', sql.Int, parseInt(stockquantity))
                     .input('category', sql.NVarChar, category)
                     .input('dimensions', sql.NVarChar, dimensionsJson)
-                    .input('image', sql.NVarChar, req.files?.image ? `/uploads/products/${req.files.image[0].filename}` : null)
+                    .input('image', sql.NVarChar, req.files?.image ? publicUrlFromMulterProductFile(req.files.image[0]) : null)
                     .input('thumbnails', sql.NVarChar, req.files ? JSON.stringify([
-                        req.files.thumbnail1?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail1[0].filename}` : null,
-                        req.files.thumbnail2?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail2[0].filename}` : null,
-                        req.files.thumbnail3?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail3[0].filename}` : null,
-                        req.files.thumbnail4?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail4[0].filename}` : null
+                        req.files.thumbnail1?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail1[0]) : null,
+                        req.files.thumbnail2?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail2[0]) : null,
+                        req.files.thumbnail3?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail3[0]) : null,
+                        req.files.thumbnail4?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail4[0]) : null
                     ].filter(Boolean)) : null)
-                    .input('model3d', sql.NVarChar, req.files?.model3d ? `/uploads/products/models/${req.files.model3d[0].filename}` : null)
+                    .input('model3d', sql.NVarChar, req.files?.model3d ? publicUrlFromMulterProductFile(req.files.model3d[0]) : null)
                     .input('tempSku', sql.NVarChar, tempSku)
                     .input('tempSlug', sql.NVarChar, tempSlug)
                     .query(`
@@ -8753,14 +8917,14 @@ module.exports = function (sql, pool, getStripe = null) {
                     price: price ? parseFloat(price) : oldProduct.Price,
                     stockquantity: stockquantity ? parseInt(stockquantity) : oldProduct.StockQuantity,
                     category: category || oldProduct.Category,
-                    image: req.files?.image ? `/uploads/products/${req.files.image[0].filename}` : oldProduct.ImageURL,
+                    image: req.files?.image ? publicUrlFromMulterProductFile(req.files.image[0]) : oldProduct.ImageURL,
                     thumbnails: req.files ? JSON.stringify([
-                        req.files.thumbnail1?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail1[0].filename}` : null,
-                        req.files.thumbnail2?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail2[0].filename}` : null,
-                        req.files.thumbnail3?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail3[0].filename}` : null,
-                        req.files.thumbnail4?.[0]?.filename ? `/uploads/products/thumbnails/${req.files.thumbnail4[0].filename}` : null
+                        req.files.thumbnail1?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail1[0]) : null,
+                        req.files.thumbnail2?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail2[0]) : null,
+                        req.files.thumbnail3?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail3[0]) : null,
+                        req.files.thumbnail4?.[0] ? publicUrlFromMulterProductFile(req.files.thumbnail4[0]) : null
                     ].filter(Boolean)) : oldProduct.ThumbnailURLs,
-                    model3d: req.files?.model3d ? `/uploads/products/models/${req.files.model3d[0].filename}` : oldProduct.Model3DURL
+                    model3d: req.files?.model3d ? publicUrlFromMulterProductFile(req.files.model3d[0]) : oldProduct.Model3DURL
                 };
 
                 // Update product
@@ -9373,59 +9537,24 @@ module.exports = function (sql, pool, getStripe = null) {
             await pool.connect();
             const orderId = parseInt(req.params.orderId);
 
-            // Get order items before cancelling to restore stock
-            const orderItemsResult = await pool.request()
-                .input('orderId', sql.Int, orderId)
-                .query(`
-                    SELECT oi.ProductID, oi.Quantity, oi.VariationID
-                    FROM OrderItems oi
-                    WHERE oi.OrderID = @orderId
-                `);
-
-            // Restore stock for each item (cancelled orders should NOT add to ReturnedQuantity)
-            for (const item of orderItemsResult.recordset) {
-                if (item.VariationID) {
-                    // Update variation stock
-                    await pool.request()
-                        .input('variationID', sql.Int, item.VariationID)
-                        .input('quantity', sql.Int, item.Quantity)
-                        .query(`UPDATE ProductVariations SET StockQuantity = StockQuantity + @quantity WHERE VariationID = @variationID`);
-
-                    // Also update InventoryProductVariations available quantity if linked (NOT ReturnedQuantity)
-                    await pool.request()
-                        .input('variationID', sql.Int, item.VariationID)
-                        .input('quantity', sql.Int, item.Quantity)
-                        .query(`
-                            UPDATE InventoryProductVariations 
-                            SET AvailableQuantity = AvailableQuantity + @quantity,
-                                UpdatedAt = GETDATE()
-                            WHERE VariationID = @variationID
-                        `);
-                } else {
-                    // Update Products table stock
-                    await pool.request()
-                        .input('productId', sql.Int, item.ProductID)
-                        .input('quantity', sql.Int, item.Quantity)
-                        .query(`UPDATE Products SET StockQuantity = StockQuantity + @quantity WHERE ProductID = @productId`);
-
-                    // Update InventoryProducts available quantity if linked (NOT ReturnedQuantity)
-                    // Check if product is linked to InventoryProducts via ProductID or InventoryProductID
-                    await pool.request()
-                        .input('productId', sql.Int, item.ProductID)
-                        .input('quantity', sql.Int, item.Quantity)
-                        .query(`
-                            UPDATE InventoryProducts 
-                            SET AvailableQuantity = AvailableQuantity + @quantity,
-                                DateUpdated = GETDATE()
-                            WHERE ProductID = @productId OR InventoryProductID = @productId
-                        `);
-                }
+            try {
+                await refundGatewayForPendingCancel(orderId, '[OS-PENDING-CANCEL-REFUND]');
+            } catch (refundErr) {
+                console.error('[ORDER SUPPORT ORDER CANCELLATION] Refund failed:', refundErr);
+                return res.json({
+                    success: false,
+                    message: `Refund failed: ${refundErr.message}. Order was not cancelled.`
+                });
             }
 
-            // Update order status to cancelled
-            await pool.request()
+            const cancelResult = await pool.request()
                 .input('orderId', sql.Int, orderId)
-                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId`);
+                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId AND Status = N'Pending'`);
+            if (!cancelResult.rowsAffected || cancelResult.rowsAffected[0] === 0) {
+                return res.json({ success: false, message: 'Order not found or not in Pending status.' });
+            }
+
+            await updateBulkOrderStatus(orderId, 'Cancelled').catch((e) => console.error('[BULK ORDER UPDATE]', e));
 
             res.json({ success: true });
         } catch (err) {
@@ -10471,10 +10600,12 @@ module.exports = function (sql, pool, getStripe = null) {
             // Additional tracking/payment columns for walk-in cards
             const extraColumns = [
                 { name: 'OrderNumber', type: 'NVARCHAR(50)' },
-                { name: 'TransactionID', type: 'NVARCHAR(50)' },
+                { name: 'TransactionID', type: 'NVARCHAR(120)' },
                 { name: 'PaymentMethod', type: 'NVARCHAR(50)' },
                 { name: 'PaymentStatus', type: 'NVARCHAR(50)' },
-                { name: 'StripeSessionID', type: 'NVARCHAR(255)' }
+                { name: 'StripeSessionID', type: 'NVARCHAR(255)' },
+                { name: 'AddressHouseNumber', type: 'NVARCHAR(100)' },
+                { name: 'AddressStreet', type: 'NVARCHAR(500)' }
             ];
             for (const col of extraColumns) {
                 const exists = await pool.request().query(`
@@ -10490,6 +10621,24 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
+            // Widen legacy TransactionID column if still NVARCHAR(50)
+            try {
+                const txnLen = await pool.request().query(`
+                    SELECT CHARACTER_MAXIMUM_LENGTH AS len
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_NAME = 'WalkInOrders' AND COLUMN_NAME = 'TransactionID'
+                `);
+                const len = txnLen.recordset?.[0]?.len;
+                if (len && len < 120) {
+                    await pool.request().query(`
+                        ALTER TABLE WalkInOrders ALTER COLUMN TransactionID NVARCHAR(120) NULL
+                    `);
+                    console.log('Widened WalkInOrders.TransactionID to NVARCHAR(120)');
+                }
+            } catch (widenErr) {
+                console.warn('Could not widen WalkInOrders.TransactionID:', widenErr.message);
+            }
+
             console.log('WalkInOrders table setup completed');
         } catch (err) {
             console.error('Error in ensureWalkInOrdersTable:', err);
@@ -10502,8 +10651,29 @@ module.exports = function (sql, pool, getStripe = null) {
         try {
             await pool.connect();
             await ensureWalkInOrdersTable(pool);
-            const { customerName, address, contactNumber, contactEmail, orderedProducts, discount, totalAmount, expectedArrival, deliveryType, deliveryRate, addressRegion, addressProvince, addressCity, addressBarangay, addressPostalCode, paymentMethod, stripeSessionId } = req.body;
+            const { customerName, address, contactNumber, contactEmail, orderedProducts, discount, totalAmount, expectedArrival, deliveryType, deliveryRate, addressRegion, addressProvince, addressCity, addressBarangay, addressPostalCode, addressHouseNumber, addressStreet, paymentMethod, stripeSessionId } = req.body;
             const ordered = JSON.parse(orderedProducts || '[]');
+
+            const pmKey = String(paymentMethod || 'cash').toLowerCase();
+            let walkInPaymentLabel = 'Cash';
+            if (pmKey === 'stripe') walkInPaymentLabel = 'Stripe';
+            else if (pmKey === 'paymongo') walkInPaymentLabel = 'PayMongo';
+
+            const gatewayAwaitingPayment = pmKey === 'stripe' || pmKey === 'paymongo';
+            const walkInPaymentStatusForInsert = gatewayAwaitingPayment ? 'Pending' : 'Paid';
+            const linkedOrderPaymentStatusForInsert = gatewayAwaitingPayment ? 'Pending' : 'Paid';
+
+            if (deliveryType === 'pickup' && pmKey !== 'cash') {
+                return res.status(400).send('Pickup orders can only use Cash payment.');
+            }
+
+            if (deliveryType === 'delivery') {
+                const hn = String(addressHouseNumber || '').trim();
+                const st = String(addressStreet || '').trim();
+                if (!hn && !st) {
+                    return res.status(400).send('Delivery requires House/Unit and/or Street in the delivery address (use Add Address).');
+                }
+            }
 
             // Determine delivery type - if deliveryRate is provided, use it; otherwise use deliveryType
             const finalDeliveryType = (deliveryType === 'delivery' && deliveryRate) ? deliveryRate : (deliveryType || 'pickup');
@@ -10578,6 +10748,73 @@ module.exports = function (sql, pool, getStripe = null) {
                 return 'E-Wallet';
             }
 
+            async function resolveLinkedOrderPaymentMethodFromWalkIn(walkInLabel) {
+                let allowed = [];
+                try {
+                    const constraintResult = await pool.request().query(`
+                        SELECT TOP 1 cc.definition
+                        FROM sys.check_constraints cc
+                        INNER JOIN sys.objects o ON cc.parent_object_id = o.object_id
+                        WHERE o.name = 'Orders' AND cc.name = 'CHK_PaymentMethod'
+                    `);
+                    const definition = constraintResult.recordset?.[0]?.definition || '';
+                    const matcher = /'([^']+)'/g;
+                    let match;
+                    while ((match = matcher.exec(definition)) !== null) {
+                        if (match[1]) allowed.push(match[1]);
+                    }
+                } catch (constraintErr) {
+                    console.warn('[WALKIN LINKED ORDER] Could not read CHK_PaymentMethod:', constraintErr.message);
+                }
+
+                const label = String(walkInLabel || 'Cash');
+                if (label === 'Stripe') {
+                    const hit = allowed.find(a => /e-wallet|wallet|stripe|card/i.test(a));
+                    if (hit) return hit;
+                    return 'E-Wallet';
+                }
+                if (label === 'PayMongo') {
+                    if (allowed.includes('PayMongo')) return 'PayMongo';
+                    const hit = allowed.find(a => /paymongo/i.test(a));
+                    if (hit) return hit;
+                    return 'E-Wallet';
+                }
+                const cod = allowed.find(a => /cash on delivery|cod/i.test(a));
+                if (cod) return cod;
+                if (allowed.includes('Cash')) return 'Cash';
+                return await resolveAllowedPaymentMethod();
+            }
+
+            const lineSubtotal = ordered.reduce((sum, it) => {
+                const unit = Number(it.unitPrice || 0);
+                const qty = Math.max(0, parseInt(it.quantity || 0, 10));
+                return sum + unit * qty;
+            }, 0);
+            const discPct = Number(discount || 0);
+            const safeDiscPct = Math.min(100, Math.max(0, Number.isFinite(discPct) ? discPct : 0));
+            const discountedMerchandise = lineSubtotal * (1 - safeDiscPct / 100);
+
+            let walkInServiceType = 'Standard Delivery';
+            let walkInDeliveryCost = 0;
+            if (finalDeliveryType && String(finalDeliveryType).startsWith('rate_')) {
+                const rateId = parseInt(String(finalDeliveryType).replace('rate_', ''), 10);
+                if (!Number.isNaN(rateId)) {
+                    const rateResult = await pool.request()
+                        .input('rateId', sql.Int, rateId)
+                        .query(`
+                            SELECT TOP 1 ServiceType, Price
+                            FROM RegionDeliveryRates
+                            WHERE RegionRateID = @rateId
+                        `);
+                    if (rateResult.recordset.length > 0) {
+                        walkInServiceType = rateResult.recordset[0].ServiceType || walkInServiceType;
+                        walkInDeliveryCost = Number(rateResult.recordset[0].Price || 0);
+                    }
+                }
+            }
+
+            const finalOrderTotal = Math.round((discountedMerchandise + walkInDeliveryCost) * 100) / 100;
+
             // Insert bulk order with ETA
             const nowForIds = new Date();
             const walkInTransactionId = generateTransactionId(nowForIds);
@@ -10588,7 +10825,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 .input('ContactEmail', contactEmail || '')
                 .input('OrderedProducts', orderedProducts || '')
                 .input('Discount', Number(discount || 0))
-                .input('TotalAmount', Number(totalAmount || 0))
+                .input('TotalAmount', Number(finalOrderTotal))
                 .input('ExpectedArrival', expectedArrival ? new Date(expectedArrival) : null)
                 .input('DeliveryType', finalDeliveryType)
                 .input('AddressRegion', addressRegion || null)
@@ -10596,16 +10833,18 @@ module.exports = function (sql, pool, getStripe = null) {
                 .input('AddressCity', addressCity || null)
                 .input('AddressBarangay', addressBarangay || null)
                 .input('AddressPostalCode', addressPostalCode || null)
-                .input('PaymentMethod', (paymentMethod || 'Cash').toLowerCase() === 'stripe' ? 'Stripe' : 'Cash')
-                .input('PaymentStatus', (paymentMethod || '').toLowerCase() === 'stripe' ? 'Paid' : 'Paid')
+                .input('AddressHouseNumber', addressHouseNumber || null)
+                .input('AddressStreet', addressStreet || null)
+                .input('PaymentMethod', walkInPaymentLabel)
+                .input('PaymentStatus', walkInPaymentStatusForInsert)
                 .input('StripeSessionID', stripeSessionId || null)
                 .input('TransactionID', walkInTransactionId)
                 .query(`
                     INSERT INTO WalkInOrders 
-                        (CustomerName, Address, ContactNumber, ContactEmail, OrderedProducts, Discount, TotalAmount, Status, ExpectedArrival, DeliveryType, AddressRegion, AddressProvince, AddressCity, AddressBarangay, AddressPostalCode, PaymentMethod, PaymentStatus, StripeSessionID, TransactionID)
+                        (CustomerName, Address, ContactNumber, ContactEmail, OrderedProducts, Discount, TotalAmount, Status, ExpectedArrival, DeliveryType, AddressRegion, AddressProvince, AddressCity, AddressBarangay, AddressPostalCode, AddressHouseNumber, AddressStreet, PaymentMethod, PaymentStatus, StripeSessionID, TransactionID)
                     OUTPUT INSERTED.BulkOrderID
                     VALUES 
-                        (@CustomerName, @Address, @ContactNumber, @ContactEmail, @OrderedProducts, @Discount, @TotalAmount, 'Processing', @ExpectedArrival, @DeliveryType, @AddressRegion, @AddressProvince, @AddressCity, @AddressBarangay, @AddressPostalCode, @PaymentMethod, @PaymentStatus, @StripeSessionID, @TransactionID)
+                        (@CustomerName, @Address, @ContactNumber, @ContactEmail, @OrderedProducts, @Discount, @TotalAmount, 'Processing', @ExpectedArrival, @DeliveryType, @AddressRegion, @AddressProvince, @AddressCity, @AddressBarangay, @AddressPostalCode, @AddressHouseNumber, @AddressStreet, @PaymentMethod, @PaymentStatus, @StripeSessionID, @TransactionID)
                 `);
             const walkInOrderId = walkInInsert.recordset?.[0]?.BulkOrderID;
             const walkInOrderNumber = generateReferenceNumber(nowForIds, walkInOrderId);
@@ -10616,7 +10855,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
             // If delivery and customer email is valid, create a linked customer Order for dashboard tracking
             if (deliveryType === 'delivery' && linkedCustomer && walkInOrderId) {
-                const safePaymentMethod = await resolveAllowedPaymentMethod();
+                const safePaymentMethod = await resolveLinkedOrderPaymentMethodFromWalkIn(walkInPaymentLabel);
                 console.log('[WALKIN LINKED ORDER] Using PaymentMethod:', safePaymentMethod);
 
                 // Ensure LinkedOrderID column exists
@@ -10633,11 +10872,13 @@ module.exports = function (sql, pool, getStripe = null) {
 
                 // Reuse existing customer address if exact match exists, otherwise create one
                 let shippingAddressId = null;
+                const shipHouse = addressHouseNumber ? String(addressHouseNumber).trim() : null;
+                const shipStreet = addressStreet ? String(addressStreet).trim() : null;
                 if (addressCity || addressProvince || addressRegion) {
                     const existingAddressResult = await pool.request()
                         .input('customerId', sql.Int, linkedCustomer.CustomerID)
-                        .input('houseNumber', sql.NVarChar, null)
-                        .input('street', sql.NVarChar, null)
+                        .input('houseNumber', sql.NVarChar, shipHouse)
+                        .input('street', sql.NVarChar, shipStreet)
                         .input('barangay', sql.NVarChar, addressBarangay || null)
                         .input('city', sql.NVarChar, addressCity || null)
                         .input('province', sql.NVarChar, addressProvince || null)
@@ -10647,6 +10888,8 @@ module.exports = function (sql, pool, getStripe = null) {
                             SELECT TOP 1 AddressID
                             FROM CustomerAddresses
                             WHERE CustomerID = @customerId
+                              AND ISNULL(HouseNumber,'') = ISNULL(@houseNumber,'')
+                              AND ISNULL(Street,'') = ISNULL(@street,'')
                               AND ISNULL(Barangay,'') = ISNULL(@barangay,'')
                               AND ISNULL(City,'') = ISNULL(@city,'')
                               AND ISNULL(Province,'') = ISNULL(@province,'')
@@ -10661,8 +10904,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         const newAddressResult = await pool.request()
                             .input('customerId', sql.Int, linkedCustomer.CustomerID)
                             .input('label', sql.NVarChar, 'Walk-in Delivery')
-                            .input('houseNumber', sql.NVarChar, null)
-                            .input('street', sql.NVarChar, null)
+                            .input('houseNumber', sql.NVarChar, shipHouse)
+                            .input('street', sql.NVarChar, shipStreet)
                             .input('barangay', sql.NVarChar, addressBarangay || null)
                             .input('city', sql.NVarChar, addressCity || null)
                             .input('province', sql.NVarChar, addressProvince || null)
@@ -10680,31 +10923,14 @@ module.exports = function (sql, pool, getStripe = null) {
                     }
                 }
 
-                // Determine service type and delivery cost from rate table
-                let serviceType = 'Standard Delivery';
-                let deliveryCost = 0;
-                if (finalDeliveryType && String(finalDeliveryType).startsWith('rate_')) {
-                    const rateId = parseInt(String(finalDeliveryType).replace('rate_', ''));
-                    if (!Number.isNaN(rateId)) {
-                        const rateResult = await pool.request()
-                            .input('rateId', sql.Int, rateId)
-                            .query(`
-                                SELECT TOP 1 ServiceType, Price
-                                FROM RegionDeliveryRates
-                                WHERE RegionRateID = @rateId
-                            `);
-                        if (rateResult.recordset.length > 0) {
-                            serviceType = rateResult.recordset[0].ServiceType || serviceType;
-                            deliveryCost = Number(rateResult.recordset[0].Price || 0);
-                        }
-                    }
-                }
+                const serviceType = walkInServiceType;
+                const deliveryCost = walkInDeliveryCost;
 
                 const now = new Date();
                 const orderInsertResult = await pool.request()
                     .input('customerId', sql.Int, linkedCustomer.CustomerID)
                     .input('status', sql.NVarChar, 'Pending')
-                    .input('totalAmount', sql.Decimal(10, 2), Number(totalAmount || 0))
+                    .input('totalAmount', sql.Decimal(10, 2), finalOrderTotal)
                     .input('paymentMethod', sql.NVarChar, safePaymentMethod)
                     .input('currency', sql.NVarChar, 'PHP')
                     .input('orderDate', sql.DateTime, now)
@@ -10713,13 +10939,14 @@ module.exports = function (sql, pool, getStripe = null) {
                     .input('deliveryType', sql.NVarChar, finalDeliveryType)
                     .input('serviceType', sql.NVarChar, serviceType)
                     .input('deliveryCost', sql.Decimal(10, 2), deliveryCost)
-                    .input('paymentStatus', sql.NVarChar, 'Paid')
+                    .input('paymentStatus', sql.NVarChar, linkedOrderPaymentStatusForInsert)
+                    .input('stripeSessionId', sql.NVarChar, stripeSessionId || null)
                     .query(`
                         INSERT INTO Orders
-                            (CustomerID, Status, TotalAmount, PaymentMethod, Currency, OrderDate, PaymentDate, ShippingAddressID, DeliveryType, ServiceType, DeliveryCost, PaymentStatus)
+                            (CustomerID, Status, TotalAmount, PaymentMethod, Currency, OrderDate, PaymentDate, ShippingAddressID, DeliveryType, ServiceType, DeliveryCost, PaymentStatus, StripeSessionID)
                         OUTPUT INSERTED.OrderID
                         VALUES
-                            (@customerId, @status, @totalAmount, @paymentMethod, @currency, @orderDate, @paymentDate, @shippingAddressId, @deliveryType, @serviceType, @deliveryCost, @paymentStatus)
+                            (@customerId, @status, @totalAmount, @paymentMethod, @currency, @orderDate, @paymentDate, @shippingAddressId, @deliveryType, @serviceType, @deliveryCost, @paymentStatus, @stripeSessionId)
                     `);
 
                 const linkedOrderId = orderInsertResult.recordset?.[0]?.OrderID || null;
@@ -10776,14 +11003,15 @@ module.exports = function (sql, pool, getStripe = null) {
 
                     // Email notification like customer receipt
                     try {
+                        if (!gatewayAwaitingPayment) {
                         await sendgridHelper.sendOrderReceiptEmail(
                             linkedCustomer.Email,
                             linkedCustomer.FullName || customerName || 'Customer',
                             {
                                 orderNumber: linkedOrderNumber,
-                                totalAmount: Number(totalAmount || 0),
+                                totalAmount: finalOrderTotal,
                                 paymentMethod: safePaymentMethod,
-                                paymentStatus: 'Paid',
+                                paymentStatus: linkedOrderPaymentStatusForInsert,
                                 deliveryType: finalDeliveryType,
                                 shippingCost: Number(deliveryCost || 0),
                                 extraDeliveryFee: 0,
@@ -10798,8 +11026,8 @@ module.exports = function (sql, pool, getStripe = null) {
                                     color: null
                                 })),
                                 shippingAddress: {
-                                    houseNumber: '',
-                                    street: '',
+                                    houseNumber: shipHouse || '',
+                                    street: shipStreet || '',
                                     barangay: addressBarangay || '',
                                     city: addressCity || '',
                                     province: addressProvince || '',
@@ -10809,6 +11037,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                 }
                             }
                         );
+                        }
                     } catch (mailErr) {
                         console.error('[WALKIN LINKED ORDER] Failed to send receipt email:', mailErr.message);
                     }
@@ -10836,8 +11065,31 @@ module.exports = function (sql, pool, getStripe = null) {
     router.post('/Employee/Admin/WalkIn/ProceedToDelivery/:id', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
-            const id = parseInt(req.params.id);
-            await pool.request().query(`UPDATE WalkInOrders SET Status = 'On delivery' WHERE BulkOrderID = ${id}`);
+            const id = parseInt(req.params.id, 10);
+            if (!id) {
+                return res.status(400).json({ success: false, message: 'Invalid walk-in order id' });
+            }
+
+            const confirmed = String(req.body?.confirmedGatewayTxnId ?? '').trim();
+            if (confirmed) {
+                await pool.request()
+                    .input('txn', sql.NVarChar, confirmed)
+                    .input('id', sql.Int, id)
+                    .query(`UPDATE WalkInOrders SET TransactionID = @txn WHERE BulkOrderID = @id`);
+                await pool.request()
+                    .input('txn', sql.NVarChar, confirmed)
+                    .input('id', sql.Int, id)
+                    .query(`
+                        UPDATE o SET o.TransactionID = @txn
+                        FROM Orders o
+                        INNER JOIN WalkInOrders w ON w.LinkedOrderID = o.OrderID
+                        WHERE w.BulkOrderID = @id
+                    `);
+            }
+
+            await pool.request()
+                .input('id', sql.Int, id)
+                .query(`UPDATE WalkInOrders SET Status = 'On delivery' WHERE BulkOrderID = @id`);
 
             // Sync to linked customer order so dashboard gets real-time status updates
             const linkResult = await pool.request()
@@ -10860,8 +11112,31 @@ module.exports = function (sql, pool, getStripe = null) {
     router.post('/Employee/Admin/WalkIn/Complete/:id', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
-            const id = parseInt(req.params.id);
-            await pool.request().query(`UPDATE WalkInOrders SET Status = 'Completed', CompletedAt = GETDATE() WHERE BulkOrderID = ${id}`);
+            const id = parseInt(req.params.id, 10);
+            if (!id) {
+                return res.status(400).json({ success: false, message: 'Invalid walk-in order id' });
+            }
+
+            const confirmed = String(req.body?.confirmedGatewayTxnId ?? '').trim();
+            if (confirmed) {
+                await pool.request()
+                    .input('txn', sql.NVarChar, confirmed)
+                    .input('id', sql.Int, id)
+                    .query(`UPDATE WalkInOrders SET TransactionID = @txn WHERE BulkOrderID = @id`);
+                await pool.request()
+                    .input('txn', sql.NVarChar, confirmed)
+                    .input('id', sql.Int, id)
+                    .query(`
+                        UPDATE o SET o.TransactionID = @txn
+                        FROM Orders o
+                        INNER JOIN WalkInOrders w ON w.LinkedOrderID = o.OrderID
+                        WHERE w.BulkOrderID = @id
+                    `);
+            }
+
+            await pool.request()
+                .input('id', sql.Int, id)
+                .query(`UPDATE WalkInOrders SET Status = 'Completed', CompletedAt = GETDATE() WHERE BulkOrderID = @id`);
 
             // Sync to linked customer order so dashboard sees completed delivery
             const linkResult = await pool.request()
@@ -11081,7 +11356,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 return res.status(500).json({ success: false, message: 'Stripe is not configured' });
             }
 
-            const { orderedProducts, customerName, contactEmail, totalAmount } = req.body || {};
+            const { orderedProducts, customerName, contactEmail, totalAmount, discount, shippingFee, deliveryType } = req.body || {};
             let ordered = [];
             try {
                 ordered = JSON.parse(orderedProducts || '[]');
@@ -11092,16 +11367,32 @@ module.exports = function (sql, pool, getStripe = null) {
                 return res.status(400).json({ success: false, message: 'No products to checkout' });
             }
 
+            const discPct = Number(discount || 0);
+            const safeDiscPct = Math.min(100, Math.max(0, Number.isFinite(discPct) ? discPct : 0));
+            const priceFactor = 1 - safeDiscPct / 100;
+            const shipPesos = deliveryType === 'delivery' ? Math.max(0, Number(shippingFee || 0)) : 0;
+
             const line_items = ordered.map(item => ({
                 price_data: {
                     currency: 'php',
                     product_data: {
                         name: String(item.name || 'Walk-in Item').replace(/\s*\(Stock:.*\)$/, '').trim()
                     },
-                    unit_amount: Math.round(Number(item.unitPrice || 0) * 100)
+                    unit_amount: Math.round(Number(item.unitPrice || 0) * 100 * priceFactor)
                 },
                 quantity: Math.max(1, Number(item.quantity || 1))
             }));
+
+            if (shipPesos > 0.001) {
+                line_items.push({
+                    price_data: {
+                        currency: 'php',
+                        product_data: { name: 'Shipping fee' },
+                        unit_amount: Math.round(shipPesos * 100)
+                    },
+                    quantity: 1
+                });
+            }
 
             req.session.pendingAdminWalkIn = req.body || {};
 
@@ -11110,7 +11401,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 payment_method_types: ['card'],
                 mode: 'payment',
                 line_items,
-                success_url: `${origin}/Employee/Admin/WalkIn?stripe=success`,
+                success_url: `${origin}/Employee/Admin/WalkIn/payment-receipt?provider=stripe&session_id={CHECKOUT_SESSION_ID}`,
                 cancel_url: `${origin}/Employee/Admin/WalkIn?stripe=cancelled`,
                 customer_email: contactEmail || undefined,
                 metadata: {
@@ -11124,6 +11415,217 @@ module.exports = function (sql, pool, getStripe = null) {
         } catch (err) {
             console.error('Error creating admin walk-in Stripe session:', err);
             return res.status(500).json({ success: false, message: 'Failed to create Stripe checkout session', error: err.message });
+        }
+    });
+
+    // Admin WalkIn PayMongo checkout session (gateway only)
+    router.post('/api/admin/walkin/create-paymongo-checkout', isAuthenticated, async (req, res) => {
+        try {
+            const paymongoSecretKey = process.env.PAYMONGO_SECRET_KEY;
+            if (!paymongoSecretKey) {
+                return res.status(500).json({ success: false, message: 'PayMongo is not configured' });
+            }
+
+            const { orderedProducts, customerName, contactEmail, totalAmount, discount, shippingFee, deliveryType } = req.body || {};
+            let ordered = [];
+            try {
+                ordered = JSON.parse(orderedProducts || '[]');
+            } catch (e) {
+                ordered = [];
+            }
+            if (!ordered.length) {
+                return res.status(400).json({ success: false, message: 'No products to checkout' });
+            }
+
+            const discPct = Number(discount || 0);
+            const safeDiscPct = Math.min(100, Math.max(0, Number.isFinite(discPct) ? discPct : 0));
+            const priceFactor = 1 - safeDiscPct / 100;
+            const shipPesos = deliveryType === 'delivery' ? Math.max(0, Number(shippingFee || 0)) : 0;
+
+            const line_items = ordered.map((item) => {
+                const qty = Math.max(1, parseInt(item.quantity || 1, 10));
+                const unit = Number(item.unitPrice || 0);
+                return {
+                    currency: 'PHP',
+                    amount: Math.round(unit * 100 * priceFactor) * qty,
+                    name: String(item.name || 'Walk-in Item').replace(/\s*\(Stock:.*\)$/, '').trim().slice(0, 200),
+                    quantity: qty
+                };
+            });
+
+            if (shipPesos > 0.001) {
+                line_items.push({
+                    currency: 'PHP',
+                    amount: Math.round(shipPesos * 100),
+                    name: 'Shipping fee',
+                    quantity: 1
+                });
+            }
+
+            const origin = `${req.protocol}://${req.get('host')}`;
+            const authHeader = `Basic ${Buffer.from(`${paymongoSecretKey}:`).toString('base64')}`;
+
+            const pmRes = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: authHeader
+                },
+                body: JSON.stringify({
+                    data: {
+                        attributes: {
+                            send_email_receipt: false,
+                            show_description: true,
+                            show_line_items: true,
+                            description: `Walk-in — ${customerName || 'Customer'} (${contactEmail || 'no email'})`,
+                            line_items,
+                            payment_method_types: ['card', 'gcash', 'paymaya'],
+                            success_url: `${origin}/Employee/Admin/WalkIn/payment-receipt?from=paymongo`,
+                            cancel_url: `${origin}/Employee/Admin/WalkIn?paymongo=cancelled`
+                        }
+                    }
+                })
+            });
+
+            const pmJson = await pmRes.json().catch(() => ({}));
+            if (!pmRes.ok || !pmJson?.data?.id) {
+                const errMsg = pmJson?.errors?.[0]?.detail || pmJson?.errors?.[0]?.code || 'PayMongo checkout failed';
+                console.error('[ADMIN WALKIN PAYMONGO]', errMsg, pmJson);
+                return res.status(500).json({ success: false, message: errMsg });
+            }
+
+            const sessionId = pmJson.data.id;
+            req.session.pendingWalkInPaymongoSessionId = sessionId;
+            const checkoutUrl = pmJson.data.attributes?.checkout_url;
+            if (!checkoutUrl) {
+                return res.status(500).json({ success: false, message: 'PayMongo did not return checkout_url' });
+            }
+
+            return res.json({ success: true, url: checkoutUrl, sessionId });
+        } catch (err) {
+            console.error('Error creating admin walk-in PayMongo session:', err);
+            return res.status(500).json({ success: false, message: err.message || 'PayMongo error' });
+        }
+    });
+
+    // Admin WalkIn: post-checkout receipt (Stripe redirects with session_id; PayMongo uses session cookie)
+    router.get('/Employee/Admin/WalkIn/payment-receipt', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const provider = String(req.query.provider || '').toLowerCase();
+            const fromPm = String(req.query.from || '').toLowerCase() === 'paymongo';
+            let checkoutSessionId = String(req.query.session_id || '').trim();
+            if (!checkoutSessionId && fromPm) {
+                checkoutSessionId = String(req.session.pendingWalkInPaymongoSessionId || '').trim();
+            }
+
+            const receipt = {
+                ok: false,
+                provider: provider === 'stripe' || fromPm ? (fromPm ? 'PayMongo' : 'Stripe') : 'Payment',
+                checkoutSessionId: checkoutSessionId || null,
+                paymentId: null,
+                amountDisplay: null,
+                currency: 'PHP',
+                status: null,
+                customerEmail: null,
+                message: null
+            };
+
+            const syncIds = async (paymentRef) => {
+                if (!checkoutSessionId || !paymentRef) return;
+                try {
+                    await pool.request()
+                        .input('sid', sql.NVarChar, checkoutSessionId)
+                        .input('pid', sql.NVarChar, paymentRef)
+                        .query(`
+                            UPDATE WalkInOrders SET TransactionID = @pid, PaymentStatus = N'Paid'
+                            WHERE StripeSessionID = @sid
+                        `);
+                    await pool.request()
+                        .input('sid', sql.NVarChar, checkoutSessionId)
+                        .input('pid', sql.NVarChar, paymentRef)
+                        .query(`
+                            UPDATE o SET o.TransactionID = @pid, o.PaymentStatus = N'Paid'
+                            FROM Orders o
+                            INNER JOIN WalkInOrders w ON w.LinkedOrderID = o.OrderID
+                            WHERE w.StripeSessionID = @sid
+                        `);
+                } catch (e) {
+                    console.warn('[WALKIN PAYMENT RECEIPT] Could not sync TransactionID:', e.message);
+                }
+            };
+
+            if (fromPm) {
+                if (!checkoutSessionId) {
+                    receipt.message = 'Missing PayMongo checkout session. Finish payment in the same browser you used to start checkout, then use this link again.';
+                } else if (!process.env.PAYMONGO_SECRET_KEY) {
+                    receipt.message = 'PayMongo is not configured on the server.';
+                } else {
+                    const authHeader = `Basic ${Buffer.from(`${process.env.PAYMONGO_SECRET_KEY}:`).toString('base64')}`;
+                    const pmRes = await fetch(
+                        `https://api.paymongo.com/v1/checkout_sessions/${encodeURIComponent(checkoutSessionId)}`,
+                        { headers: { accept: 'application/json', authorization: authHeader } }
+                    );
+                    const pmJson = await pmRes.json().catch(() => ({}));
+                    const attrs = pmJson?.data?.attributes;
+                    if (attrs) {
+                        receipt.ok = true;
+                        const payId = attrs.payments?.[0]?.id || null;
+                        receipt.paymentId = typeof payId === 'string' ? payId : null;
+                        receipt.status = attrs.status || attrs.payment_intent?.attributes?.status || null;
+                        const amtRaw = attrs.amount;
+                        if (amtRaw != null && Number.isFinite(Number(amtRaw))) {
+                            receipt.amountDisplay = (Number(amtRaw) / 100).toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            });
+                        }
+                        receipt.currency = (attrs.currency || 'PHP').toString().toUpperCase();
+                        receipt.customerEmail = attrs.billing?.email || attrs.customer_email || null;
+                        if (receipt.paymentId) await syncIds(receipt.paymentId);
+                    } else {
+                        receipt.message = 'Could not load PayMongo checkout session.';
+                    }
+                }
+                delete req.session.pendingWalkInPaymongoSessionId;
+            } else if (checkoutSessionId && getStripe) {
+                const stripe = getStripe();
+                if (stripe) {
+                    try {
+                        const sess = await stripe.checkout.sessions.retrieve(checkoutSessionId, {
+                            expand: ['payment_intent']
+                        });
+                        receipt.ok = true;
+                        const pi = sess.payment_intent;
+                        receipt.paymentId =
+                            typeof pi === 'string' ? pi : pi && typeof pi === 'object' ? pi.id : null;
+                        receipt.status = sess.payment_status || null;
+                        if (sess.amount_total != null) {
+                            receipt.amountDisplay = (Number(sess.amount_total) / 100).toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            });
+                        }
+                        receipt.currency = (sess.currency || 'php').toString().toUpperCase();
+                        receipt.customerEmail = sess.customer_details?.email || sess.customer_email || null;
+                        if (receipt.paymentId) await syncIds(receipt.paymentId);
+                    } catch (e) {
+                        receipt.message = e.message || 'Stripe session lookup failed';
+                    }
+                } else {
+                    receipt.message = 'Stripe is not configured';
+                }
+            } else {
+                receipt.message = 'Missing checkout session. Use the success link from Stripe, or return from PayMongo in the same browser.';
+            }
+
+            res.render('Employee/Admin/WalkInPaymentSuccess', {
+                user: req.session.user,
+                receipt
+            });
+        } catch (err) {
+            console.error('[WALKIN PAYMENT RECEIPT]', err);
+            res.status(500).send('Failed to load payment receipt');
         }
     });
 
@@ -11154,14 +11656,39 @@ module.exports = function (sql, pool, getStripe = null) {
                 END
             `);
 
+            // Keep walk-in cards in sync: if the linked customer order is already received/delivered/completed,
+            // the walk-in row should not stay stuck on "Processing" / "On delivery".
+            try {
+                await pool.request().query(`
+                    UPDATE w
+                    SET w.Status = N'Completed',
+                        w.CompletedAt = COALESCE(w.CompletedAt, GETDATE())
+                    FROM WalkInOrders w
+                    INNER JOIN Orders o ON o.OrderID = w.LinkedOrderID
+                    WHERE w.LinkedOrderID IS NOT NULL
+                      AND w.Status IN (N'Processing', N'On delivery')
+                      AND o.Status IN (N'Received', N'Delivered', N'Completed')
+                      AND NOT (
+                          w.PaymentMethod IN (N'Stripe', N'PayMongo')
+                          AND ISNULL(w.PaymentStatus, N'') = N'Pending'
+                      )
+                `);
+            } catch (syncErr) {
+                console.warn('[ADMIN WALKIN] Could not sync status from linked orders:', syncErr.message);
+            }
+
             // Query bulk orders
             const result = await pool.request().query(`
                 SELECT 
                     w.*,
                     o.ReferenceNumber AS LinkedOrderNumber,
-                    o.TransactionID AS LinkedTransactionID
+                    o.TransactionID AS LinkedTransactionID,
+                    o.Status AS LinkedOrderStatus,
+                    o.PaymentStatus AS LinkedOrderPaymentStatus,
+                    ISNULL(r.Price, 0) AS WalkInShippingFee
                 FROM WalkInOrders w
                 LEFT JOIN Orders o ON w.LinkedOrderID = o.OrderID
+                LEFT JOIN RegionDeliveryRates r ON w.DeliveryType = ('rate_' + CAST(r.RegionRateID AS NVARCHAR(20)))
                 ORDER BY w.CreatedAt DESC
             `);
             const bulkOrders = result.recordset;
@@ -13671,11 +14198,18 @@ module.exports = function (sql, pool, getStripe = null) {
 
     // --- Customer Chat API Endpoints (for frontend) ---
 
+    function isCustomerAuthenticatedUser(sessionUser) {
+        if (!sessionUser) return false;
+        const normalizedRole = typeof sessionUser.role === 'string' ? sessionUser.role.toLowerCase() : '';
+        const normalizedType = typeof sessionUser.type === 'string' ? sessionUser.type.toLowerCase() : '';
+        return normalizedType === 'customer' || normalizedRole === 'customer';
+    }
+
     // GET /api/chat/messages - Get messages for current customer
     router.get('/api/chat/messages', isAuthenticated, async (req, res) => {
         try {
             // Check if user is a customer
-            if (!req.session.user || req.session.user.role !== 'Customer') {
+            if (!isCustomerAuthenticatedUser(req.session.user)) {
                 return res.status(401).json({
                     success: false,
                     message: 'Access denied. Customer login required.'
@@ -13712,7 +14246,7 @@ module.exports = function (sql, pool, getStripe = null) {
     router.post('/api/chat/messages', isAuthenticated, async (req, res) => {
         try {
             // Check if user is a customer
-            if (!req.session.user || req.session.user.role !== 'Customer') {
+            if (!isCustomerAuthenticatedUser(req.session.user)) {
                 return res.status(401).json({
                     success: false,
                     message: 'Access denied. Customer login required.'
@@ -14108,12 +14642,18 @@ module.exports = function (sql, pool, getStripe = null) {
             // Handle uploaded images
             let heroBannerImages = [];
             if (req.files && req.files.length > 0) {
-                heroBannerImages = req.files.map(file => ({
-                    filename: file.filename,
-                    originalname: file.originalname,
-                    path: file.path,
-                    size: file.size
-                }));
+                heroBannerImages = req.files.map(file => {
+                    // When using Azure, file.azureUrl contains the full CDN URL
+                    const imageUrl = file.azureUrl || file.destination === 'azure-blob'
+                        ? (file.azureUrl || getBlobPublicUrl(file.filename))
+                        : `/uploads/hero-banners/${file.filename}`;
+                    return {
+                        filename: file.filename,
+                        originalname: file.originalname,
+                        path: imageUrl,
+                        size: file.size
+                    };
+                });
             }
 
             // Get existing images if no new ones uploaded
@@ -15145,13 +15685,9 @@ module.exports = function (sql, pool, getStripe = null) {
                 ? 'ISNULL(o.RefundAmount, 0) AS RefundAmount'
                 : '0 AS RefundAmount';
 
-            // Include Completed, Returned, Refunded, Completed Returned, and Declined orders in sales report
-            // Refunded and Completed Returned orders need to be included to calculate net sales properly
-            // Declined orders represent valid completed sales where a return request was rejected,
-            // so they should still be counted as sales (not as returns or refunds)
-            const whereClause = hasIsRefundedColumn
-                ? `AND (o.Status = 'Completed' OR o.Status = 'Returned' OR o.Status = 'Refunded' OR o.Status = 'Completed Returned' OR o.Status = 'Declined' OR (o.Status = 'Cancelled' AND ISNULL(o.IsRefunded, 0) = 1))`
-                : `AND (o.Status = 'Completed' OR o.Status = 'Returned' OR o.Status = 'Refunded' OR o.Status = 'Completed Returned' OR o.Status = 'Declined')`;
+            // Include all order lifecycle statuses in the admin sales report table/filtering.
+            // Revenue metrics are still computed with their own status-specific rules below.
+            const whereClause = '';
 
             query = `
                 SELECT 
@@ -15183,21 +15719,23 @@ module.exports = function (sql, pool, getStripe = null) {
                 request.input('search', sql.NVarChar, `%${search.trim()}%`);
             }
 
-            // Sales report includes 'Completed' and 'Returned' orders only
-            // Completed orders generate sales, Returned orders are used for returns calculation
-            // Cancelled orders are explicitly excluded from sales reports
-            // If a specific status filter is provided, it will override the default filter (but Cancelled is still excluded)
-            if (status && status.trim() !== '' && status.trim().toLowerCase() !== 'cancelled') {
+            // Apply explicit status filter when provided.
+            if (status && status.trim() !== '') {
                 query += ` AND o.Status = @status`;
                 request.input('status', sql.NVarChar, status.trim());
             }
-            // Note: Cancelled orders are always excluded from sales reports
-            // The main query includes 'Completed' and 'Returned' orders only
-            // This ensures we can calculate both sales and returns accurately
 
             if (payment && payment.trim() !== '') {
-                query += ` AND o.PaymentMethod = @payment`;
-                request.input('payment', sql.NVarChar, payment.trim());
+                const normalizedPayment = payment.trim();
+                if (normalizedPayment === 'Bank Card') {
+                    // Keep legacy values compatible with the new report label.
+                    query += ` AND (o.PaymentMethod = 'Bank Card' OR o.PaymentMethod = 'Bank Transfer' OR o.PaymentMethod = 'Stripe')`;
+                } else if (normalizedPayment === 'E-Wallet') {
+                    query += ` AND (o.PaymentMethod = 'E-Wallet' OR o.PaymentMethod = 'PayMongo')`;
+                } else {
+                    query += ` AND o.PaymentMethod = @payment`;
+                    request.input('payment', sql.NVarChar, normalizedPayment);
+                }
             }
 
             if (dateFrom && dateFrom.trim() !== '') {
@@ -15224,6 +15762,14 @@ module.exports = function (sql, pool, getStripe = null) {
 
             const result = await request.query(query);
 
+            // Normalize payment labels in reports (legacy "Bank Transfer"/"Stripe" => "Bank Card").
+            result.recordset.forEach(order => {
+                const pm = String(order.PaymentMethod || '').trim().toLowerCase();
+                if (pm === 'bank transfer' || pm === 'stripe') {
+                    order.PaymentMethod = 'Bank Card';
+                }
+            });
+
             // Count orders by status for reporting
             const ordersByStatus = {};
             result.recordset.forEach(order => {
@@ -15233,8 +15779,8 @@ module.exports = function (sql, pool, getStripe = null) {
             console.log('[SALES REPORT] Orders by status:', ordersByStatus);
 
             // Log order status breakdown
-            // Note: Only 'Completed' orders are included in the sales report by default
-            // Processing orders are not included - only completed sales generate reports
+            // Report can now include the full order workflow; calculations below still enforce
+            // status rules for sales/refund-specific metrics.
             const statusFilter = req.query.status || '';
             const returnedCount = (ordersByStatus['Returned'] || 0) + (ordersByStatus['returned'] || 0) + (ordersByStatus['Return'] || 0) + (ordersByStatus['return'] || 0) +
                 (ordersByStatus['Refunded'] || 0) + (ordersByStatus['refunded'] || 0) +
@@ -15244,11 +15790,9 @@ module.exports = function (sql, pool, getStripe = null) {
                 console.log('[SALES REPORT] ℹ️ Returned orders found:', returnedCount);
             }
 
-            // Get order IDs to fetch order items for detailed calculations
-            // Note: Only completed orders are included in sales report
-            // This ensures accurate revenue reporting (only finalized sales are counted)
+            // Get order IDs to fetch order items for detailed calculations.
             const orderIds = result.recordset.map(o => o.OrderID);
-            console.log('[SALES REPORT] Total completed orders found:', result.recordset.length);
+            console.log('[SALES REPORT] Total orders found:', result.recordset.length);
             console.log('[SALES REPORT] Order IDs:', orderIds);
 
             // Fetch order items for gross sales and discount calculations
@@ -15319,7 +15863,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             LEFT JOIN ProductVariations pv ON oi.VariationID = pv.VariationID
                             INNER JOIN Orders o ON oi.OrderID = o.OrderID
                             WHERE oi.OrderID IN (${orderIdParams})
-                            AND (o.Status = 'Completed' OR o.Status = 'Returned' OR o.Status = 'Refunded' OR o.Status = 'Completed Returned')
+                            AND o.Status <> 'Cancelled'
                         `;
 
                         const itemsRequest = pool.request();
@@ -15373,7 +15917,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             LEFT JOIN ProductVariations pv ON oi.VariationID = pv.VariationID
                             INNER JOIN Orders o ON oi.OrderID = o.OrderID
                             WHERE oi.OrderID IN (${orderIdParams})
-                            AND (o.Status = 'Completed' OR o.Status = 'Returned' OR o.Status = 'Refunded' OR o.Status = 'Completed Returned')
+                            AND o.Status <> 'Cancelled'
                             GROUP BY oi.OrderID
                         `;
 
@@ -15436,8 +15980,8 @@ module.exports = function (sql, pool, getStripe = null) {
             const deliveryRevenues = result.recordset
                 .filter(o => {
                     const status = (o.Status || '').toLowerCase();
-                    // Only count completed orders (not returned, refunded, or cancelled)
-                    return status === 'completed' || status === 'delivered';
+                    // Include active sales lifecycle statuses (exclude cancelled/refund outcomes).
+                    return status !== 'cancelled' && status !== 'returned' && status !== 'refunded' && status !== 'completed returned';
                 })
                 .reduce((sum, o) => {
                     return sum + parseFloat(o.DeliveryCost || 0) + parseFloat(o.ExtraDeliveryFee || 0);
@@ -15702,7 +16246,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             FROM OrderItems oi
                             INNER JOIN Orders o ON oi.OrderID = o.OrderID
                             WHERE oi.OrderID IN (${orderIdParams})
-                            AND o.Status = 'Completed'
+                            AND o.Status NOT IN ('Cancelled', 'Refunded', 'Completed Returned')
                         `;
 
                         const revenueRequest = pool.request();
@@ -15758,7 +16302,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             FROM OrderItems oi
                             INNER JOIN Orders o ON oi.OrderID = o.OrderID
                             WHERE oi.OrderID IN (${orderIdParams})
-                            AND (o.Status = 'Completed' OR o.Status = 'Returned' OR o.Status = 'Refunded' OR o.Status = 'Completed Returned')
+                            AND o.Status <> 'Cancelled'
                         `;
 
                         const taxRequest = pool.request();
@@ -15793,14 +16337,8 @@ module.exports = function (sql, pool, getStripe = null) {
                             const returnItems = orderReturnItemsMapForTax.get(orderId);
                             const status = (item.Status || '').toLowerCase();
 
-                            // Only calculate tax for completed orders
-                            // For returned/refunded orders, tax should be refunded proportionally
-                            if (status === 'completed' || status === 'delivered') {
-                                const price = parseFloat(item.PriceAtPurchase || 0);
-                                const quantity = parseFloat(item.Quantity || 0);
-                                const itemTax = price * taxRate * quantity;
-                                totalTaxes += itemTax;
-                            } else if (status === 'returned' || status === 'refunded' || status === 'completed returned') {
+                            // Pipeline + completed: tax on full line quantity. Return/refund paths adjust below.
+                            if (status === 'returned' || status === 'refunded' || status === 'completed returned') {
                                 // For returned orders, calculate tax on returned items only
                                 if (returnItems && Array.isArray(returnItems) && returnItems.length > 0) {
                                     const returnItem = returnItems.find(ri => {
@@ -15835,6 +16373,11 @@ module.exports = function (sql, pool, getStripe = null) {
                                     const itemTax = price * taxRate * quantity;
                                     totalTaxes -= itemTax; // Subtract tax for fully returned orders
                                 }
+                            } else if (status !== 'cancelled') {
+                                const price = parseFloat(item.PriceAtPurchase || 0);
+                                const quantity = parseFloat(item.Quantity || 0);
+                                const itemTax = price * taxRate * quantity;
+                                totalTaxes += itemTax;
                             }
                         });
                     }
@@ -15863,30 +16406,27 @@ module.exports = function (sql, pool, getStripe = null) {
             // This metric helps understand customer spending patterns and pricing effectiveness
             // Higher AOV indicates customers are buying more per order (either higher-priced items or more items)
 
-            const totalOrdersExcludingReturns = totalOrders - returnedOrdersCount;
-
             // Calculate AOV using TotalAmount (the actual amount customers paid, including delivery fees)
-            const totalRevenueFromOrdersExcludingReturns = result.recordset
-                .filter(o => {
-                    const status = o.Status ? o.Status.toLowerCase() : '';
-                    return status === 'completed';
-                })
-                .reduce((sum, o) => {
-                    return sum + parseFloat(o.TotalAmount || 0);
-                }, 0);
+            const ordersForAov = result.recordset.filter(o => {
+                const status = o.Status ? o.Status.toLowerCase() : '';
+                return status !== 'cancelled' && status !== 'returned' && status !== 'refunded' && status !== 'completed returned';
+            });
+            const totalRevenueFromOrdersExcludingReturns = ordersForAov.reduce((sum, o) => {
+                return sum + parseFloat(o.TotalAmount || 0);
+            }, 0);
 
-            const averageOrderValue = totalOrdersExcludingReturns > 0
-                ? totalRevenueFromOrdersExcludingReturns / totalOrdersExcludingReturns
+            const averageOrderValue = ordersForAov.length > 0
+                ? totalRevenueFromOrdersExcludingReturns / ordersForAov.length
                 : 0;
 
             console.log('[SALES REPORT] Average Order Value calculation:');
-            console.log('[SALES REPORT] - Sum of TotalAmount (completed orders):', totalRevenueFromOrdersExcludingReturns);
-            console.log('[SALES REPORT] - Total Orders (Excluding Returns):', totalOrdersExcludingReturns);
+            console.log('[SALES REPORT] - Sum of TotalAmount (non-return / non-refund orders):', totalRevenueFromOrdersExcludingReturns);
+            console.log('[SALES REPORT] - Orders in AOV denominator:', ordersForAov.length);
             console.log('[SALES REPORT] - AOV (TotalAmount / Orders):', averageOrderValue.toFixed(2));
 
             // Verify calculation matches expected formula
-            const expectedAOV = totalOrdersExcludingReturns > 0
-                ? totalRevenueFromOrdersExcludingReturns / totalOrdersExcludingReturns
+            const expectedAOV = ordersForAov.length > 0
+                ? totalRevenueFromOrdersExcludingReturns / ordersForAov.length
                 : 0;
 
             if (Math.abs(averageOrderValue - expectedAOV) > 0.01) {
@@ -16089,7 +16629,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             FROM OrderItems oi
                             INNER JOIN Orders o ON oi.OrderID = o.OrderID
                             WHERE oi.OrderID IN (${orderIdParams})
-                            AND o.Status = 'Completed'
+                            AND o.Status NOT IN ('Cancelled', 'Refunded', 'Completed Returned')
                         `;
 
                         const unitsSoldRequest = pool.request();
@@ -16172,14 +16712,15 @@ module.exports = function (sql, pool, getStripe = null) {
                 __deliveryFee: parseFloat(o.DeliveryCost || 0) + parseFloat(o.ExtraDeliveryFee || 0)
             }));
 
-            const isCompletedOrder = (o) => o.__status === 'completed';
+            const isCancelledOrder = (o) => o.__status === 'cancelled';
             const isReturnedOrder = (o) => o.__status === 'returned';
             const isRefundedOrder = (o) =>
                 o.__status === 'refunded' ||
                 o.__status === 'completed returned' ||
                 o.IsRefunded === 1 ||
                 o.IsRefunded === true;
-            const isValidSalesOrder = (o) => isCompletedOrder(o) || isReturnedOrder(o);
+            // Pipeline + fulfilled orders (merchandise + delivery), excluding cancelled and final refund outcomes
+            const isValidSalesOrder = (o) => !isCancelledOrder(o) && !isRefundedOrder(o);
 
             const grossSalesValue = normalizedOrders
                 .filter(isValidSalesOrder)
@@ -16244,9 +16785,9 @@ module.exports = function (sql, pool, getStripe = null) {
                 totalCustomers: new Set(result.recordset
                     .filter(o => {
                         const status = o.Status ? o.Status.toLowerCase() : '';
-                        return status === 'completed';
+                        return status !== 'cancelled';
                     })
-                    .map(o => o.CustomerEmail)).size, // Customers with completed orders only
+                    .map(o => o.CustomerEmail)).size, // Customers with non-cancelled orders
                 averageOrderValue: averageOrderValue // AOV = Sum of TotalAmount / Total Orders (excluding returns)
             };
 
@@ -16492,7 +17033,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             FROM OrderItems oi
                             INNER JOIN Orders o ON oi.OrderID = o.OrderID
                             WHERE oi.OrderID IN (${orderIdParams})
-                            AND (o.Status = 'Completed' OR o.Status = 'Returned' OR o.Status = 'Refunded' OR o.Status = 'Completed Returned')
+                            AND o.Status <> 'Cancelled'
                         `;
 
                         const taxRequest = pool.request();
@@ -16535,8 +17076,8 @@ module.exports = function (sql, pool, getStripe = null) {
                                         taxMap[orderId] += price * taxRate * returnQty;
                                     }
                                     // If item not in return list, don't add tax (it's not part of the refund)
-                                } else if (status === 'completed' || status === 'delivered') {
-                                    // Completed orders - calculate tax on all items
+                                } else if (status !== 'returned' && status !== 'refunded' && status !== 'completed returned' && status !== 'cancelled') {
+                                    // Count in-process and completed non-refund orders for tax totals.
                                     const price = parseFloat(row.PriceAtPurchase || 0);
                                     const quantity = parseFloat(row.Quantity || 0);
                                     taxMap[orderId] += price * taxRate * quantity;
@@ -16859,13 +17400,75 @@ module.exports = function (sql, pool, getStripe = null) {
                 });
             }
 
+            // Revenue composition: structural split (matches stats.grossRevenue = merchandise + delivery)
+            // and merchandise mix by product category (line revenue, completed + declined orders)
+            let revenueCompositionByCategory = [];
+            try {
+                const compositionOrderIds = result.recordset
+                    .filter(o => {
+                        const s = (o.Status || '').toLowerCase().trim();
+                        return s !== 'cancelled' && s !== 'refunded' && s !== 'completed returned';
+                    })
+                    .map(o => o.OrderID);
+
+                if (compositionOrderIds.length > 0) {
+                    const categoryTotals = new Map();
+                    const compositionBatchSize = 1000;
+                    for (let cbi = 0; cbi < compositionOrderIds.length; cbi += compositionBatchSize) {
+                        const batch = compositionOrderIds.slice(cbi, cbi + compositionBatchSize);
+                        const orderIdParams = batch.map((id, idx) => `@catOrderId${cbi + idx}`).join(',');
+
+                        const categoryQuery = `
+                            SELECT 
+                                ISNULL(p.Category, 'Uncategorized') AS CategoryName,
+                                SUM(ISNULL(oi.PriceAtPurchase, 0) * ISNULL(oi.Quantity, 0)) AS Revenue
+                            FROM OrderItems oi
+                            INNER JOIN Orders o ON oi.OrderID = o.OrderID
+                            LEFT JOIN Products p ON oi.ProductID = p.ProductID
+                            WHERE oi.OrderID IN (${orderIdParams})
+                            AND o.Status NOT IN ('Cancelled', 'Refunded', 'Completed Returned')
+                            GROUP BY ISNULL(p.Category, 'Uncategorized')
+                        `;
+
+                        const categoryRequest = pool.request();
+                        batch.forEach((id, idx) => {
+                            categoryRequest.input(`catOrderId${cbi + idx}`, sql.Int, id);
+                        });
+
+                        const categoryResult = await categoryRequest.query(categoryQuery);
+                        categoryResult.recordset.forEach(row => {
+                            const name = row.CategoryName || 'Uncategorized';
+                            const rev = parseFloat(row.Revenue || 0);
+                            categoryTotals.set(name, (categoryTotals.get(name) || 0) + rev);
+                        });
+                    }
+
+                    const sortedCategories = [...categoryTotals.entries()].sort((a, b) => b[1] - a[1]);
+                    const categorySum = sortedCategories.reduce((sum, [, v]) => sum + v, 0);
+                    revenueCompositionByCategory = sortedCategories.map(([category, revenue]) => ({
+                        category,
+                        revenue,
+                        percent: categorySum > 0 ? (revenue / categorySum) * 100 : 0
+                    }));
+                }
+            } catch (compositionErr) {
+                console.error('[SALES REPORT] Revenue composition by category failed:', compositionErr);
+            }
+
+            const revenueComposition = {
+                grossRevenue: grossRevenueValue,
+                merchandise: grossSalesValue,
+                delivery: deliveryFeesValidOrders,
+                byCategory: revenueCompositionByCategory
+            };
+
             const chartData = {
                 salesByStatus: salesByStatus,
                 revenueByStatus: revenueByStatus,
                 paymentMethodData: paymentMethodData
             };
 
-            res.json({ success: true, data: result.recordset, stats, chartData });
+            res.json({ success: true, data: result.recordset, stats, chartData, revenueComposition });
         } catch (err) {
             console.error('Error fetching sales report:', err);
             res.status(500).json({ success: false, error: err.message, details: err.toString() });
@@ -16930,8 +17533,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 FROM Orders o
                 INNER JOIN Customers c ON o.CustomerID = c.CustomerID
                 WHERE 1=1
-                AND (o.Status = 'Completed' OR o.Status = 'Returned' OR o.Status = 'Refunded' OR o.Status = 'Completed Returned' OR o.Status = 'Declined')
-                AND o.Status != 'Cancelled'
+                AND o.Status <> 'Cancelled'
             `;
 
             const request = pool.request();
@@ -16941,15 +17543,21 @@ module.exports = function (sql, pool, getStripe = null) {
                 request.input('search', sql.NVarChar, `%${search.trim()}%`);
             }
 
-            // Cancelled orders are always excluded from sales reports
-            if (status && status.trim() !== '' && status.trim().toLowerCase() !== 'cancelled') {
+            if (status && status.trim() !== '') {
                 query += ` AND o.Status = @status`;
                 request.input('status', sql.NVarChar, status.trim());
             }
 
             if (payment && payment.trim() !== '') {
-                query += ` AND o.PaymentMethod = @payment`;
-                request.input('payment', sql.NVarChar, payment.trim());
+                const normalizedPayment = payment.trim();
+                if (normalizedPayment === 'Bank Card') {
+                    query += ` AND (o.PaymentMethod = 'Bank Card' OR o.PaymentMethod = 'Bank Transfer' OR o.PaymentMethod = 'Stripe')`;
+                } else if (normalizedPayment === 'E-Wallet') {
+                    query += ` AND (o.PaymentMethod = 'E-Wallet' OR o.PaymentMethod = 'PayMongo')`;
+                } else {
+                    query += ` AND o.PaymentMethod = @payment`;
+                    request.input('payment', sql.NVarChar, normalizedPayment);
+                }
             }
 
             if (dateFrom && dateFrom.trim() !== '') {
@@ -17051,7 +17659,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             LEFT JOIN ProductVariations pv ON oi.VariationID = pv.VariationID
                             INNER JOIN Orders o ON oi.OrderID = o.OrderID
                             WHERE oi.OrderID IN (${orderIdParams})
-                            AND (o.Status = 'Completed' OR o.Status = 'Returned' OR o.Status = 'Refunded' OR o.Status = 'Completed Returned')
+                            AND o.Status <> 'Cancelled'
                             ORDER BY oi.OrderID, oi.OrderItemID
                         `;
 
@@ -17083,7 +17691,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                     LEFT JOIN ProductVariations pv ON oi.VariationID = pv.VariationID
                                     INNER JOIN Orders o ON oi.OrderID = o.OrderID
                                     WHERE oi.OrderID IN (${orderIdParams})
-                                    AND (o.Status = 'Completed' OR o.Status = 'Returned' OR o.Status = 'Refunded' OR o.Status = 'Completed Returned')
+                                    AND o.Status <> 'Cancelled'
                                     ORDER BY oi.OrderID, oi.OrderItemID
                                 `;
                                 const altRequest = pool.request();
@@ -17110,7 +17718,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                         LEFT JOIN ProductVariations pv ON oi.VariationID = pv.VariationID
                                         INNER JOIN Orders o ON oi.OrderID = o.OrderID
                                         WHERE oi.OrderID IN (${orderIdParams})
-                                        AND (o.Status = 'Completed' OR o.Status = 'Returned' OR o.Status = 'Refunded' OR o.Status = 'Completed Returned')
+                                        AND o.Status <> 'Cancelled'
                                         ORDER BY oi.OrderID, oi.OrderItemID
                                     `;
                                     const fallbackRequest = pool.request();
@@ -17557,14 +18165,14 @@ module.exports = function (sql, pool, getStripe = null) {
                 __deliveryFee: parseFloat(o.DeliveryCost || 0) + parseFloat(o.ExtraDeliveryFee || 0)
             }));
 
-            const isCompletedOrder = (o) => o.__status === 'completed';
+            const isCancelledOrder = (o) => o.__status === 'cancelled';
             const isReturnedOrder = (o) => o.__status === 'returned';
             const isRefundedOrder = (o) =>
                 o.__status === 'refunded' ||
                 o.__status === 'completed returned' ||
                 o.IsRefunded === 1 ||
                 o.IsRefunded === true;
-            const isValidSalesOrder = (o) => isCompletedOrder(o) || isReturnedOrder(o);
+            const isValidSalesOrder = (o) => !isCancelledOrder(o) && !isRefundedOrder(o);
 
             const grossSalesValue = normalizedOrders
                 .filter(isValidSalesOrder)
@@ -17594,16 +18202,14 @@ module.exports = function (sql, pool, getStripe = null) {
 
             // Calculate Average Order Value = Sum of TotalAmount / Total Orders (excluding returns)
             // AOV should use the actual amount customers paid (TotalAmount), not calculated revenue
-            const ordersExcludingReturns = totalOrders - returnedOrdersCount;
-            const totalAmountSum = result.recordset
-                .filter(o => {
-                    const status = o.Status ? o.Status.toLowerCase() : '';
-                    return status === 'completed';
-                })
-                .reduce((sum, o) => {
-                    return sum + parseFloat(o.TotalAmount || 0);
-                }, 0);
-            const averageOrderValue = ordersExcludingReturns > 0 ? totalAmountSum / ordersExcludingReturns : 0;
+            const ordersForAovExport = result.recordset.filter(o => {
+                const status = o.Status ? o.Status.toLowerCase() : '';
+                return status !== 'cancelled' && status !== 'returned' && status !== 'refunded' && status !== 'completed returned';
+            });
+            const totalAmountSum = ordersForAovExport.reduce((sum, o) => {
+                return sum + parseFloat(o.TotalAmount || 0);
+            }, 0);
+            const averageOrderValue = ordersForAovExport.length > 0 ? totalAmountSum / ordersForAovExport.length : 0;
 
             // Calculate summary statistics (for backward compatibility)
             const totalSubtotal = result.recordset.reduce((sum, o) => sum + parseFloat(o.Subtotal || 0), 0);
@@ -20200,102 +20806,94 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
-    // Create separate multer configurations for main images and thumbnails
-    const mainImageStorage = multer.diskStorage({
-        destination: function (req, file, cb) {
-            const dest = path.join(__dirname, 'public', 'uploads', 'projects', 'main');
-            // Ensure directory exists
-            if (!fs.existsSync(dest)) {
-                fs.mkdirSync(dest, { recursive: true });
-            }
-            cb(null, dest);
-        },
-        filename: function (req, file, cb) {
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            cb(null, 'project-' + uniqueSuffix + path.extname(file.originalname));
-        }
-    });
+    // mainImageStorage and thumbnailStorage removed — projectsStorageEngine handles both (Azure-aware)
 
-    const thumbnailStorage = multer.diskStorage({
-        destination: function (req, file, cb) {
-            const dest = path.join(__dirname, 'public', 'uploads', 'projects', 'thumbnails');
-            // Ensure directory exists
-            if (!fs.existsSync(dest)) {
-                fs.mkdirSync(dest, { recursive: true });
-            }
-            cb(null, dest);
-        },
-        filename: function (req, file, cb) {
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            cb(null, 'project-' + uniqueSuffix + path.extname(file.originalname));
+    const projectsStorageEngine = isAzureBlobConfigured()
+        ? {
+            _handleFile: async (req, file, cb) => {
+                try {
+                    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+                    const ext = path.extname(file.originalname) || '.jpg';
+                    const sub = file.fieldname === 'mainImage' ? 'main' : 'thumbnails';
+                    const blobPath = `projects/${sub}/project-${uniqueSuffix}${ext}`;
+                    const chunks = [];
+                    file.stream.on('data', (c) => chunks.push(c));
+                    file.stream.on('error', cb);
+                    file.stream.on('end', async () => {
+                        try {
+                            const buffer = Buffer.concat(chunks);
+                            const url = await uploadBufferToAzureBlob(blobPath, buffer, file.mimetype);
+                            cb(null, { filename: `project-${uniqueSuffix}${ext}`, destination: 'azure-blob', size: buffer.length, path: blobPath, azureUrl: url });
+                        } catch (e) { cb(e); }
+                    });
+                } catch (e) { cb(e); }
+            },
+            _removeFile: (req, file, cb) => cb(null)
         }
-    });
-
-    const projectsUpload = multer({
-        storage: multer.diskStorage({
+        : multer.diskStorage({
             destination: function (req, file, cb) {
                 let dest;
-                if (file.fieldname === 'mainImage') {
-                    dest = path.join(__dirname, 'public', 'uploads', 'projects', 'main');
-                } else if (file.fieldname === 'thumbnails') {
-                    dest = path.join(__dirname, 'public', 'uploads', 'projects', 'thumbnails');
-                } else {
-                    dest = path.join(__dirname, 'public', 'uploads', 'projects');
-                }
-
-                // Ensure directory exists
-                if (!fs.existsSync(dest)) {
-                    fs.mkdirSync(dest, { recursive: true });
-                }
+                if (file.fieldname === 'mainImage') dest = path.join(__dirname, 'public', 'uploads', 'projects', 'main');
+                else if (file.fieldname === 'thumbnails') dest = path.join(__dirname, 'public', 'uploads', 'projects', 'thumbnails');
+                else dest = path.join(__dirname, 'public', 'uploads', 'projects');
+                if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
                 cb(null, dest);
             },
             filename: function (req, file, cb) {
                 const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
                 cb(null, 'project-' + uniqueSuffix + path.extname(file.originalname));
             }
-        }),
-        limits: {
-            fileSize: 10 * 1024 * 1024 // 10MB limit for project images
-        },
+        });
+
+    const projectsUpload = multer({
+        storage: projectsStorageEngine,
+        limits: { fileSize: 10 * 1024 * 1024 },
         fileFilter: function (req, file, cb) {
-            if (file.mimetype.startsWith('image/')) {
-                cb(null, true);
-            } else {
-                cb(new Error('Only image files are allowed!'), false);
-            }
+            if (file.mimetype.startsWith('image/')) { cb(null, true); }
+            else { cb(new Error('Only image files are allowed!'), false); }
         }
     });
 
-    // Configure multer for logo uploads
-    const logoStorage = multer.diskStorage({
-        destination: function (req, file, cb) {
-            const uploadDir = path.join(__dirname, 'public', 'uploads');
-            const logosDir = path.join(uploadDir, 'logos');
-
-            // Create directory if it doesn't exist
-            if (!fs.existsSync(logosDir)) {
-                fs.mkdirSync(logosDir, { recursive: true });
-            }
-
-            cb(null, logosDir);
-        },
-        filename: function (req, file, cb) {
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            cb(null, 'logo-' + uniqueSuffix + path.extname(file.originalname));
+    // Configure multer for logo uploads – Azure-aware
+    const logoStorageEngine = isAzureBlobConfigured()
+        ? {
+            _handleFile: async (req, file, cb) => {
+                try {
+                    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+                    const ext = path.extname(file.originalname) || '.png';
+                    const blobPath = `logos/logo-${uniqueSuffix}${ext}`;
+                    const chunks = [];
+                    file.stream.on('data', (c) => chunks.push(c));
+                    file.stream.on('error', cb);
+                    file.stream.on('end', async () => {
+                        try {
+                            const buffer = Buffer.concat(chunks);
+                            const url = await uploadBufferToAzureBlob(blobPath, buffer, file.mimetype);
+                            cb(null, { filename: blobPath, destination: 'azure-blob', size: buffer.length, path: blobPath, azureUrl: url });
+                        } catch (e) { cb(e); }
+                    });
+                } catch (e) { cb(e); }
+            },
+            _removeFile: (req, file, cb) => cb(null)
         }
-    });
+        : multer.diskStorage({
+            destination: function (req, file, cb) {
+                const logosDir = path.join(__dirname, 'public', 'uploads', 'logos');
+                if (!fs.existsSync(logosDir)) fs.mkdirSync(logosDir, { recursive: true });
+                cb(null, logosDir);
+            },
+            filename: function (req, file, cb) {
+                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+                cb(null, 'logo-' + uniqueSuffix + path.extname(file.originalname));
+            }
+        });
 
     const logoUpload = multer({
-        storage: logoStorage,
-        limits: {
-            fileSize: 2 * 1024 * 1024 // 2MB limit for logos
-        },
+        storage: logoStorageEngine,
+        limits: { fileSize: 2 * 1024 * 1024 },
         fileFilter: function (req, file, cb) {
-            if (file.mimetype.startsWith('image/')) {
-                cb(null, true);
-            } else {
-                cb(new Error('Only image files are allowed for logos!'), false);
-            }
+            if (file.mimetype.startsWith('image/')) { cb(null, true); }
+            else { cb(new Error('Only image files are allowed for logos!'), false); }
         }
     });
     // Admin Logo Upload API
@@ -20305,7 +20903,10 @@ module.exports = function (sql, pool, getStripe = null) {
                 return res.json({ success: false, message: 'No file uploaded' });
             }
 
-            const logoUrl = `/uploads/logos/${req.file.filename}`;
+            // Use Azure URL when available, fall back to local path
+            const logoUrl = req.file.azureUrl || (req.file.destination === 'azure-blob'
+                ? getBlobPublicUrl(req.file.filename)
+                : `/uploads/logos/${req.file.filename}`);
 
             res.json({
                 success: true,
@@ -20356,12 +20957,17 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
-            // Files are already saved by multer, just get the filenames
-            const mainImageFilename = mainImage.filename;
-            const thumbnailFilenames = thumbnails.map(thumb => thumb.filename);
-
-            // Save to database with correct paths
-            const mainImageUrl = `/uploads/projects/main/${mainImageFilename}`;
+            // Files are already saved by multer – use Azure URL when available
+            const mainImageUrl = mainImage.azureUrl || (mainImage.destination === 'azure-blob'
+                ? getBlobPublicUrl(mainImage.path)
+                : `/uploads/projects/main/${mainImage.filename}`);
+            const thumbnails_data = thumbnails.map(thumb => ({
+                filename: thumb.filename,
+                url: thumb.azureUrl || (thumb.destination === 'azure-blob'
+                    ? getBlobPublicUrl(thumb.path)
+                    : `/uploads/projects/thumbnails/${thumb.filename}`)
+            }));
+            const thumbnailFilenames = thumbnails_data.map(t => t.filename);
 
             // First, insert the main project item
             console.log('Inserting project item with data:', { title, description, mainImageUrl });
@@ -20384,7 +20990,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
             // Then insert thumbnails
             for (let i = 0; i < thumbnailFilenames.length; i++) {
-                const thumbnailUrl = `/uploads/projects/thumbnails/${thumbnailFilenames[i]}`;
+                const thumbnailUrl = thumbnails_data[i]?.url || `/uploads/projects/thumbnails/${thumbnailFilenames[i]}`;
                 await pool.request()
                     .input('projectId', sql.Int, projectId)
                     .input('thumbnailUrl', sql.NVarChar, thumbnailUrl)
@@ -20403,7 +21009,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     title,
                     description,
                     mainImageUrl,
-                    thumbnailUrls: thumbnailFilenames.map(filename => `/uploads/projects/thumbnails/${filename}`)
+                    thumbnailUrls: thumbnails_data.map(t => t.url)
                 }
             };
 
@@ -20459,7 +21065,6 @@ module.exports = function (sql, pool, getStripe = null) {
             if (req.files && req.files.mainImage && req.files.mainImage.length > 0) {
                 const mainImage = req.files.mainImage[0];
                 if (mainImage.mimetype.startsWith('image/')) {
-                    const mainImageUrl = `/uploads/projects/main/${mainImage.filename}`;
                     updateQuery += ', main_image_url = @mainImageUrl';
                     queryParams.mainImageUrl = sql.NVarChar;
                 }
@@ -20475,11 +21080,13 @@ module.exports = function (sql, pool, getStripe = null) {
             request.input('description', sql.NVarChar, description);
             request.input('updatedAt', sql.DateTime, new Date());
 
-            // Add main image URL if provided
+            // Add main image URL if provided — use Azure URL when available
             if (req.files && req.files.mainImage && req.files.mainImage.length > 0) {
                 const mainImage = req.files.mainImage[0];
                 if (mainImage.mimetype.startsWith('image/')) {
-                    const mainImageUrl = `/uploads/projects/main/${mainImage.filename}`;
+                    const mainImageUrl = mainImage.azureUrl || (mainImage.destination === 'azure-blob'
+                        ? getBlobPublicUrl(mainImage.path)
+                        : `/uploads/projects/main/${mainImage.filename}`);
                     request.input('mainImageUrl', sql.NVarChar, mainImageUrl);
                 }
             }
@@ -21582,6 +22189,9 @@ module.exports = function (sql, pool, getStripe = null) {
                             console.error(`[ADMIN ORDERS] Error checking order ${order.OrderID} total:`, err.message);
                         }
                     }
+
+                    order.TransactionID = dedupeDoubledTransactionId(order.TransactionID);
+                    order.PaymentMethodDisplay = paymentMethodDisplayForOrder(order);
                 }
 
                 res.render(`Employee/Admin/Admin${route}`, {
@@ -21692,10 +22302,22 @@ module.exports = function (sql, pool, getStripe = null) {
             // Stock is only decreased when order status changes to "Processing"
             console.log(`[ADMIN ORDER CANCELLATION] Cancelling Pending order ${orderId} - no stock restoration needed (stock was never decreased)`);
 
-            // Update order status to cancelled
-            await pool.request()
+            try {
+                await refundGatewayForPendingCancel(orderId, '[ADMIN-PENDING-CANCEL-REFUND]');
+            } catch (refundErr) {
+                console.error('[ADMIN ORDER CANCELLATION] Refund failed:', refundErr);
+                return res.json({
+                    success: false,
+                    message: `Refund failed: ${refundErr.message}. Order was not cancelled.`
+                });
+            }
+
+            const cancelResult = await pool.request()
                 .input('orderId', sql.Int, orderId)
-                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId`);
+                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId AND Status = N'Pending'`);
+            if (!cancelResult.rowsAffected || cancelResult.rowsAffected[0] === 0) {
+                return res.json({ success: false, message: 'Order not found or not in Pending status.' });
+            }
 
             // Update bulk order status if applicable
             await updateBulkOrderStatus(orderId, 'Cancelled');
@@ -21888,6 +22510,21 @@ module.exports = function (sql, pool, getStripe = null) {
 
             console.log(`[ADMIN ORDER CANCELLATION] Order ID: ${orderId}`);
 
+            try {
+                await refundGatewayForAdminFulfilmentStageCancel(
+                    orderId,
+                    'Processing',
+                    '[ADMIN-PROCESSING-CANCEL-REFUND]',
+                    'processing'
+                );
+            } catch (refundErr) {
+                console.error('[ADMIN ORDER CANCELLATION] Refund failed:', refundErr);
+                return res.json({
+                    success: false,
+                    message: `Refund failed: ${refundErr.message}. Order was not cancelled.`
+                });
+            }
+
             // Get order items before cancelling to restore stock
             const orderItemsResult = await pool.request()
                 .input('orderId', sql.Int, orderId)
@@ -21920,10 +22557,13 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
-            // Update order status to cancelled
-            await pool.request()
+            // Update order status to cancelled (only if still Processing)
+            const cancelResult = await pool.request()
                 .input('orderId', sql.Int, orderId)
-                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId`);
+                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId AND Status = N'Processing'`);
+            if (!cancelResult.rowsAffected || cancelResult.rowsAffected[0] === 0) {
+                return res.json({ success: false, message: 'Order not found or not in Processing status.' });
+            }
 
             // Update bulk order status if applicable
             await updateBulkOrderStatus(orderId, 'Cancelled');
@@ -22079,6 +22719,21 @@ module.exports = function (sql, pool, getStripe = null) {
             await pool.connect();
             const orderId = parseInt(req.params.orderId);
 
+            try {
+                await refundGatewayForAdminFulfilmentStageCancel(
+                    orderId,
+                    'Shipping',
+                    '[ADMIN-SHIPPING-CANCEL-REFUND]',
+                    'shipping'
+                );
+            } catch (refundErr) {
+                console.error('[ADMIN ORDER CANCELLATION] Refund failed:', refundErr);
+                return res.json({
+                    success: false,
+                    message: `Refund failed: ${refundErr.message}. Order was not cancelled.`
+                });
+            }
+
             // Get order items before cancelling to restore stock
             const orderItemsResult = await pool.request()
                 .input('orderId', sql.Int, orderId)
@@ -22111,10 +22766,13 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
-            // Update order status to cancelled
-            await pool.request()
+            // Update order status to cancelled (only if still Shipping)
+            const cancelResult = await pool.request()
                 .input('orderId', sql.Int, orderId)
-                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId`);
+                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId AND Status = N'Shipping'`);
+            if (!cancelResult.rowsAffected || cancelResult.rowsAffected[0] === 0) {
+                return res.json({ success: false, message: 'Order not found or not in Shipping status.' });
+            }
 
             // Update bulk order status if applicable
             await updateBulkOrderStatus(orderId, 'Cancelled');
@@ -22246,6 +22904,21 @@ module.exports = function (sql, pool, getStripe = null) {
             await pool.connect();
             const orderId = parseInt(req.params.orderId);
 
+            try {
+                await refundGatewayForAdminFulfilmentStageCancel(
+                    orderId,
+                    'Delivery',
+                    '[ADMIN-DELIVERY-CANCEL-REFUND]',
+                    'delivery'
+                );
+            } catch (refundErr) {
+                console.error('[ADMIN ORDER CANCELLATION] Refund failed:', refundErr);
+                return res.json({
+                    success: false,
+                    message: `Refund failed: ${refundErr.message}. Order was not cancelled.`
+                });
+            }
+
             // Get order items before cancelling to restore stock
             const orderItemsResult = await pool.request()
                 .input('orderId', sql.Int, orderId)
@@ -22278,10 +22951,13 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
-            // Update order status to cancelled
-            await pool.request()
+            // Update order status to cancelled (only if still Delivery)
+            const cancelResult = await pool.request()
                 .input('orderId', sql.Int, orderId)
-                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId`);
+                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId AND Status = N'Delivery'`);
+            if (!cancelResult.rowsAffected || cancelResult.rowsAffected[0] === 0) {
+                return res.json({ success: false, message: 'Order not found or not in Delivery status.' });
+            }
 
             // Update bulk order status if applicable
             await updateBulkOrderStatus(orderId, 'Cancelled');
@@ -23421,7 +24097,17 @@ module.exports = function (sql, pool, getStripe = null) {
                                 ip.SKU as InventoryProductSKU,
                                 ip.Category as InventoryProductCategory,
                                 ip.Price as InventoryProductPrice,
-                                ip.ImageURL as InventoryProductImageURL,
+                                COALESCE(
+                                    -- Prefer customer-facing product URLs (often already Azure/public)
+                                    NULLIF(pLinked.ImageURL, ''),
+                                    NULLIF(pById.ImageURL, ''),
+                                    NULLIF(pBySku.ImageURL, ''),
+                                    NULLIF(JSON_VALUE(pLinked.ThumbnailURLs, '$[0]'), ''),
+                                    NULLIF(JSON_VALUE(pById.ThumbnailURLs, '$[0]'), ''),
+                                    NULLIF(JSON_VALUE(pBySku.ThumbnailURLs, '$[0]'), ''),
+                                    -- Fallback to InventoryProducts.ImageURL (often local /uploads path)
+                                    NULLIF(ip.ImageURL, '')
+                                ) as InventoryProductImageURL,
                                 ip.DateAdded,
                                 -- Total quantity (Available + Damaged) - repaired items are included in Available
                                 (COALESCE(ip.AvailableQuantity, 0) + COALESCE(ip.DamagedQuantity, 0)) as TotalQuantity,
@@ -23445,6 +24131,11 @@ module.exports = function (sql, pool, getStripe = null) {
                                 ip.InventoryNotes as Notes,
                                 ip.DateUpdated
                             FROM InventoryProducts ip
+                            LEFT JOIN Products pLinked ON pLinked.ProductID = ip.ProductID AND pLinked.IsActive = 1
+                            LEFT JOIN Products pById ON pById.ProductID = ip.InventoryProductID AND pById.IsActive = 1
+                            LEFT JOIN Products pBySku 
+                                ON UPPER(LTRIM(RTRIM(pBySku.SKU))) = UPPER(LTRIM(RTRIM(ip.SKU))) 
+                                AND pBySku.IsActive = 1
                             WHERE ip.IsActive = 1
                             ORDER BY ip.DateAdded DESC
                         `);
@@ -23618,7 +24309,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
                         // Handle file uploads
                         if (req.file) {
-                            const imageUrl = `/uploads/products/images/${req.file.filename}`;
+                            const imageUrl = publicUrlFromMulterProductFile(req.file);
                             await transaction.request()
                                 .input('inventoryProductId', sql.Int, inventoryProductId)
                                 .input('imageUrl', sql.NVarChar, imageUrl)
@@ -23733,7 +24424,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
                     let imageUrl = null;
                     if (req.file) {
-                        imageUrl = `/uploads/products/inventory/${req.file.filename}`;
+                        imageUrl = publicUrlFromMulterProductFile(req.file);
                     }
 
                     // Parse dimensions if provided
@@ -23852,7 +24543,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
                     let imageUrl = currentImageURL || null;
                     if (req.file) {
-                        imageUrl = `/uploads/products/inventory/${req.file.filename}`;
+                        imageUrl = publicUrlFromMulterProductFile(req.file);
                     }
 
                     // Parse dimensions if provided
@@ -24053,10 +24744,14 @@ module.exports = function (sql, pool, getStripe = null) {
                                 ISNULL(v.RepairedQuantity, 0) as RepairedQuantity,
                                 ISNULL(v.DisposedQuantity, 0) as DisposedQuantity,
                                 ISNULL(v.Price, 0) AS Price,
-                                v.VariationImageURL,
+                                COALESCE(
+                                    NULLIF(LTRIM(RTRIM(ISNULL(v.VariationImageURL, N''))), N''),
+                                    pv.VariationImageURL
+                                ) AS VariationImageURL,
                                 v.IsActive,
                                 v.CreatedAt
                             FROM InventoryProductVariations v
+                            LEFT JOIN ProductVariations pv ON pv.VariationID = v.VariationID
                             WHERE (v.ProductID = @productId OR v.InventoryProductID = @productId 
                                    OR v.ProductID = @requestedProductId OR v.InventoryProductID = @requestedProductId)
                                 AND v.IsActive = 1
@@ -24067,9 +24762,14 @@ module.exports = function (sql, pool, getStripe = null) {
                     const totalVariationQuantity = result.recordset
                         .reduce((sum, v) => sum + (v.Quantity || 0), 0);
 
+                    const variations = result.recordset.map((row) => ({
+                        ...row,
+                        VariationImageURL: normalizeProductAssetUrl(row.VariationImageURL) || row.VariationImageURL || null
+                    }));
+
                     res.json({
                         success: true,
-                        variations: result.recordset,
+                        variations,
                         productStock: productStock,
                         totalVariationQuantity: totalVariationQuantity,
                         availableStock: productStock - totalVariationQuantity
@@ -24781,6 +25481,8 @@ module.exports = function (sql, pool, getStripe = null) {
                             WHERE VariationID = @variationID
                         `);
 
+                    await cascadeArchiveCmsProductVariationFromInventoryVariationArchived(variationID);
+
                     res.json({
                         success: true,
                         message: 'Variation archived successfully.'
@@ -25095,7 +25797,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     // Handle product image upload if provided
                     let productImageUrl = null;
                     if (req.file) {
-                        productImageUrl = `/uploads/products/inventory/${req.file.filename}`;
+                        productImageUrl = publicUrlFromMulterProductFile(req.file);
                         console.log('New product image uploaded:', productImageUrl);
                     }
 
@@ -25566,6 +26268,8 @@ module.exports = function (sql, pool, getStripe = null) {
 
                         const productName = productResult.recordset[0].Name;
 
+                        await cascadeArchiveCmsFromInventoryProductArchived(id);
+
                         // Archive the product (soft delete by setting IsActive = 0)
                         // Inventory data is stored in InventoryProducts itself, so no separate table to update
                         await pool.request()
@@ -25590,6 +26294,8 @@ module.exports = function (sql, pool, getStripe = null) {
                 try {
                     await pool.connect();
                     const inventoryProductId = req.params.id;
+
+                    await cascadeArchiveCmsFromInventoryProductArchived(inventoryProductId);
 
                     // Soft delete (archive) the inventory product
                     await pool.request()
@@ -25981,7 +26687,29 @@ module.exports = function (sql, pool, getStripe = null) {
                     code: 'NOT_AUTHENTICATED'
                 });
             }
-            const customerData = { ...req.session.user };
+            await ensureCustomerGoogleAuthColumns();
+            let requiresPasswordSetup = false;
+            try {
+                const pr = await pool.request()
+                    .input('id', sql.Int, req.session.user.id)
+                    .query(`
+                        SELECT PasswordSetupCompleted
+                        FROM Customers
+                        WHERE CustomerID = @id AND IsActive = 1
+                    `);
+                requiresPasswordSetup = customerRequiresPasswordSetup(pr.recordset[0]);
+            } catch (e) {
+                console.error('[GOOGLE AUTH] sync-tokens password flag:', e.message);
+            }
+            const customerData = { ...req.session.user, requiresPasswordSetup };
+            req.session.user = customerData;
+            try {
+                await new Promise((resolve, reject) => {
+                    req.session.save((err) => (err ? reject(err) : resolve()));
+                });
+            } catch (saveErr) {
+                console.error('[GOOGLE AUTH] sync-tokens session save:', saveErr.message);
+            }
             let jwtTokens = null;
             try {
                 jwtTokens = jwtUtils.generateTokenPair(customerData);
@@ -26053,6 +26781,8 @@ module.exports = function (sql, pool, getStripe = null) {
     router.post('/api/auth/customer/login', async (req, res) => {
         try {
             const { email, password, rememberMe } = req.body;
+
+            await ensureCustomerGoogleAuthColumns();
 
             console.log('=== CUSTOMER LOGIN ATTEMPT ===');
             console.log('Email:', email);
@@ -26169,6 +26899,14 @@ module.exports = function (sql, pool, getStripe = null) {
                 console.error('Error updating Users.LastLogin for customer:', lastLoginErr);
             }
 
+            try {
+                await pool.request()
+                    .input('customerId', sql.Int, customer.CustomerID)
+                    .query('UPDATE Customers SET PasswordSetupCompleted = 1 WHERE CustomerID = @customerId');
+            } catch (e) {
+                /* column may not exist on unmigrated DB */
+            }
+
             // Create customer session data
             const customerData = {
                 id: customer.CustomerID,
@@ -26177,7 +26915,8 @@ module.exports = function (sql, pool, getStripe = null) {
                 phoneNumber: customer.PhoneNumber,
                 role: 'Customer',
                 type: 'customer',
-                profileImage: customer.ProfileImage
+                profileImage: customer.ProfileImage,
+                requiresPasswordSetup: false
             };
 
             // Store in session (using customer session middleware)
@@ -26404,6 +27143,14 @@ module.exports = function (sql, pool, getStripe = null) {
                 });
             }
 
+            if (isCommonPassword(password)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'This password is too common and easy to guess. Please choose something more unique.',
+                    code: 'COMMON_PASSWORD'
+                });
+            }
+
             // Email validation
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(email)) {
@@ -26485,7 +27232,8 @@ module.exports = function (sql, pool, getStripe = null) {
                 phoneNumber: phoneNumber,
                 role: 'Customer',
                 type: 'customer',
-                isEmailVerified: true // OTP verification confirms email
+                isEmailVerified: true, // OTP verification confirms email
+                requiresPasswordSetup: false
             };
 
             // Store in session
@@ -26555,6 +27303,14 @@ module.exports = function (sql, pool, getStripe = null) {
                 });
             }
 
+            if (isCommonPassword(password)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'This password is too common and easy to guess. Please choose something more unique.',
+                    code: 'COMMON_PASSWORD'
+                });
+            }
+
             // Email validation
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(email)) {
@@ -26606,7 +27362,8 @@ module.exports = function (sql, pool, getStripe = null) {
                 phoneNumber: phoneNumber,
                 role: 'Customer',
                 type: 'customer',
-                isEmailVerified: false
+                isEmailVerified: false,
+                requiresPasswordSetup: false
             };
 
             // Store in session
@@ -26646,15 +27403,12 @@ module.exports = function (sql, pool, getStripe = null) {
      */
     router.get('/api/auth/status', async (req, res) => {
         try {
-            // Log session information for debugging
-            if (process.env.NODE_ENV === 'production') {
-                console.log('🔍 Auth status check:', {
+            if (process.env.DEBUG_AUTH === 'true') {
+                console.log('Auth status check:', {
                     hasSession: !!req.session,
                     hasUser: !!(req.session && req.session.user),
                     sessionId: req.session?.id,
-                    cookie: req.headers.cookie ? 'Present' : 'Missing',
-                    userType: req.session?.user?.type,
-                    userRole: req.session?.user?.role
+                    userType: req.session?.user?.type
                 });
             }
 
@@ -26688,10 +27442,30 @@ module.exports = function (sql, pool, getStripe = null) {
             // Ensure credentials header is set
             res.setHeader('Access-Control-Allow-Credentials', 'true');
 
+            let requiresPasswordSetup = Boolean(sessionUser.requiresPasswordSetup);
+            if (sessionUser.type === 'customer' && sessionUser.id) {
+                try {
+                    await ensureCustomerGoogleAuthColumns();
+                    const pr = await pool.request()
+                        .input('id', sql.Int, sessionUser.id)
+                        .query(`
+                            SELECT PasswordSetupCompleted
+                            FROM Customers
+                            WHERE CustomerID = @id AND IsActive = 1
+                        `);
+                    requiresPasswordSetup = customerRequiresPasswordSetup(pr.recordset[0]);
+                } catch (e) {
+                    console.error('[AUTH] status password flag:', e.message);
+                }
+            }
+
+            const userOut = { ...sessionUser, requiresPasswordSetup };
+            req.session.user = userOut;
+
             res.json({
                 success: true,
                 authenticated: true,
-                user: sessionUser,
+                user: userOut,
                 sessionId: req.sessionID
             });
         } catch (err) {
@@ -26831,6 +27605,13 @@ module.exports = function (sql, pool, getStripe = null) {
                 return res.status(400).json({
                     success: false,
                     message: 'Password must be at least 8 characters long'
+                });
+            }
+
+            if (isCommonPassword(password)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'This password is too common and easy to guess. Please choose something more unique.'
                 });
             }
 
@@ -27073,6 +27854,13 @@ module.exports = function (sql, pool, getStripe = null) {
                 });
             }
 
+            if (isCommonPassword(password)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'This password is too common and easy to guess. Please choose something more unique.'
+                });
+            }
+
             await pool.connect();
 
             // Validate the reset token from database
@@ -27244,37 +28032,7 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
-    // Cancel customer order
-    router.put('/api/customer/orders/:orderId/cancel', isAuthenticated, async (req, res) => {
-        const orderId = req.params.orderId;
-        const customerId = req.session.user && req.session.user.id;
-        if (!customerId) {
-            return res.status(401).json({ success: false, message: 'Not authenticated.' });
-        }
-        try {
-            await pool.connect();
-            // Only allow if the order belongs to this customer and is in a cancellable state
-            const result = await pool.request()
-                .input('orderId', sql.Int, orderId)
-                .input('customerId', sql.Int, customerId)
-                .query(`SELECT Status FROM Orders WHERE OrderID = @orderId AND CustomerID = @customerId`);
-            if (!result.recordset.length) {
-                return res.status(404).json({ success: false, message: 'Order not found.' });
-            }
-            const status = result.recordset[0].Status;
-            if (status === 'Completed' || status === 'Cancelled') {
-                return res.status(400).json({ success: false, message: 'Order cannot be cancelled in its current state.' });
-            }
-            // Update status to Cancelled
-            await pool.request()
-                .input('orderId', sql.Int, orderId)
-                .query(`UPDATE Orders SET Status = 'Cancelled' WHERE OrderID = @orderId`);
-            return res.json({ success: true, message: 'Order cancelled successfully.' });
-        } catch (err) {
-            console.error('Error cancelling order:', err);
-            return res.status(500).json({ success: false, message: 'Failed to cancel order.' });
-        }
-    });
+    // Customer cancel is implemented in server.js (gateway refund, stock rules, email).
 
     // Return order endpoint
     router.put('/api/customer/orders/:orderId/return', isAuthenticated, returnUpload.fields([
@@ -27981,8 +28739,9 @@ module.exports = function (sql, pool, getStripe = null) {
             const orderResult = await transaction.request()
                 .input('orderId', sql.Int, orderId)
                 .query(`
-                    SELECT o.OrderID, o.Status, o.TotalAmount, o.TransactionID, 
-                           o.StripeSessionID, o.PaymentMethod, ${returnShippingFeeSelect},
+                    SELECT o.OrderID, o.ReferenceNumber, o.OrderDate, o.Status, o.TotalAmount, o.TransactionID,
+                           o.StripeSessionID, o.PaymentMethod, ISNULL(o.DeliveryCost, 0) AS DeliveryCost,
+                           ISNULL(o.ExtraDeliveryFee, 0) AS ExtraDeliveryFee, o.ReturnType, o.ReturnReason, ${returnShippingFeeSelect},
                            ${refundAmountSelect}
                     FROM Orders o
                     WHERE o.OrderID = @orderId 
@@ -28030,9 +28789,10 @@ module.exports = function (sql, pool, getStripe = null) {
                     WHERE o.OrderID = @orderId
                 `);
 
-            // Process Stripe refund if payment was via Stripe
+            // Process payment gateway refund (Stripe / PayMongo) when applicable.
             // Use RefundAmount from database (calculated during return approval, accounts for partial returns)
             let stripeRefundId = null;
+            let paymongoRefundId = null;
             let refundError = null;
             let refundAmount = 0;
 
@@ -28040,7 +28800,35 @@ module.exports = function (sql, pool, getStripe = null) {
             // This amount already accounts for partial returns and deductions
             const storedRefundAmount = parseFloat(order.RefundAmount) || 0;
 
-            if (order.StripeSessionID && getStripe) {
+            // PayMongo payment id: may be stored on TransactionID, or only recoverable from checkout session
+            // (StripeSessionID column is reused for PayMongo checkout session ids — not Stripe cs_test_/cs_live_.)
+            let resolvedPaymongoPaymentId = null;
+            const txnForPaymongo = String(order.TransactionID || '').trim();
+            const payMatchTxn = txnForPaymongo.match(/pay_[a-zA-Z0-9]+/);
+            if (payMatchTxn) {
+                resolvedPaymongoPaymentId = payMatchTxn[0];
+            } else if (process.env.PAYMONGO_SECRET_KEY && order.StripeSessionID && !isStripeCheckoutSessionId(order.StripeSessionID)) {
+                try {
+                    const pmAuth = `Basic ${Buffer.from(`${process.env.PAYMONGO_SECRET_KEY}:`).toString('base64')}`;
+                    const pmSessionResp = await fetch(
+                        `https://api.paymongo.com/v1/checkout_sessions/${encodeURIComponent(String(order.StripeSessionID).trim())}`,
+                        {
+                            method: 'GET',
+                            headers: { accept: 'application/json', authorization: pmAuth }
+                        }
+                    );
+                    const pmSessionJson = await pmSessionResp.json().catch(() => ({}));
+                    resolvedPaymongoPaymentId = pmSessionJson?.data?.attributes?.payments?.[0]?.id || null;
+                    if (!resolvedPaymongoPaymentId) {
+                        const detail = pmSessionJson?.errors?.[0]?.detail || pmSessionResp.statusText || String(pmSessionResp.status);
+                        console.warn(`[REFUND] PayMongo checkout session lookup did not return a payment id (order ${orderId}):`, detail);
+                    }
+                } catch (pmLookupErr) {
+                    console.warn(`[REFUND] PayMongo checkout session lookup failed (order ${orderId}):`, pmLookupErr.message);
+                }
+            }
+
+            if (isStripeCheckoutSessionId(order.StripeSessionID) && getStripe) {
                 try {
                     const stripeInstance = getStripe();
                     if (!stripeInstance) {
@@ -28102,7 +28890,9 @@ module.exports = function (sql, pool, getStripe = null) {
                                     refund_type: refundType,
                                     original_total_amount: order.TotalAmount?.toString() || '0',
                                     refund_amount: refundAmount.toFixed(2),
-                                    is_partial_return: (storedRefundAmount > 0 && refundAmountInCents < paymentIntent.amount).toString()
+                                    is_partial_return: (storedRefundAmount > 0 && refundAmountInCents < paymentIntent.amount).toString(),
+                                    refund_initiator: 'admin',
+                                    refund_note: 'Successfully refunded due to admin request'
                                 }
                             });
 
@@ -28128,10 +28918,96 @@ module.exports = function (sql, pool, getStripe = null) {
                     // Admin can manually process refund in Stripe dashboard if needed
                 }
             } else if (order.PaymentMethod && order.PaymentMethod.toLowerCase().includes('stripe')) {
-                console.warn(`[REFUND] Order ${orderId} has Stripe payment method but no StripeSessionID`);
-                refundError = 'No Stripe session ID found';
+                console.warn(`[REFUND] Order ${orderId} has Stripe payment method but no valid Stripe checkout session id (cs_test_/cs_live_) for API refund`);
+                refundError = 'No valid Stripe checkout session for refund';
+            } else if (resolvedPaymongoPaymentId) {
+                try {
+                    const paymongoSecretKey = process.env.PAYMONGO_SECRET_KEY;
+                    if (!paymongoSecretKey) {
+                        throw new Error('PayMongo is not configured');
+                    }
+
+                    const paymentId = (() => {
+                        let p = dedupeDoubledTransactionId(String(resolvedPaymongoPaymentId).trim());
+                        const tok = p.match(/pay_[a-zA-Z0-9]+/);
+                        return tok ? tok[0] : p;
+                    })();
+                    const authHeader = `Basic ${Buffer.from(`${paymongoSecretKey}:`).toString('base64')}`;
+                    const storedOrTotalAmount = storedRefundAmount > 0
+                        ? storedRefundAmount
+                        : parseFloat(order.TotalAmount || 0);
+                    let refundAmountInCentavos = Math.max(0, Math.round(storedOrTotalAmount * 100));
+                    refundAmount = refundAmountInCentavos / 100;
+                    let refundType = storedRefundAmount > 0 ? 'partial_return_refund' : 'full_return_refund';
+
+                    // Read payment details first so we can cap refund amount to paid amount.
+                    const paymentResponse = await fetch(`https://api.paymongo.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+                        method: 'GET',
+                        headers: {
+                            'accept': 'application/json',
+                            'authorization': authHeader
+                        }
+                    });
+                    const paymentResult = await paymentResponse.json();
+                    if (!paymentResponse.ok || !paymentResult?.data?.attributes) {
+                        const errorDetail = paymentResult?.errors?.[0]?.detail || 'Failed to retrieve PayMongo payment details';
+                        throw new Error(errorDetail);
+                    }
+
+                    const paymongoPaymentAmount = parseInt(paymentResult.data.attributes.amount || 0, 10);
+                    if (paymongoPaymentAmount > 0 && refundAmountInCentavos > paymongoPaymentAmount) {
+                        console.warn(`[REFUND] Requested PayMongo refund (${refundAmountInCentavos}) exceeds payment amount (${paymongoPaymentAmount}). Capping to full paid amount.`);
+                        refundAmountInCentavos = paymongoPaymentAmount;
+                        refundAmount = refundAmountInCentavos / 100;
+                        refundType = 'full_return_refund';
+                    }
+
+                    const refundPayload = {
+                        data: {
+                            attributes: {
+                                amount: refundAmountInCentavos,
+                                payment_id: paymentId,
+                                reason: 'requested_by_customer',
+                                notes: 'requested_by_admin'
+                            }
+                        }
+                    };
+
+                    const paymongoRefundResponse = await fetch('https://api.paymongo.com/v1/refunds', {
+                        method: 'POST',
+                        headers: {
+                            'accept': 'application/json',
+                            'content-type': 'application/json',
+                            'authorization': authHeader
+                        },
+                        body: JSON.stringify(refundPayload)
+                    });
+
+                    const paymongoRefundResult = await paymongoRefundResponse.json();
+                    if (!paymongoRefundResponse.ok || !paymongoRefundResult?.data?.id) {
+                        const errorDetail = paymongoRefundResult?.errors?.[0]?.detail || 'PayMongo refund failed';
+                        throw new Error(errorDetail);
+                    }
+
+                    paymongoRefundId = paymongoRefundResult.data.id;
+                    console.log(`[REFUND] ✅ PayMongo refund created successfully for payment ${paymentId}`);
+                    console.log(`[REFUND] PayMongo Refund ID: ${paymongoRefundId}`);
+                    console.log(`[REFUND] PayMongo Refund Amount: ₱${refundAmount.toFixed(2)}`);
+                } catch (paymongoErr) {
+                    console.error('[REFUND] ❌ Error processing PayMongo refund:', paymongoErr);
+                    refundError = paymongoErr.message || 'PayMongo refund failed';
+                }
+            } else if (
+                order.PaymentMethod &&
+                (order.PaymentMethod.toLowerCase().includes('paymongo') ||
+                    (order.StripeSessionID &&
+                        !isStripeCheckoutSessionId(order.StripeSessionID) &&
+                        process.env.PAYMONGO_SECRET_KEY))
+            ) {
+                console.warn(`[REFUND] Order ${orderId} appears to be PayMongo but no payment id could be resolved for refund`);
+                refundError = refundError || 'No PayMongo payment ID found';
             } else {
-                console.log(`[REFUND] Order ${orderId} was not paid via Stripe, skipping Stripe refund`);
+                console.log(`[REFUND] Order ${orderId} was not paid via Stripe/PayMongo, skipping gateway refund`);
             }
 
             // Check if IsRefunded column exists before updating
@@ -28201,10 +29077,11 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
-            // Add Stripe refund ID if available
-            if (hasStripeRefundIdColumn && stripeRefundId) {
+            // Add refund reference ID if a gateway refund was created.
+            const gatewayRefundId = stripeRefundId || paymongoRefundId;
+            if (hasStripeRefundIdColumn && gatewayRefundId) {
                 updateQuery += `, StripeRefundID = @stripeRefundId`;
-                updateRequest.input('stripeRefundId', sql.NVarChar(255), stripeRefundId);
+                updateRequest.input('stripeRefundId', sql.NVarChar(255), gatewayRefundId);
             }
 
             // Add refund date
@@ -28294,8 +29171,11 @@ module.exports = function (sql, pool, getStripe = null) {
                 console.log(`[REFUND] ✅ Order ${orderId} refunded successfully in Stripe`);
                 console.log(`[REFUND] Stripe Refund ID: ${stripeRefundId}`);
                 console.log(`[REFUND] View in Stripe Dashboard: https://dashboard.stripe.com/refunds/${stripeRefundId}`);
+            } else if (paymongoRefundId) {
+                console.log(`[REFUND] ✅ Order ${orderId} refunded successfully in PayMongo`);
+                console.log(`[REFUND] PayMongo Refund ID: ${paymongoRefundId}`);
             } else if (refundError) {
-                console.warn(`[REFUND] ⚠️ Order ${orderId} refund processed but Stripe refund failed: ${refundError}`);
+                console.warn(`[REFUND] ⚠️ Order ${orderId} refund processed but gateway refund failed: ${refundError}`);
             }
 
             // Store customer details for email before committing
@@ -28343,8 +29223,10 @@ module.exports = function (sql, pool, getStripe = null) {
             let responseMessage = `Refund processed successfully. ₱${refundAmount.toFixed(2)} has been refunded to the customer.`;
             if (stripeRefundId) {
                 responseMessage += ` Stripe Refund ID: ${stripeRefundId}. You can view this refund in your Stripe Dashboard.`;
+            } else if (paymongoRefundId) {
+                responseMessage += ` PayMongo Refund ID: ${paymongoRefundId}.`;
             } else if (refundError) {
-                responseMessage += ` Note: Stripe refund failed (${refundError}). Please process the refund manually in Stripe Dashboard if needed.`;
+                responseMessage += ` Note: Payment gateway refund failed (${refundError}). Please process the refund manually in your payment gateway dashboard if needed.`;
             }
 
             return res.json({
@@ -28352,6 +29234,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 message: responseMessage,
                 refundAmount: refundAmount,
                 stripeRefundId: stripeRefundId || null,
+                paymongoRefundId: paymongoRefundId || null,
                 refundError: refundError || null
             });
         } catch (err) {
@@ -31039,7 +31922,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     } else {
                         // Use uploaded image
                         const imageFile = req.files.image[0];
-                        const imageUrl = `/uploads/products/images/${imageFile.filename}`;
+                        const imageUrl = publicUrlFromMulterProductFile(imageFile);
                         await transaction.request()
                             .input('productId', sql.Int, productId)
                             .input('imageUrl', sql.NVarChar, imageUrl)
@@ -31054,7 +31937,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     for (let i = 1; i <= 4; i++) {
                         if (req.files && req.files[`thumbnail${i}`]) {
                             const thumbnailFile = req.files[`thumbnail${i}`][0];
-                            thumbnails.push(`/uploads/products/thumbnails/${thumbnailFile.filename}`);
+                            thumbnails.push(publicUrlFromMulterProductFile(thumbnailFile));
                             hasUploadedThumbnails = true;
                         }
                     }
@@ -31062,7 +31945,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     // Bulk thumbnails field (matches "Bulk Upload" in AdminProducts.ejs)
                     if (req.files && req.files.thumbnails && req.files.thumbnails.length > 0) {
                         for (const thumbnailFile of req.files.thumbnails) {
-                            thumbnails.push(`/uploads/products/thumbnails/${thumbnailFile.filename}`);
+                            thumbnails.push(publicUrlFromMulterProductFile(thumbnailFile));
                             hasUploadedThumbnails = true;
                         }
                     }
@@ -31104,7 +31987,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     } else {
                         // Use uploaded 3D model
                         const model3dFile = req.files.model3d[0];
-                        const model3dUrl = `/uploads/products/models/${model3dFile.filename}`;
+                        const model3dUrl = publicUrlFromMulterProductFile(model3dFile);
                         await transaction.request()
                             .input('productId', sql.Int, productId)
                             .input('model3dUrl', sql.NVarChar, model3dUrl)
@@ -31115,7 +31998,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     // Handle main image
                     if (req.files.image) {
                         const imageFile = req.files.image[0];
-                        const imageUrl = `/uploads/products/images/${imageFile.filename}`;
+                        const imageUrl = publicUrlFromMulterProductFile(imageFile);
                         await transaction.request()
                             .input('productId', sql.Int, productId)
                             .input('imageUrl', sql.NVarChar, imageUrl)
@@ -31127,7 +32010,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     for (let i = 1; i <= 4; i++) {
                         if (req.files[`thumbnail${i}`]) {
                             const thumbnailFile = req.files[`thumbnail${i}`][0];
-                            thumbnails.push(`/uploads/products/thumbnails/${thumbnailFile.filename}`);
+                            thumbnails.push(publicUrlFromMulterProductFile(thumbnailFile));
                         }
                     }
 
@@ -31144,7 +32027,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     // Handle 3D model
                     if (req.files.model3d) {
                         const modelFile = req.files.model3d[0];
-                        const model3dUrl = `/uploads/products/3dmodels/${modelFile.filename}`;
+                        const model3dUrl = publicUrlFromMulterProductFile(modelFile);
                         await transaction.request()
                             .input('productId', sql.Int, productId)
                             .input('model3dUrl', sql.NVarChar, model3dUrl)
@@ -31434,7 +32317,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         await deleteOldImageFile(currentImageUrl);
 
                         const imageFile = req.files.image[0];
-                        const imageUrl = `/uploads/products/images/${imageFile.filename}`;
+                        const imageUrl = publicUrlFromMulterProductFile(imageFile);
                         await transaction.request()
                             .input('productId', sql.Int, productid)
                             .input('imageUrl', sql.NVarChar, imageUrl)
@@ -31448,14 +32331,14 @@ module.exports = function (sql, pool, getStripe = null) {
                     for (let i = 1; i <= 4; i++) {
                         if (req.files[`thumbnail${i}`]) {
                             const thumbnailFile = req.files[`thumbnail${i}`][0];
-                            thumbnails.push(`/uploads/products/thumbnails/${thumbnailFile.filename}`);
+                            thumbnails.push(publicUrlFromMulterProductFile(thumbnailFile));
                         }
                     }
 
                     // Also check for thumbnails field (multiple files)
                     if (req.files.thumbnails && req.files.thumbnails.length > 0) {
                         for (const thumbnailFile of req.files.thumbnails) {
-                            thumbnails.push(`/uploads/products/thumbnails/${thumbnailFile.filename}`);
+                            thumbnails.push(publicUrlFromMulterProductFile(thumbnailFile));
                         }
                     }
 
@@ -31482,7 +32365,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         }
 
                         const model3dFile = req.files.model3d[0];
-                        const model3dUrl = `/uploads/products/models/${model3dFile.filename}`;
+                        const model3dUrl = publicUrlFromMulterProductFile(model3dFile);
                         await transaction.request()
                             .input('productId', sql.Int, productid)
                             .input('model3dUrl', sql.NVarChar, model3dUrl)
@@ -32046,6 +32929,18 @@ module.exports = function (sql, pool, getStripe = null) {
                 // Sync variation stock to ensure ProductVariations.Quantity matches InventoryProductVariations
                 await syncInventoryVariationToProductsVariation(variationID, null);
                 console.log(`[VARIATION ADD] ✅ Synced variation stock for VariationID ${variationID}`);
+
+                if (variationID && imageUrl) {
+                    await pool.request()
+                        .input('variationID', sql.Int, variationID)
+                        .input('imageUrl', sql.NVarChar, imageUrl)
+                        .query(`
+                            UPDATE InventoryProductVariations
+                            SET VariationImageURL = @imageUrl
+                            WHERE VariationID = @variationID
+                        `);
+                    console.log(`[VARIATION ADD] Synced VariationImageURL to InventoryProductVariations for VariationID ${variationID}`);
+                }
             } else {
                 // This should never happen due to validation above, but keeping as fallback
                 return res.json({
@@ -32167,6 +33062,19 @@ module.exports = function (sql, pool, getStripe = null) {
 
             // Update variation without affecting product stock
             await updateRequest.query(updateQuery);
+
+            // Keep inventory row image in sync when CMS uploads a new file (same VariationID)
+            if (req.file && imageUrl) {
+                await pool.request()
+                    .input('variationID', sql.Int, parseInt(variationID))
+                    .input('imageUrl', sql.NVarChar, imageUrl)
+                    .query(`
+                        UPDATE InventoryProductVariations
+                        SET VariationImageURL = @imageUrl
+                        WHERE VariationID = @variationID
+                    `);
+                console.log(`[VARIATION EDIT] Synced VariationImageURL to InventoryProductVariations for VariationID ${variationID}`);
+            }
 
             // Get old quantity for logging
             const oldQuantity = parseInt(oldVariationResult.recordset[0].Quantity);

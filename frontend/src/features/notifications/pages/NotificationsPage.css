@@ -21,7 +21,47 @@
   overflow: hidden;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: stretch;
+}
+
+.notifications-header-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+  padding: 0.5rem 0;
+}
+
+.notifications-clear-all-btn {
+  flex-shrink: 0;
+  align-self: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  cursor: pointer;
+  background: linear-gradient(135deg, #F0B21B 0%, #e0a10b 100%);
+  color: #1f2937;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.notifications-clear-all-btn:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(240, 178, 27, 0.35);
+  transform: translateY(-1px);
+}
+
+.notifications-clear-all-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .notifications-header::before {
@@ -37,13 +77,12 @@
 }
 
 .notifications-header-content {
-  padding: 0.5rem 2rem 0.5rem;
-  text-align: center;
+  padding: 0.5rem 0;
+  text-align: left;
   position: relative;
   z-index: 1;
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
+  flex: 1;
+  min-width: 0;
 }
 
 .notifications-title {
@@ -65,9 +104,61 @@
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+.notifications-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.notifications-pagination-info {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 500;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.notifications-pagination-btn {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  cursor: pointer;
+  background: #f3f4f6;
+  color: #374151;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.notifications-pagination-btn:hover:not(:disabled) {
+  background: #e5e7eb;
+  transform: translateY(-1px);
+}
+
+.notifications-pagination-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 @media (max-width: 768px) {
+  .notifications-header-inner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .notifications-clear-all-btn {
+    width: 100%;
+    align-self: stretch;
+  }
+
   .notifications-header-content {
-    padding: 1.25rem 1rem 0.75rem;
+    padding: 1.25rem 0 0.75rem;
+    text-align: center;
   }
   
   .notifications-title {
@@ -381,5 +472,28 @@ body.theme-dark .notifications-title {
 
 body.theme-dark .notifications-subtitle {
   color: #cccccc !important;
+}
+
+body.theme-dark .notifications-clear-all-btn {
+  border-color: rgba(240, 178, 27, 0.35);
+  color: #111827;
+}
+
+body.theme-dark .notifications-pagination {
+  border-top-color: rgba(255, 255, 255, 0.12);
+}
+
+body.theme-dark .notifications-pagination-info {
+  color: #9ca3af;
+}
+
+body.theme-dark .notifications-pagination-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #e5e7eb;
+}
+
+body.theme-dark .notifications-pagination-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
 }
 

@@ -334,23 +334,6 @@ const DashboardTab = ({ stats, recentOrders, loading, formatPrice, onLogout, use
 
     return (
         <div className="dashboard-container">
-            {/* Theme Switcher */}
-            <div 
-                className="offer-bar-theme-switcher"
-                style={{
-                    position: 'absolute',
-                    top: '1rem',
-                    right: '0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'flex-end',
-                    zIndex: 10,
-                    paddingRight: '1rem'
-                }}
-            >
-                <ModernThemeSwitcher size="small" />
-            </div>
-            
             {/* Welcome Header */}
             <div className="dashboard-header">
                 <div className="welcome-content">
@@ -381,7 +364,7 @@ const DashboardTab = ({ stats, recentOrders, loading, formatPrice, onLogout, use
                 <div className="stat-card">
                     <div className="stat-icon">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 2V22M17 5H9.5C8.57174 5 7.6815 5.36875 7.02513 6.02513C6.36875 6.6815 6 7.57174 6 8.5C6 9.42826 6.36875 10.3185 7.02513 10.9749C7.6815 11.6312 8.57174 12 9.5 12H14.5C15.4283 12 16.3185 12.3687 16.9749 13.0251C17.6312 13.6815 18 14.5717 18 15.5C18 16.4283 17.6312 17.3185 16.9749 17.9749C16.3185 18.6312 15.4283 19 14.5 19H6" stroke="#F0B21B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <text x="12" y="19" textAnchor="middle" fill="#F0B21B" fontSize="20" fontWeight="800" fontFamily="Inter, Arial, sans-serif">₱</text>
                         </svg>
                     </div>
                     <div className="stat-content">
@@ -422,6 +405,16 @@ const DashboardTab = ({ stats, recentOrders, loading, formatPrice, onLogout, use
                     </div>
                 </div>
                 <div className="quick-actions-grid">
+                    <div className="quick-action-card quick-action-theme-card">
+                        <div className="action-icon">
+                            <DashboardIcon size={24} color="currentColor" />
+                        </div>
+                        <div className="action-content">
+                            <h3>Theme</h3>
+                            <p>Switch between light and dark mode</p>
+                        </div>
+                        <ModernThemeSwitcher className="account-theme-switcher-card" size="small" />
+                    </div>
                     <button className="quick-action-card" onClick={() => navigate('/products')}>
                         <div className="action-icon">
                             <ShoppingBagIcon size={24} color="currentColor" />

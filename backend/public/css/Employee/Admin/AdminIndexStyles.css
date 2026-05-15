@@ -1002,3 +1002,79 @@ body {
         transform: rotate(360deg);
     }
 }
+
+/* Archived page — inventory variations table (horizontal scroll + compact) */
+.archived-variations-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 6px;
+}
+
+.archived-variations-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    min-width: 640px;
+}
+
+.archived-variations-table th,
+.archived-variations-table td {
+    padding: 5px 6px;
+    border: 1px solid #dee2e6;
+    vertical-align: middle;
+    text-align: center;
+    word-break: break-word;
+    hyphens: auto;
+    line-height: 1.25;
+}
+
+.archived-variations-table th:first-child,
+.archived-variations-table td:first-child {
+    text-align: left;
+    max-width: 7rem;
+}
+
+.archived-variations-table td:nth-child(2) {
+    max-width: 6.5rem;
+}
+
+.archived-variations-table .archived-variations-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: center;
+    align-items: center;
+}
+
+.archived-variations-table .archived-variations-actions .reactivate-btn,
+.archived-variations-table .archived-variations-actions .delete-btn {
+    padding: 3px 8px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.archived-variations-table .status-badge {
+    display: inline-block;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.archived-variations-table .status-badge.status-available {
+    background-color: #28a745;
+    color: #fff;
+}
+
+.archived-variations-table .status-badge.status-damaged {
+    background-color: #dc3545;
+    color: #fff;
+}
+
+.archived-variations-table .status-badge.status-returned {
+    background-color: #ffc107;
+    color: #333;
+}
