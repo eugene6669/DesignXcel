@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useLocation, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../shared/hooks/useAuth';
-import paymentService from '../services/paymentService';
 import stripeService from '../services/stripeService';
 import paymongoService from '../services/paymongoService';
 import apiClient from '../../../shared/services/api/apiClient';
@@ -507,12 +506,35 @@ const OrderSuccessPage = () => {
                         console.warn('PayMongo session fetch failed, continuing with order lookup flow:', e);
                     }
 
-                    // Ensure order exists for this session (covers delayed webhooks).
-                    await apiClient.post(`/api/paymongo/finalize-checkout-session/${paymongoSessionId}`).catch(() => {});
+                    // Ensure order exists for this session (PayMongo has no server webhook in this app).
+                    let finalizeResult = null;
+                    for (let finAttempt = 0; finAttempt < 3; finAttempt += 1) {
+                        try {
+                            finalizeResult = await apiClient.post(
+                                `/api/paymongo/finalize-checkout-session/${paymongoSessionId}`
+                            );
+                            if (finalizeResult?.success && finalizeResult?.orderId) break;
+                            if (finalizeResult?.message === 'Payment not completed yet') {
+                                await new Promise((r) => setTimeout(r, 1200));
+                                continue;
+                            }
+                            if (finalizeResult?.success === false) {
+                                console.warn('[PayMongo] finalize attempt', finAttempt + 1, finalizeResult.message);
+                            }
+                            break;
+                        } catch (finErr) {
+                            console.warn('[PayMongo] finalize request failed:', finErr?.message || finErr);
+                            await new Promise((r) => setTimeout(r, 800));
+                        }
+                    }
+
+                    if (finalizeResult?.success === false && !finalizeResult?.orderId) {
+                        throw new Error(finalizeResult.message || 'Could not create order from PayMongo payment');
+                    }
 
                     // Retry DB lookup so PayMongo page matches Stripe rich summary.
                     let resolvedOrder = null;
-                    for (let attempt = 0; attempt < 5; attempt += 1) {
+                    for (let attempt = 0; attempt < 8; attempt += 1) {
                         try {
                             const orderResult = await apiClient.get(`/api/order/stripe-session/${paymongoSessionId}`);
                             if (orderResult.success && orderResult.order) {
@@ -611,6 +633,7 @@ const OrderSuccessPage = () => {
                 completedAt: new Date().toISOString()
             });
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run on session/order params; triggerWebhookSimulation is stable for this flow
     }, [order, orderId, paymentStatus, paymentMethod, searchParams, user?.email]);
 
     if (loading) {

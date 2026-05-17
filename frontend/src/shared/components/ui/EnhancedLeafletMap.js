@@ -18,7 +18,7 @@ const EnhancedLeafletMap = ({
   const mapInstanceRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [locationData, setLocationData] = useState({
+  const [locationData] = useState({
     coordinates: [14.640700042873558, 121.00340179095328], // Updated precise coordinates
     address: '1 Binmaka St, cor Biak na Bato, Quezon City, 1115 Kalakhang Maynila',
     isGeocoded: true // Set to true since we have precise coordinates

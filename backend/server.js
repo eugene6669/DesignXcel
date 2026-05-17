@@ -1193,12 +1193,11 @@ app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), as
                         let product = null;
                         let productResult;
 
-                        // Try by ID first (if it's a valid integer)
                         if (productIdValue && productIdValue !== 'shipping') {
-                            const productId = parseInt(productIdValue);
-                            if (!isNaN(productId) && productId > 0) {
+                            const resolvedId = await resolveProductId(productIdValue);
+                            if (resolvedId && resolvedId > 0) {
                                 productResult = await pool.request()
-                                    .input('id', sql.Int, productId)
+                                    .input('id', sql.Int, resolvedId)
                                     .query('SELECT ProductID, Name FROM Products WHERE ProductID = @id AND IsActive = 1');
 
                                 if (productResult.recordset.length > 0) {
@@ -3012,30 +3011,63 @@ app.put('/api/customer/change-password', async (req, res) => {
         }
 
         const customerId = req.session.user.id;
-        const { currentPassword, newPassword } = req.body;
+        const { currentPassword, newPassword, setupInitialPassword } = req.body || {};
+        const isInitialSetup =
+            setupInitialPassword === true ||
+            setupInitialPassword === 'true' ||
+            setupInitialPassword === 1;
 
-        if (!currentPassword || !newPassword) {
+        const newPwd = typeof newPassword === 'string' ? newPassword.trim() : '';
+        const currentPwd =
+            typeof currentPassword === 'string' ? currentPassword.trim() : '';
+
+        if (!newPwd) {
+            return res.status(400).json({
+                success: false,
+                message: 'New password is required'
+            });
+        }
+
+        if (!isInitialSetup && !currentPwd) {
             return res.status(400).json({
                 success: false,
                 message: 'Current password and new password are required'
             });
         }
 
-        if (newPassword.length < 8) {
+        if (newPwd.length < 8) {
             return res.status(400).json({
                 success: false,
                 message: 'New password must be at least 8 characters long'
             });
         }
 
-        console.log('[PASSWORD CHANGE] Customer ID:', customerId);
+        const { isCommonPassword } = require('./utils/passwordValidator');
+        if (isCommonPassword(newPwd)) {
+            return res.status(400).json({
+                success: false,
+                message: 'This password is too common. Please choose a more secure password.'
+            });
+        }
+
+        console.log('[PASSWORD CHANGE] Customer ID:', customerId, 'initialSetup:', isInitialSetup);
 
         await poolConnect;
 
-        // Get current password hash
-        const customerResult = await pool.request()
-            .input('customerId', sql.Int, customerId)
-            .query('SELECT PasswordHash FROM Customers WHERE CustomerID = @customerId AND IsActive = 1');
+        let customerResult;
+        try {
+            customerResult = await pool.request()
+                .input('customerId', sql.Int, customerId)
+                .query(`
+                    SELECT PasswordHash, PasswordSetupCompleted
+                    FROM Customers
+                    WHERE CustomerID = @customerId AND IsActive = 1
+                `);
+        } catch (colErr) {
+            customerResult = await pool.request()
+                .input('customerId', sql.Int, customerId)
+                .query('SELECT PasswordHash FROM Customers WHERE CustomerID = @customerId AND IsActive = 1');
+        }
 
         const customer = customerResult.recordset[0];
         if (!customer) {
@@ -3045,30 +3077,66 @@ app.put('/api/customer/change-password', async (req, res) => {
             });
         }
 
-        // Verify current password
-        const currentPasswordMatch = await bcrypt.compare(currentPassword, customer.PasswordHash);
-        if (!currentPasswordMatch) {
-            console.log('[PASSWORD CHANGE] Current password verification failed');
-            return res.status(400).json({
-                success: false,
-                message: 'Current password is incorrect'
-            });
+        const passwordSetupIncomplete =
+            customer.PasswordSetupCompleted === false ||
+            customer.PasswordSetupCompleted === 0;
+        const hasNoLocalPassword =
+            customer.PasswordHash == null || String(customer.PasswordHash).trim() === '';
+        const allowWithoutCurrent =
+            isInitialSetup || passwordSetupIncomplete || hasNoLocalPassword;
+
+        if (!allowWithoutCurrent) {
+            const currentPasswordMatch = await bcrypt.compare(
+                currentPwd,
+                customer.PasswordHash
+            );
+            if (!currentPasswordMatch) {
+                console.log('[PASSWORD CHANGE] Current password verification failed');
+                return res.status(400).json({
+                    success: false,
+                    message: 'Current password is incorrect'
+                });
+            }
+            if (currentPwd === newPwd) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'New password must be different from current password'
+                });
+            }
         }
 
-        // Hash new password
-        const newPasswordHash = await bcrypt.hash(newPassword, 10);
+        const newPasswordHash = await bcrypt.hash(newPwd, 10);
 
-        // Update password in database
-        await pool.request()
-            .input('customerId', sql.Int, customerId)
-            .input('newPasswordHash', sql.NVarChar, newPasswordHash)
-            .query('UPDATE Customers SET PasswordHash = @newPasswordHash WHERE CustomerID = @customerId');
+        try {
+            await pool.request()
+                .input('customerId', sql.Int, customerId)
+                .input('newPasswordHash', sql.NVarChar, newPasswordHash)
+                .query(`
+                    UPDATE Customers
+                    SET PasswordHash = @newPasswordHash, PasswordSetupCompleted = 1
+                    WHERE CustomerID = @customerId
+                `);
+        } catch (updateErr) {
+            await pool.request()
+                .input('customerId', sql.Int, customerId)
+                .input('newPasswordHash', sql.NVarChar, newPasswordHash)
+                .query('UPDATE Customers SET PasswordHash = @newPasswordHash WHERE CustomerID = @customerId');
+        }
+
+        if (req.session.user) {
+            req.session.user.requiresPasswordSetup = false;
+        }
+        if (req.session.customerData) {
+            req.session.customerData.requiresPasswordSetup = false;
+        }
 
         console.log('[PASSWORD CHANGE] Password updated successfully for customer:', customerId);
 
         res.json({
             success: true,
-            message: 'Password updated successfully'
+            message: allowWithoutCurrent
+                ? 'Password set successfully'
+                : 'Password updated successfully'
         });
 
     } catch (err) {
@@ -3800,28 +3868,13 @@ app.get('/api/products', async (req, res) => {
         await poolConnect;
         console.log('Products API: Database connected');
 
-        // Keep Products.SKU aligned with ProductInventory (InventoryProducts) source of truth
+        // Catalog parent products have no SKU; sellable units use variation SKUs only
         await pool.request().query(`
             UPDATE p
-            SET p.SKU = src.SKU
+            SET p.SKU = NULL, p.UpdatedAt = GETDATE()
             FROM Products p
-            OUTER APPLY (
-                SELECT TOP 1 ip.SKU
-                FROM InventoryProducts ip
-                WHERE ip.IsActive = 1
-                  AND ip.SKU IS NOT NULL
-                  AND (
-                       ip.ProductID = p.ProductID
-                    OR ip.InventoryProductID = p.ProductID
-                  )
-                ORDER BY
-                    CASE WHEN ip.ProductID = p.ProductID THEN 0 ELSE 1 END,
-                    ip.DateUpdated DESC,
-                    ip.DateAdded DESC,
-                    ip.InventoryProductID DESC
-            ) src
-            WHERE src.SKU IS NOT NULL
-              AND ISNULL(p.SKU, '') <> src.SKU
+            INNER JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
+            WHERE p.SKU IS NOT NULL
         `);
 
         await pool.request().query(`
@@ -3839,26 +3892,56 @@ app.get('/api/products', async (req, res) => {
 
         const result = await pool.request().query(`
             SELECT 
-                PublicId as id,
-                Slug as slug,
-                SKU as sku,
-                Name as name,
-                Description as description,
-                Price as price,
-                StockQuantity as stockQuantity,
-                Category as categoryName,
-                ImageURL as images,
-                DateAdded as dateAdded,
-                IsActive as isActive,
-                Dimensions as specifications,
-                IsFeatured as featured,
-                IsBestSeller as isBestSeller,
-                IsNewArrival as isNewArrival,
-                Model3DURL as model3d,
-                Has3DModel as has3dModel
-            FROM Products WITH (NOLOCK)
-            WHERE IsActive = 1
-            ORDER BY IsFeatured DESC, IsBestSeller DESC, IsNewArrival DESC, DateAdded DESC
+                p.PublicId as id,
+                p.Slug as slug,
+                p.SKU as sku,
+                p.Name as name,
+                p.Description as description,
+                p.Price as price,
+                p.StockQuantity as stockQuantity,
+                p.StockQuantity - ISNULL((
+                    SELECT SUM(oi.Quantity)
+                    FROM OrderItems oi
+                    INNER JOIN Orders o ON oi.OrderID = o.OrderID
+                    WHERE oi.ProductID = p.ProductID
+                    AND o.Status = N'Pending'
+                ), 0) as availableStock,
+                COALESCE(sold.soldQuantity, 0) as soldQuantity,
+                p.Category as categoryName,
+                p.ImageURL as images,
+                ISNULL(p.ThumbnailURLs, '[]') as thumbnails,
+                p.DateAdded as dateAdded,
+                p.IsActive as isActive,
+                p.Dimensions as specifications,
+                p.IsFeatured as featured,
+                p.IsBestSeller as isBestSeller,
+                p.IsNewArrival as isNewArrival,
+                p.Model3DURL as model3d,
+                p.Has3DModel as has3dModel
+            FROM Products p WITH (NOLOCK)
+            LEFT JOIN (
+                SELECT 
+                    cat.CatalogProductID AS ProductID,
+                    SUM(oi.Quantity) AS soldQuantity
+                FROM OrderItems oi
+                INNER JOIN Orders o ON oi.OrderID = o.OrderID
+                CROSS APPLY (
+                    SELECT COALESCE(
+                        (SELECT TOP 1 p2.ProductID FROM Products p2 WHERE p2.ProductID = oi.ProductID),
+                        (SELECT TOP 1 ip.ProductID FROM InventoryProducts ip
+                         WHERE ip.InventoryProductID = oi.ProductID AND ISNULL(ip.IsActive, 1) = 1
+                         ORDER BY ip.InventoryProductID DESC),
+                        (SELECT TOP 1 ip2.ProductID FROM InventoryProducts ip2
+                         WHERE ip2.ProductID = oi.ProductID AND ISNULL(ip2.IsActive, 1) = 1
+                         ORDER BY ip2.InventoryProductID DESC)
+                    ) AS CatalogProductID
+                ) cat
+                WHERE o.Status IN (N'Completed', N'Delivered', N'Received')
+                  AND cat.CatalogProductID IS NOT NULL
+                GROUP BY cat.CatalogProductID
+            ) sold ON p.ProductID = sold.ProductID
+            WHERE p.IsActive = 1
+            ORDER BY p.IsFeatured DESC, p.IsBestSeller DESC, p.IsNewArrival DESC, p.DateAdded DESC
         `);
 
         console.log('Products API: Query executed, found', result.recordset.length, 'products');
@@ -3867,6 +3950,11 @@ app.get('/api/products', async (req, res) => {
         const products = result.recordset.map((product) => {
             const row = {
                 ...product,
+                soldQuantity: Number(product.soldQuantity ?? 0) || 0,
+                availableStock:
+                    product.availableStock != null
+                        ? Math.max(0, Number(product.availableStock) || 0)
+                        : Math.max(0, Number(product.stockQuantity) || 0),
                 images: product.images ? [product.images] : [],
                 specifications: (() => {
                     try {
@@ -3879,10 +3967,17 @@ app.get('/api/products', async (req, res) => {
             return mapProductRecordAssetUrls(row);
         });
 
-        console.log('Products API: Returning', products.length, 'products');
+        const {
+            enrichProductsWithVariationPolicy,
+            enrichProductsAssetsFromInventory
+        } = require('./utils/productVariationPolicy');
+        let productsForClient = await enrichProductsWithVariationPolicy(pool, products);
+        productsForClient = await enrichProductsAssetsFromInventory(pool, productsForClient);
+
+        console.log('Products API: Returning', productsForClient.length, 'products');
         res.json({
             success: true,
-            products: products
+            products: productsForClient
         });
     } catch (err) {
         console.error('Products API Error:', err);
@@ -3926,6 +4021,116 @@ async function resolveProductId(identifier) {
     return result.recordset[0].ProductID || null;
 }
 
+/** Cart/checkout item may send id (PublicId), productId, or ProductID. */
+function getCheckoutItemProductIdentifier(item) {
+    if (!item || typeof item !== 'object') return '';
+    return String(
+        item.productId ||
+        item.id ||
+        item.ProductID ||
+        item.product?.id ||
+        item.product?.ProductID ||
+        ''
+    ).trim();
+}
+
+function getPayMongoAuthHeader() {
+    const key = process.env.PAYMONGO_SECRET_KEY;
+    if (!key) return null;
+    return `Basic ${Buffer.from(`${key}:`).toString('base64')}`;
+}
+
+async function fetchPayMongoCheckoutSession(sessionId) {
+    const auth = getPayMongoAuthHeader();
+    if (!auth || !sessionId) return null;
+    const pmRes = await fetch(
+        `https://api.paymongo.com/v1/checkout_sessions/${encodeURIComponent(String(sessionId).trim())}`,
+        { headers: { accept: 'application/json', authorization: auth } }
+    );
+    if (!pmRes.ok) return null;
+    const pmJson = await pmRes.json().catch(() => ({}));
+    return pmJson?.data || null;
+}
+
+/** True when PayMongo reports the checkout session as paid (several attribute shapes). */
+function isPayMongoCheckoutSessionPaid(attrs) {
+    if (!attrs) return false;
+    const paidStatuses = new Set(['paid', 'succeeded', 'success', 'completed']);
+    const candidates = [
+        attrs.status,
+        attrs.payment_status,
+        attrs.payment_intent?.attributes?.status
+    ];
+    for (const payment of attrs.payments || []) {
+        candidates.push(payment?.attributes?.status);
+        candidates.push(payment?.attributes?.paid_at ? 'paid' : null);
+    }
+    if (candidates.some((s) => paidStatuses.has(String(s || '').toLowerCase()))) {
+        return true;
+    }
+    if (Array.isArray(attrs.payments) && attrs.payments.length > 0) {
+        return attrs.payments.some((p) =>
+            paidStatuses.has(String(p?.attributes?.status || '').toLowerCase())
+        );
+    }
+    return false;
+}
+
+/** Shared stock validation for Stripe/PayMongo checkout (supports UUID PublicId in item.id). */
+async function validateCheckoutItemsStock(items) {
+    const stockIssues = [];
+    if (!items || !Array.isArray(items)) {
+        return ['No items provided'];
+    }
+
+    await pool.connect();
+
+    for (const item of items) {
+        const requestedQuantity = parseInt(item.quantity, 10) || 0;
+        if (requestedQuantity <= 0) continue;
+
+        const rawId = getCheckoutItemProductIdentifier(item);
+        const productId = await resolveProductId(rawId);
+        if (!productId || productId <= 0) {
+            stockIssues.push(`Product not found or inactive: ${rawId || 'unknown'}`);
+            continue;
+        }
+
+        const productResult = await pool.request()
+            .input('productId', sql.Int, productId)
+            .query('SELECT StockQuantity, Name FROM Products WHERE ProductID = @productId AND IsActive = 1');
+
+        if (productResult.recordset.length === 0) {
+            stockIssues.push(`Product ID ${productId} not found`);
+            continue;
+        }
+
+        const actualStock = productResult.recordset[0].StockQuantity || 0;
+        const productName = productResult.recordset[0].Name || 'Unknown Product';
+
+        const pendingResult = await pool.request()
+            .input('productId', sql.Int, productId)
+            .query(`
+                SELECT ISNULL(SUM(oi.Quantity), 0) as PendingQuantity
+                FROM OrderItems oi
+                INNER JOIN Orders o ON oi.OrderID = o.OrderID
+                WHERE oi.ProductID = @productId
+                AND o.Status = 'Pending'
+            `);
+
+        const pendingQuantity = pendingResult.recordset[0].PendingQuantity || 0;
+        const availableStock = Math.max(0, actualStock - pendingQuantity);
+
+        if (requestedQuantity > availableStock) {
+            stockIssues.push(
+                `${productName}: Requested ${requestedQuantity}, but only ${availableStock} available (${actualStock} in stock, ${pendingQuantity} in pending orders)`
+            );
+        }
+    }
+
+    return stockIssues;
+}
+
 // Search products (must be declared before /api/products/:id)
 app.get('/api/products/search', async (req, res) => {
     try {
@@ -3953,6 +4158,7 @@ app.get('/api/products/search', async (req, res) => {
                     StockQuantity as stockQuantity,
                     Category as categoryName,
                     ImageURL as images,
+                    ISNULL(ThumbnailURLs, '[]') as thumbnails,
                     DateAdded as dateAdded,
                     IsActive as isActive,
                     Dimensions as specifications,
@@ -4010,35 +4216,20 @@ app.get('/api/products/:id', async (req, res) => {
         const identifier = req.params.id;
         await poolConnect;
 
-        // Keep Products.SKU aligned with ProductInventory (InventoryProducts) source of truth
+        // Catalog parent products have no SKU; sellable units use variation SKUs only
         await pool.request().query(`
             UPDATE p
-            SET p.SKU = src.SKU
+            SET p.SKU = NULL, p.UpdatedAt = GETDATE()
             FROM Products p
-            OUTER APPLY (
-                SELECT TOP 1 ip.SKU
-                FROM InventoryProducts ip
-                WHERE ip.IsActive = 1
-                  AND ip.SKU IS NOT NULL
-                  AND (
-                       ip.ProductID = p.ProductID
-                    OR ip.InventoryProductID = p.ProductID
-                  )
-                ORDER BY
-                    CASE WHEN ip.ProductID = p.ProductID THEN 0 ELSE 1 END,
-                    ip.DateUpdated DESC,
-                    ip.DateAdded DESC,
-                    ip.InventoryProductID DESC
-            ) src
-            WHERE src.SKU IS NOT NULL
-              AND ISNULL(p.SKU, '') <> src.SKU
+            INNER JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
+            WHERE p.SKU IS NOT NULL
         `);
 
         // Set cache headers for product detail (2 minutes - products change less frequently)
         res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
 
         // Determine if identifier is UUID, slug, SKU, or legacy numeric ID
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier);
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier);
         const isNumeric = /^\d+$/.test(identifier);
         const isSKU = /^SKU-[A-Z0-9]+-[0-9]{6}$/i.test(identifier) || /^DX-[A-F0-9]{8}-[0-9]{4}$/i.test(identifier);
 
@@ -4055,6 +4246,7 @@ app.get('/api/products/:id', async (req, res) => {
                     StockQuantity as stockQuantity,
                     Category as categoryName,
                     ImageURL as images,
+                    ISNULL(ThumbnailURLs, '[]') as thumbnails,
                     DateAdded as dateAdded,
                     IsActive as isActive,
                     Dimensions as specifications,
@@ -4078,6 +4270,7 @@ app.get('/api/products/:id', async (req, res) => {
                     StockQuantity as stockQuantity,
                     Category as categoryName,
                     ImageURL as images,
+                    ISNULL(ThumbnailURLs, '[]') as thumbnails,
                     DateAdded as dateAdded,
                     IsActive as isActive,
                     Dimensions as specifications,
@@ -4100,6 +4293,7 @@ app.get('/api/products/:id', async (req, res) => {
                     StockQuantity as stockQuantity,
                     Category as categoryName,
                     ImageURL as images,
+                    ISNULL(ThumbnailURLs, '[]') as thumbnails,
                     DateAdded as dateAdded,
                     IsActive as isActive,
                     Dimensions as specifications,
@@ -4123,6 +4317,7 @@ app.get('/api/products/:id', async (req, res) => {
                     StockQuantity as stockQuantity,
                     Category as categoryName,
                     ImageURL as images,
+                    ISNULL(ThumbnailURLs, '[]') as thumbnails,
                     DateAdded as dateAdded,
                     IsActive as isActive,
                     Dimensions as specifications,
@@ -4208,55 +4403,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
             return res.status(400).json({ error: 'No items provided' });
         }
 
-        // ✅ STOCK VALIDATION: Check available stock (accounting for pending orders)
-        await pool.connect();
-        const stockIssues = [];
-
-        for (const item of items) {
-            const requestedQuantity = parseInt(item.quantity) || 0;
-            if (requestedQuantity <= 0) {
-                continue;
-            }
-
-            const productId = await resolveProductId(item.productId);
-            if (!productId || productId <= 0) {
-                stockIssues.push(`Product not found or inactive: ${item.productId}`);
-                continue;
-            }
-
-            // Get actual stock
-            const productResult = await pool.request()
-                .input('productId', sql.Int, productId)
-                .query('SELECT StockQuantity, Name FROM Products WHERE ProductID = @productId AND IsActive = 1');
-
-            if (productResult.recordset.length === 0) {
-                stockIssues.push(`Product ID ${productId} not found`);
-                continue;
-            }
-
-            const actualStock = productResult.recordset[0].StockQuantity || 0;
-            const productName = productResult.recordset[0].Name || 'Unknown Product';
-
-            // Calculate pending quantities from regular orders
-            const pendingResult = await pool.request()
-                .input('productId', sql.Int, productId)
-                .query(`
-                    SELECT ISNULL(SUM(oi.Quantity), 0) as PendingQuantity
-                    FROM OrderItems oi
-                    INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                    WHERE oi.ProductID = @productId
-                    AND o.Status = 'Pending'
-                `);
-
-            const pendingQuantity = pendingResult.recordset[0].PendingQuantity || 0;
-            const availableStock = Math.max(0, actualStock - pendingQuantity);
-
-            if (requestedQuantity > availableStock) {
-                stockIssues.push(
-                    `${productName}: Requested ${requestedQuantity}, but only ${availableStock} available (${actualStock} in stock, ${pendingQuantity} in pending orders)`
-                );
-            }
-        }
+        const stockIssues = await validateCheckoutItemsStock(items);
 
         if (stockIssues.length > 0) {
             console.error('[CHECKOUT] Stock validation failed:', stockIssues);
@@ -4374,6 +4521,323 @@ app.post('/api/create-checkout-session', async (req, res) => {
     }
 });
 
+// PayMongo customer checkout
+app.post('/api/create-paymongo-checkout-session', async (req, res) => {
+    try {
+        const paymongoSecretKey = process.env.PAYMONGO_SECRET_KEY;
+        if (!paymongoSecretKey) {
+            return res.status(500).json({ success: false, error: 'PayMongo is not configured' });
+        }
+
+        const {
+            items,
+            email,
+            paymentMethod,
+            deliveryType,
+            pickupDate,
+            shippingCost,
+            extraDeliveryFee,
+            subtotal,
+            total,
+            shippingAddressId
+        } = req.body || {};
+
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ success: false, error: 'No items provided' });
+        }
+
+        const stockIssues = await validateCheckoutItemsStock(items);
+        if (stockIssues.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Insufficient stock',
+                message: stockIssues.join('; '),
+                issues: stockIssues
+            });
+        }
+
+        const cartForMetadata = items.map((item) => ({
+            ...item,
+            id: getCheckoutItemProductIdentifier(item) || item.id,
+            productId: getCheckoutItemProductIdentifier(item) || item.productId
+        }));
+
+        const line_items = cartForMetadata.map((item) => {
+            const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+            const unit = Number(item.price) || 0;
+            return {
+                currency: 'PHP',
+                amount: Math.round(unit * 100) * qty,
+                name: String(item.name || 'Product').trim().slice(0, 200),
+                quantity: qty
+            };
+        });
+
+        const shipPesos = Math.max(0, Number(shippingCost) || 0);
+        if (shipPesos > 0.001) {
+            line_items.push({
+                currency: 'PHP',
+                amount: Math.round(shipPesos * 100),
+                name: 'Delivery Fee',
+                quantity: 1
+            });
+        }
+
+        const extraFeePesos = Math.max(0, Number(extraDeliveryFee) || 0);
+        if (extraFeePesos > 0.001) {
+            line_items.push({
+                currency: 'PHP',
+                amount: Math.round(extraFeePesos * 100),
+                name: 'Extra Delivery Fee (Qty > 4)',
+                quantity: 1
+            });
+        }
+
+        const origin = req.headers.origin || `${req.protocol}://${req.get('host')}`;
+        const authHeader = getPayMongoAuthHeader();
+
+        const pmRes = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: authHeader
+            },
+            body: JSON.stringify({
+                data: {
+                    attributes: {
+                        send_email_receipt: false,
+                        show_description: true,
+                        show_line_items: true,
+                        description: `DesignXcel order — ${email || 'customer'}`,
+                        line_items,
+                        payment_method_types: ['card', 'gcash', 'paymaya', 'grab_pay'],
+                        success_url: `${origin}/order-success?provider=paymongo&paymongo_session_id={CHECKOUT_SESSION_ID}`,
+                        cancel_url: `${origin}/payment?cancelled=true`,
+                        billing: email && String(email).includes('@')
+                            ? { email: String(email).trim() }
+                            : undefined,
+                        metadata: {
+                            cart: JSON.stringify(cartForMetadata),
+                            paymentMethod: paymentMethod || 'E-Wallet',
+                            deliveryType: deliveryType || 'pickup',
+                            pickupDate: pickupDate ? String(pickupDate).trim() : '',
+                            shippingCost: String(typeof shippingCost === 'number' ? shippingCost : 0),
+                            extraDeliveryFee: String(typeof extraDeliveryFee === 'number' ? extraDeliveryFee : 0),
+                            subtotal: String(typeof subtotal === 'number' ? subtotal : 0),
+                            total: String(typeof total === 'number' ? total : 0),
+                            shippingAddressId: shippingAddressId ? String(shippingAddressId) : '',
+                            email: email ? String(email).trim() : '',
+                            orderType: 'regular'
+                        }
+                    }
+                }
+            })
+        });
+
+        const pmJson = await pmRes.json().catch(() => ({}));
+        if (!pmRes.ok || !pmJson?.data?.id) {
+            const errMsg =
+                pmJson?.errors?.[0]?.detail ||
+                pmJson?.errors?.[0]?.code ||
+                'PayMongo checkout failed';
+            console.error('[PAYMONGO CHECKOUT]', errMsg, pmJson);
+            return res.status(500).json({ success: false, error: errMsg });
+        }
+
+        const checkoutUrl = pmJson.data.attributes?.checkout_url;
+        if (!checkoutUrl) {
+            return res.status(500).json({
+                success: false,
+                error: 'PayMongo did not return checkout_url'
+            });
+        }
+
+        res.json({
+            success: true,
+            sessionId: pmJson.data.id,
+            checkoutUrl
+        });
+    } catch (error) {
+        console.error('Error creating PayMongo checkout session:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to create PayMongo checkout session',
+            message: error.message
+        });
+    }
+});
+
+app.get('/api/paymongo-checkout-session/:sessionId', async (req, res) => {
+    try {
+        const session = await fetchPayMongoCheckoutSession(req.params.sessionId);
+        if (!session) {
+            return res.status(404).json({
+                success: false,
+                message: 'PayMongo checkout session not found'
+            });
+        }
+        res.json({ success: true, session });
+    } catch (error) {
+        console.error('Error retrieving PayMongo checkout session:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to retrieve PayMongo checkout session'
+        });
+    }
+});
+
+app.post('/api/paymongo/finalize-checkout-session/:sessionId', async (req, res) => {
+    try {
+        const sessionId = String(req.params.sessionId || '').trim();
+        if (!sessionId) {
+            return res.status(400).json({ success: false, message: 'Session ID is required' });
+        }
+
+        const pmData = await fetchPayMongoCheckoutSession(sessionId);
+        if (!pmData) {
+            return res.status(404).json({ success: false, message: 'PayMongo session not found' });
+        }
+
+        const attrs = pmData.attributes || {};
+        const pmStatus = String(
+            attrs.status || attrs.payment_intent?.attributes?.status || ''
+        ).toLowerCase();
+
+        if (!isPayMongoCheckoutSessionPaid(attrs)) {
+            return res.json({
+                success: false,
+                message: 'Payment not completed yet',
+                status: pmStatus || 'pending'
+            });
+        }
+
+        await poolConnect;
+        const existingOrder = await pool.request()
+            .input('sessionId', sql.NVarChar, sessionId)
+            .query('SELECT OrderID FROM Orders WHERE StripeSessionID = @sessionId');
+
+        if (existingOrder.recordset.length > 0) {
+            return res.json({
+                success: true,
+                message: 'Order already exists',
+                orderId: existingOrder.recordset[0].OrderID
+            });
+        }
+
+        const metadata = attrs.metadata || {};
+        const sessionUser = req.session?.user || req.session?.customerData || {};
+        const email =
+            attrs.billing?.email ||
+            metadata.email ||
+            sessionUser.email ||
+            '';
+
+        const paymongoPaymentId = attrs.payments?.[0]?.id || null;
+        const amountRaw = Number(attrs.amount);
+        const amountPhp = Number.isFinite(amountRaw) && amountRaw > 0
+            ? amountRaw / 100
+            : parseFloat(metadata.total) || 0;
+
+        let cartItems = [];
+        try {
+            if (metadata.cart) {
+                cartItems = typeof metadata.cart === 'string'
+                    ? JSON.parse(metadata.cart)
+                    : metadata.cart;
+            }
+        } catch (cartErr) {
+            console.warn('[PAYMONGO FINALIZE] Could not parse cart metadata:', cartErr.message);
+        }
+
+        const webhookPayload = {
+            sessionId,
+            email,
+            customerId: sessionUser.id || sessionUser.CustomerID || null,
+            paymentMethod: metadata.paymentMethod || 'E-Wallet',
+            deliveryType: metadata.deliveryType || 'pickup',
+            pickupDate: metadata.pickupDate || '',
+            shippingCost: metadata.shippingCost || '0',
+            extraDeliveryFee: metadata.extraDeliveryFee || '0',
+            subtotal: metadata.subtotal || '0',
+            total: amountPhp,
+            shippingAddressId: metadata.shippingAddressId || '',
+            items: Array.isArray(cartItems) ? cartItems : [],
+            paymongoPaymentId
+        };
+
+        const port = process.env.PORT || 5000;
+        const baseUrl = process.env.API_BASE_URL || `http://127.0.0.1:${port}`;
+        const webhookRes = await fetch(`${baseUrl}/api/test-webhook`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {})
+            },
+            body: JSON.stringify(webhookPayload)
+        });
+
+        const webhookJson = await webhookRes.json().catch(() => ({}));
+
+        if (!webhookRes.ok) {
+            console.error('[PAYMONGO FINALIZE] test-webhook HTTP', webhookRes.status, webhookJson);
+            return res.status(500).json({
+                success: false,
+                message: webhookJson.message || webhookJson.error || 'Failed to create order from PayMongo payment',
+                details: webhookJson.details
+            });
+        }
+
+        if (webhookJson.success === false) {
+            console.error('[PAYMONGO FINALIZE] test-webhook rejected:', webhookJson.message);
+            return res.status(422).json({
+                success: false,
+                message: webhookJson.message || 'Order could not be created',
+                details: webhookJson.details
+            });
+        }
+
+        if (paymongoPaymentId) {
+            try {
+                await pool.request()
+                    .input('sessionId', sql.NVarChar, sessionId)
+                    .input('txn', sql.NVarChar, paymongoPaymentId)
+                    .query(`
+                        UPDATE Orders
+                        SET TransactionID = @txn
+                        WHERE StripeSessionID = @sessionId
+                          AND (TransactionID IS NULL OR TransactionID LIKE 'TXN%')
+                    `);
+            } catch (txnErr) {
+                console.warn('[PAYMONGO FINALIZE] Could not set gateway TransactionID:', txnErr.message);
+            }
+        }
+
+        const orderAfter = await pool.request()
+            .input('sessionId', sql.NVarChar, sessionId)
+            .query('SELECT OrderID FROM Orders WHERE StripeSessionID = @sessionId');
+
+        const orderId = orderAfter.recordset[0]?.OrderID || webhookJson.orderId || null;
+        if (!orderId) {
+            return res.status(500).json({
+                success: false,
+                message: 'Payment received but order was not saved. Please contact support with your payment reference.'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: webhookJson.message || 'Order finalized',
+            orderId
+        });
+    } catch (error) {
+        console.error('[PAYMONGO FINALIZE] Error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to finalize PayMongo checkout'
+        });
+    }
+});
+
 app.post('/api/confirm-payment', async (req, res) => {
     try {
         const { paymentIntentId } = req.body;
@@ -4438,18 +4902,45 @@ app.get('/api/products/:productId/available-stock', async (req, res) => {
             });
         }
 
-        const actualStock = productResult.recordset[0].StockQuantity || 0;
+        const {
+            productHasActiveProductVariations,
+            getProductVariationStockSum,
+            getProductVariationQuantity
+        } = require('./utils/productVariationPolicy');
+
+        const variationIdParam = req.query.variationId;
+        const parsedVariationId = variationIdParam != null && variationIdParam !== ''
+            ? parseInt(variationIdParam, 10)
+            : null;
+
+        const hasVariations = await productHasActiveProductVariations(pool, productId);
+
+        let actualStock = productResult.recordset[0].StockQuantity || 0;
+        if (hasVariations) {
+            if (parsedVariationId && !Number.isNaN(parsedVariationId)) {
+                actualStock = await getProductVariationQuantity(pool, productId, parsedVariationId);
+            } else {
+                actualStock = await getProductVariationStockSum(pool, productId);
+            }
+        }
 
         // Calculate pending quantities from regular orders
-        const pendingOrdersResult = await pool.request()
-            .input('productId', sql.Int, productId)
-            .query(`
+        let pendingQuery = `
                 SELECT ISNULL(SUM(oi.Quantity), 0) as PendingQuantity
                 FROM OrderItems oi
                 INNER JOIN Orders o ON oi.OrderID = o.OrderID
                 WHERE oi.ProductID = @productId
                 AND o.Status = 'Pending'
-            `);
+            `;
+        const pendingRequest = pool.request().input('productId', sql.Int, productId);
+        if (hasVariations && parsedVariationId && !Number.isNaN(parsedVariationId)) {
+            pendingQuery += ' AND oi.VariationID = @variationId';
+            pendingRequest.input('variationId', sql.Int, parsedVariationId);
+        } else if (hasVariations) {
+            pendingQuery += ' AND oi.VariationID IS NOT NULL';
+        }
+
+        const pendingOrdersResult = await pendingRequest.query(pendingQuery);
 
         const pendingQuantity = pendingOrdersResult.recordset[0].PendingQuantity || 0;
 
@@ -4487,13 +4978,45 @@ app.get('/api/products/:productId/available-stock', async (req, res) => {
         const totalPending = pendingQuantity + bulkPendingQuantity;
         const availableStock = Math.max(0, actualStock - totalPending);
 
+        const soldResult = await pool.request()
+            .input('productId', sql.Int, productId)
+            .query(`
+                SELECT ISNULL(SUM(oi.Quantity), 0) as soldQuantity
+                FROM OrderItems oi
+                INNER JOIN Orders o ON oi.OrderID = o.OrderID
+                CROSS APPLY (
+                    SELECT COALESCE(
+                        (SELECT TOP 1 p2.ProductID FROM Products p2 WHERE p2.ProductID = oi.ProductID),
+                        (SELECT TOP 1 ip.ProductID FROM InventoryProducts ip
+                         WHERE ip.InventoryProductID = oi.ProductID AND ISNULL(ip.IsActive, 1) = 1
+                         ORDER BY ip.InventoryProductID DESC),
+                        (SELECT TOP 1 ip2.ProductID FROM InventoryProducts ip2
+                         WHERE ip2.ProductID = oi.ProductID AND ISNULL(ip2.IsActive, 1) = 1
+                         ORDER BY ip2.InventoryProductID DESC)
+                    ) AS CatalogProductID
+                ) cat
+                WHERE o.Status IN (N'Completed', N'Delivered', N'Received')
+                  AND cat.CatalogProductID = @productId
+            `);
+
+        const soldQuantity = soldResult.recordset[0]?.soldQuantity || 0;
+
+        const variationStockSum = hasVariations
+            ? await getProductVariationStockSum(pool, productId)
+            : null;
+
         res.json({
             success: true,
             productId: productId,
             productName: productResult.recordset[0].Name,
             actualStock: actualStock,
             pendingQuantity: totalPending,
-            availableStock: availableStock
+            availableStock: availableStock,
+            soldQuantity: soldQuantity,
+            hasVariations,
+            requiresVariationSelection: hasVariations,
+            variationStockSum,
+            variationId: parsedVariationId && !Number.isNaN(parsedVariationId) ? parsedVariationId : null
         });
     } catch (err) {
         console.error('Error calculating available stock:', err);
@@ -4532,10 +5055,11 @@ app.post('/api/check-bulk-order-stock', async (req, res) => {
             }
 
             // Match /api/products list (PublicId as id) and available-stock: resolve UUID/slug/SKU to ProductID
-            const productId = await resolveProductId(item.productId);
+            const rawProductId = getCheckoutItemProductIdentifier(item) || item.productId;
+            const productId = await resolveProductId(rawProductId);
             if (!productId || productId <= 0) {
                 stockIssues.push({
-                    productId: item.productId,
+                    productId: rawProductId,
                     message: 'Product not found or inactive'
                 });
                 continue;
@@ -4548,7 +5072,7 @@ app.post('/api/check-bulk-order-stock', async (req, res) => {
 
             if (stockResult.recordset.length === 0) {
                 stockIssues.push({
-                    productId: item.productId,
+                    productId: rawProductId,
                     message: 'Product not found or inactive'
                 });
                 continue;
@@ -4886,17 +5410,30 @@ app.post('/api/create-bulk-order-checkout-session', async (req, res) => {
 
 // Test endpoint to simulate webhook locally (for development only)
 app.post('/api/test-webhook', async (req, res) => {
-    // If we have a sessionId, try to retrieve the actual session from Stripe to get real metadata
+    // If we have a sessionId, load Stripe or PayMongo session for real metadata
     let actualSession = null;
-    if (req.body.sessionId && req.body.sessionId.startsWith('cs_')) {
+    const bodySessionId = String(req.body.sessionId || '').trim();
+    if (bodySessionId.startsWith('cs_')) {
         try {
             const stripeInstance = getStripe();
             if (!stripeInstance) {
                 return res.status(500).json({ error: 'Stripe not configured' });
             }
-            actualSession = await stripeInstance.checkout.sessions.retrieve(req.body.sessionId);
+            actualSession = await stripeInstance.checkout.sessions.retrieve(bodySessionId);
         } catch (stripeError) {
             // Session might not be available in test mode
+        }
+    } else if (bodySessionId) {
+        const pmData = await fetchPayMongoCheckoutSession(bodySessionId);
+        if (pmData) {
+            const attrs = pmData.attributes || {};
+            actualSession = {
+                id: pmData.id,
+                customer_email: attrs.billing?.email || attrs.metadata?.email || req.body.email,
+                metadata: attrs.metadata || {},
+                amount_total: Number(attrs.amount) || 0,
+                currency: 'php'
+            };
         }
     }
 
@@ -4953,8 +5490,22 @@ app.post('/api/test-webhook', async (req, res) => {
         metadata.cart = JSON.stringify([]); // Empty cart for bulk orders
         metadata.customerName = req.body.customerName || actualSession?.metadata?.customerName || (email ? email.split('@')[0] : 'Guest Customer');
     } else {
-        // For regular orders, include cart
-        metadata.cart = JSON.stringify(req.body.items || req.body.cart || []);
+        if (actualSession?.metadata?.cart) {
+            metadata.cart =
+                typeof actualSession.metadata.cart === 'string'
+                    ? actualSession.metadata.cart
+                    : JSON.stringify(actualSession.metadata.cart);
+        } else {
+            metadata.cart = JSON.stringify(req.body.items || req.body.cart || []);
+        }
+    }
+
+    let amountTotalCents = 2000;
+    if (actualSession?.amount_total != null && Number.isFinite(Number(actualSession.amount_total))) {
+        amountTotalCents = Number(actualSession.amount_total);
+    } else if (req.body.total != null && Number.isFinite(Number(req.body.total))) {
+        const t = Number(req.body.total);
+        amountTotalCents = t > 100000 ? t : Math.round(t * 100);
     }
 
     // Simulate the webhook event data
@@ -4965,7 +5516,7 @@ app.post('/api/test-webhook', async (req, res) => {
                 id: req.body.sessionId || 'cs_test_' + Date.now(),
                 customer_email: req.body.email || actualSession?.customer_email || 'augmentdoe@gmail.com',
                 metadata: metadata,
-                amount_total: req.body.total || actualSession?.amount_total || 2000,
+                amount_total: amountTotalCents,
                 currency: 'php'
             }
         }
@@ -5629,19 +6180,48 @@ app.post('/api/test-webhook', async (req, res) => {
                     });
                 }
 
-                // Find customer by email
-                if (!email) {
+                // Find customer — prefer logged-in customer id from PayMongo finalize payload
+                let customer = null;
+                const bodyCustomerId = parseInt(req.body.customerId, 10);
+                if (bodyCustomerId && !Number.isNaN(bodyCustomerId)) {
+                    const byIdResult = await pool.request()
+                        .input('customerId', sql.Int, bodyCustomerId)
+                        .query('SELECT CustomerID, FullName, Email FROM Customers WHERE CustomerID = @customerId');
+                    customer = byIdResult.recordset[0];
+                    if (customer) {
+                        console.log('[TEST WEBHOOK] Using customer from session customerId:', customer.CustomerID);
+                    }
+                }
+
+                if (!email && !customer) {
                     console.error('[TEST WEBHOOK] No customer email provided. Order not saved.');
                     return res.status(200).json({ success: false, message: 'No customer email, order not saved' });
                 }
 
-                console.log('[TEST WEBHOOK] Looking up customer with email:', email);
-                const customerResult = await pool.request()
-                    .input('email', sql.NVarChar, email)
-                    .query('SELECT CustomerID, FullName, Email FROM Customers WHERE LOWER(Email) = LOWER(@email)');
+                if (!customer && email) {
+                    console.log('[TEST WEBHOOK] Looking up customer with email:', email);
+                    const customerResult = await pool.request()
+                        .input('email', sql.NVarChar, email)
+                        .query('SELECT CustomerID, FullName, Email FROM Customers WHERE LOWER(Email) = LOWER(@email)');
 
-                console.log('[TEST WEBHOOK] Customer lookup result:', customerResult.recordset);
-                const customer = customerResult.recordset[0];
+                    console.log('[TEST WEBHOOK] Customer lookup result:', customerResult.recordset);
+                    customer = customerResult.recordset[0];
+                }
+
+                if (!customer && email) {
+                    const customerName = metadata.customerName || email.split('@')[0] || 'Customer';
+                    console.log('[TEST WEBHOOK] Customer not found, creating account for:', email);
+                    const createCustomerResult = await pool.request()
+                        .input('email', sql.NVarChar, email)
+                        .input('fullName', sql.NVarChar, customerName)
+                        .query(`
+                            INSERT INTO Customers (Email, FullName, IsActive, CreatedAt)
+                            OUTPUT INSERTED.CustomerID, INSERTED.FullName, INSERTED.Email
+                            VALUES (@email, @fullName, 1, GETDATE())
+                        `);
+                    customer = createCustomerResult.recordset[0];
+                }
+
                 if (!customer) {
                     console.error('[TEST WEBHOOK] Customer not found for email:', email);
                     return res.status(200).json({ success: false, message: 'Customer not found, order not saved' });
@@ -5936,12 +6516,11 @@ app.post('/api/test-webhook', async (req, res) => {
                             let product = null;
                             let productResult;
 
-                            // Try by ID first (if it's a valid integer)
                             if (productIdValue && productIdValue !== 'shipping') {
-                                const productId = parseInt(productIdValue);
-                                if (!isNaN(productId) && productId > 0) {
+                                const resolvedId = await resolveProductId(productIdValue);
+                                if (resolvedId && resolvedId > 0) {
                                     productResult = await pool.request()
-                                        .input('id', sql.Int, productId)
+                                        .input('id', sql.Int, resolvedId)
                                         .query('SELECT ProductID, Name FROM Products WHERE ProductID = @id AND IsActive = 1');
 
                                     if (productResult.recordset.length > 0) {

@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import apiClient from '../../../shared/services/api/apiClient';
 import { useAuth } from '../../../shared/hooks/useAuth';
-import { EditIcon, TrashIcon, CameraIcon, UploadIcon } from '../../../shared/components/ui/SvgIcons';
+import { TrashIcon, UploadIcon } from '../../../shared/components/ui/SvgIcons';
 // LoadingSpinner and InlineLoader removed as requested
 import { getImageUrl } from '../../../shared/utils/imageUtils';
 
@@ -23,7 +22,6 @@ const ProfileManagement = () => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { user, setUser } = useAuth();
-  const navigate = useNavigate();
 
   // Monitor editingProfile state changes
   useEffect(() => {
@@ -124,6 +122,7 @@ const ProfileManagement = () => {
     return () => {
       isMounted = false;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- load profile once on mount
   }, []);
 
   // Profile update

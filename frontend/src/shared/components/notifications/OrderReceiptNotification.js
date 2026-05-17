@@ -16,7 +16,7 @@ const getCurrentUserStorageKey = (baseKey) => {
 const OrderReceiptNotification = ({ isOpen, onClose, onOpenGmail }) => {
   const [orderNumber, setOrderNumber] = useState(null);
   const [currentReceiptId, setCurrentReceiptId] = useState(null);
-  const [hasNotification, setHasNotification] = useState(false);
+  const [, setHasNotification] = useState(false);
   const notificationRef = useRef(null);
 
   useEffect(() => {

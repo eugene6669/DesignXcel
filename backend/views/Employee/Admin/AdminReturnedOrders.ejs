@@ -3071,11 +3071,11 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    showSuccessModal('Replacement processed successfully. The order has been moved to processing and damaged items have been added to inventory.', '', 'replacement');
+                    showSuccessModal('Replacement processed successfully. The order has been moved to Orders Processing for replacement delivery.', '', 'replacement');
                     closeReplacementModal();
                     setTimeout(() => {
-                        window.location.reload();
-                    }, 3000);
+                        window.location.href = '/Employee/Admin/OrdersProcessing';
+                    }, 1500);
                 } else {
                     alert(result.message || 'Failed to process replacement.');
                     if (confirmBtn) {
@@ -3151,8 +3151,8 @@
                     showSuccessModal(message, '', 'refund');
                     closeRefundModal();
                     setTimeout(() => {
-                        window.location.reload();
-                    }, 3000);
+                        window.location.href = '/Employee/Admin/CompletedRefunded';
+                    }, 1500);
                 } else {
                     alert(result.message || 'Failed to process refund.');
                     if (confirmBtn) {

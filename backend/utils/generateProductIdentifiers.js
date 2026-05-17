@@ -67,5 +67,24 @@ function generateProductIdentifiers(productId, productName) {
     };
 }
 
-module.exports = { generateProductIdentifiers, generateTemporaryPublicId, generateGuid };
+/**
+ * Generate SKU for a product variation (sellable unit).
+ * @param {number} variationId - VariationID from InventoryProductVariations / ProductVariations
+ * @param {string} [_variationName] - Optional label (reserved for future slug-based SKUs)
+ * @returns {{ sku: string }}
+ */
+function generateVariationSKU(variationId, _variationName) {
+    const randomHex = generateGuid().replace(/-/g, '').substring(0, 8).toUpperCase();
+    const paddedVariationId = String(variationId).padStart(6, '0');
+    return {
+        sku: `SKU-${randomHex}-${paddedVariationId}`
+    };
+}
+
+module.exports = {
+    generateProductIdentifiers,
+    generateVariationSKU,
+    generateTemporaryPublicId,
+    generateGuid
+};
 

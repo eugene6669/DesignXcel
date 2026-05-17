@@ -35,17 +35,6 @@ const getNotificationStorageKey = (baseKey) => {
   }
 };
 
-const statusBadgeClass = (status) => {
-  if (status === 'Cancelled') return 'status-badge status-cancelled';
-  if (status === 'Returned') return 'status-badge status-returned';
-  if (status === 'Refunded') return 'status-badge status-refunded';
-  if (status === 'Declined') return 'status-badge status-declined';
-  if (status === 'Pending') return 'status-badge status-pending';
-  if (status === 'Completed' || status === 'Delivered') return 'status-badge status-completed';
-  if (status === 'Receive' || status === 'Received' || status === 'To Receive') return 'status-badge status-received';
-  return 'status-badge';
-};
-
 const statusIcon = (status) => {
   const iconStyle = { width: '16px', height: '16px', marginRight: '8px' };
   
@@ -160,7 +149,7 @@ const ConfirmModal = ({ open, onClose, onConfirm, countdown, order }) => {
 
 const DetailsModal = ({ open, onClose, order }) => {
   if (!open || !order) return null;
-  const { user, address, items, Status, OrderID, ReferenceNumber, OrderDate, PaymentMethod, PaymentMethodDisplay, TransactionID, StripeSessionID, TotalAmount, RefundAmount, DeliveryType, DeliveryCost, DeliveryTypeName, PickupDate, EstimatedDeliveryDate, EstimatedDeliveryDateFormatted, ActionType, ReturnType, ReturnReason, OriginalPackaging, AllParts, Unused, ProofOfPurchase, ProofOfPurchaseImageURL } = order;
+  const { user, address, items, Status, OrderID, ReferenceNumber, OrderDate, PaymentMethod, PaymentMethodDisplay, TransactionID, StripeSessionID, TotalAmount, RefundAmount, DeliveryType, DeliveryCost, DeliveryTypeName, PickupDate, EstimatedDeliveryDate, EstimatedDeliveryDateFormatted, ActionType, ReturnType, ReturnReason } = order;
   
   // Normalize status for display
   const normalizedStatus = normalizeStatusDisplay(Status);
@@ -2115,21 +2104,6 @@ const OrderHistory = () => {
                     }
                   } catch (e) {
                     console.error('Error parsing ReturnItems:', e);
-                  }
-                }
-                
-                // Calculate return value from returned items if RefundAmount is not available
-                let returnValue = null;
-                if (shouldFilterItems && displayItems.length > 0) {
-                  if (order.RefundAmount) {
-                    returnValue = order.RefundAmount;
-                  } else {
-                    // Calculate subtotal of returned items as return value
-                    returnValue = displayItems.reduce((sum, item) => {
-                      const price = parseFloat(item.price) || 0;
-                      const qty = parseInt(item.quantity) || 0;
-                      return sum + (price * qty);
-                    }, 0);
                   }
                 }
                 

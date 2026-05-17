@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 const ModernThemeSwitcher = ({ className = '', size = 'medium' }) => {
   const [currentTheme, setCurrentTheme] = useState('default');
   const [isLoading, setIsLoading] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
+  const [, setIsAnimating] = useState(false);
 
   // SVG Icons
   const SunIcon = () => (

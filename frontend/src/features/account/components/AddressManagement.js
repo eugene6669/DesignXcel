@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../../shared/services/api/apiClient';
 
@@ -29,12 +29,10 @@ const AddressManagement = ({ returnTo }) => {
     // Address autofill states
     const [regions, setRegions] = useState([]);
     const [provinces, setProvinces] = useState([]);
-    const [cities, setCities] = useState([]);
+    const [, setCities] = useState([]);
     const [citySearchResults, setCitySearchResults] = useState([]);
     const [showCityDropdown, setShowCityDropdown] = useState(false);
     const [barangays, setBarangays] = useState([]);
-
-    const defaultAddressId = useMemo(() => addresses.find(a => a.IsDefault)?.AddressID || null, [addresses]);
 
     const fetchAddresses = async () => {
         setLoading(true);

@@ -58,6 +58,17 @@ export const isValidUUID = (str) => {
  * @returns {string|null} - Product identifier or null
  */
 export const extractProductIdFromPath = (path) => {
-  const match = path.match(/\/product\/([^\/]+)/);
+  const match = path.match(/\/product\/([^/]+)/);
   return match ? match[1] : null;
+};
+
+/** Sellable units for catalog/filter (variation sum when product has options). */
+export const getSellableStock = (product) => {
+  if (!product) return 0;
+  if (product.hasVariations || product.requiresVariationSelection) {
+    if (product.availableStock != null) return Number(product.availableStock) || 0;
+    if (product.variationStockSum != null) return Number(product.variationStockSum) || 0;
+    return 0;
+  }
+  return Number(product.availableStock ?? product.stockQuantity ?? product.stock ?? product.quantity ?? 0) || 0;
 };

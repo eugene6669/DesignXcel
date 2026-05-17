@@ -77,13 +77,11 @@ const ProductCard = ({ product }) => {
   const navigate = useNavigate();
   const [quickOpen, setQuickOpen] = useState(false);
 
+  const productDetailPath = `/product/${product.slug || product.sku || id}`;
+  const product3DPath = `/3d-products/${product.slug || product.sku || id}`;
+
   const handleCardClick = () => {
-    // If product has 3D model, redirect to 3d-products-furniture page
-    if (has3DModelData) {
-      navigate('/3d-products-furniture');
-    } else {
-      navigate(`/product/${id}`);
-    }
+    navigate(productDetailPath);
   };
 
   return (
@@ -145,7 +143,7 @@ const ProductCard = ({ product }) => {
               onClick={(e) => { 
                 e.preventDefault(); 
                 e.stopPropagation(); 
-                navigate('/3d-products-furniture'); 
+                navigate(product3DPath);
               }}
               style={{ backgroundColor: '#FFC107', color: '#333' }}
             >

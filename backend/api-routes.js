@@ -5,7 +5,17 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { sendBulkOrderConfirmationEmail } = require('./utils/sendgridHelper');
-const { mapProductRecordAssetUrls } = require('./utils/productAssetUrls');
+const { mapProductRecordAssetUrls, normalizeProductAssetUrl } = require('./utils/productAssetUrls');
+const {
+    enrichProductWithVariationPolicy,
+    enrichProductsWithVariationPolicy,
+    enrichProductsAssetsFromInventory,
+    enrichProductAssetsFromInventory,
+    parseThumbnailUrlsField
+} = require('./utils/productVariationPolicy');
+
+const UUID_IDENTIFIER_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 module.exports = function(sql, pool) {
     const router = express.Router();
@@ -3134,10 +3144,13 @@ module.exports = function(sql, pool) {
             });
             
             console.log('Products processed successfully. Final count:', products.length);
-            
+
+            let productsWithPolicy = await enrichProductsWithVariationPolicy(pool, products);
+            productsWithPolicy = await enrichProductsAssetsFromInventory(pool, productsWithPolicy);
+
             res.json({
                 success: true,
-                products: products
+                products: productsWithPolicy
             });
         } catch (err) {
             console.error('Error fetching products:', err);
@@ -3372,7 +3385,7 @@ module.exports = function(sql, pool) {
             const identifier = req.params.id;
             
             // Determine if identifier is UUID, slug, SKU, or legacy numeric ID
-            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier);
+            const isUUID = UUID_IDENTIFIER_RE.test(identifier);
             const isNumeric = /^\d+$/.test(identifier);
             const isSKU = /^DX-[A-F0-9]{8}-[0-9]{4}$/i.test(identifier);
             
@@ -3847,9 +3860,15 @@ module.exports = function(sql, pool) {
                 discountAmount: product.discountAmount
             } : null;
             
+            let productWithPolicy = await enrichProductWithVariationPolicy(
+                pool,
+                mapProductRecordAssetUrls(product)
+            );
+            productWithPolicy = await enrichProductAssetsFromInventory(pool, productWithPolicy);
+
             res.json({
                 success: true,
-                product: mapProductRecordAssetUrls(product)
+                product: productWithPolicy
             });
         } catch (err) {
             console.error('Error fetching product:', err);
@@ -3882,7 +3901,7 @@ module.exports = function(sql, pool) {
             }
             
             // Determine if identifier is UUID, slug, SKU, or legacy numeric ID
-            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier);
+            const isUUID = UUID_IDENTIFIER_RE.test(identifier);
             const isNumeric = /^\d+$/.test(identifier);
             const isSKU = /^DX-[A-F0-9]{8}-[0-9]{4}$/i.test(identifier);
             
@@ -3930,15 +3949,20 @@ module.exports = function(sql, pool) {
                         pv.VariationID as id,
                         pv.ProductID as productId,
                         pv.VariationName as name,
+                        COALESCE(ipv.SKU, pv.SKU) as sku,
                         pv.Color as color,
                         pv.Quantity as quantity,
                         ISNULL(pv.Price, 0) as price,
-                        pv.VariationImageURL as imageUrl,
+                        COALESCE(ipv.VariationImageURL, pv.VariationImageURL) as imageUrl,
+                        COALESCE(ipv.ThumbnailURLs, pv.ThumbnailURLs) as thumbnails,
+                        COALESCE(ipv.Model3D, pv.Model3D) as model3d,
                         pv.CreatedAt as createdAt,
                         pv.UpdatedAt as updatedAt,
                         pv.IsActive as isActive
                     FROM ProductVariations pv
                     INNER JOIN Products p ON pv.ProductID = p.ProductID
+                    LEFT JOIN InventoryProductVariations ipv
+                        ON ipv.VariationID = pv.VariationID AND ipv.IsActive = 1
                     WHERE pv.ProductID = @productID 
                     AND pv.IsActive = 1 
                     AND p.IsActive = 1
@@ -3947,9 +3971,15 @@ module.exports = function(sql, pool) {
             
             
             // Process variations data (keep imageUrl relative so frontend/proxy can resolve)
-            const variations = result.recordset.map(variation => ({
+            const variations = result.recordset.map((variation) => ({
                 ...variation,
-                imageUrl: variation.imageUrl || null
+                imageUrl: variation.imageUrl
+                    ? normalizeProductAssetUrl(variation.imageUrl)
+                    : null,
+                thumbnails: parseThumbnailUrlsField(variation.thumbnails),
+                model3d: variation.model3d
+                    ? normalizeProductAssetUrl(variation.model3d)
+                    : null
             }));
             
             res.json({

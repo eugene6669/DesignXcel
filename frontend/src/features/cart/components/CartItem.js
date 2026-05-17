@@ -4,14 +4,10 @@ import { getImageUrl, getPrimaryImageUrl } from '../../../shared/utils/imageUtil
 import { useState } from 'react';
 
 const CartItem = ({ item, onUpdateQuantity, onRemove, checked = true, onCheck = () => {} }) => {
-  const { id, product, quantity, price: itemPrice, variationId, variationName, useOriginalProduct, selectedVariation } = item;
-  const { name, price: originalPrice, images, hasDiscount, discountInfo } = product || {};
-  const { useOriginalProduct: productUseOriginal, selectedVariation: productSelectedVariation } = product || {};
+  const { id, product, quantity, price: itemPrice, useOriginalProduct, selectedVariation } = item;
+  const { name, price: originalPrice, hasDiscount, discountInfo } = product || {};
   const { formatPrice } = useCurrency();
   const [imageError, setImageError] = useState(false);
-  
-  // Maximum quantity for regular checkout
-  const MAX_REGULAR_CHECKOUT_QUANTITY = 9;
   
   // Use discounted price if available, otherwise use original price
   const displayPrice = itemPrice || originalPrice;

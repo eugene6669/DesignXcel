@@ -1,4 +1,3 @@
-import api from '../../../shared/services/api/api';
 import apiClient from '../../../shared/services/api/apiClient';
 
 // Helper function for delay

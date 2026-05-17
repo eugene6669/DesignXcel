@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './TermsModal.css';
-import { FaCheckCircle, FaExclamationCircle } from 'react-icons/fa';
-
 const TermsModal = ({ isOpen, onClose, type = 'terms', onReadComplete, canAccept = false }) => {
     const [termsData, setTermsData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
     const [isAccepted, setIsAccepted] = useState(false);
-    const [isContentScrollable, setIsContentScrollable] = useState(true);
+    const [, setIsContentScrollable] = useState(true);
     const contentRef = useRef(null);
     const scrollContainerRef = useRef(null);
 
@@ -78,7 +76,6 @@ const TermsModal = ({ isOpen, onClose, type = 'terms', onReadComplete, canAccept
         if (!scrollContainerRef.current || !contentRef.current) return;
         
         const container = scrollContainerRef.current;
-        const content = contentRef.current;
         
         // Check if scrolled to bottom (with 50px threshold for better UX)
         const scrollTop = container.scrollTop;

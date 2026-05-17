@@ -1,8 +1,8 @@
 <% const active=typeof activePage !=='undefined' ? activePage : '' ; const
-    inventoryPages=['products', 'product-inventory' , 'raw-materials' , 'alerts' , 'archived' ]; const
+    inventoryPages=['product-inventory' , 'raw-materials' , 'alerts' , 'archived' ]; const
     transactionsPages=['bulk-orders', 'delivery-rates' , 'walk-in' ]; const
     ordersPages=['orders-pending', 'orders-processing' , 'orders-shipping' , 'orders-delivery' , 'orders-receive'
-    , 'orders-cancelled' , 'orders-returned' , 'orders-completed' , 'orders-completed-returned' ]; const
+    , 'orders-cancelled' , 'orders-returned' , 'orders-completed-refunded' , 'orders-completed-replacement' , 'orders-completed' ]; const
     userPages=['manage-users']; const reviewPages=['reviews']; const supportPages=['chat-support', 'messages' ]; const
     contentPages=['cms', 'logs' ]; %>
     <div class="sidebar-header">
@@ -32,15 +32,6 @@
             </a></li>
         <li class="sidebar-section-label <%= inventoryPages.includes(active) ? 'active' : '' %>">Inventory</li>
         <ul class="sidebar-submenu">
-            <li><a href="/Employee/Admin/Products" <%=active==='products' ? 'class="active"' : '' %>>
-                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                        <line x1="3" y1="6" x2="21" y2="6" />
-                        <path d="M16 10a4 4 0 0 1-8 0" />
-                    </svg>
-                    Products
-                </a></li>
             <li><a href="/Employee/Admin/ProductInventory" <%=active==='product-inventory' ? 'class="active"' : '' %>>
                     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
@@ -171,14 +162,22 @@
                     </svg>
                     Returned Orders
                 </a></li>
-            <li><a href="/Employee/Admin/CompletedReturned" <%=active==='orders-completed-returned' ? 'class="active"'
+            <li><a href="/Employee/Admin/CompletedRefunded" <%=active==='orders-completed-refunded' ? 'class="active"'
+                    : '' %>>
+                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    </svg>
+                    Completed Refunded
+                </a></li>
+            <li><a href="/Employee/Admin/CompletedReplacement" <%=active==='orders-completed-replacement' ? 'class="active"'
                     : '' %>>
                     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
                         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                         <polyline points="22,4 12,14.01 9,11.01" />
                     </svg>
-                    Completed Returned
+                    Completed Replacement
                 </a></li>
             <li><a href="/Employee/Admin/CompletedOrders" <%=active==='orders-completed' ? 'class="active"' : '' %>>
                     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"

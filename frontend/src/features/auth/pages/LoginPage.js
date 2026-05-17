@@ -82,7 +82,7 @@ const Login = () => {
     const [registerStep, setRegisterStep] = useState(1); // 1=email, 2=otp, 3=full
     const [otp, setOtp] = useState('');
     const [otpSent, setOtpSent] = useState(false);
-    const [otpVerified, setOtpVerified] = useState(false);
+    const [, setOtpVerified] = useState(false);
     const [otpLoading, setOtpLoading] = useState(false);
     const [otpError, setOtpError] = useState('');
     // ---
@@ -142,7 +142,7 @@ const Login = () => {
     };
 
     // Public terms for signup
-    const [publicTerms, setPublicTerms] = useState(null);
+    const [, setPublicTerms] = useState(null);
 
     // Get the intended destination from location state
     const from = location.state?.from?.pathname || '/';

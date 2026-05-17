@@ -147,7 +147,7 @@ const ReviewList = ({ reviews, loading, currentPage, totalPages, onPageChange, s
                       <div key={index} className="review-image">
                         <img 
                           src={imageUrl.startsWith('http') ? imageUrl : `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${imageUrl}`}
-                          alt={`Review image ${index + 1}`}
+                          alt={`Review attachment ${index + 1}`}
                           onClick={() => {
                             const fullUrl = imageUrl.startsWith('http') ? imageUrl : `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${imageUrl}`;
                             window.open(fullUrl, '_blank');

@@ -60,10 +60,12 @@ const ThreeDProductsFurniture = () => {
 
     useEffect(() => {
         loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load
     }, []);
 
     useEffect(() => {
         applyFilters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- filter when products/filters change
     }, [products, filters]);
 
     const loadData = async () => {

@@ -29,6 +29,8 @@ class ApiClient {
           config.url.includes('/api/create-checkout-session') ||
           config.url.includes('/api/create-paymongo-checkout-session') ||
           config.url.includes('/api/paymongo-checkout-session') ||
+          config.url.includes('/api/paymongo/finalize-checkout-session') ||
+          config.url.includes('/api/order/stripe-session') ||
           config.url.includes('/api/terms') ||
           config.url.includes('/api/public/') ||
           config.url.includes('/api/test-webhook') ||
@@ -104,7 +106,9 @@ class ApiClient {
               '/api/auth/validate-session',
               '/api/create-checkout-session',
               '/api/create-paymongo-checkout-session',
-              '/api/paymongo-checkout-session'
+              '/api/paymongo-checkout-session',
+              '/api/paymongo/finalize-checkout-session',
+              '/api/order/stripe-session'
             ];
             const shouldSkipAutoRedirect = noAutoRedirectEndpoints.some((endpoint) =>
               error.config?.url?.includes(endpoint)
@@ -154,7 +158,7 @@ class ApiClient {
               const criticalEndpoints = ['/api/customer/profile', '/api/auth/customer/login'];
               const checkoutEndpoints = ['/api/customer/addresses', '/api/create-checkout-session'];
               checkoutEndpoints.push('/api/create-paymongo-checkout-session');
-              const publicEndpoints = ['/api/terms', '/api/public/', '/api/test-webhook', '/api/paymongo-checkout-session'];
+              const publicEndpoints = ['/api/terms', '/api/public/', '/api/test-webhook', '/api/paymongo-checkout-session', '/api/paymongo/finalize-checkout-session', '/api/order/stripe-session'];
               
               const isCriticalEndpoint = criticalEndpoints.some(endpoint => 
                 error.config?.url?.includes(endpoint)

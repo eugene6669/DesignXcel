@@ -4,7 +4,6 @@ import { useCart } from '../../../shared/contexts/CartContext';
 import { useWishlist } from '../../../shared/contexts/WishlistContext';
 import { useCurrency } from '../../../shared/contexts/CurrencyContext';
 import { getProductById, getProductVariations } from '../services/productService';
-import apiConfig from '../../../shared/services/api/apiConfig.js';
 import Breadcrumb from '../../../shared/components/layout/Breadcrumb';
 import CartSuccessModal from '../../../shared/components/ui/CartSuccessModal';
 import ConfirmationModal from '../../../shared/components/ui/ConfirmationModal';
@@ -21,7 +20,7 @@ const ProductDetail = () => {
   // Extract orderId from URL query parameters (if user came from order history)
   const searchParams = new URLSearchParams(location.search);
   const orderId = searchParams.get('orderId');
-  const { addToCart, canAddItem, getMaxQuantityForProduct, getRemainingSlots, CART_LIMITS } = useCart();
+  const { addToCart, canAddItem, getMaxQuantityForProduct } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
   const { formatPrice } = useCurrency();
   
@@ -32,13 +31,12 @@ const ProductDetail = () => {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [selectedVariation, setSelectedVariation] = useState(null);
-  const [useOriginalProduct, setUseOriginalProduct] = useState(true);
+  const [variationRequiredMessage, setVariationRequiredMessage] = useState('');
   const [activeTab, setActiveTab] = useState('additional-info');
   const [showCartSuccessModal, setShowCartSuccessModal] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [availableStock, setAvailableStock] = useState(null);
-  const [stockFetching, setStockFetching] = useState(false);
   const [showBulkOrderModal, setShowBulkOrderModal] = useState(false);
   const [showInsufficientStockModal, setShowInsufficientStockModal] = useState(false);
   const [insufficientStockMessage, setInsufficientStockMessage] = useState('');
@@ -145,42 +143,58 @@ const ProductDetail = () => {
     if (product) {
       loadVariations();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- reload variations when product changes
   }, [product]);
 
-  // Fetch available stock when product loads (must be before early returns)
+  const hasVariations = variations.length > 0;
+
+  // Fetch available stock (per variation when product has options)
   useEffect(() => {
-    if (product?.id) {
-      setStockFetching(true);
-      const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-      fetch(`${apiBase}/api/products/${product.id}/available-stock`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            console.log('[STOCK] Available stock loaded:', data.availableStock, 'Actual:', data.actualStock, 'Pending:', data.pendingQuantity);
-            setAvailableStock(data.availableStock);
-          } else {
-            console.warn('[STOCK] API returned success:false, using raw stock');
-            setAvailableStock(prev => prev === null ? (product.stockQuantity || 0) : prev);
-          }
-        })
-        .catch(err => {
-          console.error('Error fetching available stock:', err);
-          setAvailableStock(prev => prev === null ? (product.stockQuantity || 0) : prev);
-        })
-        .finally(() => {
-          setStockFetching(false);
-        });
-    } else {
-      // Reset when product is cleared
+    if (!product?.id) {
       setAvailableStock(null);
+      return;
     }
-  }, [product?.id]);
+
+    if (hasVariations && !selectedVariation?.id) {
+      const anyInStock = variations.some((v) => (v.quantity || 0) > 0);
+      setAvailableStock(anyInStock ? null : 0);
+      return;
+    }
+
+    const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    const stockUrl = selectedVariation?.id
+      ? `${apiBase}/api/products/${product.id}/available-stock?variationId=${selectedVariation.id}`
+      : `${apiBase}/api/products/${product.id}/available-stock`;
+
+    fetch(stockUrl)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setAvailableStock(data.availableStock);
+        } else if (hasVariations && selectedVariation) {
+          setAvailableStock(selectedVariation.quantity || 0);
+        } else {
+          setAvailableStock(product.stockQuantity || 0);
+        }
+      })
+      .catch(err => {
+        console.error('Error fetching available stock:', err);
+        if (hasVariations && selectedVariation) {
+          setAvailableStock(selectedVariation.quantity || 0);
+        } else {
+          setAvailableStock(product.stockQuantity || 0);
+        }
+      });
+  }, [product?.id, product?.stockQuantity, hasVariations, selectedVariation?.id, variations]);
 
   // Load variations function
   const loadVariations = async () => {
     try {
-        const response = await getProductVariations(slug);
-      setVariations(response.variations || []);
+      const response = await getProductVariations(slug);
+      const loaded = response.variations || [];
+      setVariations(loaded);
+      setSelectedVariation(null);
+      setVariationRequiredMessage('');
     } catch (error) {
       console.error('Error loading variations:', error);
     }
@@ -203,6 +217,9 @@ const ProductDetail = () => {
 
   // Handle adding product to bulk order and navigating
   const handleAddToBulkOrder = () => {
+    if (requiresVariationSelection()) {
+      return;
+    }
     try {
       const productId = String(product.id || product.ProductID);
       const imageUrl = product.ImageURL || product.image || (product.images && product.images[0]) || '';
@@ -218,7 +235,7 @@ const ProductDetail = () => {
         name: product.name || product.Name,
         price: itemPrice,
         quantity: Math.max(10, quantity), // Ensure minimum 10
-        sku: product.sku || product.SKU || `SKU-${productId}`,
+        sku: selectedVariation?.sku || product.sku || product.SKU || `SKU-${productId}`,
         stockQuantity: stockQuantity || 0,
         image: imageUrl,
         variationId: selectedVariation?.id || null,
@@ -253,8 +270,19 @@ const ProductDetail = () => {
     }
   };
 
+  const requiresVariationSelection = () => {
+    if (!hasVariations) return false;
+    if (selectedVariation?.id) return false;
+    setVariationRequiredMessage('Please select an option before adding to cart.');
+    return true;
+  };
+
   // Handle add to cart
   const handleAddToCart = async () => {
+    if (requiresVariationSelection()) {
+      return;
+    }
+
     // If quantity >= 10, check if product can accommodate bulk order
     if (quantity >= 10) {
       // Check if product has enough stock for bulk order (minimum 10)
@@ -281,9 +309,13 @@ const ProductDetail = () => {
         // Create product object with variation data and correct price
         const productWithVariation = {
           ...product,
-          price: itemPrice, // Override price with variation price if applicable
-          useOriginalProduct,
-          selectedVariation
+          price: itemPrice,
+          sku: hasVariations
+            ? (selectedVariation?.sku || product.sku || product.SKU)
+            : (product.sku || product.SKU),
+          useOriginalProduct: !hasVariations,
+          selectedVariation: hasVariations ? selectedVariation : null,
+          hasVariations
         };
         
         // Check if we can add this item
@@ -369,14 +401,13 @@ const ProductDetail = () => {
   const productMainImage = rawImages[0] || null;
   const productThumbnails = rawImages.slice(1);
   
-  // If variation is selected and has an image, use it as the main image
-  // Otherwise, use the product's main image
-  const mainImage = selectedVariation && selectedVariation.imageUrl
-    ? selectedVariation.imageUrl
-    : productMainImage;
-  
-  // Build images array: variation image (if selected) or product main image first, then product thumbnails
-  const allImages = [mainImage, ...productThumbnails].filter(Boolean);
+  const variationThumbs = selectedVariation?.thumbnails?.length
+    ? selectedVariation.thumbnails
+    : (selectedVariation?.imageUrl ? [selectedVariation.imageUrl] : []);
+
+  const mainImage = variationThumbs[0] || productMainImage;
+
+  const allImages = [...new Set([mainImage, ...variationThumbs.slice(1), ...productThumbnails].filter(Boolean))];
   
   const currentImage = allImages[selectedImageIndex] || '/logo192.png';
   const imageUrl = getImageUrl(currentImage);
@@ -389,16 +420,19 @@ const ProductDetail = () => {
   const hasDiscount = product.hasDiscount && product.discountInfo;
   const displayPrice = hasDiscount ? product.discountInfo.discountedPrice : basePrice;
   const originalPrice = hasDiscount ? basePrice : null;
-  const discountPercentage = hasDiscount && product.discountInfo.discountType === 'percentage' 
-    ? product.discountInfo.discountValue 
-    : null;
+  const variationStockSum = variations.reduce((sum, v) => sum + (Number(v.quantity) || 0), 0);
 
-  // Stock status - use available stock if fetched, otherwise use variation stock or product stock
-  const stockQuantity = availableStock !== null 
-    ? availableStock 
-    : (selectedVariation ? selectedVariation.quantity : (product.stockQuantity || 0));
-  const isInStock = stockQuantity > 0;
+  const stockQuantity = hasVariations
+    ? (selectedVariation
+        ? (availableStock !== null ? availableStock : (selectedVariation.quantity || 0))
+        : variationStockSum)
+    : (availableStock !== null ? availableStock : (product.stockQuantity || 0));
+
+  const isInStock = hasVariations
+    ? (selectedVariation ? (stockQuantity > 0) : variationStockSum > 0)
+    : stockQuantity > 0;
   const isLowStock = stockQuantity > 0 && stockQuantity <= 10;
+  const canPurchase = hasVariations ? Boolean(selectedVariation?.id) && stockQuantity > 0 : isInStock;
 
   // Breadcrumb items
   const breadcrumbItems = [
@@ -407,21 +441,10 @@ const ProductDetail = () => {
     { label: product.name }
   ];
 
-  // Variation selection logic with unselect functionality
   const handleVariationSelect = (variation) => {
-    // If clicking on the already selected variation, unselect it
-    if (!useOriginalProduct && selectedVariation?.id === variation.id) {
-      setUseOriginalProduct(true);
-      setSelectedVariation(null);
-      // Reset to first image (product main image) when deselecting variation
-      setSelectedImageIndex(0);
-    } else {
-      // Select the new variation
-      setUseOriginalProduct(false);
-      setSelectedVariation(variation);
-      // Reset to first image (variation image) when selecting variation
-      setSelectedImageIndex(0);
-    }
+    setSelectedVariation(variation);
+    setVariationRequiredMessage('');
+    setSelectedImageIndex(0);
   };
 
   // Handle wishlist toggle
@@ -578,7 +601,11 @@ const ProductDetail = () => {
             <div className="pdp-title-row">
               <h1 className="pdp-title">{product.name}</h1>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {stockQuantity > 0 ? (
+                {hasVariations && !selectedVariation ? (
+                  <span className="stock-badge in-stock" style={{ background: '#6c757d' }}>
+                    {variationStockSum > 0 ? 'Select an option' : 'Out of Stock'}
+                  </span>
+                ) : stockQuantity > 0 ? (
                   <span className={`stock-badge ${isLowStock ? 'low-stock' : 'in-stock'}`}>
                     {isLowStock ? `Only ${stockQuantity} available` : `${stockQuantity} in stock`}
                   </span>
@@ -626,14 +653,20 @@ const ProductDetail = () => {
             </div>
 
             {/* Product Variations */}
-            {variations.length > 0 && (
+            {hasVariations && (
               <div className="variation-cards-container">
+                <p style={{ margin: '0 0 10px', fontSize: '0.9em', color: '#666' }}>
+                  Choose an option <span style={{ color: '#dc3545' }}>*</span>
+                </p>
+                {variationRequiredMessage && (
+                  <p style={{ margin: '0 0 10px', fontSize: '0.9em', color: '#dc3545' }}>{variationRequiredMessage}</p>
+                )}
                 {variations.map((variation) => (
                   <div
                     key={variation.id}
-                    className={`variation-card ${!useOriginalProduct && selectedVariation?.id === variation.id ? 'selected' : ''}`}
+                    className={`variation-card ${selectedVariation?.id === variation.id ? 'selected' : ''}`}
                     onClick={() => handleVariationSelect(variation)}
-                    title={!useOriginalProduct && selectedVariation?.id === variation.id ? 'Click to unselect' : 'Click to select'}
+                    title="Select this option"
                   >
                     {variation.imageUrl && (
                       <div className="variation-image">
@@ -677,8 +710,9 @@ const ProductDetail = () => {
                   onClick={() => {
                     const productWithVariation = {
                       ...product,
-                      useOriginalProduct,
-                      selectedVariation
+                      useOriginalProduct: !hasVariations,
+                      selectedVariation: hasVariations ? selectedVariation : null,
+                      hasVariations
                     };
                     const maxAllowed = Math.min(
                       stockQuantity,
@@ -706,8 +740,9 @@ const ProductDetail = () => {
                       stockQuantity,
                       getMaxQuantityForProduct({
                         ...product,
-                        useOriginalProduct,
-                        selectedVariation
+                        useOriginalProduct: !hasVariations,
+                        selectedVariation: hasVariations ? selectedVariation : null,
+                        hasVariations
                       })
                     ) && quantity < MAX_REGULAR_CHECKOUT_QUANTITY
                   }
@@ -719,17 +754,17 @@ const ProductDetail = () => {
               <button 
                 className="btn-add-cart"
                 onClick={handleAddToCart}
-                disabled={!isInStock || addingToCart}
+                disabled={!canPurchase || addingToCart}
               >
-                {addingToCart ? 'Adding...' : 'Add To Cart'}
+                {addingToCart ? 'Adding...' : (hasVariations && !selectedVariation ? 'Select an option' : 'Add To Cart')}
               </button>
 
               {/* Only show 3D Products button if product has a 3D model */}
-              {(product.model3d || product.model3DURL || product.has3dModel || product.has3DModel) && (
+              {(selectedVariation?.model3d || product.model3d || product.model3DURL || product.has3dModel || product.has3DModel) && (
                 <button 
                   className="btn-buy-now" 
                   onClick={handle3DProducts}
-                  disabled={!isInStock}
+                  disabled={!canPurchase}
                 >
                   3D Products
                 </button>
@@ -926,7 +961,11 @@ const ProductDetail = () => {
                   </tr>
                   <tr>
                     <td>SKU</td>
-                    <td>{product?.sku || 'N/A'}</td>
+                    <td>
+                      {hasVariations
+                        ? (selectedVariation?.sku || (selectedVariation?.id ? '—' : 'Select a variation'))
+                        : (product?.sku || 'N/A')}
+                    </td>
                   </tr>
                   <tr>
                     <td>Dimensions</td>

@@ -10,7 +10,7 @@ const ProductReviews = ({ productId }) => {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [showReviewForm, setShowReviewForm] = useState(false);
-    const [editingReview, setEditingReview] = useState(null);
+    const [, setEditingReview] = useState(null);
     const [newReview, setNewReview] = useState({
         rating: 5,
         comment: ''
@@ -208,21 +208,6 @@ const ProductReviews = ({ productId }) => {
         ));
     };
 
-    const renderRatingBar = (rating, count, total) => {
-        const percentage = total > 0 ? (count / total) * 100 : 0;
-        return (
-            <div key={rating} className="rating-bar">
-                <span className="rating-label">{rating} stars</span>
-                <div className="rating-progress">
-                    <div 
-                        className="rating-fill" 
-                        style={{ width: `${percentage}%` }}
-                    ></div>
-                </div>
-                <span className="rating-count">{count}</span>
-            </div>
-        );
-    };
 
     if (loading) {
         return (

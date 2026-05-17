@@ -21,9 +21,6 @@ const Home = () => {
     const [categories, setCategories] = useState([]);
     const [categoriesLoading, setCategoriesLoading] = useState(true);
     
-    // Theme detection
-    const [currentTheme, setCurrentTheme] = useState('default');
-    
     // Remove old slider state - now handled by Slider component
     // const [currentSlide, setCurrentSlide] = useState(0);
     // const [itemsPerSlide, setItemsPerSlide] = useState(4);
@@ -31,29 +28,7 @@ const Home = () => {
     useEffect(() => {
         loadFeaturedProducts();
         loadCategories();
-    }, []);
-
-    // Detect current theme from body class
-    useEffect(() => {
-        const detectTheme = () => {
-            const bodyClasses = document.body.className;
-            if (bodyClasses.includes('theme-christmas')) {
-                setCurrentTheme('christmas');
-            } else if (bodyClasses.includes('theme-dark')) {
-                setCurrentTheme('dark');
-            } else {
-                setCurrentTheme('default');
-            }
-        };
-
-        // Initial detection
-        detectTheme();
-
-        // Listen for theme changes
-        const observer = new MutationObserver(detectTheme);
-        observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-
-        return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial page load
     }, []);
 
     const loadFeaturedProducts = async () => {
@@ -330,10 +305,6 @@ const Home = () => {
         }
     ];
 
-    // Testimonials state
-    const [testimonials, setTestimonials] = useState([]);
-    const [testimonialIndex, setTestimonialIndex] = useState(0);
-    
     // Testimonials design settings state
     const [testimonialsDesign, setTestimonialsDesign] = useState({
         theme: 'default',
@@ -350,30 +321,9 @@ const Home = () => {
         textAlign: 'left'
     });
     
-    // Hero banner settings state
-    const [heroBanner, setHeroBanner] = useState({
-        mainHeading: 'Premium Office Furniture Solutions',
-        descriptionLine1: 'Transform your workspace with our premium collection of office furniture',
-        descriptionLine2: 'Discover our premium collection of office furniture designed for modern professionals',
-        buttonText: 'SHOP NOW',
-        buttonLink: '/products',
-        textColor: '#ffffff',
-        buttonBgColor: '#ffc107',
-        buttonTextColor: '#333333',
-        heroBannerImages: []
-    });
-
-    // Carousel state
-    const [currentImageIndex, setCurrentImageIndex] = useState(0);
-
     useEffect(() => {
-        // Fetch testimonials
         const apiBase2 = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-        fetch(`${apiBase2}/api/testimonials`)
-            .then(res => res.json())
-            .then(data => setTestimonials(data.testimonials || []))
-            .catch(() => setTestimonials([]));
-        
+
         // Fetch testimonials design settings
         fetch(`${apiBase2}/api/testimonials-design`)
             .then(res => res.json())
@@ -385,44 +335,7 @@ const Home = () => {
                 // Use default values if API fails
                 console.log('Using default testimonials design settings due to error:', error);
             });
-        
-        // Fetch hero banner settings
-        fetch(`${apiBase2}/api/hero-banner`)
-            .then(res => res.json())
-            .then(data => {
-                console.log('Hero banner settings loaded:', data);
-                if (data.success && data.heroBanner) {
-                    setHeroBanner(data.heroBanner);
-                } else {
-                    console.log('Hero banner data format issue:', data);
-                }
-            })
-            .catch((error) => {
-                // Use default values if API fails
-                console.log('Using default hero banner settings due to error:', error);
-            });
     }, []);
-
-    // Auto-rotate hero banner images
-    useEffect(() => {
-        if (heroBanner.heroBannerImages && heroBanner.heroBannerImages.length > 1) {
-            const interval = setInterval(() => {
-                setCurrentImageIndex(prev => (prev + 1) % heroBanner.heroBannerImages.length);
-            }, 4000); // Change every 4 seconds
-            
-            return () => clearInterval(interval);
-        }
-    }, [heroBanner.heroBannerImages]);
-
-    const handlePrevTestimonial = () => {
-        setTestimonialIndex((prev) => (prev - 1 + testimonials.length) % testimonials.length);
-    };
-    const handleNextTestimonial = () => {
-        setTestimonialIndex((prev) => (prev + 1) % testimonials.length);
-    };
-
-    const currentTestimonial = testimonials[testimonialIndex] || {};
-    const DEFAULT_IMAGE = '/placeholder.png'; // Place this in your public folder
 
     // Slider navigation functions removed - now handled by Slider component
 

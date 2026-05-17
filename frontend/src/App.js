@@ -28,7 +28,6 @@ import AppRoutes from './app/routes';
 import { getImageUrl } from './shared/utils/imageUtils';
 import './shared/utils/themeManager';
 import ChristmasSnowfall from './shared/components/ChristmasSnowfall';
-import { ChristmasPageDecoration } from './shared/components/christmas';
 
 // Import API connection test
 import apiConnectionTest from './shared/utils/apiConnectionTest';

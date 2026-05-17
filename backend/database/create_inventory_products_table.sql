@@ -26,7 +26,7 @@ BEGIN
         -- Constraints
         CONSTRAINT FK_InventoryProducts_CreatedBy FOREIGN KEY (CreatedBy) REFERENCES Users(UserID),
         CONSTRAINT FK_InventoryProducts_UpdatedBy FOREIGN KEY (UpdatedBy) REFERENCES Users(UserID),
-        CONSTRAINT UQ_InventoryProducts_SKU UNIQUE (SKU),
+        -- SKU is on InventoryProductVariations only (not UNIQUE here — multiple NULL parents)
         CONSTRAINT UQ_InventoryProducts_PublicId UNIQUE (PublicId),
         CONSTRAINT UQ_InventoryProducts_Slug UNIQUE (Slug)
     );

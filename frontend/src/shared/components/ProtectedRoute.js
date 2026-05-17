@@ -33,10 +33,7 @@ const ProtectedRoute = ({
     const { 
         isAuthenticated, 
         loading, 
-        user, 
-        isCustomer, 
-        isEmployee,
-        isAdmin
+        user
     } = useAuth();
     
     const location = useLocation();

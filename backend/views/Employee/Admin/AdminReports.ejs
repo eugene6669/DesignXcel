@@ -995,8 +995,8 @@
                                 <option value="Completed">Completed</option>
                                 <option value="Cancelled">Cancelled</option>
                                 <option value="Returned">Returned</option>
-                                <option value="Refunded">Refunded</option>
-                                <option value="Completed Returned">Completed Returned</option>
+                                <option value="Refunded">Completed Refunded</option>
+                                <option value="Completed Returned">Replacement</option>
                                 <option value="Declined">Declined</option>
                             </select>
                         </div>
@@ -1066,16 +1066,16 @@
                         </summary>
                         <div style="padding: 0 1.5rem 1.5rem;">
                             <div id="stats-table-container" style="width: 100%; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch;">
-                                <table id="stats-table" style="width: 100%; border-collapse: collapse; min-width: 1200px;">
+                                <table id="stats-table" style="width: 100%; border-collapse: collapse; min-width: 1600px;">
                                     <thead id="stats-thead">
                                         <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
                                             <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: #111827; font-size: 0.875rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; border-right: 1px solid #e5e7eb;">Metric</th>
-                                            <th colspan="13" style="padding: 0.5rem; text-align: center; color: #6b7280; font-size: 0.75rem;">Loading statistics...</th>
+                                            <th colspan="17" style="padding: 0.5rem; text-align: center; color: #6b7280; font-size: 0.75rem;">Loading statistics...</th>
                                         </tr>
                                     </thead>
                                     <tbody id="stats-tbody">
                                         <tr>
-                                            <td colspan="14" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics...</td>
+                                            <td colspan="18" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics...</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -1761,11 +1761,48 @@
                     document.getElementById('sales-tbody').innerHTML = 
                         `<tr><td colspan="15" class="empty-state">${data.error || 'Error loading sales data'}</td></tr>`;
                 }
+                return data;
             } catch (error) {
                 console.error('Error loading sales:', error);
                 document.getElementById('sales-tbody').innerHTML = 
                     `<tr><td colspan="15" class="empty-state">Error loading sales data</td></tr>`;
+                return { success: false };
             }
+        }
+
+        function formatSalesOrderStatus(status) {
+            if (!status) return 'N/A';
+            if (status === 'Completed Returned') return 'Replacement';
+            return status;
+        }
+
+        function formatSalesSummaryValue(stats, key, opts = {}) {
+            const v = stats[key];
+            if (opts.percent) return `${Number(v || 0).toFixed(1)}%`;
+            if (opts.currency) return '₱' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2 });
+            return String(v ?? 0);
+        }
+
+        function buildSalesSummaryTableRows(stats) {
+            return [
+                ['Gross Sales', formatSalesSummaryValue(stats, 'grossSales', { currency: true })],
+                ['Net Sales', formatSalesSummaryValue(stats, 'netSales', { currency: true })],
+                ['Gross Revenue', formatSalesSummaryValue(stats, 'grossRevenue', { currency: true })],
+                ['Net Revenue', formatSalesSummaryValue(stats, 'netRevenue', { currency: true })],
+                ['Total Revenue', formatSalesSummaryValue(stats, 'totalRevenue', { currency: true })],
+                ['Returns', formatSalesSummaryValue(stats, 'salesReturns', { currency: true })],
+                ['Total Discounts', formatSalesSummaryValue(stats, 'totalDiscounts', { currency: true })],
+                ['Total Taxes', formatSalesSummaryValue(stats, 'totalTaxes', { currency: true })],
+                ['Inventory Loss', formatSalesSummaryValue(stats, 'inventoryLoss', { currency: true })],
+                ['Delivery Revenues', formatSalesSummaryValue(stats, 'deliveryRevenues', { currency: true })],
+                ['Total Orders', formatSalesSummaryValue(stats, 'totalOrders')],
+                ['Total Customers', formatSalesSummaryValue(stats, 'totalCustomers')],
+                ['Average Order Value', formatSalesSummaryValue(stats, 'averageOrderValue', { currency: true })],
+                ['Refunded Orders', formatSalesSummaryValue(stats, 'refundedOrdersCount')],
+                ['Returned Orders', formatSalesSummaryValue(stats, 'returnedOrdersCount')],
+                ['Replacement Orders', formatSalesSummaryValue(stats, 'replacementOrdersCount')],
+                ['Return Rate', formatSalesSummaryValue(stats, 'returnRate', { percent: true })]
+            ];
         }
 
         function renderSalesTable(data) {
@@ -1838,7 +1875,7 @@
                         <td>${item.CustomerName || 'N/A'}</td>
                         <td>${item.CustomerEmail || 'N/A'}</td>
                         <td>${item.OrderDate ? new Date(item.OrderDate).toLocaleDateString() : 'N/A'}</td>
-                        <td><span class="badge ${statusClass}">${item.Status || 'N/A'}</span></td>
+                        <td><span class="badge ${statusClass}">${formatSalesOrderStatus(item.Status)}</span></td>
                         <td>${orderItemsCount}</td>
                         <td style="max-width: 300px; word-wrap: break-word; line-height: 1.5;">${productNamesQuantitiesHtml}</td>
                         <td>₱${Number(item.Subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
@@ -2012,6 +2049,7 @@
                     { name: 'Net Sales', isSection: false },
                     { name: 'Gross Revenue', isSection: false },
                     { name: 'Net Revenue', isSection: false },
+                    { name: 'Total Revenue', isSection: false },
                     { name: 'Returns', isSection: false },
                     { name: 'Total Discounts', isSection: false },
                     { name: 'Inventory Loss', isSection: false },
@@ -2019,7 +2057,11 @@
                     { name: 'Delivery Revenues', isSection: false },
                     { name: 'Total Orders', isSection: true },
                     { name: 'Total Customers', isSection: true },
-                    { name: 'Average Order Value', isSection: true }
+                    { name: 'Average Order Value', isSection: true },
+                    { name: 'Refunded Orders', isSection: true },
+                    { name: 'Returned Orders', isSection: true },
+                    { name: 'Replacement Orders', isSection: true },
+                    { name: 'Return Rate', isSection: true }
                 ];
 
                 let headerHTML = '<tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;"><th style="padding: 0.75rem; text-align: left; font-weight: 600; color: #111827; font-size: 0.875rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; border-right: 1px solid #e5e7eb; background: #f9fafb;">Metric</th>';
@@ -2036,6 +2078,7 @@
                 valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.netSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
                 valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.grossRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
                 valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.netRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.totalRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
                 valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.salesReturns || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
                 valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.totalDiscounts || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
                 valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.inventoryLoss || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
@@ -2044,6 +2087,10 @@
                 valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.totalOrders || 0}</td>`;
                 valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.totalCustomers || 0}</td>`;
                 valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">₱${Number(stats.averageOrderValue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.refundedOrdersCount || 0}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.returnedOrdersCount || 0}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.replacementOrdersCount || 0}</td>`;
+                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${Number(stats.returnRate || 0).toFixed(1)}%</td>`;
                 valueRow += '</tr>';
 
                 // Build formula row
@@ -2052,14 +2099,19 @@
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Gross Sales – (Discounts + Returns)</td>`;
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Gross Sales + Delivery Fees</td>`;
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Gross Revenue – (Discounts + Returns)</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Net Sales + Delivery Revenues</td>`;
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">${stats.returnedOrdersCount || 0} orders (${Number(stats.returnRate || 0).toFixed(1)}%)</td>`;
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">All discounts applied</td>`;
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Value of returned/damaged items</td>`;
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Price before Tax item × (12% / 100)</td>`;
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Delivery + Extra Delivery (excluding returns)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Total number of orders (excluding returns)</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Total number of orders</td>`;
                 formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Unique customers with orders</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Sum of TotalAmount / Total Orders</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Sum of TotalAmount / qualifying orders</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Refunded / completed returned</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Same as refunded orders count</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Orders with replacement action</td>`;
+                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">(Returned Orders / Total Orders) × 100</td>`;
                 formulaRow += '</tr>';
 
                 statsTableBody.innerHTML = valueRow + formulaRow;
@@ -2288,7 +2340,7 @@
                 amountMin: document.getElementById('sales-amount-min').value,
                 amountMax: document.getElementById('sales-amount-max').value
             };
-            loadSalesData();
+            loadSalesData().then(() => refreshCSVPreviewIfOpen());
         }
 
         function clearSalesFilters() {
@@ -2300,97 +2352,122 @@
             document.getElementById('sales-amount-min').value = '';
             document.getElementById('sales-amount-max').value = '';
             salesFilters = {};
-            loadSalesData();
+            loadSalesData().then(() => refreshCSVPreviewIfOpen());
+        }
+
+        function formatSalesFiltersSummary(filters) {
+            if (!filters) return 'None';
+            const parts = [];
+            if (filters.search) parts.push(`Search: ${filters.search}`);
+            if (filters.status) {
+                parts.push(`Status: ${filters.status === 'Completed Returned' ? 'Replacement' : filters.status}`);
+            }
+            if (filters.payment) parts.push(`Payment: ${filters.payment}`);
+            if (filters.dateFrom) parts.push(`From: ${filters.dateFrom}`);
+            if (filters.dateTo) parts.push(`To: ${filters.dateTo}`);
+            if (filters.amountMin) parts.push(`Min: ₱${Number(filters.amountMin).toLocaleString('en-US', { minimumFractionDigits: 2 })}`);
+            if (filters.amountMax) parts.push(`Max: ₱${Number(filters.amountMax).toLocaleString('en-US', { minimumFractionDigits: 2 })}`);
+            return parts.length ? parts.join(' · ') : 'None';
+        }
+
+        function countSalesTableRows() {
+            const table = document.getElementById('sales-tbody');
+            if (!table) return 0;
+            return Array.from(table.querySelectorAll('tr')).filter(tr => !tr.querySelector('.empty-state')).length;
+        }
+
+        function refreshCSVPreviewData() {
+            const statsContainer = document.getElementById('sales-stats');
+            let stats = null;
+            try {
+                stats = statsContainer?.dataset.stats ? JSON.parse(statsContainer.dataset.stats) : null;
+            } catch (e) {
+                stats = null;
+            }
+            return {
+                stats,
+                rowCount: countSalesTableRows(),
+                filters: { ...salesFilters }
+            };
+        }
+
+        function isCSVPreviewOpen() {
+            const modal = document.getElementById('csv-preview-modal');
+            return modal && modal.style.display === 'flex';
+        }
+
+        async function refreshCSVPreviewIfOpen() {
+            if (!isCSVPreviewOpen()) return;
+            const previewBody = document.getElementById('csv-preview-body');
+            if (previewBody) previewBody.innerHTML = '<p>Updating preview…</p>';
+            csvPreviewData = refreshCSVPreviewData();
+            displayCSVPreview();
         }
 
         // CSV Preview Modal
         let csvPreviewData = null;
-        function showCSVPreview() {
-            if (!csvPreviewData) {
-                // Fetch preview data
-                loadSalesData().then(() => {
-                    const statsContainer = document.getElementById('sales-stats');
-                    const stats = statsContainer?.dataset.stats ? JSON.parse(statsContainer.dataset.stats) : null;
-                    const table = document.getElementById('sales-tbody');
-                    const rows = table?.querySelectorAll('tr') || [];
-                    
-                    // Build preview data
-                    csvPreviewData = {
-                        stats: stats,
-                        rowCount: rows.length,
-                        filters: salesFilters
-                    };
-                    displayCSVPreview();
-                });
-            } else {
-                displayCSVPreview();
-            }
+
+        async function showCSVPreview() {
+            ensureCSVPreviewModal();
+            const csvModal = document.getElementById('csv-preview-modal');
+            const previewBody = document.getElementById('csv-preview-body');
+            csvModal.style.display = 'flex';
+            previewBody.innerHTML = '<p>Loading preview…</p>';
+
+            await loadSalesData();
+            csvPreviewData = refreshCSVPreviewData();
+            displayCSVPreview();
+        }
+
+        function ensureCSVPreviewModal() {
+            if (document.getElementById('csv-preview-modal')) return;
+            const modalHTML = `
+                <div id="csv-preview-modal" class="csv-preview-overlay" style="display: none;">
+                    <div class="csv-preview-content">
+                        <div class="csv-preview-header">
+                            <h2>CSV Export Preview</h2>
+                            <button type="button" class="csv-preview-close" onclick="closeCSVPreview()" aria-label="Close">&times;</button>
+                        </div>
+                        <div class="csv-preview-body" id="csv-preview-body">
+                            <p>Loading preview…</p>
+                        </div>
+                        <div class="csv-preview-footer">
+                            <button type="button" class="btn-filter btn-filter-secondary" onclick="closeCSVPreview()">Cancel</button>
+                            <button type="button" class="btn-filter btn-export" onclick="downloadCSV()">Download CSV</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
         }
 
         function displayCSVPreview() {
-            let csvModal = document.getElementById('csv-preview-modal');
-            if (!csvModal) {
-                // Create modal if it doesn't exist
-                const modalHTML = `
-                    <div id="csv-preview-modal" class="csv-preview-overlay" style="display: none;">
-                        <div class="csv-preview-content">
-                            <div class="csv-preview-header">
-                                <h2>CSV Export Preview</h2>
-                                <button class="csv-preview-close" onclick="closeCSVPreview()">&times;</button>
-                            </div>
-                            <div class="csv-preview-body" id="csv-preview-body">
-                                <p>Loading preview...</p>
-                            </div>
-                            <div class="csv-preview-footer">
-                                <button class="btn-filter btn-filter-secondary" onclick="closeCSVPreview()">Cancel</button>
-                                <button class="btn-filter btn-export" onclick="downloadCSV()">Download CSV</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                document.body.insertAdjacentHTML('beforeend', modalHTML);
-                csvModal = document.getElementById('csv-preview-modal');
-            }
+            ensureCSVPreviewModal();
+            const csvModal = document.getElementById('csv-preview-modal');
             const previewBody = document.getElementById('csv-preview-body');
-            
+            const filterSummary = formatSalesFiltersSummary(csvPreviewData?.filters);
+
             if (csvPreviewData && csvPreviewData.stats) {
                 const stats = csvPreviewData.stats;
+                const summaryRowsHtml = buildSalesSummaryTableRows(stats)
+                    .map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`)
+                    .join('');
                 previewBody.innerHTML = `
                     <div class="csv-preview-section">
-                        <h3>Sales Report Statistics</h3>
+                        <h3>Summary (included in file)</h3>
                         <table class="csv-preview-table">
-                            <tr><td><strong>Gross Sales</strong></td><td>₱${Number(stats.grossSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Net Sales</strong></td><td>₱${Number(stats.netSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Gross Revenue</strong></td><td>₱${Number(stats.grossRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Net Revenue</strong></td><td>₱${Number(stats.netRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Returns</strong></td><td>₱${Number(stats.salesReturns || 0).toLocaleString('en-US', {minimumFractionDigits: 2})} (${stats.returnedOrdersCount || 0} orders, ${Number(stats.returnRate || 0).toFixed(1)}%)</td></tr>
-                            <tr><td><strong>Total Discounts</strong></td><td>₱${Number(stats.totalDiscounts || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Inventory Loss</strong></td><td>₱${Number(stats.inventoryLoss || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Total Taxes</strong></td><td>₱${Number(stats.totalTaxes || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Delivery Revenues</strong></td><td>₱${Number(stats.deliveryRevenues || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
+                            ${summaryRowsHtml}
                         </table>
                     </div>
                     <div class="csv-preview-section">
-                        <h3>Order Summary</h3>
-                        <table class="csv-preview-table">
-                            <tr><td><strong>Total Orders</strong></td><td>${stats.totalOrders || 0} (including returns)</td></tr>
-                            <tr><td><strong>Total Customers</strong></td><td>${stats.totalCustomers || 0}</td></tr>
-                            <tr><td><strong>Average Order Value</strong></td><td>₱${Number(stats.averageOrderValue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                        </table>
-                    </div>
-                    <div class="csv-preview-section">
-                        <h3>Export Details</h3>
-                        <p><strong>Total Records:</strong> ${csvPreviewData.rowCount || 0} orders</p>
-                        <p><strong>Filters Applied:</strong> ${Object.keys(csvPreviewData.filters || {}).length > 0 ? 'Yes' : 'No'}</p>
-                        <p><strong>Export Format:</strong> Excel (.xlsx)</p>
-                        <p><em>The Excel file will include:</em></p>
-                        <ul style="margin: 0.5rem 0; padding-left: 1.5rem;">
-                            <li>Sales Report Statistics with formulas</li>
-                            <li>Orders by Status breakdown</li>
-                            <li>Revenue by Payment Method</li>
-                            <li>Additional Summary Statistics</li>
-                            <li>Detailed Order Transactions (${csvPreviewData.rowCount || 0} orders)</li>
-                        </ul>
+                        <h3>Orders sheet</h3>
+                        <p style="margin: 0 0 0.5rem 0; color: var(--text-light); font-size: 0.9rem;">
+                            ${csvPreviewData.rowCount || 0} order(s): Order #, Reference, Date, Customer, Status, Products, Subtotal, Delivery, Total, Payment
+                        </p>
+                        <p style="margin: 0; font-size: 0.85rem; color: var(--text-light);">
+                            <strong>Format:</strong> Excel (.xlsx) &nbsp;•&nbsp;
+                            <strong>Filters:</strong> ${filterSummary}
+                        </p>
                     </div>
                 `;
             } else {

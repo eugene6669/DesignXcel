@@ -26,14 +26,20 @@ const QuickViewModal = ({ open, onClose, product, formatPrice, onAddToCart }) =>
   const discountInfo = product.discountInfo;
   const description = product.Description || product.description || '';
   const category = product.Category || product.categoryName || product.category || '';
-  const stock = product.StockQuantity ?? product.stock ?? product.quantity ?? null;
-  const soldQuantity = product.soldQuantity ?? 0;
+  const hasVariations = product.hasVariations || product.requiresVariationSelection;
+  const stock = hasVariations
+    ? (product.variationStockSum ?? product.availableStock ?? 0)
+    : (product.StockQuantity ?? product.stock ?? product.quantity ?? null);
   const dimensions = product.Dimensions || product.dimensions || '';
   
   const imageUrl = getPrimaryImageUrl(product);
   const displayPrice = (hasDiscount && discountInfo) ? discountInfo.discountedPrice : price;
 
   const handleAdd = () => {
+    if (hasVariations) {
+      handleViewDetails();
+      return;
+    }
     onAddToCart?.(product);
   };
 
@@ -122,14 +128,14 @@ const QuickViewModal = ({ open, onClose, product, formatPrice, onAddToCart }) =>
               <button 
                 className="quickview-add-to-cart-btn"
                 onClick={handleAdd}
-                disabled={stock === 0}
+                disabled={!hasVariations && stock === 0}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="9" cy="21" r="1"></circle>
                   <circle cx="20" cy="21" r="1"></circle>
                   <path d="m1 1 4 4 13 0 3 8-1 1H6"></path>
                 </svg>
-                Add to Cart
+                {hasVariations ? 'Choose options' : 'Add to Cart'}
               </button>
               <button className="quickview-view-details-btn" onClick={handleViewDetails}>
                 View Full Details

@@ -7,7 +7,8 @@ const CART_ACTIONS = {
     UPDATE_QUANTITY: 'UPDATE_QUANTITY',
     CLEAR_CART: 'CLEAR_CART',
     LOAD_CART: 'LOAD_CART',
-    SET_LOADING: 'SET_LOADING'
+    SET_LOADING: 'SET_LOADING',
+    SET_ERROR: 'SET_ERROR'
 };
 
 // Cart limits
@@ -160,6 +161,13 @@ const cartReducer = (state, action) => {
             return {
                 ...state,
                 isLoading: action.payload
+            };
+        }
+
+        case CART_ACTIONS.SET_ERROR: {
+            return {
+                ...state,
+                lastError: action.payload || null
             };
         }
 
@@ -365,10 +373,29 @@ export const CartProvider = ({ children, userId }) => {
 
     // Cart actions
     const addToCart = (product, quantity = 1, customization = {}) => {
+        const hasVariations = product?.hasVariations || product?.requiresVariationSelection;
+        if (hasVariations && !product?.selectedVariation?.id) {
+            dispatch({
+                type: CART_ACTIONS.SET_ERROR,
+                payload: 'Please select a product option before adding to cart.'
+            });
+            return {
+                ok: false,
+                error: 'Please select a product option before adding to cart.'
+            };
+        }
+
+        const productForCart = {
+            ...product,
+            useOriginalProduct: hasVariations ? false : true,
+            selectedVariation: hasVariations ? product.selectedVariation : null
+        };
+
         dispatch({
             type: CART_ACTIONS.ADD_ITEM,
-            payload: { product, quantity, customization }
+            payload: { product: productForCart, quantity, customization }
         });
+        return { ok: true };
     };
 
     const removeFromCart = (itemId) => {

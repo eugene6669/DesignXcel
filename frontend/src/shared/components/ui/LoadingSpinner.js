@@ -16,17 +16,6 @@ const LoadingSpinner = ({
     className
   ].filter(Boolean).join(' ');
 
-  const getSpinnerSize = () => {
-    switch (size) {
-      case 'small': return { height: 20, width: 20 };
-      case 'large': return { height: 80, width: 80 };
-      case 'medium':
-      default: return { height: 40, width: 40 };
-    }
-  };
-
-  const spinnerSize = getSpinnerSize();
-
   return (
     <div className={spinnerClasses}>
       <div className="loading-spinner__container">

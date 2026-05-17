@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import apiClient from "../../../shared/services/api/apiClient";
+import { getSellableStock } from "../../../shared/utils/productUtils";
 
 const ProductFilter = ({ categories, products, filters, onFilterChange, onClearFilters }) => {
   const [priceRange, setPriceRange] = useState([25, 125]);
@@ -9,10 +10,6 @@ const ProductFilter = ({ categories, products, filters, onFilterChange, onClearF
   const [stockStatus, setStockStatus] = useState({ inStock: 0, outOfStock: 0 });
   const [loading, setLoading] = useState(true);
   
-  const handleFilterChange = (filterType, value) => {
-    onFilterChange({ [filterType]: value });
-  };
-
   const handleCheckboxChange = (filterType, checked) => {
     onFilterChange({ [filterType]: checked });
   };
@@ -185,12 +182,12 @@ const ProductFilter = ({ categories, products, filters, onFilterChange, onClearF
           // Fallback: calculate stock status from products data
           if (products && products.length > 0) {
             const inStockCount = products.filter(product => {
-              const currentStock = product.stockQuantity || product.stock || product.quantity || 0;
+              const currentStock = getSellableStock(product);
               return currentStock > 0;
             }).length;
             
             const outOfStockCount = products.filter(product => {
-              const currentStock = product.stockQuantity || product.stock || product.quantity || 0;
+              const currentStock = getSellableStock(product);
               return currentStock === 0;
             }).length;
             
@@ -204,12 +201,12 @@ const ProductFilter = ({ categories, products, filters, onFilterChange, onClearF
         // Fallback: calculate stock status from products data
         if (products && products.length > 0) {
           const inStockCount = products.filter(product => {
-            const currentStock = product.stockQuantity || product.stock || product.quantity || 0;
+            const currentStock = getSellableStock(product);
             return currentStock > 0;
           }).length;
           
           const outOfStockCount = products.filter(product => {
-            const currentStock = product.stockQuantity || product.stock || product.quantity || 0;
+            const currentStock = getSellableStock(product);
             return currentStock === 0;
           }).length;
           

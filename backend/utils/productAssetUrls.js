@@ -54,6 +54,28 @@ function fixLegacyFlatProductUploadPath(u) {
  * Public URL for a multer file (disk or Azure custom storage).
  * @param {import('multer').File} file
  */
+function publicUrlFromMulterVariationFile(file) {
+    if (!file) return null;
+    if (file.azureUrl) return file.azureUrl;
+    if (file.destination === 'azure-blob' && file.path) {
+        return getBlobPublicUrl(String(file.path).replace(/\\/g, '/')) || null;
+    }
+    const field = file.fieldname || '';
+    if (field === 'variationMainImage' || field === 'variationImage') {
+        return `/uploads/variations/${file.filename}`;
+    }
+    if (field === 'variationModel3d') {
+        return `/uploads/products/models/${file.filename}`;
+    }
+    if (field === 'variationThumbnail') {
+        return `/uploads/products/thumbnails/${file.filename}`;
+    }
+    if (file.filename) {
+        return `/uploads/variations/${file.filename}`;
+    }
+    return null;
+}
+
 function publicUrlFromMulterProductFile(file) {
     if (!file) return null;
     if (file.destination === 'azure-blob' && file.path) {
@@ -61,8 +83,8 @@ function publicUrlFromMulterProductFile(file) {
     }
     const field = file.fieldname || '';
     let sub = 'images';
-    if (field.startsWith('thumbnail') || field === 'thumbnails') sub = 'thumbnails';
-    else if (field === 'model3d') sub = 'models';
+    if (field.startsWith('thumbnail') || field === 'thumbnails' || field === 'variationThumbnail') sub = 'thumbnails';
+    else if (field === 'model3d' || field === 'variationModel3d') sub = 'models';
     else if (field === 'inventoryImage' || field === 'productImage') sub = 'inventory';
     else if (field === 'image') sub = 'images';
     return `/uploads/products/${sub}/${file.filename}`;
@@ -126,11 +148,14 @@ function mapProductRecordAssetUrls(product) {
         next.images = [];
     }
 
-    if (next.thumbnails != null) {
-        next.thumbnails = normalizeThumbnailList(next.thumbnails);
+    const rawThumbs = next.thumbnails ?? next.ThumbnailURLs ?? next.thumbnailURLs;
+    if (rawThumbs != null && String(rawThumbs).trim() !== '') {
+        next.thumbnails = normalizeThumbnailList(rawThumbs);
     } else {
         next.thumbnails = [];
     }
+    delete next.ThumbnailURLs;
+    delete next.thumbnailURLs;
 
     const rawModel =
         next.model3d ??
@@ -154,6 +179,7 @@ module.exports = {
     normalizeThumbnailList,
     mapProductRecordAssetUrls,
     publicUrlFromMulterProductFile,
+    publicUrlFromMulterVariationFile,
     sanitizeRelativeUploadPath,
     fixLegacyFlatProductUploadPath
 };

@@ -21,8 +21,18 @@ const { isAzureBlobConfigured, uploadBufferToAzureBlob, getBlobPublicUrl } = req
 const {
     isAzureProductAssetMode,
     publicUrlFromMulterProductFile,
+    publicUrlFromMulterVariationFile,
     normalizeProductAssetUrl
 } = require('./utils/productAssetUrls');
+const {
+    ensureVariationMediaColumns,
+    mapVariationMediaFiles,
+    parseSingleVariationMediaFiles,
+    resolveVariationMediaUrls,
+    assignVariationSku,
+    upsertProductVariationWithId,
+    createStorefrontProductFromInventory
+} = require('./utils/inventoryCatalogSync');
 const { isCommonPassword } = require('./utils/passwordValidator');
 const { dedupeDoubledTransactionId, paymentMethodDisplayForOrder, isStripeCheckoutSessionId } = require('./utils/orderDisplayHelpers');
 const { processGatewayRefund } = require('./utils/processGatewayRefund');
@@ -177,6 +187,31 @@ module.exports = function (sql, pool, getStripe = null) {
         return row;
     }
 
+    /** Rows for Excel/CSV sales report summary (matches on-screen metrics). */
+    function buildSalesReportSummaryRows(stats) {
+        const n = (v) => parseFloat(v || 0);
+        const i = (v) => parseInt(v || 0, 10);
+        return [
+            { label: 'Gross Sales', value: n(stats.grossSales), currency: true },
+            { label: 'Net Sales', value: n(stats.netSales), currency: true },
+            { label: 'Gross Revenue', value: n(stats.grossRevenue), currency: true },
+            { label: 'Net Revenue', value: n(stats.netRevenue), currency: true },
+            { label: 'Total Revenue', value: n(stats.totalRevenue), currency: true },
+            { label: 'Returns', value: n(stats.salesReturns), currency: true },
+            { label: 'Total Discounts', value: n(stats.totalDiscounts), currency: true },
+            { label: 'Total Taxes', value: n(stats.totalTaxes), currency: true },
+            { label: 'Inventory Loss', value: n(stats.inventoryLoss), currency: true },
+            { label: 'Delivery Revenues', value: n(stats.deliveryRevenues), currency: true },
+            { label: 'Total Orders', value: i(stats.totalOrders), currency: false },
+            { label: 'Total Customers', value: i(stats.totalCustomers), currency: false },
+            { label: 'Average Order Value', value: n(stats.averageOrderValue), currency: true },
+            { label: 'Refunded Orders', value: i(stats.refundedOrdersCount), currency: false },
+            { label: 'Returned Orders', value: i(stats.returnedOrdersCount), currency: false },
+            { label: 'Replacement Orders', value: i(stats.replacementOrdersCount), currency: false },
+            { label: 'Return Rate', value: n(stats.returnRate), percent: true }
+        ];
+    }
+
     // Helper function to sync variation stock from InventoryProductVariations to ProductVariations (for CMS display)
     // This ensures ProductVariations.Quantity reflects InventoryProductVariations.Quantity
     async function syncInventoryVariationToProductsVariation(variationId, transaction = null) {
@@ -188,12 +223,17 @@ module.exports = function (sql, pool, getStripe = null) {
 
             // Find linked InventoryProductVariation via VariationID
             // Note: VariationID is shared between InventoryProductVariations and ProductVariations
-            const inventoryResult = await inventoryRequest
+                const inventoryResult = await inventoryRequest
                 .input('variationId', sql.Int, variationId)
                 .query(`
                     SELECT TOP 1 
                         VariationID,
-                        AvailableQuantity as InventoryQuantity
+                        VariationName,
+                        AvailableQuantity as InventoryQuantity,
+                        VariationImageURL,
+                        ThumbnailURLs,
+                        Model3D,
+                        SKU
                     FROM InventoryProductVariations
                     WHERE VariationID = @variationId AND IsActive = 1
                 `);
@@ -224,16 +264,30 @@ module.exports = function (sql, pool, getStripe = null) {
 
                 // Update ProductVariations.Quantity to match InventoryProductVariations.Quantity - create new request
                 const updateRequest = transaction ? transaction.request() : pool.request();
+                const invRow = inventoryResult.recordset[0];
+                let variationSku = invRow.SKU;
+                if (!variationSku || !String(variationSku).trim()) {
+                    variationSku = await assignVariationSku(transaction || pool, variationId, invRow.VariationName);
+                }
                 const updateResult = await updateRequest
                     .input('variationId', sql.Int, variationId)
                     .input('inventoryQuantity', sql.Int, inventoryQuantity)
+                    .input('imageUrl', sql.NVarChar, invRow.VariationImageURL || null)
+                    .input('thumbJson', sql.NVarChar, invRow.ThumbnailURLs || null)
+                    .input('model3d', sql.NVarChar, invRow.Model3D || null)
+                    .input('sku', sql.NVarChar, variationSku)
                     .query(`
                         UPDATE ProductVariations 
-                        SET Quantity = @inventoryQuantity
+                        SET Quantity = @inventoryQuantity,
+                            SKU = COALESCE(@sku, SKU),
+                            VariationImageURL = COALESCE(@imageUrl, VariationImageURL),
+                            ThumbnailURLs = COALESCE(@thumbJson, ThumbnailURLs),
+                            Model3D = COALESCE(@model3d, Model3D),
+                            UpdatedAt = GETDATE()
                         WHERE VariationID = @variationId
                     `);
 
-                console.log(`[VARIATION SYNC] ✅ Updated ProductVariations.Quantity for VariationID ${variationId} from ${oldVariationQty} to ${inventoryQuantity}, rows affected: ${updateResult.rowsAffected[0] || 0}`);
+                console.log(`[VARIATION SYNC] ✅ Updated ProductVariations for VariationID ${variationId} qty ${oldVariationQty} -> ${inventoryQuantity}, rows affected: ${updateResult.rowsAffected[0] || 0}`);
 
                 // Verify the update - create new request
                 const verifyRequest = transaction ? transaction.request() : pool.request();
@@ -313,6 +367,91 @@ module.exports = function (sql, pool, getStripe = null) {
     }
 
     /**
+     * Delete rows referencing Products.ProductID (FK order matches delete_all_products.sql).
+     * Removes OrderItems/BulkOrderItems for this product so CMS delete can succeed.
+     */
+    async function deleteCmsProductDependentRows(transaction, productId) {
+        const pid = parseInt(productId, 10);
+        if (!pid || Number.isNaN(pid)) {
+            return { orderItemsRemoved: 0, bulkItemsRemoved: 0 };
+        }
+
+        const run = () => transaction.request().input('productId', sql.Int, pid);
+
+        const optionalTables = [
+            'CartItems',
+            'WishlistItems',
+            'ProductDiscounts',
+            'ProductReviews',
+            'BulkOrderQuoteItems',
+        ];
+        for (const table of optionalTables) {
+            try {
+                await run().query(`DELETE FROM [dbo].[${table}] WHERE ProductID = @productId`);
+            } catch (e) {
+                if (e.number !== 208) {
+                    console.log(`Skip ${table} on CMS product delete:`, e.message);
+                }
+            }
+        }
+
+        let bulkItemsRemoved = 0;
+        let orderItemsRemoved = 0;
+        try {
+            const bulkRes = await run().query('DELETE FROM [dbo].[BulkOrderItems] WHERE ProductID = @productId');
+            bulkItemsRemoved = bulkRes.rowsAffected?.[0] || 0;
+        } catch (e) {
+            if (e.number !== 208) throw e;
+        }
+
+        try {
+            const orderRes = await run().query('DELETE FROM [dbo].[OrderItems] WHERE ProductID = @productId');
+            orderItemsRemoved = orderRes.rowsAffected?.[0] || 0;
+        } catch (e) {
+            if (e.number !== 208) throw e;
+        }
+
+        await run().query('DELETE FROM [dbo].[ProductMaterials] WHERE ProductID = @productId');
+        await run().query('DELETE FROM [dbo].[ProductVariations] WHERE ProductID = @productId');
+
+        try {
+            await run().query('DELETE FROM [dbo].[ProductInventory] WHERE ProductID = @productId');
+        } catch (e) {
+            if (e.number !== 208) {
+                console.log('Skip ProductInventory on CMS product delete:', e.message);
+            }
+        }
+
+        try {
+            await run().query('UPDATE [dbo].[InventoryProducts] SET ProductID = NULL WHERE ProductID = @productId');
+        } catch (e) {
+            if (e.number !== 208) {
+                console.log('Skip InventoryProducts unlink on CMS product delete:', e.message);
+            }
+        }
+
+        return { orderItemsRemoved, bulkItemsRemoved };
+    }
+
+    async function permanentlyDeleteCmsProductRow(transaction, productId) {
+        const stats = await deleteCmsProductDependentRows(transaction, productId);
+        await transaction.request()
+            .input('productId', sql.Int, parseInt(productId, 10))
+            .query('DELETE FROM [dbo].[Products] WHERE ProductID = @productId');
+        return stats;
+    }
+
+    function formatPermanentDeleteProductMessage(stats, entityLabel = 'Product') {
+        let message = `${entityLabel} and related items permanently deleted.`;
+        const orderN = stats?.orderItemsRemoved || 0;
+        const bulkN = stats?.bulkItemsRemoved || 0;
+        if (orderN > 0 || bulkN > 0) {
+            message += ` Removed ${orderN} order line(s) and ${bulkN} bulk order line(s) that referenced this product.`;
+        }
+        return message;
+    }
+
+    /**
      * When a single InventoryProductVariation is archived, deactivate linked CMS ProductVariation (same VariationID).
      */
     async function cascadeArchiveCmsProductVariationFromInventoryVariationArchived(variationId) {
@@ -353,7 +492,14 @@ module.exports = function (sql, pool, getStripe = null) {
                 const availableQuantity = inventoryProduct.AvailableQuantity || 0;
                 const inventoryProductId = inventoryProduct.InventoryProductID;
 
-                console.log(`[STOCK SYNC] Found InventoryProduct ${inventoryProductId} for ProductID ${productId}, AvailableQuantity: ${availableQuantity}`);
+                const hasInventoryVariations = await productHasActiveInventoryVariations(inventoryProductId, transaction);
+                const { productHasActiveProductVariations } = require('./utils/productVariationPolicy');
+                const hasProductVariations = await productHasActiveProductVariations(pool, productId, transaction);
+                const hasVariations = hasInventoryVariations || hasProductVariations;
+                // Parent CMS stock is not sellable when variations exist (variations hold stock).
+                const stockToSync = hasVariations ? 0 : availableQuantity;
+
+                console.log(`[STOCK SYNC] Found InventoryProduct ${inventoryProductId} for ProductID ${productId}, AvailableQuantity: ${availableQuantity}, hasVariations: ${hasVariations}, CMS StockQuantity -> ${stockToSync}`);
 
                 // Get current Products.StockQuantity before update - create new request
                 const currentRequest = transaction ? transaction.request() : pool.request();
@@ -369,13 +515,13 @@ module.exports = function (sql, pool, getStripe = null) {
                     ? (currentProductsResult.recordset[0].StockQuantity || 0)
                     : 0;
 
-                console.log(`[STOCK SYNC] Current Products.StockQuantity: ${oldStockQuantity}, Updating to: ${availableQuantity}`);
+                console.log(`[STOCK SYNC] Current Products.StockQuantity: ${oldStockQuantity}, Updating to: ${stockToSync}`);
 
-                // Update Products.StockQuantity to match InventoryProducts.AvailableQuantity - create new request
+                // Update Products.StockQuantity - create new request
                 const updateRequest = transaction ? transaction.request() : pool.request();
                 const updateResult = await updateRequest
                     .input('productId', sql.Int, productId)
-                    .input('availableQuantity', sql.Int, availableQuantity)
+                    .input('availableQuantity', sql.Int, stockToSync)
                     .query(`
                         UPDATE Products 
                         SET StockQuantity = @availableQuantity,
@@ -383,7 +529,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         WHERE ProductID = @productId
                     `);
 
-                console.log(`[STOCK SYNC] ✅ Updated Products.StockQuantity for ProductID ${productId} from ${oldStockQuantity} to ${availableQuantity}, rows affected: ${updateResult.rowsAffected[0] || 0}`);
+                console.log(`[STOCK SYNC] ✅ Updated Products.StockQuantity for ProductID ${productId} from ${oldStockQuantity} to ${stockToSync}, rows affected: ${updateResult.rowsAffected[0] || 0}`);
 
                 // Verify the update - create new request
                 const verifyRequest = transaction ? transaction.request() : pool.request();
@@ -403,7 +549,19 @@ module.exports = function (sql, pool, getStripe = null) {
 
                 return true;
             } else {
-                // No inventory product linked, keep Products.StockQuantity as is
+                const { productHasActiveProductVariations } = require('./utils/productVariationPolicy');
+                if (await productHasActiveProductVariations(pool, productId, transaction)) {
+                    const updateRequest = transaction ? transaction.request() : pool.request();
+                    await updateRequest
+                        .input('productId', sql.Int, productId)
+                        .query(`
+                            UPDATE Products
+                            SET StockQuantity = 0, UpdatedAt = GETDATE()
+                            WHERE ProductID = @productId
+                        `);
+                    console.log(`[STOCK SYNC] No inventory link; set Products.StockQuantity=0 for ProductID ${productId} (has CMS variations)`);
+                    return true;
+                }
                 console.log(`[STOCK SYNC] ⚠️ No linked InventoryProduct found for ProductID ${productId}, keeping Products.StockQuantity unchanged`);
                 return false;
             }
@@ -413,6 +571,230 @@ module.exports = function (sql, pool, getStripe = null) {
             console.error(`[STOCK SYNC] Error stack:`, err.stack);
             return false;
         }
+    }
+
+    async function productHasActiveInventoryVariations(inventoryProductId, transaction = null) {
+        const request = transaction ? transaction.request() : pool.request();
+        const result = await request
+            .input('inventoryProductId', sql.Int, inventoryProductId)
+            .query(`
+                SELECT COUNT(*) as Cnt
+                FROM InventoryProductVariations
+                WHERE InventoryProductID = @inventoryProductId AND IsActive = 1
+            `);
+        return (result.recordset[0]?.Cnt || 0) > 0;
+    }
+
+    /**
+     * Roll up active variation status quantities into InventoryProducts
+     * (product inventory tab stays in sync with product variations tab).
+     */
+    async function syncInventoryProductQtyFromVariations(inventoryProductId, transaction = null) {
+        const hasVariations = await productHasActiveInventoryVariations(inventoryProductId, transaction);
+        if (!hasVariations) {
+            return null;
+        }
+
+        const sumRequest = transaction ? transaction.request() : pool.request();
+        const sumResult = await sumRequest
+            .input('inventoryProductId', sql.Int, inventoryProductId)
+            .query(`
+                SELECT
+                    ISNULL(SUM(
+                        CASE
+                            WHEN AvailableQuantity IS NULL OR AvailableQuantity = 0
+                            THEN COALESCE(Quantity, 0)
+                            ELSE AvailableQuantity
+                        END
+                    ), 0) as AvailableQuantity,
+                    ISNULL(SUM(COALESCE(DamagedQuantity, 0)), 0) as DamagedQuantity,
+                    ISNULL(SUM(COALESCE(ReturnedQuantity, 0)), 0) as ReturnedQuantity,
+                    ISNULL(SUM(COALESCE(RepairedQuantity, 0)), 0) as RepairedQuantity,
+                    ISNULL(SUM(COALESCE(DisposedQuantity, 0)), 0) as DisposedQuantity
+                FROM InventoryProductVariations
+                WHERE InventoryProductID = @inventoryProductId AND IsActive = 1
+            `);
+
+        const agg = sumResult.recordset[0] || {};
+        const available = agg.AvailableQuantity || 0;
+        const damaged = agg.DamagedQuantity || 0;
+        const returned = agg.ReturnedQuantity || 0;
+        const repaired = agg.RepairedQuantity || 0;
+        const disposed = agg.DisposedQuantity || 0;
+
+        const primaryStatus = available > 0 ? 'available' :
+            repaired > 0 ? 'repaired' :
+                damaged > 0 ? 'damaged' :
+                    disposed > 0 ? 'disposed' : 'available';
+
+        const updateRequest = transaction ? transaction.request() : pool.request();
+        await updateRequest
+            .input('inventoryProductId', sql.Int, inventoryProductId)
+            .input('available', sql.Int, available)
+            .input('damaged', sql.Int, damaged)
+            .input('returned', sql.Int, returned)
+            .input('repaired', sql.Int, repaired)
+            .input('disposed', sql.Int, disposed)
+            .input('status', sql.NVarChar, primaryStatus)
+            .query(`
+                UPDATE InventoryProducts
+                SET AvailableQuantity = @available,
+                    DamagedQuantity = @damaged,
+                    ReturnedQuantity = @returned,
+                    RepairedQuantity = @repaired,
+                    DisposedQuantity = @disposed,
+                    InventoryStatus = @status
+                WHERE InventoryProductID = @inventoryProductId
+            `);
+
+        const linkRequest = transaction ? transaction.request() : pool.request();
+        const linkResult = await linkRequest
+            .input('inventoryProductId', sql.Int, inventoryProductId)
+            .query(`
+                SELECT ProductID FROM InventoryProducts
+                WHERE InventoryProductID = @inventoryProductId AND IsActive = 1
+            `);
+
+        const linkedProductId = linkResult.recordset[0]?.ProductID;
+        if (linkedProductId) {
+            await syncInventoryToProductsStock(linkedProductId, transaction);
+        }
+
+        return { available, damaged, returned, repaired, disposed, primaryStatus };
+    }
+
+    /** Split a non-negative total across slots by prior weights (or evenly if all zero). */
+    function distributeQuantityAcrossSlots(total, weights) {
+        const n = weights.length;
+        if (n === 0) return [];
+        const target = Math.max(0, parseInt(total, 10) || 0);
+        if (target === 0) return weights.map(() => 0);
+
+        const w = weights.map((x) => Math.max(0, parseInt(x, 10) || 0));
+        const weightSum = w.reduce((a, b) => a + b, 0);
+
+        let allocated;
+        if (weightSum === 0) {
+            const base = Math.floor(target / n);
+            const remainder = target % n;
+            allocated = w.map((_, i) => base + (i < remainder ? 1 : 0));
+        } else {
+            allocated = w.map((weight) => Math.floor((target * weight) / weightSum));
+            let assigned = allocated.reduce((a, b) => a + b, 0);
+            let remainder = target - assigned;
+            const order = w
+                .map((weight, index) => ({ weight, index }))
+                .sort((a, b) => b.weight - a.weight)
+                .map((x) => x.index);
+            let ptr = 0;
+            while (remainder > 0) {
+                allocated[order[ptr % n]] += 1;
+                remainder -= 1;
+                ptr += 1;
+            }
+        }
+        return allocated;
+    }
+
+    /**
+     * Push InventoryProducts status quantities down to active variations (proportional split).
+     */
+    async function syncInventoryVariationsFromProduct(inventoryProductId, quantities, transaction = null) {
+        const hasVariations = await productHasActiveInventoryVariations(inventoryProductId, transaction);
+        if (!hasVariations) {
+            return [];
+        }
+
+        const varRequest = transaction ? transaction.request() : pool.request();
+        const variationsResult = await varRequest
+            .input('inventoryProductId', sql.Int, inventoryProductId)
+            .query(`
+                SELECT
+                    VariationID,
+                    CASE
+                        WHEN AvailableQuantity IS NULL OR AvailableQuantity = 0
+                        THEN COALESCE(Quantity, 0)
+                        ELSE AvailableQuantity
+                    END as AvailableQuantity,
+                    COALESCE(DamagedQuantity, 0) as DamagedQuantity,
+                    COALESCE(ReturnedQuantity, 0) as ReturnedQuantity,
+                    COALESCE(RepairedQuantity, 0) as RepairedQuantity,
+                    COALESCE(DisposedQuantity, 0) as DisposedQuantity
+                FROM InventoryProductVariations
+                WHERE InventoryProductID = @inventoryProductId AND IsActive = 1
+                ORDER BY VariationID
+            `);
+
+        const variations = variationsResult.recordset || [];
+        if (!variations.length) {
+            return [];
+        }
+
+        const targets = {
+            available: quantities.available || 0,
+            damaged: quantities.damaged || 0,
+            returned: quantities.returned || 0,
+            repaired: quantities.repaired || 0,
+            disposed: quantities.disposed || 0
+        };
+
+        const availableSplit = distributeQuantityAcrossSlots(
+            targets.available,
+            variations.map((v) => v.AvailableQuantity)
+        );
+        const damagedSplit = distributeQuantityAcrossSlots(
+            targets.damaged,
+            variations.map((v) => v.DamagedQuantity)
+        );
+        const returnedSplit = distributeQuantityAcrossSlots(
+            targets.returned,
+            variations.map((v) => v.ReturnedQuantity)
+        );
+        const repairedSplit = distributeQuantityAcrossSlots(
+            targets.repaired,
+            variations.map((v) => v.RepairedQuantity)
+        );
+        const disposedSplit = distributeQuantityAcrossSlots(
+            targets.disposed,
+            variations.map((v) => v.DisposedQuantity)
+        );
+
+        const updatedVariationIds = [];
+
+        for (let i = 0; i < variations.length; i++) {
+            const variationId = variations[i].VariationID;
+            const available = availableSplit[i] || 0;
+            const damaged = damagedSplit[i] || 0;
+            const returned = returnedSplit[i] || 0;
+            const repaired = repairedSplit[i] || 0;
+            const disposed = disposedSplit[i] || 0;
+            const totalQty = available + damaged;
+
+            const updateReq = transaction ? transaction.request() : pool.request();
+            await updateReq
+                .input('variationId', sql.Int, variationId)
+                .input('available', sql.Int, available)
+                .input('damaged', sql.Int, damaged)
+                .input('returned', sql.Int, returned)
+                .input('repaired', sql.Int, repaired)
+                .input('disposed', sql.Int, disposed)
+                .input('totalQty', sql.Int, totalQty)
+                .query(`
+                    UPDATE InventoryProductVariations
+                    SET AvailableQuantity = @available,
+                        DamagedQuantity = @damaged,
+                        ReturnedQuantity = @returned,
+                        RepairedQuantity = @repaired,
+                        DisposedQuantity = @disposed,
+                        Quantity = @totalQty,
+                        UpdatedAt = GETDATE()
+                    WHERE VariationID = @variationId
+                `);
+
+            updatedVariationIds.push(variationId);
+        }
+
+        return updatedVariationIds;
     }
 
     // Helper function to decrement stock from both InventoryProducts and Products
@@ -880,11 +1262,11 @@ module.exports = function (sql, pool, getStripe = null) {
         console.log(`[MATERIALS] Starting decrease for product ${productId} with ${materials.length} materials, stock: ${stockQuantity}`);
 
         for (const material of materials) {
-            const materialId = material.materialId || material.materialID;
-            const quantityRequired = material.quantityRequired || 1;
+            const materialId = parseInt(material.materialId || material.materialID || material.MaterialID, 10);
+            const quantityRequired = parseInt(material.quantityRequired || material.QuantityRequired, 10) || 1;
             const totalToDecrease = quantityRequired * stockQuantity;
 
-            if (totalToDecrease > 0 && materialId) {
+            if (totalToDecrease > 0 && materialId && !isNaN(materialId)) {
                 // Check current available quantity
                 const currentStockResult = await transaction.request()
                     .input('materialId', sql.Int, materialId)
@@ -939,11 +1321,11 @@ module.exports = function (sql, pool, getStripe = null) {
         console.log(`[MATERIALS] Starting restore for product ${productId} with ${materials.length} materials, stock: ${stockQuantity}`);
 
         for (const material of materials) {
-            const materialId = material.materialId || material.materialID;
-            const quantityRequired = material.quantityRequired || 1;
+            const materialId = parseInt(material.materialId || material.materialID || material.MaterialID, 10);
+            const quantityRequired = parseInt(material.quantityRequired || material.QuantityRequired, 10) || 1;
             const totalToRestore = quantityRequired * stockQuantity;
 
-            if (totalToRestore > 0 && materialId) {
+            if (totalToRestore > 0 && materialId && !isNaN(materialId)) {
                 // Check current available quantity before restore
                 const currentStockResult = await transaction.request()
                     .input('materialId', sql.Int, materialId)
@@ -993,6 +1375,156 @@ module.exports = function (sql, pool, getStripe = null) {
                 WHERE ProductID = @productId
             `);
         return result.recordset;
+    }
+
+    function mapMaterialRows(recordset) {
+        return (recordset || []).map((row) => ({
+            materialId: row.MaterialID,
+            quantityRequired: row.QuantityRequired || 1
+        })).filter((m) => m.materialId);
+    }
+
+    async function getInventoryProductMaterials(transaction, inventoryProductId) {
+        const invId = parseInt(inventoryProductId, 10);
+        if (!invId) {
+            return [];
+        }
+
+        // 1) Materials defined on the inventory product
+        try {
+            const invMaterials = await transaction.request()
+                .input('inventoryProductId', sql.Int, invId)
+                .query(`
+                    SELECT MaterialID, QuantityRequired
+                    FROM InventoryProductMaterials
+                    WHERE InventoryProductID = @inventoryProductId
+                `);
+            const fromInventory = mapMaterialRows(invMaterials.recordset);
+            if (fromInventory.length > 0) {
+                return fromInventory;
+            }
+        } catch (invMatErr) {
+            console.log('[MATERIALS] InventoryProductMaterials:', invMatErr.message);
+        }
+
+        // 2) Linked CMS product (InventoryProducts.ProductID)
+        let linkedProductId = null;
+        try {
+            const linkResult = await transaction.request()
+                .input('inventoryProductId', sql.Int, invId)
+                .query(`
+                    SELECT ProductID
+                    FROM InventoryProducts
+                    WHERE InventoryProductID = @inventoryProductId
+                `);
+            linkedProductId = linkResult.recordset[0]?.ProductID || null;
+        } catch (linkErr) {
+            console.log('[MATERIALS] InventoryProducts link lookup:', linkErr.message);
+        }
+
+        // 3) Legacy: CMS ProductID equals inventory product id
+        const productIdsToTry = [];
+        if (linkedProductId) {
+            productIdsToTry.push(parseInt(linkedProductId, 10));
+        }
+        if (!productIdsToTry.includes(invId)) {
+            productIdsToTry.push(invId);
+        }
+
+        for (const productId of productIdsToTry) {
+            try {
+                const pmResult = await transaction.request()
+                    .input('productId', sql.Int, productId)
+                    .query(`
+                        SELECT MaterialID, QuantityRequired
+                        FROM ProductMaterials
+                        WHERE ProductID = @productId
+                    `);
+                const fromProduct = mapMaterialRows(pmResult.recordset);
+                if (fromProduct.length > 0) {
+                    console.log(`[MATERIALS] Using ProductMaterials for inventory ${invId} (ProductID ${productId}), count: ${fromProduct.length}`);
+                    for (const m of fromProduct) {
+                        try {
+                            await transaction.request()
+                                .input('inventoryProductId', sql.Int, invId)
+                                .input('materialId', sql.Int, m.materialId)
+                                .input('quantityRequired', sql.Int, m.quantityRequired)
+                                .query(`
+                                    IF NOT EXISTS (
+                                        SELECT 1 FROM InventoryProductMaterials
+                                        WHERE InventoryProductID = @inventoryProductId AND MaterialID = @materialId
+                                    )
+                                    INSERT INTO InventoryProductMaterials (InventoryProductID, MaterialID, QuantityRequired)
+                                    VALUES (@inventoryProductId, @materialId, @quantityRequired)
+                                `);
+                        } catch (persistErr) {
+                            // ignore duplicate / table missing
+                        }
+                    }
+                    return fromProduct;
+                }
+            } catch (pmErr) {
+                console.log(`[MATERIALS] ProductMaterials ProductID ${productId}:`, pmErr.message);
+            }
+        }
+
+        console.log(`[MATERIALS] No materials found for inventory product ${invId}`);
+        return [];
+    }
+
+    async function saveInventoryProductMaterials(transaction, inventoryProductId, materialsData) {
+        const invId = parseInt(inventoryProductId, 10);
+        if (!invId || !Array.isArray(materialsData)) {
+            return;
+        }
+
+        try {
+            await transaction.request()
+                .input('inventoryProductId', sql.Int, invId)
+                .query('DELETE FROM InventoryProductMaterials WHERE InventoryProductID = @inventoryProductId');
+
+            for (const material of materialsData) {
+                const materialId = parseInt(material.materialId || material.materialID || material.MaterialID, 10);
+                const quantityRequired = parseInt(material.quantityRequired || material.QuantityRequired, 10) || 1;
+                if (!materialId || isNaN(materialId) || quantityRequired <= 0) {
+                    continue;
+                }
+                await transaction.request()
+                    .input('inventoryProductId', sql.Int, invId)
+                    .input('materialId', sql.Int, materialId)
+                    .input('quantityRequired', sql.Int, quantityRequired)
+                    .query(`
+                        INSERT INTO InventoryProductMaterials (InventoryProductID, MaterialID, QuantityRequired)
+                        VALUES (@inventoryProductId, @materialId, @quantityRequired)
+                    `);
+            }
+            console.log(`[MATERIALS] Saved recipe for inventory product ${invId} (${materialsData.length} row(s))`);
+        } catch (saveErr) {
+            console.error('[MATERIALS] saveInventoryProductMaterials error:', saveErr.message);
+            throw saveErr;
+        }
+    }
+
+    // Decrease or restore raw materials when inventory stock changes (restock, edit qty, create with stock)
+    async function applyMaterialsDeltaForInventoryProduct(transaction, inventoryProductId, stockDelta) {
+        const delta = parseInt(stockDelta, 10) || 0;
+        if (delta === 0) {
+            return;
+        }
+
+        const materials = await getInventoryProductMaterials(transaction, inventoryProductId);
+        if (materials.length === 0) {
+            console.log(`[MATERIALS] Skipping delta ${delta} — no materials for inventory product ${inventoryProductId}`);
+            return;
+        }
+
+        const qty = Math.abs(delta);
+        console.log(`[MATERIALS] Applying delta ${delta} (${qty} units) for inventory product ${inventoryProductId}, ${materials.length} material(s)`);
+        if (delta > 0) {
+            await decreaseMaterialsForProduct(transaction, inventoryProductId, qty, materials);
+        } else {
+            await restoreMaterialsForProduct(transaction, inventoryProductId, qty, materials);
+        }
     }
 
     // Helper function to sync all bulk orders with their converted orders
@@ -1387,6 +1919,9 @@ module.exports = function (sql, pool, getStripe = null) {
         if (fieldname.startsWith('thumbnail')) return 'thumbnails';
         if (fieldname === 'model3d') return 'models';
         if (fieldname === 'inventoryImage' || fieldname === 'productImage') return 'inventory';
+        if (fieldname === 'variationImage' || fieldname === 'variationMainImage') return 'variations';
+        if (fieldname === 'variationModel3d') return 'models';
+        if (fieldname === 'variationThumbnail') return 'thumbnails';
         return '';
     };
 
@@ -1402,9 +1937,15 @@ module.exports = function (sql, pool, getStripe = null) {
                     const safeOriginalName = sanitizeFileName(file.originalname || 'upload.bin');
                     const finalName = `${uniqueSuffix}-${safeOriginalName}`;
                     const subdirectory = getProductSubdirectory(file.fieldname);
-                    const blobPath = subdirectory
-                        ? `products/${subdirectory}/${finalName}`
-                        : `products/${finalName}`;
+                    const blobPath = (file.fieldname === 'variationImage' || file.fieldname === 'variationMainImage')
+                        ? `variations/${finalName}`
+                        : file.fieldname === 'variationModel3d'
+                            ? `products/models/${finalName}`
+                            : file.fieldname === 'variationThumbnail'
+                                ? `products/thumbnails/${finalName}`
+                                : (subdirectory
+                            ? `products/${subdirectory}/${finalName}`
+                            : `products/${finalName}`);
 
                     const chunks = [];
                     file.stream.on('data', (chunk) => chunks.push(chunk));
@@ -1446,6 +1987,12 @@ module.exports = function (sql, pool, getStripe = null) {
                     dest = path.join(__dirname, 'public', 'uploads', 'products', 'models');
                 } else if (file.fieldname === 'inventoryImage' || file.fieldname === 'productImage') {
                     dest = path.join(__dirname, 'public', 'uploads', 'products', 'inventory');
+                } else if (file.fieldname === 'variationImage' || file.fieldname === 'variationMainImage') {
+                    dest = path.join(__dirname, 'public', 'uploads', 'variations');
+                } else if (file.fieldname === 'variationModel3d') {
+                    dest = path.join(__dirname, 'public', 'uploads', 'products', 'models');
+                } else if (file.fieldname === 'variationThumbnail') {
+                    dest = path.join(__dirname, 'public', 'uploads', 'products', 'thumbnails');
                 } else {
                     dest = path.join(__dirname, 'public', 'uploads', 'products');
                 }
@@ -1466,14 +2013,14 @@ module.exports = function (sql, pool, getStripe = null) {
         limits: {
             fileSize: function (req, file) {
                 // 30MB limit for 3D models, 10MB for other files
-                if (file.fieldname === 'model3d') {
+                if (file.fieldname === 'model3d' || file.fieldname === 'variationModel3d') {
                     return 30 * 1024 * 1024; // 30MB for 3D models
                 }
                 return 10 * 1024 * 1024; // 10MB for images and other files
             }
         },
         fileFilter: function (req, file, cb) {
-            if (file.fieldname === 'model3d') {
+            if (file.fieldname === 'model3d' || file.fieldname === 'variationModel3d') {
                 // Allow GLB and GLTF files for 3D models
                 if (file.mimetype === 'model/gltf-binary' || file.mimetype === 'model/gltf+json' ||
                     file.originalname.toLowerCase().endsWith('.glb') || file.originalname.toLowerCase().endsWith('.gltf')) {
@@ -1481,7 +2028,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 } else {
                     cb(new Error('Only GLB and GLTF files are allowed for 3D models!'), false);
                 }
-            } else if (file.mimetype.startsWith('image/')) {
+            } else if (file.fieldname === 'variationMainImage' || file.fieldname === 'variationThumbnail' || file.mimetype.startsWith('image/')) {
                 cb(null, true);
             } else {
                 cb(new Error('Only image files are allowed!'), false);
@@ -1489,30 +2036,54 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
-    // Configure multer for variation uploads
-    const variationStorage = multer.diskStorage({
-        destination: function (req, file, cb) {
-            const uploadDir = path.join(__dirname, 'public', 'uploads');
-            const variationsDir = path.join(uploadDir, 'variations');
-
-            // Ensure directory exists
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
-            }
-            if (!fs.existsSync(variationsDir)) {
-                fs.mkdirSync(variationsDir, { recursive: true });
-            }
-
-            cb(null, variationsDir);
-        },
-        filename: function (req, file, cb) {
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            cb(null, 'variation-' + uniqueSuffix + path.extname(file.originalname));
+    // Configure multer for variation uploads (Azure Blob in production when configured)
+    const variationStorageEngine = isAzureProductAssetMode()
+        ? {
+            _handleFile: async (req, file, cb) => {
+                try {
+                    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+                    const ext = path.extname(file.originalname) || '.jpg';
+                    const blobPath = `variations/variation-${uniqueSuffix}${ext}`;
+                    const chunks = [];
+                    file.stream.on('data', (c) => chunks.push(c));
+                    file.stream.on('error', cb);
+                    file.stream.on('end', async () => {
+                        try {
+                            const buffer = Buffer.concat(chunks);
+                            const url = await uploadBufferToAzureBlob(blobPath, buffer, file.mimetype);
+                            cb(null, {
+                                filename: `variation-${uniqueSuffix}${ext}`,
+                                destination: 'azure-blob',
+                                size: buffer.length,
+                                path: blobPath,
+                                azureUrl: url
+                            });
+                        } catch (e) {
+                            cb(e);
+                        }
+                    });
+                } catch (e) {
+                    cb(e);
+                }
+            },
+            _removeFile: (req, file, cb) => cb(null)
         }
-    });
+        : multer.diskStorage({
+            destination: function (req, file, cb) {
+                const uploadDir = path.join(__dirname, 'public', 'uploads');
+                const variationsDir = path.join(uploadDir, 'variations');
+                if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+                if (!fs.existsSync(variationsDir)) fs.mkdirSync(variationsDir, { recursive: true });
+                cb(null, variationsDir);
+            },
+            filename: function (req, file, cb) {
+                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+                cb(null, 'variation-' + uniqueSuffix + path.extname(file.originalname));
+            }
+        });
 
     const variationUpload = multer({
-        storage: variationStorage,
+        storage: variationStorageEngine,
         limits: {
             fileSize: 10 * 1024 * 1024 // 10MB limit
         },
@@ -3390,7 +3961,7 @@ module.exports = function (sql, pool, getStripe = null) {
             // Handle image upload
             let imageUrl = null;
             if (req.file) {
-                imageUrl = `/uploads/variations/${req.file.filename}`;
+                imageUrl = publicUrlFromMulterVariationFile(req.file);
             }
 
             // Start transaction to ensure both variation insert and stock update succeed or fail together
@@ -5515,7 +6086,7 @@ module.exports = function (sql, pool, getStripe = null) {
             // Handle image upload
             let imageUrl = null;
             if (req.file) {
-                imageUrl = `/uploads/variations/${req.file.filename}`;
+                imageUrl = publicUrlFromMulterVariationFile(req.file);
             }
 
             // Start transaction to ensure both variation insert and stock update succeed or fail together
@@ -5587,7 +6158,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 // Delete old variation image
                 await deleteOldImageFile(currentImageUrl);
 
-                imageUrl = `/uploads/variations/${req.file.filename}`;
+                imageUrl = publicUrlFromMulterVariationFile(req.file);
             } else {
                 // If no new image uploaded, keep existing image
                 const existingResult = await pool.request()
@@ -7442,7 +8013,7 @@ module.exports = function (sql, pool, getStripe = null) {
             // Handle image upload
             let imageUrl = null;
             if (req.file) {
-                imageUrl = `/uploads/variations/${req.file.filename}`;
+                imageUrl = publicUrlFromMulterVariationFile(req.file);
             }
 
             // Start transaction to ensure both variation insert and stock update succeed or fail together
@@ -7515,7 +8086,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 // Delete old variation image
                 await deleteOldImageFile(currentImageUrl);
 
-                imageUrl = `/uploads/variations/${req.file.filename}`;
+                imageUrl = publicUrlFromMulterVariationFile(req.file);
             } else {
                 // If no new image uploaded, keep existing image
                 const existingResult = await pool.request()
@@ -9195,7 +9766,7 @@ module.exports = function (sql, pool, getStripe = null) {
             // Handle image upload
             let imageUrl = null;
             if (req.file) {
-                imageUrl = `/uploads/variations/${req.file.filename}`;
+                imageUrl = publicUrlFromMulterVariationFile(req.file);
             }
 
             // Start transaction to ensure both variation insert and stock update succeed or fail together
@@ -9268,7 +9839,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 // Delete old variation image
                 await deleteOldImageFile(currentImageUrl);
 
-                imageUrl = `/uploads/variations/${req.file.filename}`;
+                imageUrl = publicUrlFromMulterVariationFile(req.file);
             } else {
                 // If no new image uploaded, keep existing image
                 const existingResult = await pool.request()
@@ -14981,28 +15552,13 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/Employee/Admin/Reports/Inventory/Data', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
-            // Keep Products.SKU aligned with ProductInventory (InventoryProducts) source of truth
+            // Catalog parent products have no SKU; sellable units use variation SKUs only
             await pool.request().query(`
                 UPDATE p
-                SET p.SKU = src.SKU
+                SET p.SKU = NULL, p.UpdatedAt = GETDATE()
                 FROM Products p
-                OUTER APPLY (
-                    SELECT TOP 1 ip.SKU
-                    FROM InventoryProducts ip
-                    WHERE ip.IsActive = 1
-                      AND ip.SKU IS NOT NULL
-                      AND (
-                           ip.ProductID = p.ProductID
-                        OR ip.InventoryProductID = p.ProductID
-                      )
-                    ORDER BY
-                        CASE WHEN ip.ProductID = p.ProductID THEN 0 ELSE 1 END,
-                        ip.DateUpdated DESC,
-                        ip.DateAdded DESC,
-                        ip.InventoryProductID DESC
-                ) src
-                WHERE src.SKU IS NOT NULL
-                  AND ISNULL(p.SKU, '') <> src.SKU
+                INNER JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
+                WHERE p.SKU IS NOT NULL
             `);
             const { search, category, status, stockMin, stockMax, dateFrom, dateTo } = req.query;
 
@@ -15685,9 +16241,10 @@ module.exports = function (sql, pool, getStripe = null) {
                 ? 'ISNULL(o.RefundAmount, 0) AS RefundAmount'
                 : '0 AS RefundAmount';
 
-            // Include all order lifecycle statuses in the admin sales report table/filtering.
-            // Revenue metrics are still computed with their own status-specific rules below.
-            const whereClause = '';
+            // Exclude cancelled orders from the default report; allow explicit Cancelled filter.
+            const excludeCancelledDefault = (!status || status.trim() === '')
+                ? ` AND o.Status <> 'Cancelled'`
+                : '';
 
             query = `
                 SELECT 
@@ -15709,7 +16266,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 FROM Orders o
                 INNER JOIN Customers c ON o.CustomerID = c.CustomerID
                 WHERE 1=1
-                ${whereClause}
+                ${excludeCancelledDefault}
             `;
 
             const request = pool.request();
@@ -16046,17 +16603,11 @@ module.exports = function (sql, pool, getStripe = null) {
                 return sum;
             }, 0);
 
-            // Calculate Total Discounts
-            // First, use direct calculation from OrderItems (already calculated in batch loop above)
-            // If direct calculation didn't work (totalDiscounts is 0), use indirect calculation as fallback
-            const directDiscounts = totalDiscounts; // Store the directly calculated discounts
-            if (totalDiscounts === 0 && grossSales > 0 && netSalesFromOrders > 0) {
-                // Fallback to indirect calculation: Total Discounts = Gross Sales - Net Sales
-                // This represents ALL discounts applied (coupons, promotions, order-level discounts, product discounts)
-                totalDiscounts = Math.max(0, grossSales - netSalesFromOrders); // Ensure non-negative (safety check)
-                console.log('[SALES REPORT] Using indirect discount calculation (fallback):', totalDiscounts);
-            } else if (totalDiscounts > 0) {
-                console.log('[SALES REPORT] Using direct discount calculation from OrderItems:', totalDiscounts);
+            // Total Discounts: use direct line-item calculation only (Original Price − PriceAtPurchase).
+            // Do NOT infer discounts as (Gross Sales − Net Sales): gross sales includes refund/replacement
+            // orders while net sales excludes them, which falsely inflates discounts (e.g. ₱2,000).
+            if (totalDiscounts > 0) {
+                console.log('[SALES REPORT] Direct discounts from OrderItems:', totalDiscounts);
             }
 
             // Calculate Net Sales using Standard Formula: Net Sales = Gross Sales - Total Discounts - Returns
@@ -16337,47 +16888,29 @@ module.exports = function (sql, pool, getStripe = null) {
                             const returnItems = orderReturnItemsMapForTax.get(orderId);
                             const status = (item.Status || '').toLowerCase();
 
-                            // Pipeline + completed: tax on full line quantity. Return/refund paths adjust below.
-                            if (status === 'returned' || status === 'refunded' || status === 'completed returned') {
-                                // For returned orders, calculate tax on returned items only
-                                if (returnItems && Array.isArray(returnItems) && returnItems.length > 0) {
-                                    const returnItem = returnItems.find(ri => {
-                                        const returnProductId = ri.productId || ri.ProductID;
-                                        const returnVariationId = ri.variationId || ri.VariationID || null;
-                                        const itemProductId = item.ProductID;
-                                        const itemVariationId = item.VariationID || null;
+                            const price = parseFloat(item.PriceAtPurchase || 0);
+                            const quantity = parseFloat(item.Quantity || 0);
 
-                                        const productMatch = String(returnProductId) === String(itemProductId);
-                                        const variationMatch = (returnVariationId == null && (itemVariationId == null || itemVariationId === undefined)) ||
-                                            (returnVariationId != null && itemVariationId != null && String(returnVariationId) === String(itemVariationId));
-                                        return productMatch && variationMatch;
-                                    });
+                            // Partial refund only: VAT on returned line qty; all other orders add full line VAT.
+                            if (status === 'refunded' && returnItems && Array.isArray(returnItems) && returnItems.length > 0) {
+                                const returnItem = returnItems.find(ri => {
+                                    const returnProductId = ri.productId || ri.ProductID;
+                                    const returnVariationId = ri.variationId || ri.VariationID || null;
+                                    const itemProductId = item.ProductID;
+                                    const itemVariationId = item.VariationID || null;
 
-                                    if (returnItem) {
-                                        // Partial return: tax refund on returned quantity
-                                        const price = parseFloat(item.PriceAtPurchase || 0);
-                                        const returnQty = parseInt(returnItem.quantity || returnItem.Quantity || 0);
-                                        const itemTaxRefund = price * taxRate * returnQty;
-                                        totalTaxes -= itemTaxRefund; // Subtract tax for returned items
-                                    } else {
-                                        // Item not in return list, tax remains
-                                        const price = parseFloat(item.PriceAtPurchase || 0);
-                                        const quantity = parseFloat(item.Quantity || 0);
-                                        const itemTax = price * taxRate * quantity;
-                                        totalTaxes += itemTax;
-                                    }
-                                } else {
-                                    // Full return: subtract all tax
-                                    const price = parseFloat(item.PriceAtPurchase || 0);
-                                    const quantity = parseFloat(item.Quantity || 0);
-                                    const itemTax = price * taxRate * quantity;
-                                    totalTaxes -= itemTax; // Subtract tax for fully returned orders
+                                    const productMatch = String(returnProductId) === String(itemProductId);
+                                    const variationMatch = (returnVariationId == null && (itemVariationId == null || itemVariationId === undefined)) ||
+                                        (returnVariationId != null && itemVariationId != null && String(returnVariationId) === String(itemVariationId));
+                                    return productMatch && variationMatch;
+                                });
+
+                                if (returnItem) {
+                                    const returnQty = parseInt(returnItem.quantity || returnItem.Quantity || 0, 10);
+                                    totalTaxes += price * taxRate * returnQty;
                                 }
                             } else if (status !== 'cancelled') {
-                                const price = parseFloat(item.PriceAtPurchase || 0);
-                                const quantity = parseFloat(item.Quantity || 0);
-                                const itemTax = price * taxRate * quantity;
-                                totalTaxes += itemTax;
+                                totalTaxes += price * taxRate * quantity;
                             }
                         });
                     }
@@ -16679,118 +17212,6 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
-            // Calculate total discounts from per-order discounts if available
-            // This ensures we use the same discount calculation method for both table and stats
-            let finalTotalDiscounts = totalDiscounts;
-
-            // If we calculated per-order discounts, sum them up for stats
-            // This is more accurate than the batch calculation when Price columns don't exist
-            if (result.recordset.length > 0 && result.recordset[0].TotalDiscounts !== undefined) {
-                const sumFromOrders = result.recordset.reduce((sum, order) => {
-                    return sum + parseFloat(order.TotalDiscounts || 0);
-                }, 0);
-
-                // Use the sum from orders if it's greater than the batch calculation
-                // or if batch calculation is 0 but we have order-level discounts
-                if (sumFromOrders > 0 && (totalDiscounts === 0 || sumFromOrders > totalDiscounts)) {
-                    finalTotalDiscounts = sumFromOrders;
-                    console.log('[SALES REPORT] Using per-order discount sum for stats:', finalTotalDiscounts, '(batch calculation was:', totalDiscounts, ')');
-                } else {
-                    console.log('[SALES REPORT] Using batch discount calculation for stats:', totalDiscounts, '(per-order sum was:', sumFromOrders, ')');
-                }
-            }
-
-            // Calculate stats using explicit business formulas provided by user:
-            // 1) Gross Sales = Sum(Subtotal) for Completed + Returned (exclude Cancelled/Declined, exclude delivery fees)
-            // 2) Net Sales = Gross Sales - Sum(Subtotal of Returned orders)
-            // 3) Gross Revenue = Gross Sales + Sum(Delivery Fees for Completed + Returned orders)
-            // 4) Net Revenue = Gross Revenue - (Returned + Refunded), using Subtotal for refunded unless otherwise specified
-            const normalizedOrders = result.recordset.map(o => ({
-                ...o,
-                __status: (o.Status || '').toLowerCase().trim(),
-                __subtotal: parseFloat(o.Subtotal || 0),
-                __deliveryFee: parseFloat(o.DeliveryCost || 0) + parseFloat(o.ExtraDeliveryFee || 0)
-            }));
-
-            const isCancelledOrder = (o) => o.__status === 'cancelled';
-            const isReturnedOrder = (o) => o.__status === 'returned';
-            const isRefundedOrder = (o) =>
-                o.__status === 'refunded' ||
-                o.__status === 'completed returned' ||
-                o.IsRefunded === 1 ||
-                o.IsRefunded === true;
-            // Pipeline + fulfilled orders (merchandise + delivery), excluding cancelled and final refund outcomes
-            const isValidSalesOrder = (o) => !isCancelledOrder(o) && !isRefundedOrder(o);
-
-            const grossSalesValue = normalizedOrders
-                .filter(isValidSalesOrder)
-                .reduce((sum, o) => sum + o.__subtotal, 0);
-
-            const returnedSubtotalValue = normalizedOrders
-                .filter(isReturnedOrder)
-                .reduce((sum, o) => sum + o.__subtotal, 0);
-
-            const refundedSubtotalValue = normalizedOrders
-                .filter(isRefundedOrder)
-                .reduce((sum, o) => sum + o.__subtotal, 0);
-
-            const deliveryFeesValidOrders = normalizedOrders
-                .filter(isValidSalesOrder)
-                .reduce((sum, o) => sum + o.__deliveryFee, 0);
-
-            const netSalesValue = grossSalesValue - returnedSubtotalValue;
-            const grossRevenueValue = grossSalesValue + deliveryFeesValidOrders;
-            const netRevenueValue = grossRevenueValue - (returnedSubtotalValue + refundedSubtotalValue);
-
-            // Calculate stats (using only completed orders)
-            // Sales report includes only orders with 'Completed' status, not 'Processing' or other statuses
-            // For E-commerce Furniture Inventory System with In-House Delivery Service:
-            const stats = {
-                grossSales: grossSalesValue, // Gross Sales = Completed + Returned subtotals (no delivery fees)
-                netSales: netSalesValue, // Net Sales = Gross Sales - Returned subtotals
-                grossRevenue: grossRevenueValue, // Gross Revenue = Gross Sales + delivery fees from Completed + Returned
-                netRevenue: netRevenueValue, // Net Revenue = Gross Revenue - (Returned subtotals + Refunded subtotals)
-                salesReturns: returns, // Returns = Total value of returned orders (including delivery fees)
-                totalRefunds: totalRefunds, // Total Refunds = Sum of all refunded amounts (product amounts only, delivery fees typically non-refundable)
-                refundedOrdersCount: refundedOrdersCount, // Number of refunded orders
-                returnedOrdersCount: returnedOrdersCount, // Number of returned orders
-                returnRate: returnRate, // Return rate percentage
-                totalDiscounts: finalTotalDiscounts,
-                totalTaxes: totalTaxes, // Total Taxes = Price before Tax × (12% / 100)
-                // In-House Delivery Service Metrics:
-                deliveryRevenues: deliveryFeesValidOrders, // Delivery fees from valid orders (Completed + Returned)
-                deliveryRevenuesLostFromReturns: deliveryRevenuesFromReturns, // Delivery revenues lost due to returned orders
-                deliveryRevenuesLostFromRefunds: deliveryRevenuesFromRefunds, // Delivery revenues lost due to refunded orders
-                totalDeliveryRevenues: deliveryFeesValidOrders, // Total delivery fees from valid orders
-                // Note: For in-house delivery service, you may want to track:
-                // - Delivery Costs (actual costs of running delivery service: fuel, driver wages, vehicle maintenance, etc.)
-                // - Delivery Profit = Delivery Revenues - Delivery Costs
-                // - Delivery Profit Margin = (Delivery Profit / Delivery Revenues) × 100
-                // These would need to be tracked separately in your system (e.g., in a DeliveryCosts table)
-                // Example: If deliveryRevenues = ₱10,000 and deliveryCosts = ₱7,000, then deliveryProfit = ₱3,000 (30% margin)
-                inventoryLoss: inventoryLoss, // Inventory Loss = Value of returned/damaged items (supports partial returns)
-                // Inventory Management Statistics for Office Furniture E-commerce:
-                totalUnitsSold: totalUnitsSold, // Total units sold (completed orders only)
-                totalUnitsReturned: totalUnitsReturned, // Total units returned (supports partial returns)
-                totalUnitsDamaged: totalUnitsDamaged, // Total units damaged (non-resellable)
-                totalUnitsReplaced: totalUnitsReplaced, // Total units replaced
-                replacementOrdersCount: replacementOrdersCount, // Number of replacement orders
-                // Inventory Health Metrics:
-                inventoryTurnoverRate: totalUnitsSold > 0 ? (totalUnitsSold / (totalUnitsSold + totalUnitsReturned)) : 0, // Units sold / (Units sold + Units returned)
-                damageRate: totalUnitsReturned > 0 ? (totalUnitsDamaged / totalUnitsReturned) * 100 : 0, // Percentage of returned units that are damaged
-                returnRateByUnits: totalUnitsSold > 0 ? (totalUnitsReturned / totalUnitsSold) * 100 : 0, // Return rate by units (not orders)
-                replacementRate: totalUnitsReturned > 0 ? (totalUnitsReplaced / totalUnitsReturned) * 100 : 0, // Percentage of returns that were replaced
-                totalRevenue: grossRevenueValue, // Keep compatibility: Total Revenue mirrors Gross Revenue per current business formula
-                totalOrders: totalOrders, // Total orders including returns
-                totalCustomers: new Set(result.recordset
-                    .filter(o => {
-                        const status = o.Status ? o.Status.toLowerCase() : '';
-                        return status !== 'cancelled';
-                    })
-                    .map(o => o.CustomerEmail)).size, // Customers with non-cancelled orders
-                averageOrderValue: averageOrderValue // AOV = Sum of TotalAmount / Total Orders (excluding returns)
-            };
-
             // Calculate chart data
             // Sales by Status
             const salesByStatus = {};
@@ -16874,6 +17295,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     // Process in batches to avoid SQL parameter limits
                     const batchSize = 1000;
                     const discountMap = {};
+                    orderIds.forEach((id) => { discountMap[id] = 0; });
 
                     for (let i = 0; i < orderIds.length; i += batchSize) {
                         const batch = orderIds.slice(i, i + batchSize);
@@ -16972,9 +17394,10 @@ module.exports = function (sql, pool, getStripe = null) {
                     const ordersWithDiscounts = Object.keys(discountMap).filter(id => discountMap[id] > 0).length;
                     console.log('[SALES REPORT] Added discount information to orders. Total orders with discounts:', ordersWithDiscounts, 'out of', result.recordset.length);
 
-                    // Calculate taxes per order
+                    // Calculate taxes per order (12% VAT on PriceAtPurchase × Quantity)
                     const taxRate = 0.12; // 12% VAT
                     const taxMap = {};
+                    orderIds.forEach((id) => { taxMap[id] = 0; });
 
                     for (let i = 0; i < orderIds.length; i += batchSize) {
                         const batch = orderIds.slice(i, i + batchSize);
@@ -17048,14 +17471,18 @@ module.exports = function (sql, pool, getStripe = null) {
                             taxResult.recordset.forEach(row => {
                                 const orderId = row.OrderID;
                                 const orderReturnData = orderReturnItemsMap.get(orderId);
-                                const status = (row.Status || '').toString().toLowerCase();
+                                const status = (row.Status || '').toString().toLowerCase().trim();
 
                                 if (!taxMap[orderId]) {
                                     taxMap[orderId] = 0;
                                 }
 
-                                // For refunded/completed returned orders with ReturnItems, calculate tax only on returned items
-                                if ((status === 'refunded' || status === 'completed returned') && orderReturnData) {
+                                const price = parseFloat(row.PriceAtPurchase || 0);
+                                const quantity = parseFloat(row.Quantity || 0);
+
+                                // VAT on all fulfilled orders (pending, completed, replacement, refund).
+                                // Partial refunds: tax only on returned line qty when ReturnItems is set.
+                                if (status === 'refunded' && orderReturnData && orderReturnData.returnItems && orderReturnData.returnItems.length > 0) {
                                     const returnItems = orderReturnData.returnItems;
                                     const returnItem = returnItems.find(ri => {
                                         const returnProductId = ri.productId || ri.ProductID;
@@ -17070,20 +17497,14 @@ module.exports = function (sql, pool, getStripe = null) {
                                     });
 
                                     if (returnItem) {
-                                        // Item is returned - calculate tax on returned quantity
-                                        const price = parseFloat(row.PriceAtPurchase || 0);
-                                        const returnQty = parseInt(returnItem.quantity || returnItem.Quantity || 0);
+                                        const returnQty = parseInt(returnItem.quantity || returnItem.Quantity || 0, 10);
                                         taxMap[orderId] += price * taxRate * returnQty;
                                     }
-                                    // If item not in return list, don't add tax (it's not part of the refund)
-                                } else if (status !== 'returned' && status !== 'refunded' && status !== 'completed returned' && status !== 'cancelled') {
-                                    // Count in-process and completed non-refund orders for tax totals.
-                                    const price = parseFloat(row.PriceAtPurchase || 0);
-                                    const quantity = parseFloat(row.Quantity || 0);
+                                    return;
+                                }
+
+                                if (status !== 'cancelled') {
                                     taxMap[orderId] += price * taxRate * quantity;
-                                } else {
-                                    // For returned orders without ReturnItems (full returns), tax should be 0 or negative
-                                    // We'll handle this by not adding tax here
                                 }
                             });
                         } catch (taxError) {
@@ -17091,7 +17512,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         }
                     }
 
-                    // Add tax to each order in result set
+                    // Add tax to each order in result set (12% VAT on PriceAtPurchase × qty)
                     result.recordset.forEach(order => {
                         order.TotalTaxes = taxMap[order.OrderID] || 0;
                     });
@@ -17313,6 +17734,11 @@ module.exports = function (sql, pool, getStripe = null) {
                         });
                     }
 
+                    // Snapshot merchandise subtotals before refund display adjustments (for stats fallback)
+                    result.recordset.forEach(order => {
+                        order.__merchandiseSubtotal = parseFloat(order.Subtotal || 0);
+                    });
+
                     // Attach order items to each order as plain objects for JSON serialization
                     // Also update Subtotal, TotalAmount, DeliveryCost for refunded orders with partial returns
                     result.recordset.forEach(order => {
@@ -17356,6 +17782,16 @@ module.exports = function (sql, pool, getStripe = null) {
                             // Set delivery costs to 0 for refunded orders
                             order.DeliveryCost = 0;
                             order.ExtraDeliveryFee = 0;
+                            order.TotalDiscounts = 0;
+
+                            // VAT on merchandise shown for this order (replacement/refund still had a taxable sale)
+                            if (items.length > 0) {
+                                order.TotalTaxes = items.reduce((sum, item) => {
+                                    return sum + (parseFloat(item.price) || 0) * 0.12 * (parseInt(item.quantity, 10) || 0);
+                                }, 0);
+                            } else if (hasRefundAmount && parseFloat(order.Subtotal || 0) > 0) {
+                                order.TotalTaxes = parseFloat(order.Subtotal || 0) * 0.12;
+                            }
 
                             // Update TotalItems count to reflect returned items count if items are filtered
                             if (items.length > 0) {
@@ -17397,8 +17833,81 @@ module.exports = function (sql, pool, getStripe = null) {
                 // No orders, set empty array for all
                 result.recordset.forEach(order => {
                     order.OrderItems = [];
+                    order.__merchandiseSubtotal = parseFloat(order.Subtotal || 0);
                 });
             }
+
+            // Build stats after per-order discounts, taxes, and refund display values are finalized
+            const sumOrderDiscounts = result.recordset.reduce((sum, order) => sum + parseFloat(order.TotalDiscounts || 0), 0);
+            const finalTotalDiscounts = sumOrderDiscounts;
+
+            const sumOrderTaxes = result.recordset.reduce((sum, order) => sum + parseFloat(order.TotalTaxes || 0), 0);
+            const finalTotalTaxes = sumOrderTaxes;
+
+            const grossSalesFromMerchandise = result.recordset.reduce((sum, order) => {
+                const merchandise = parseFloat(order.__merchandiseSubtotal ?? order.Subtotal ?? 0);
+                const orderDiscount = parseFloat(order.TotalDiscounts || 0);
+                return sum + merchandise + orderDiscount;
+            }, 0);
+
+            const grossSalesForStats = grossSales > 0 ? grossSales : grossSalesFromMerchandise;
+            const salesReturnsValue = totalRefunds > 0 ? totalRefunds : returns;
+            const netSalesForStats = grossSalesForStats - finalTotalDiscounts - salesReturnsValue;
+
+            const deliveryFeesAllSalesOrders = result.recordset.reduce((sum, order) => {
+                return sum + parseFloat(order.DeliveryCost || 0) + parseFloat(order.ExtraDeliveryFee || 0);
+            }, 0);
+
+            const deliveryFeesValidOrders = result.recordset
+                .filter(o => {
+                    const status = (o.Status || '').toLowerCase().trim();
+                    return status !== 'refunded' && status !== 'completed returned' && o.IsRefunded !== 1 && o.IsRefunded !== true;
+                })
+                .reduce((sum, order) => sum + parseFloat(order.DeliveryCost || 0) + parseFloat(order.ExtraDeliveryFee || 0), 0);
+
+            const grossRevenueValue = grossSalesForStats + deliveryFeesAllSalesOrders;
+            const netRevenueValue = grossRevenueValue - finalTotalDiscounts - salesReturnsValue;
+
+            const stats = {
+                grossSales: grossSalesForStats,
+                netSales: netSalesForStats,
+                grossRevenue: grossRevenueValue,
+                netRevenue: netRevenueValue,
+                salesReturns: salesReturnsValue,
+                totalRefunds: totalRefunds,
+                refundedOrdersCount: refundedOrdersCount,
+                returnedOrdersCount: returnedOrdersCount,
+                returnRate: returnRate,
+                totalDiscounts: finalTotalDiscounts,
+                totalTaxes: finalTotalTaxes,
+                deliveryRevenues: deliveryFeesValidOrders,
+                deliveryRevenuesLostFromReturns: deliveryRevenuesFromReturns,
+                deliveryRevenuesLostFromRefunds: deliveryRevenuesFromRefunds,
+                totalDeliveryRevenues: deliveryFeesValidOrders,
+                inventoryLoss: inventoryLoss,
+                totalUnitsSold: totalUnitsSold,
+                totalUnitsReturned: totalUnitsReturned,
+                totalUnitsDamaged: totalUnitsDamaged,
+                totalUnitsReplaced: totalUnitsReplaced,
+                replacementOrdersCount: replacementOrdersCount,
+                inventoryTurnoverRate: totalUnitsSold > 0 ? (totalUnitsSold / (totalUnitsSold + totalUnitsReturned)) : 0,
+                damageRate: totalUnitsReturned > 0 ? (totalUnitsDamaged / totalUnitsReturned) * 100 : 0,
+                returnRateByUnits: totalUnitsSold > 0 ? (totalUnitsReturned / totalUnitsSold) * 100 : 0,
+                replacementRate: totalUnitsReturned > 0 ? (totalUnitsReplaced / totalUnitsReturned) * 100 : 0,
+                totalRevenue: netSalesForStats + deliveryFeesValidOrders,
+                totalOrders: totalOrders,
+                totalCustomers: new Set(result.recordset.map(o => o.CustomerEmail)).size,
+                averageOrderValue: averageOrderValue
+            };
+
+            console.log('[SALES REPORT] Final stats:', {
+                grossSales: grossSalesForStats,
+                netSales: netSalesForStats,
+                grossRevenue: grossRevenueValue,
+                netRevenue: netRevenueValue,
+                totalDiscounts: finalTotalDiscounts,
+                salesReturns: salesReturnsValue
+            });
 
             // Revenue composition: structural split (matches stats.grossRevenue = merchandise + delivery)
             // and merchandise mix by product category (line revenue, completed + declined orders)
@@ -17457,8 +17966,8 @@ module.exports = function (sql, pool, getStripe = null) {
 
             const revenueComposition = {
                 grossRevenue: grossRevenueValue,
-                merchandise: grossSalesValue,
-                delivery: deliveryFeesValidOrders,
+                merchandise: grossSalesForStats,
+                delivery: deliveryFeesAllSalesOrders,
                 byCategory: revenueCompositionByCategory
             };
 
@@ -17511,6 +18020,10 @@ module.exports = function (sql, pool, getStripe = null) {
             const refundAmountColumn = hasRefundAmountColumn ? ', ISNULL(o.RefundAmount, 0) AS RefundAmount' : ', 0 AS RefundAmount';
             const isRefundedColumn = hasRefundAmountColumn ? ', CASE WHEN ISNULL(o.RefundAmount, 0) > 0 THEN 1 ELSE 0 END AS IsRefunded' : ', 0 AS IsRefunded';
 
+            const excludeCancelledExport = (!status || status.trim() === '')
+                ? ` AND o.Status <> 'Cancelled'`
+                : '';
+
             let query = `
                 SELECT 
                     o.OrderID,
@@ -17533,7 +18046,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 FROM Orders o
                 INNER JOIN Customers c ON o.CustomerID = c.CustomerID
                 WHERE 1=1
-                AND o.Status <> 'Cancelled'
+                ${excludeCancelledExport}
             `;
 
             const request = pool.request();
@@ -17832,7 +18345,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             // Gross Sales = Original Price × Quantity (before discount)
                             const itemGrossSales = originalPrice * quantity;
 
-                            // Tax = PriceAtPurchase × 0.12 × Quantity (on discounted price)
+                            // Tax = PriceAtPurchase × 0.12 × Quantity (all non-cancelled orders)
                             const itemTax = priceAtPurchase * taxRate * quantity;
 
                             // Discount = (Original Price - PriceAtPurchase) × Quantity
@@ -17879,8 +18392,6 @@ module.exports = function (sql, pool, getStripe = null) {
 
                                     // Gross Sales = Price × Quantity (same as refunded amount for partial returns)
                                     const itemGrossSales = price * quantity;
-
-                                    // Tax = Price × 0.12 × Quantity
                                     const itemTax = price * taxRate * quantity;
 
                                     // Discount = 0 for refunded items (we're showing the refunded value)
@@ -17917,7 +18428,6 @@ module.exports = function (sql, pool, getStripe = null) {
                 return status === 'returned' || status === 'return';
             });
 
-            // Calculate total taxes from order taxes map
             const totalTaxes = Object.values(orderTaxes).reduce((sum, val) => sum + val, 0);
 
             // Calculate Delivery Revenues (excluding returns)
@@ -18157,43 +18667,51 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
-            // Export stats must match on-screen business formulas exactly
-            const normalizedOrders = result.recordset.map(o => ({
-                ...o,
-                __status: (o.Status || '').toLowerCase().trim(),
-                __subtotal: parseFloat(o.Subtotal || 0),
-                __deliveryFee: parseFloat(o.DeliveryCost || 0) + parseFloat(o.ExtraDeliveryFee || 0)
-            }));
+            // Export stats — same formulas as on-screen Sales/Data report
+            const totalRefundsExport = result.recordset.reduce((sum, o) => {
+                const isRefunded = o.Status === 'Refunded' ||
+                    o.Status === 'Completed Returned' ||
+                    o.IsRefunded === 1 ||
+                    o.IsRefunded === true;
+                if (!isRefunded) return sum;
+                const refundAmount = parseFloat(o.RefundAmount || 0);
+                return sum + (refundAmount > 0 ? refundAmount : parseFloat(o.Subtotal || 0));
+            }, 0);
 
-            const isCancelledOrder = (o) => o.__status === 'cancelled';
-            const isReturnedOrder = (o) => o.__status === 'returned';
-            const isRefundedOrder = (o) =>
-                o.__status === 'refunded' ||
-                o.__status === 'completed returned' ||
-                o.IsRefunded === 1 ||
-                o.IsRefunded === true;
-            const isValidSalesOrder = (o) => !isCancelledOrder(o) && !isRefundedOrder(o);
+            const sumOrderDiscountsExport = Object.values(orderDiscounts).reduce((s, v) => s + parseFloat(v || 0), 0);
+            const finalDiscountsExport = sumOrderDiscountsExport;
 
-            const grossSalesValue = normalizedOrders
-                .filter(isValidSalesOrder)
-                .reduce((sum, o) => sum + o.__subtotal, 0);
+            const finalTotalTaxesExport = totalTaxes;
 
-            const returnedSubtotalValue = normalizedOrders
-                .filter(isReturnedOrder)
-                .reduce((sum, o) => sum + o.__subtotal, 0);
+            const grossSalesFromMerchandiseExport = result.recordset.reduce((sum, order) => {
+                return sum + parseFloat(order.Subtotal || 0) + parseFloat(orderDiscounts[order.OrderID] || 0);
+            }, 0);
 
-            const refundedSubtotalValue = normalizedOrders
-                .filter(isRefundedOrder)
-                .reduce((sum, o) => sum + o.__subtotal, 0);
+            const grossSalesValue = totalGrossSales > 0 ? totalGrossSales : grossSalesFromMerchandiseExport;
+            const salesReturnsExport = totalRefundsExport > 0 ? totalRefundsExport : returns;
+            const netSalesValue = grossSalesValue - finalDiscountsExport - salesReturnsExport;
 
-            const deliveryFeesValidOrders = normalizedOrders
-                .filter(isValidSalesOrder)
-                .reduce((sum, o) => sum + o.__deliveryFee, 0);
+            const deliveryFeesAllSalesOrders = result.recordset.reduce((sum, order) => {
+                return sum + parseFloat(order.DeliveryCost || 0) + parseFloat(order.ExtraDeliveryFee || 0);
+            }, 0);
 
-            const netSalesValue = grossSalesValue - returnedSubtotalValue;
-            const grossRevenueValue = grossSalesValue + deliveryFeesValidOrders;
-            const netRevenueValue = grossRevenueValue - (returnedSubtotalValue + refundedSubtotalValue);
-            const totalRevenue = grossRevenueValue;
+            const deliveryFeesValidExport = result.recordset
+                .filter(o => {
+                    const status = (o.Status || '').toLowerCase().trim();
+                    return status !== 'refunded' && status !== 'completed returned' && o.IsRefunded !== 1 && o.IsRefunded !== true;
+                })
+                .reduce((sum, order) => sum + parseFloat(order.DeliveryCost || 0) + parseFloat(order.ExtraDeliveryFee || 0), 0);
+
+            const grossRevenueValue = grossSalesValue + deliveryFeesAllSalesOrders;
+            const netRevenueValue = grossRevenueValue - finalDiscountsExport - salesReturnsExport;
+            const totalRevenueExport = netSalesValue + deliveryFeesValidExport;
+
+            const refundedOrdersCountExport = result.recordset.filter(o => {
+                const s = (o.Status || '').toLowerCase().trim();
+                return s === 'refunded' || s === 'completed returned' || o.IsRefunded === 1 || o.IsRefunded === true;
+            }).length;
+
+            const replacementOrdersCountExport = result.recordset.filter(o => o.ActionType === 'replacement').length;
 
             // COGS, Gross Profit, and Gross Margin calculations removed
 
@@ -18211,533 +18729,200 @@ module.exports = function (sql, pool, getStripe = null) {
             }, 0);
             const averageOrderValue = ordersForAovExport.length > 0 ? totalAmountSum / ordersForAovExport.length : 0;
 
-            // Calculate summary statistics (for backward compatibility)
-            const totalSubtotal = result.recordset.reduce((sum, o) => sum + parseFloat(o.Subtotal || 0), 0);
-            const totalDeliveryCost = result.recordset.reduce((sum, o) => sum + parseFloat(o.DeliveryCost || 0), 0);
-            const totalItems = result.recordset.reduce((sum, o) => sum + parseInt(o.TotalItems || 0), 0);
+            const formatExportStatus = (orderStatus) => {
+                if (!orderStatus) return '';
+                if (orderStatus === 'Completed Returned') return 'Replacement';
+                return orderStatus;
+            };
 
-            // Sales by status
-            const salesByStatus = {};
-            result.recordset.forEach(order => {
-                const status = order.Status || 'Unknown';
-                salesByStatus[status] = (salesByStatus[status] || 0) + 1;
-            });
+            const exportSummaryStats = {
+                grossSales: grossSalesValue,
+                netSales: netSalesValue,
+                grossRevenue: grossRevenueValue,
+                netRevenue: netRevenueValue,
+                totalRevenue: totalRevenueExport,
+                salesReturns: salesReturnsExport,
+                totalDiscounts: finalDiscountsExport,
+                totalTaxes: finalTotalTaxesExport,
+                inventoryLoss: inventoryLoss,
+                deliveryRevenues: deliveryFeesValidExport,
+                totalOrders: totalOrders,
+                totalCustomers: totalCustomers,
+                averageOrderValue: averageOrderValue,
+                refundedOrdersCount: refundedOrdersCountExport,
+                returnedOrdersCount: returnedOrdersCount,
+                replacementOrdersCount: replacementOrdersCountExport,
+                returnRate: returnRate
+            };
 
-            // Revenue by status
-            const revenueByStatus = {};
-            result.recordset.forEach(order => {
-                const status = order.Status || 'Unknown';
-                const amount = parseFloat(order.TotalAmount || 0);
-                revenueByStatus[status] = (revenueByStatus[status] || 0) + amount;
-            });
+            const filterParts = [];
+            if (status) filterParts.push(`Status: ${status === 'Completed Returned' ? 'Replacement' : status}`);
+            if (payment) filterParts.push(`Payment: ${payment}`);
+            if (dateFrom) filterParts.push(`From: ${dateFrom}`);
+            if (dateTo) filterParts.push(`To: ${dateTo}`);
+            if (search) filterParts.push(`Search: ${search}`);
+            if (amountMin || amountMax) {
+                filterParts.push(`Amount: ${amountMin ? `₱${parseFloat(amountMin).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : 'any'} – ${amountMax ? `₱${parseFloat(amountMax).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : 'any'}`);
+            }
+            const filterSummary = filterParts.length ? filterParts.join('  •  ') : 'All orders (no filters)';
 
-            // Payment method breakdown
-            const paymentMethodBreakdown = {};
-            result.recordset.forEach(order => {
-                const method = order.PaymentMethod || 'Unknown';
-                const amount = parseFloat(order.TotalAmount || 0);
-                paymentMethodBreakdown[method] = (paymentMethodBreakdown[method] || 0) + amount;
-            });
-
-            // Generate Excel file with enhanced formatting
-            const ExcelJS = getExcelJS();
-            const workbook = new ExcelJS.Workbook();
-            const worksheet = workbook.addWorksheet('Sales Report');
-
-            const timestamp = new Date().toLocaleString('en-US', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false
-            });
-
-            let currentRow = 1;
-
-            // Title Section
-            createExcelTitle(worksheet, currentRow++, 'DESIGN EXCELLENCE - SALES REPORT', 12);
-            const titleInfoRow = worksheet.getRow(currentRow++);
-            titleInfoRow.getCell(1).value = `Generated on: ${timestamp}`;
-            titleInfoRow.getCell(1).font = { size: 10, color: { argb: 'FF6B7280' } };
-            titleInfoRow.getCell(1).alignment = { horizontal: 'left', wrapText: true };
-            currentRow++;
-
-            // Report Summary Box
-            const summaryRow = worksheet.getRow(currentRow++);
-            summaryRow.getCell(1).value = 'REPORT SUMMARY';
-            summaryRow.getCell(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-            summaryRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
-            summaryRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-            summaryRow.height = 22;
-            worksheet.mergeCells(currentRow - 1, 1, currentRow - 1, 4);
-
-            const summaryDataRow1 = worksheet.getRow(currentRow++);
-            summaryDataRow1.getCell(1).value = `Total Orders: ${totalOrders.toLocaleString('en-US')}`;
-            summaryDataRow1.getCell(2).value = `Total Customers: ${totalCustomers.toLocaleString('en-US')}`;
-            summaryDataRow1.getCell(3).value = `Net Sales: ₱${netSalesValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-            summaryDataRow1.getCell(4).value = `Average Order Value: ₱${averageOrderValue.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-
-            [1, 2, 3, 4].forEach(col => {
-                const cell = summaryDataRow1.getCell(col);
-                cell.font = { size: 10 };
-                cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+            const applyThinBorder = (cell) => {
                 cell.border = {
                     top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
                     left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
                     bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
                     right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
                 };
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+            };
+
+            const ORDER_COL_COUNT = 10;
+            const ExcelJS = getExcelJS();
+            const workbook = new ExcelJS.Workbook();
+            workbook.creator = 'Design Excellence';
+            const worksheet = workbook.addWorksheet('Sales Report');
+
+            const timestamp = new Date().toLocaleString('en-PH', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
             });
-            summaryDataRow1.height = 25; // Increased height for text wrapping
+
+            let currentRow = 1;
+
+            createExcelTitle(worksheet, currentRow++, 'Sales Report', ORDER_COL_COUNT);
+
+            const generatedRow = worksheet.getRow(currentRow++);
+            generatedRow.getCell(1).value = `Generated: ${timestamp}`;
+            generatedRow.getCell(1).font = { size: 10, color: { argb: 'FF6B7280' } };
+            worksheet.mergeCells(currentRow - 1, 1, currentRow - 1, ORDER_COL_COUNT);
+
+            const filtersAppliedRow = worksheet.getRow(currentRow++);
+            filtersAppliedRow.getCell(1).value = filterSummary;
+            filtersAppliedRow.getCell(1).font = { size: 10, color: { argb: 'FF6B7280' } };
+            filtersAppliedRow.getCell(1).alignment = { wrapText: true, vertical: 'top' };
+            worksheet.mergeCells(currentRow - 1, 1, currentRow - 1, ORDER_COL_COUNT);
             currentRow++;
 
-            // Filters Applied Section
-            const filtersRow = worksheet.getRow(currentRow++);
-            filtersRow.getCell(1).value = 'FILTERS APPLIED';
-            filtersRow.getCell(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-            filtersRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
-            filtersRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-            filtersRow.height = 22;
-            worksheet.mergeCells(currentRow - 1, 1, currentRow - 1, 4);
+            createExcelSectionHeader(worksheet, currentRow++, 'Summary', 2);
+            createExcelHeaderRow(worksheet, currentRow++, ['Metric', 'Amount (PHP)'], 1);
 
-            const filtersDataRow1 = worksheet.getRow(currentRow++);
-            filtersDataRow1.getCell(1).value = `Status: ${status || 'All'}`;
-            filtersDataRow1.getCell(2).value = `Payment Method: ${payment || 'All'}`;
-            filtersDataRow1.getCell(3).value = `Date From: ${dateFrom || 'All'}`;
-            filtersDataRow1.getCell(4).value = `Date To: ${dateTo || 'All'}`;
+            const summaryRows = buildSalesReportSummaryRows(exportSummaryStats);
 
-            const filtersDataRow2 = worksheet.getRow(currentRow++);
-            filtersDataRow2.getCell(1).value = `Amount Range: ${amountMin ? `Min: ₱${parseFloat(amountMin).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : ''}${amountMin && amountMax ? ' - ' : ''}${amountMax ? `Max: ₱${parseFloat(amountMax).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : ''}${!amountMin && !amountMax ? 'All' : ''}`;
-            filtersDataRow2.getCell(2).value = `Search: ${search || 'None'}`;
-
-            [1, 2, 3, 4].forEach(col => {
-                [filtersDataRow1, filtersDataRow2].forEach(row => {
-                    const cell = row.getCell(col);
-                    if (cell.value) {
-                        cell.font = { size: 9, color: { argb: 'FF4B5563' } };
-                        cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
-                        cell.border = {
-                            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-                        };
-                    }
-                });
-            });
-            filtersDataRow1.height = 25; // Increased height for text wrapping
-            filtersDataRow2.height = 25; // Increased height for text wrapping
-            currentRow++;
-
-            // Sales Report Statistics Table (matching frontend stats table)
-            currentRow++;
-            createExcelSectionHeader(worksheet, currentRow++, 'SALES REPORT STATISTICS', 3);
-            createExcelHeaderRow(worksheet, currentRow++, ['Metric', 'Value', 'Formula'], 1);
-
-            // Revenue Metrics (Updated Formulas) - Matching current report
-            const statsData = [
-                { metric: 'Gross Sales', value: grossSalesValue, formula: 'Completed + Returned subtotals (excluding delivery fees)', format: 'currency' },
-                { metric: 'Net Sales', value: netSalesValue, formula: 'Gross Sales - Returned subtotals', format: 'currency' },
-                { metric: 'Gross Revenue', value: grossRevenueValue, formula: 'Gross Sales + delivery fees from Completed + Returned orders', format: 'currency' },
-                { metric: 'Net Revenue', value: netRevenueValue, formula: 'Gross Revenue - (Returned subtotals + Refunded subtotals)', format: 'currency' },
-                { metric: 'Returns', value: returns, formula: `${returnedOrdersCount} orders (${returnRate.toFixed(1)}%)`, format: 'currency' },
-                { metric: 'Total Discounts', value: totalDiscounts, formula: 'All discounts applied', format: 'currency' },
-                { metric: 'Inventory Loss', value: inventoryLoss, formula: 'Value of returned/damaged items', format: 'currency' },
-                { metric: 'Total Taxes', value: totalTaxes, formula: 'Price before Tax × 12% (adjusted for returns/refunds)', format: 'currency' },
-                { metric: 'Delivery Revenues', value: deliveryRevenues, formula: 'Delivery + Extra Delivery (excluding returns)', format: 'currency' },
-                {
-                    metric: 'Total Refunds', value: result.recordset.reduce((sum, o) => {
-                        const isRefunded = o.Status === 'Refunded' || o.Status === 'Completed Returned' || (o.IsRefunded === 1);
-                        const refundAmount = parseFloat(o.RefundAmount || 0);
-                        return isRefunded ? sum + (refundAmount > 0 ? refundAmount : parseFloat(o.Subtotal || 0)) : sum;
-                    }, 0), formula: 'Total refunded amounts (supports partial refunds)', format: 'currency'
-                },
-                { metric: 'Total Orders', value: totalOrders, formula: 'Total number of orders (including returns)', format: 'number', isSection: true },
-                { metric: 'Total Customers', value: totalCustomers, formula: 'Unique customers with orders', format: 'number' },
-                { metric: 'Average Order Value', value: averageOrderValue, formula: 'Sum of TotalAmount / Total Orders', format: 'currency' },
-                { metric: 'Refunded Orders', value: result.recordset.filter(o => o.Status === 'Refunded' || o.Status === 'Completed Returned' || (o.IsRefunded === 1)).length, formula: 'Number of orders that were refunded', format: 'number', isSection: true },
-                { metric: 'Returned Orders', value: returnedOrdersCount, formula: 'Number of orders that were returned', format: 'number' },
-                { metric: 'Replacement Orders', value: result.recordset.filter(o => o.ActionType === 'replacement').length, formula: 'Number of replacement orders processed', format: 'number' },
-                { metric: 'Return Rate (%)', value: returnRate, formula: '(Returned Orders / Total Orders) × 100', format: 'percentage' }
-            ];
-
-            statsData.forEach(stat => {
+            summaryRows.forEach(({ label, value, currency, percent }) => {
                 const dataRow = worksheet.getRow(currentRow++);
-                dataRow.getCell(1).value = stat.metric;
+                dataRow.getCell(1).value = label;
                 dataRow.getCell(1).font = { bold: true };
-                if (stat.isSection) {
-                    dataRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
-                }
-
-                if (stat.format === 'currency') {
-                    dataRow.getCell(2).value = stat.value;
-                    dataRow.getCell(2).numFmt = '₱#,##0.00';
-                } else if (stat.format === 'percentage') {
-                    dataRow.getCell(2).value = stat.value / 100;
+                dataRow.getCell(2).value = percent ? value / 100 : value;
+                if (percent) {
                     dataRow.getCell(2).numFmt = '0.0%';
-                } else {
-                    dataRow.getCell(2).value = stat.value;
-                    dataRow.getCell(2).numFmt = '#,##0';
-                }
-
-                dataRow.getCell(3).value = stat.formula;
-                dataRow.getCell(3).font = { size: 9, color: { argb: 'FF6B7280' } };
-
-                for (let i = 1; i <= 3; i++) {
-                    const cell = dataRow.getCell(i);
-                    cell.border = {
-                        top: { style: 'thin' },
-                        left: { style: 'thin' },
-                        bottom: { style: 'thin' },
-                        right: { style: 'thin' }
-                    };
-                    if (stat.isSection && i === 1) {
-                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
-                    }
-                }
-            });
-
-            // Set column widths for stats table
-            worksheet.getColumn(1).width = 28; // Metric
-            worksheet.getColumn(2).width = 22; // Value
-            worksheet.getColumn(3).width = 55; // Formula
-
-            // Add spacing after stats table
-            currentRow += 2;
-
-            // Additional Summary Statistics
-            createExcelSectionHeader(worksheet, currentRow++, 'ADDITIONAL SUMMARY STATISTICS', 2);
-            const summaryData = [
-                { label: 'Total Orders (All Statuses)', value: totalOrders, format: 'number' },
-                { label: 'Total Subtotal', value: totalSubtotal, format: 'currency' },
-                { label: 'Total Delivery Cost', value: totalDeliveryCost, format: 'currency' },
-                { label: 'Total Items Sold', value: totalItems, format: 'number' }
-            ];
-
-            summaryData.forEach(item => {
-                const dataRow = worksheet.getRow(currentRow++);
-                dataRow.getCell(1).value = item.label;
-                dataRow.getCell(1).font = { bold: true };
-                if (item.format === 'currency') {
-                    dataRow.getCell(2).value = item.value;
+                } else if (currency) {
                     dataRow.getCell(2).numFmt = '₱#,##0.00';
                 } else {
-                    dataRow.getCell(2).value = item.value;
                     dataRow.getCell(2).numFmt = '#,##0';
                 }
-
-                for (let i = 1; i <= 2; i++) {
-                    const cell = dataRow.getCell(i);
-                    cell.border = {
-                        top: { style: 'thin' },
-                        left: { style: 'thin' },
-                        bottom: { style: 'thin' },
-                        right: { style: 'thin' }
-                    };
-                }
-            });
-            currentRow++;
-
-            // Sales by Status Breakdown
-            createExcelSectionHeader(worksheet, currentRow++, 'ORDERS BY STATUS BREAKDOWN', 3);
-            createExcelHeaderRow(worksheet, currentRow++, ['Status', 'Order Count', 'Revenue'], 1);
-
-            Object.keys(salesByStatus).sort().forEach(statusKey => {
-                const dataRow = worksheet.getRow(currentRow++);
-                dataRow.getCell(1).value = statusKey;
-                dataRow.getCell(2).value = salesByStatus[statusKey];
-                dataRow.getCell(2).numFmt = '#,##0';
-                dataRow.getCell(3).value = revenueByStatus[statusKey];
-                dataRow.getCell(3).numFmt = '₱#,##0.00';
-
-                for (let i = 1; i <= 3; i++) {
-                    const cell = dataRow.getCell(i);
-                    cell.border = {
-                        top: { style: 'thin' },
-                        left: { style: 'thin' },
-                        bottom: { style: 'thin' },
-                        right: { style: 'thin' }
-                    };
-                }
+                dataRow.getCell(2).alignment = { horizontal: 'right' };
+                applyThinBorder(dataRow.getCell(1));
+                applyThinBorder(dataRow.getCell(2));
             });
 
-            // Set column widths for status breakdown
-            worksheet.getColumn(1).width = 20; // Status
-            worksheet.getColumn(2).width = 15; // Order Count
-            worksheet.getColumn(3).width = 18; // Revenue
+            worksheet.getColumn(1).width = 24;
+            worksheet.getColumn(2).width = 20;
             currentRow += 2;
 
-            // Payment Method Breakdown
-            createExcelSectionHeader(worksheet, currentRow++, 'REVENUE BY PAYMENT METHOD', 3);
-            createExcelHeaderRow(worksheet, currentRow++, ['Payment Method', 'Revenue', 'Percentage'], 1);
-
-            // Calculate total revenue for percentage calculation (sum of all payment methods)
-            const totalPaymentRevenue = Object.values(paymentMethodBreakdown).reduce((sum, val) => sum + val, 0);
-
-            Object.keys(paymentMethodBreakdown).forEach(method => {
-                const methodRevenue = paymentMethodBreakdown[method];
-                const percentage = totalPaymentRevenue > 0 ? ((methodRevenue / totalPaymentRevenue) * 100) : 0;
-                const dataRow = worksheet.getRow(currentRow++);
-                dataRow.getCell(1).value = method;
-                dataRow.getCell(2).value = methodRevenue;
-                dataRow.getCell(2).numFmt = '₱#,##0.00';
-                dataRow.getCell(3).value = percentage / 100;
-                dataRow.getCell(3).numFmt = '0.00%';
-
-                for (let i = 1; i <= 3; i++) {
-                    const cell = dataRow.getCell(i);
-                    cell.border = {
-                        top: { style: 'thin' },
-                        left: { style: 'thin' },
-                        bottom: { style: 'thin' },
-                        right: { style: 'thin' }
-                    };
-                }
-            });
-            currentRow++;
-
-            // Detailed Orders - Clean and organized layout
-            currentRow++;
-            createExcelSectionHeader(worksheet, currentRow++, 'DETAILED ORDER TRANSACTIONS', 15);
+            createExcelSectionHeader(worksheet, currentRow++, 'Orders', ORDER_COL_COUNT);
+            const ordersHeaderRow = currentRow;
             createExcelHeaderRow(worksheet, currentRow++, [
-                'Order ID',
-                'Reference Number',
-                'Customer Name',
-                'Customer Email',
-                'Order Date',
+                'Order #',
+                'Reference',
+                'Date',
+                'Customer',
                 'Status',
-                'Order Items',
-                'Products and Qty',
+                'Products',
                 'Subtotal',
-                'Delivery Cost',
-                'Extra Delivery Fee',
-                'Total Amount',
-                'Discounts',
-                'Taxes',
-                'Payment Method'
+                'Delivery',
+                'Total',
+                'Payment'
             ], 1);
 
             result.recordset.forEach((row, index) => {
-                const orderId = row.OrderID;
-                const orderStatus = row.Status ? row.Status.toLowerCase() : '';
-                const isReturned = orderStatus === 'returned' || orderStatus === 'return';
-
                 const dataRow = worksheet.getRow(currentRow++);
-
-                // Order ID
-                dataRow.getCell(1).value = row.OrderID || '';
-                dataRow.getCell(1).numFmt = '#,##0';
-
-                // Reference Number
-                dataRow.getCell(2).value = row.ReferenceNumber || '';
-
-                // Customer Name (with text wrapping)
-                dataRow.getCell(3).value = row.CustomerName || '';
-                dataRow.getCell(3).alignment = { wrapText: true, vertical: 'top' };
-
-                // Customer Email (with text wrapping)
-                dataRow.getCell(4).value = row.CustomerEmail || '';
-                dataRow.getCell(4).alignment = { wrapText: true, vertical: 'top' };
-
-                // Order Date
-                if (row.OrderDate) {
-                    dataRow.getCell(5).value = new Date(row.OrderDate);
-                    dataRow.getCell(5).numFmt = 'mm/dd/yyyy hh:mm AM/PM';
-                }
-
-                // Status (with color coding for returns)
-                dataRow.getCell(6).value = row.Status || '';
-                if (isReturned) {
-                    dataRow.getCell(6).font = { color: { argb: 'FFFF0000' }, bold: true };
-                }
-
-                // Check if this is a refunded order with partial return
-                const isRefunded = orderStatus === 'refunded' || orderStatus === 'completed returned' || (row.IsRefunded === 1);
+                const orderStatus = row.Status ? row.Status.toLowerCase() : '';
+                const isRefunded = orderStatus === 'refunded' || orderStatus === 'completed returned' || row.IsRefunded === 1;
                 const hasRefundAmount = parseFloat(row.RefundAmount || 0) > 0;
-                const hasReturnItems = row.ReturnItems && hasReturnItemsColumn;
                 const refundedItems = orderItemsMap[row.OrderID] || [];
-                const shouldUseRefundedValues = isRefunded && (hasRefundAmount || hasReturnItems);
+                const shouldUseRefundedValues = isRefunded && (hasRefundAmount || (row.ReturnItems && hasReturnItemsColumn));
 
-                // Order Items Count - use returned items count for partial returns
-                const itemCount = shouldUseRefundedValues && refundedItems.length > 0
-                    ? refundedItems.length
-                    : (row.TotalItems || 0);
-                dataRow.getCell(7).value = itemCount;
-                dataRow.getCell(7).numFmt = '#,##0';
-                dataRow.getCell(7).alignment = { horizontal: 'right' };
-
-                // Products and Qty (detailed list) - use filtered items for refunded orders
-                const productsQty = shouldUseRefundedValues && refundedItems.length > 0
-                    ? refundedItems.map(item => `${item.name} (Qty: ${item.quantity})`)
+                const productsList = shouldUseRefundedValues && refundedItems.length > 0
+                    ? refundedItems.map(item => `${item.name} (×${item.quantity})`)
                     : (orderProductsQty[row.OrderID] || []);
-                const productsQtyText = productsQty.length > 0
-                    ? productsQty.join('\n')
-                    : (itemCount > 0 ? `${itemCount} item(s) - Details not available` : 'N/A');
-                dataRow.getCell(8).value = productsQtyText;
-                dataRow.getCell(8).alignment = { wrapText: true, vertical: 'top' };
+                const productsText = productsList.length > 0
+                    ? productsList.join('; ')
+                    : (row.TotalItems ? `${row.TotalItems} item(s)` : '—');
 
-                // Subtotal - use the updated Subtotal value (already calculated and updated in this route for refunded orders)
-                // For refunded orders, Subtotal was updated to RefundAmount earlier (around line 15421)
                 let subtotal = parseFloat(row.Subtotal || 0);
-                if (shouldUseRefundedValues) {
-                    // Verify Subtotal matches RefundAmount for refunded orders (should already be updated)
-                    if (hasRefundAmount) {
-                        // Use RefundAmount if Subtotal doesn't match (safety check)
-                        if (Math.abs(parseFloat(row.Subtotal || 0) - parseFloat(row.RefundAmount || 0)) > 0.01) {
-                            subtotal = parseFloat(row.RefundAmount || 0);
-                            console.log(`[CSV EXPORT] Order ${orderId} - Subtotal mismatch, using RefundAmount: ₱${subtotal.toFixed(2)}`);
-                        }
-                    } else if (refundedItems.length > 0) {
-                        // Fallback: Calculate from filtered returned items if no RefundAmount
-                        subtotal = refundedItems.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 0), 0);
-                        console.log(`[CSV EXPORT] Order ${orderId} - Calculated subtotal from returned items: ₱${subtotal.toFixed(2)}`);
-                    }
-                }
-                dataRow.getCell(9).value = subtotal;
-                dataRow.getCell(9).numFmt = '₱#,##0.00';
-                dataRow.getCell(9).alignment = { horizontal: 'right' };
-
-                // Delivery Cost - use updated value (already set to 0 for refunded orders around line 15433)
-                // This ensures CSV matches the Sales/Data route exactly
-                const deliveryCost = parseFloat(row.DeliveryCost || 0);
-                dataRow.getCell(10).value = deliveryCost;
-                dataRow.getCell(10).numFmt = '₱#,##0.00';
-                dataRow.getCell(10).alignment = { horizontal: 'right' };
-
-                // Extra Delivery Fee - use updated value (already set to 0 for refunded orders around line 15434)
-                // This ensures CSV matches the Sales/Data route exactly
-                const extraDeliveryFee = parseFloat(row.ExtraDeliveryFee || 0);
-                dataRow.getCell(11).value = extraDeliveryFee;
-                dataRow.getCell(11).numFmt = '₱#,##0.00';
-                dataRow.getCell(11).alignment = { horizontal: 'right' };
-
-                // Total Amount - use the updated TotalAmount value from result.recordset (already updated for refunded orders)
-                // For refunded orders, TotalAmount was updated to RefundAmount earlier in this route (around line 15422)
-                // This ensures CSV matches the Sales/Data route exactly
+                let deliveryFee = parseFloat(row.DeliveryCost || 0) + parseFloat(row.ExtraDeliveryFee || 0);
                 let totalAmount = parseFloat(row.TotalAmount || 0);
-                if (shouldUseRefundedValues && hasRefundAmount) {
-                    // For refunded orders, ensure TotalAmount matches RefundAmount (should already be updated)
-                    // This is a safety check to ensure data consistency
-                    const expectedTotalAmount = parseFloat(row.RefundAmount || 0);
-                    if (Math.abs(totalAmount - expectedTotalAmount) > 0.01) {
-                        totalAmount = expectedTotalAmount;
-                        console.log(`[CSV EXPORT] Order ${orderId} - Corrected TotalAmount from ₱${parseFloat(row.TotalAmount || 0).toFixed(2)} to ₱${totalAmount.toFixed(2)} (RefundAmount)`);
-                    }
-                }
-                dataRow.getCell(12).value = totalAmount;
-                dataRow.getCell(12).numFmt = '₱#,##0.00';
-                dataRow.getCell(12).alignment = { horizontal: 'right' };
-                if (isReturned || isRefunded || orderStatus === 'completed returned') {
-                    dataRow.getCell(12).font = { color: { argb: 'FFFF0000' }, bold: true };
-                }
-
-                // Discounts - should be 0 for refunded orders
-                let orderDiscount = orderDiscounts[row.OrderID] || 0;
                 if (shouldUseRefundedValues) {
-                    // Discounts are 0 for refunded orders (we're showing the refunded amount)
-                    orderDiscount = 0;
-                }
-                dataRow.getCell(13).value = orderDiscount;
-                dataRow.getCell(13).numFmt = '₱#,##0.00';
-                dataRow.getCell(13).alignment = { horizontal: 'right' };
-
-                // Taxes - recalculate from returned items for refunded orders
-                let orderTax = orderTaxes[row.OrderID] || 0;
-                if (shouldUseRefundedValues) {
-                    if (refundedItems.length > 0) {
-                        // Recalculate taxes from returned items only (12% VAT on refunded amount)
-                        const taxRate = 0.12;
-                        orderTax = refundedItems.reduce((sum, item) => {
-                            return sum + (parseFloat(item.price) || 0) * taxRate * (parseInt(item.quantity) || 0);
-                        }, 0);
-                        console.log(`[CSV EXPORT] Order ${orderId} - Recalculated taxes from returned items: ₱${orderTax.toFixed(2)}`);
-                    } else if (hasRefundAmount) {
-                        // Fallback: Calculate tax on RefundAmount (12% VAT)
-                        const taxRate = 0.12;
-                        orderTax = parseFloat(row.RefundAmount || 0) * taxRate;
-                        console.log(`[CSV EXPORT] Order ${orderId} - Calculated taxes from RefundAmount: ₱${orderTax.toFixed(2)}`);
-                    } else {
-                        // For refunded orders without items, tax is 0
-                        orderTax = 0;
+                    if (hasRefundAmount) {
+                        subtotal = parseFloat(row.RefundAmount || 0);
+                        totalAmount = parseFloat(row.RefundAmount || 0);
+                    } else if (refundedItems.length > 0) {
+                        subtotal = refundedItems.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.quantity, 10) || 0), 0);
+                        totalAmount = subtotal;
                     }
+                    deliveryFee = 0;
                 }
-                dataRow.getCell(14).value = orderTax;
-                dataRow.getCell(14).numFmt = '₱#,##0.00';
-                dataRow.getCell(14).alignment = { horizontal: 'right' };
 
-                // Payment Method
-                dataRow.getCell(15).value = row.PaymentMethod || '';
-                dataRow.getCell(15).alignment = { wrapText: true, vertical: 'top' };
+                dataRow.getCell(1).value = row.OrderID || '';
+                dataRow.getCell(2).value = row.ReferenceNumber || '';
+                if (row.OrderDate) {
+                    dataRow.getCell(3).value = new Date(row.OrderDate);
+                    dataRow.getCell(3).numFmt = 'mmm d, yyyy h:mm AM/PM';
+                }
+                dataRow.getCell(4).value = row.CustomerName || '';
+                dataRow.getCell(5).value = formatExportStatus(row.Status);
+                dataRow.getCell(6).value = productsText;
+                dataRow.getCell(7).value = subtotal;
+                dataRow.getCell(7).numFmt = '₱#,##0.00';
+                dataRow.getCell(8).value = deliveryFee;
+                dataRow.getCell(8).numFmt = '₱#,##0.00';
+                dataRow.getCell(9).value = totalAmount;
+                dataRow.getCell(9).numFmt = '₱#,##0.00';
+                dataRow.getCell(10).value = row.PaymentMethod || '';
 
-                // Set row height to accommodate wrapped text (increase for products list)
-                dataRow.height = productsQty.length > 1 ? 20 + (productsQty.length * 5) : 20;
-
-                // Apply borders and alternating row colors for readability
-                for (let i = 1; i <= 15; i++) {
-                    const cell = dataRow.getCell(i);
-
-                    // Ensure text wrapping and alignment for all cells
-                    if (!cell.alignment) {
-                        cell.alignment = {};
+                for (let col = 1; col <= ORDER_COL_COUNT; col++) {
+                    const cell = dataRow.getCell(col);
+                    cell.alignment = { wrapText: true, vertical: 'top' };
+                    if (col >= 7 && col <= 9) {
+                        cell.alignment.horizontal = 'right';
                     }
-                    cell.alignment.wrapText = true;
-                    cell.alignment.vertical = 'top';
-
-                    cell.border = {
-                        top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                        left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                        bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                        right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-                    };
-
-                    // Alternating row colors for better readability
+                    applyThinBorder(cell);
                     if (index % 2 === 0) {
                         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
                     }
                 }
+                dataRow.height = Math.min(60, Math.max(22, 18 + (productsList.length > 1 ? productsList.length * 4 : 0)));
             });
 
-            // Set optimized column widths for readability
-            worksheet.getColumn(1).width = 12; // Order ID
-            worksheet.getColumn(2).width = 20; // Reference Number
-            worksheet.getColumn(3).width = 28; // Customer Name
-            worksheet.getColumn(4).width = 32; // Customer Email
-            worksheet.getColumn(5).width = 22; // Order Date
-            worksheet.getColumn(6).width = 14; // Status
-            worksheet.getColumn(7).width = 12; // Order Items (count)
-            worksheet.getColumn(8).width = 35; // Products and Qty (detailed list)
-            worksheet.getColumn(9).width = 16; // Subtotal
-            worksheet.getColumn(10).width = 16; // Delivery Cost
-            worksheet.getColumn(11).width = 18; // Extra Delivery Fee
-            worksheet.getColumn(12).width = 16; // Total Amount
-            worksheet.getColumn(13).width = 16; // Discounts
-            worksheet.getColumn(14).width = 16; // Taxes
-            worksheet.getColumn(15).width = 20; // Payment Method
+            worksheet.getColumn(1).width = 10;
+            worksheet.getColumn(2).width = 18;
+            worksheet.getColumn(3).width = 20;
+            worksheet.getColumn(4).width = 26;
+            worksheet.getColumn(5).width = 18;
+            worksheet.getColumn(6).width = 40;
+            worksheet.getColumn(7).width = 14;
+            worksheet.getColumn(8).width = 14;
+            worksheet.getColumn(9).width = 14;
+            worksheet.getColumn(10).width = 16;
 
-            // Enable text wrapping for all cells to prevent overlapping
-            worksheet.eachRow((row, rowNumber) => {
-                row.eachCell((cell) => {
-                    cell.alignment = {
-                        ...cell.alignment,
-                        wrapText: true,
-                        vertical: 'top'
-                    };
-                });
-                // Set minimum row height for better readability
-                if (rowNumber > 1) { // Skip header row
-                    row.height = 20;
-                }
-            });
+            worksheet.views = [{ state: 'frozen', ySplit: ordersHeaderRow, activeCell: 'A1' }];
 
-            // No frozen headers - allow full scrolling
-
-            // Generate buffer and send
+            const exportDate = new Date().toISOString().split('T')[0];
             const buffer = await workbook.xlsx.writeBuffer();
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', `attachment; filename=sales-report-${new Date().toISOString().split('T')[0]}-${Date.now()}.xlsx`);
+            res.setHeader('Content-Disposition', `attachment; filename=sales-report-${exportDate}.xlsx`);
             res.send(buffer);
         } catch (err) {
             console.error('Error exporting sales report:', err);
@@ -21686,11 +21871,19 @@ module.exports = function (sql, pool, getStripe = null) {
         const transaction = new sql.Transaction(pool);
         try {
             await pool.connect();
-            const { id } = req.params;
+            const invId = parseInt(req.params.id, 10);
+            if (!invId || Number.isNaN(invId)) {
+                return res.json({ success: false, message: 'Invalid inventory product ID.' });
+            }
 
             await transaction.begin();
 
             try {
+                const linkRes = await transaction.request()
+                    .input('inventoryProductId', sql.Int, invId)
+                    .query('SELECT ProductID FROM InventoryProducts WHERE InventoryProductID = @inventoryProductId');
+                const linkedCmsProductId = linkRes.recordset[0]?.ProductID ?? null;
+
                 // Delete required materials (if table exists)
                 try {
                     const tableCheck = await transaction.request()
@@ -21702,7 +21895,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
                     if (tableCheck.recordset[0].tableExists > 0) {
                         await transaction.request()
-                            .input('inventoryProductId', sql.Int, id)
+                            .input('inventoryProductId', sql.Int, invId)
                             .query('DELETE FROM InventoryProductMaterials WHERE InventoryProductID = @inventoryProductId');
                     }
                 } catch (materialsErr) {
@@ -21711,17 +21904,40 @@ module.exports = function (sql, pool, getStripe = null) {
 
                 // Delete inventory variations
                 await transaction.request()
-                    .input('inventoryProductId', sql.Int, id)
+                    .input('inventoryProductId', sql.Int, invId)
                     .query('DELETE FROM InventoryProductVariations WHERE InventoryProductID = @inventoryProductId');
 
-                // Now delete the product (inventory data is stored in InventoryProducts itself)
                 await transaction.request()
-                    .input('inventoryProductId', sql.Int, id)
+                    .input('inventoryProductId', sql.Int, invId)
                     .query('DELETE FROM InventoryProducts WHERE InventoryProductID = @inventoryProductId');
+
+                const cmsIdsToDelete = new Set();
+                if (linkedCmsProductId) cmsIdsToDelete.add(linkedCmsProductId);
+
+                const legacyRes = await transaction.request()
+                    .input('productId', sql.Int, invId)
+                    .query('SELECT ProductID FROM Products WHERE ProductID = @productId');
+                if (legacyRes.recordset.length > 0) {
+                    cmsIdsToDelete.add(invId);
+                }
+
+                let orderItemsRemoved = 0;
+                let bulkItemsRemoved = 0;
+                for (const cmsId of cmsIdsToDelete) {
+                    const stats = await permanentlyDeleteCmsProductRow(transaction, cmsId);
+                    orderItemsRemoved += stats.orderItemsRemoved;
+                    bulkItemsRemoved += stats.bulkItemsRemoved;
+                }
 
                 await transaction.commit();
 
-                res.json({ success: true, message: 'Inventory product and related items permanently deleted.' });
+                res.json({
+                    success: true,
+                    message: formatPermanentDeleteProductMessage(
+                        { orderItemsRemoved, bulkItemsRemoved },
+                        'Inventory product'
+                    ),
+                });
             } catch (err) {
                 await transaction.rollback();
                 throw err;
@@ -21737,31 +21953,22 @@ module.exports = function (sql, pool, getStripe = null) {
         const transaction = new sql.Transaction(pool);
         try {
             await pool.connect();
-            const { id } = req.params;
+            const productId = parseInt(req.params.id, 10);
+            if (!productId || Number.isNaN(productId)) {
+                return res.json({ success: false, message: 'Invalid product ID.' });
+            }
 
             await transaction.begin();
 
             try {
-                // Note: ProductInventory table is no longer used - inventory is stored in InventoryProducts
-
-                // Also delete ProductMaterials (required materials)
-                await transaction.request()
-                    .input('productId', sql.Int, id)
-                    .query('DELETE FROM [dbo].[ProductMaterials] WHERE ProductID = @productId');
-
-                // Also delete ProductVariations
-                await transaction.request()
-                    .input('productId', sql.Int, id)
-                    .query('DELETE FROM [dbo].[ProductVariations] WHERE ProductID = @productId');
-
-                // Now delete the product
-                await transaction.request()
-                    .input('productId', sql.Int, id)
-                    .query('DELETE FROM [dbo].[Products] WHERE ProductID = @productId');
+                const stats = await permanentlyDeleteCmsProductRow(transaction, productId);
 
                 await transaction.commit();
 
-                res.json({ success: true, message: 'Product and related inventory items permanently deleted.' });
+                res.json({
+                    success: true,
+                    message: formatPermanentDeleteProductMessage(stats),
+                });
             } catch (err) {
                 await transaction.rollback();
                 throw err;
@@ -21811,12 +22018,18 @@ module.exports = function (sql, pool, getStripe = null) {
         { route: 'OrdersDelivery', status: 'Delivery' },
         { route: 'OrdersReceive', status: 'Received' },
         { route: 'CancelledOrders', status: 'Cancelled' },
-        { route: 'ReturnedOrders', status: 'Returned', includeStatuses: ['Returned', 'Processing', 'Processing (Pickup)', 'Declined'] },
+        { route: 'ReturnedOrders', status: 'Returned', includeStatuses: ['Returned', 'Processing (Pickup)', 'Declined'] },
         { route: 'CompletedOrders', status: 'Completed' },
-        { route: 'CompletedReturned', status: 'Completed Returned', includeStatuses: ['Completed Returned', 'Refunded'] }
+        { route: 'CompletedReplacement', status: 'Completed Returned', includeStatuses: ['Completed Returned'], extraWhere: "AND (o.ActionType IS NULL OR LOWER(LTRIM(RTRIM(o.ActionType))) = 'replacement')" },
+        { route: 'CompletedRefunded', status: 'Refunded' }
     ];
 
-    orderRoutes.forEach(({ route, status, includeStatuses }) => {
+    // Legacy URL → Completed Replacement
+    router.get('/Employee/Admin/CompletedReturned', isAuthenticated, (req, res) => {
+        res.redirect(301, '/Employee/Admin/CompletedReplacement');
+    });
+
+    orderRoutes.forEach(({ route, status, includeStatuses, extraWhere }) => {
         router.get(`/Employee/Admin/${route}`, isAuthenticated, async (req, res) => {
             try {
                 await pool.connect();
@@ -21831,16 +22044,16 @@ module.exports = function (sql, pool, getStripe = null) {
                 let statusFilter = '';
                 const statusRequest = pool.request();
 
-                if ((route === 'ReturnedOrders' || route === 'CompletedReturned') && includeStatuses && Array.isArray(includeStatuses)) {
-                    // For ReturnedOrders and CompletedReturned pages, include multiple statuses
+                const extraFilter = extraWhere || '';
+
+                if (includeStatuses && Array.isArray(includeStatuses)) {
                     const statusParams = includeStatuses.map((s, idx) => `@status${idx}`).join(', ');
-                    statusFilter = `WHERE o.Status IN (${statusParams})`;
+                    statusFilter = `WHERE o.Status IN (${statusParams})${extraFilter}`;
                     includeStatuses.forEach((s, idx) => {
                         statusRequest.input(`status${idx}`, sql.NVarChar, s);
                     });
                 } else {
-                    // Single status filter for other pages
-                    statusFilter = `WHERE o.Status = @status`;
+                    statusFilter = `WHERE o.Status = @status${extraFilter}`;
                     statusRequest.input('status', sql.NVarChar, status);
                 }
 
@@ -21879,14 +22092,10 @@ module.exports = function (sql, pool, getStripe = null) {
                 // For sales report, we need to include Completed, Returned, and Refunded orders
                 // Refunded orders should be included to calculate net sales properly
                 let statusFilterForOrders;
-                if (route === 'ReturnedOrders' || route === 'CompletedReturned') {
-                    // For ReturnedOrders and CompletedReturned pages, use the includeStatuses
-                    statusFilterForOrders = includeStatuses && Array.isArray(includeStatuses)
-                        ? `WHERE o.Status IN (${includeStatuses.map((s, idx) => `@status${idx}`).join(', ')})`
-                        : `WHERE o.Status = @status`;
+                if (includeStatuses && Array.isArray(includeStatuses)) {
+                    statusFilterForOrders = `WHERE o.Status IN (${includeStatuses.map((s, idx) => `@status${idx}`).join(', ')})${extraFilter}`;
                 } else {
-                    // For sales report and other pages, use single status
-                    statusFilterForOrders = `WHERE o.Status = @status`;
+                    statusFilterForOrders = `WHERE o.Status = @status${extraFilter}`;
                 }
 
                 // Build SELECT query conditionally based on column existence
@@ -22979,23 +23188,27 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
-    // Admin OrdersReceive: Proceed to Completed
+    // Admin OrdersReceive: Proceed to Completed (or Completed Returned for replacement deliveries)
     router.post('/Employee/Admin/OrdersReceive/Proceed/:orderId', isAuthenticated, async (req, res) => {
         try {
             const orderId = parseInt(req.params.orderId);
 
-            // OPTIMIZED: Update order status immediately (critical path)
+            const orderMeta = await pool.request()
+                .input('orderId', sql.Int, orderId)
+                .query(`SELECT ActionType FROM Orders WHERE OrderID = @orderId`);
+
+            const actionType = orderMeta.recordset[0]?.ActionType;
+            const newStatus = actionType === 'replacement' ? 'Completed Returned' : 'Completed';
+
             await pool.request()
                 .input('orderId', sql.Int, orderId)
-                .query(`UPDATE Orders SET Status = 'Completed' WHERE OrderID = @orderId`);
+                .input('newStatus', sql.NVarChar, newStatus)
+                .query(`UPDATE Orders SET Status = @newStatus WHERE OrderID = @orderId`);
 
-            // OPTIMIZED: Send response immediately, do other operations asynchronously
-            res.json({ success: true });
+            res.json({ success: true, status: newStatus });
 
-            // OPTIMIZED: Do non-critical operations asynchronously (don't wait)
             Promise.all([
-                // Update bulk order status if applicable
-                updateBulkOrderStatus(orderId, 'Completed').catch(err => console.error('[BULK ORDER UPDATE ERROR]', err)),
+                updateBulkOrderStatus(orderId, newStatus).catch(err => console.error('[BULK ORDER UPDATE ERROR]', err)),
 
                 // Log activity asynchronously
                 logActivity(
@@ -24087,6 +24300,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
                 try {
                     await pool.connect();
+                    await ensureVariationMediaColumns(pool);
 
                     // Fetch all products from InventoryProducts table with inventory data
                     try {
@@ -24098,14 +24312,19 @@ module.exports = function (sql, pool, getStripe = null) {
                                 ip.Category as InventoryProductCategory,
                                 ip.Price as InventoryProductPrice,
                                 COALESCE(
-                                    -- Prefer customer-facing product URLs (often already Azure/public)
+                                    (SELECT TOP 1 ipv.VariationImageURL
+                                     FROM InventoryProductVariations ipv
+                                     WHERE ipv.InventoryProductID = ip.InventoryProductID AND ipv.IsActive = 1
+                                     ORDER BY ipv.VariationID),
+                                    NULLIF(JSON_VALUE(
+                                        (SELECT TOP 1 ipv2.ThumbnailURLs
+                                         FROM InventoryProductVariations ipv2
+                                         WHERE ipv2.InventoryProductID = ip.InventoryProductID AND ipv2.IsActive = 1
+                                         ORDER BY ipv2.VariationID), '$[0]'), ''),
                                     NULLIF(pLinked.ImageURL, ''),
                                     NULLIF(pById.ImageURL, ''),
                                     NULLIF(pBySku.ImageURL, ''),
                                     NULLIF(JSON_VALUE(pLinked.ThumbnailURLs, '$[0]'), ''),
-                                    NULLIF(JSON_VALUE(pById.ThumbnailURLs, '$[0]'), ''),
-                                    NULLIF(JSON_VALUE(pBySku.ThumbnailURLs, '$[0]'), ''),
-                                    -- Fallback to InventoryProducts.ImageURL (often local /uploads path)
                                     NULLIF(ip.ImageURL, '')
                                 ) as InventoryProductImageURL,
                                 ip.DateAdded,
@@ -24226,20 +24445,76 @@ module.exports = function (sql, pool, getStripe = null) {
             });
 
             // Admin - Create New Product (from ProductInventory page) - Uses InventoryProducts table
-            router.post('/Employee/Admin/ProductInventory/Add', isAuthenticated, productUpload.single('image'), async (req, res) => {
+            router.post('/Employee/Admin/ProductInventory/Add', isAuthenticated, productUpload.fields([
+                { name: 'variationMainImage', maxCount: 50 },
+                { name: 'variationModel3d', maxCount: 50 },
+                { name: 'variationThumbnail', maxCount: 200 }
+            ]), async (req, res) => {
+                const wantsJson = req.get('X-Requested-With') === 'XMLHttpRequest' || (req.get('Accept') || '').includes('application/json');
+                const respondError = (message, status = 400) => {
+                    if (wantsJson) {
+                        return res.status(status).json({ success: false, message });
+                    }
+                    req.flash('error', message);
+                    return res.redirect('/Employee/Admin/ProductInventory');
+                };
+                const respondSuccess = (inventoryProductId) => {
+                    if (wantsJson) {
+                        return res.json({
+                            success: true,
+                            message: 'Product created successfully in inventory!',
+                            inventoryProductId
+                        });
+                    }
+                    req.flash('success', 'Product created successfully in inventory!');
+                    return res.redirect(`/Employee/Admin/ProductInventory?inventoryProductId=${inventoryProductId}&tab=variations`);
+                };
+
                 try {
                     await pool.connect();
-                    const { name, description, price, category, length, width, height, weight, dimensions, requiredMaterials, quantity } = req.body;
+                    await ensureVariationMediaColumns(pool);
+                    const { name, description, price, category, length, width, height, weight, dimensions, requiredMaterials, quantity, variationsJson } = req.body;
 
-                    console.log('ProductInventory/Add - Received data:', { name, description, price, category, quantity, length, width, height, weight, hasImage: !!req.file });
+                    console.log('ProductInventory/Add - Received data:', {
+                        name, description, price, category, quantity,
+                        variationModels: req.files && req.files.variationModel3d ? req.files.variationModel3d.length : 0,
+                        variationThumbs: req.files && req.files.variationThumbnail ? req.files.variationThumbnail.length : 0
+                    });
 
-                    if (!name || !price || !category) {
-                        console.error('ProductInventory/Add - Missing required fields:', { name: !!name, price: !!price, category: !!category });
-                        req.flash('error', 'Name, price, and category are required.');
-                        return res.redirect('/Employee/Admin/ProductInventory');
+                    if (!name || !category) {
+                        return respondError('Name and category are required.');
                     }
 
-                    const initialQuantity = parseInt(quantity) || 0;
+                    let variationsList = [];
+                    if (variationsJson) {
+                        try {
+                            variationsList = typeof variationsJson === 'string' ? JSON.parse(variationsJson) : variationsJson;
+                        } catch (parseVarErr) {
+                            return respondError('Invalid variations data.');
+                        }
+                    }
+                    if (!Array.isArray(variationsList) || variationsList.length === 0) {
+                        return respondError('At least one product variation is required.');
+                    }
+
+                    const parentPrice = parseFloat(price);
+                    if (Number.isNaN(parentPrice) || parentPrice <= 0) {
+                        return respondError('Product price is required and must be greater than zero.');
+                    }
+
+                    const validVariations = variationsList.filter((v) => {
+                        const vName = (v.variationName || '').trim();
+                        const vQty = parseInt(v.quantity, 10);
+                        return vName && vQty > 0;
+                    });
+                    if (validVariations.length === 0) {
+                        return respondError('Each variation needs a name and initial quantity of at least 1.');
+                    }
+
+                    const catalogPrice = parentPrice;
+
+                    const initialQuantity = parseInt(quantity, 10) || 0;
+                    const mediaByVariation = mapVariationMediaFiles(req.files, validVariations);
 
                     // Start transaction
                     const transaction = new sql.Transaction(pool);
@@ -24273,54 +24548,116 @@ module.exports = function (sql, pool, getStripe = null) {
                             }
                         }
 
-                        // Generate temporary SKU and Slug
-                        const tempSku = `INV-SKU-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
                         const tempSlug = `inv-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
-                        // Insert product into InventoryProducts table
+                        // Insert parent (no SKU — variations own SKUs)
                         const productResult = await transaction.request()
                             .input('name', sql.NVarChar, name)
                             .input('description', sql.NVarChar, description || '')
-                            .input('price', sql.Decimal(10, 2), price)
+                            .input('price', sql.Decimal(10, 2), catalogPrice)
                             .input('category', sql.NVarChar, category)
                             .input('dimensions', sql.NVarChar, dimensionsJson)
-                            .input('tempSku', sql.NVarChar, tempSku)
                             .input('tempSlug', sql.NVarChar, tempSlug)
                             .input('createdBy', sql.Int, req.session.user.id)
                             .query(`
                                 INSERT INTO InventoryProducts (Name, Description, Price, Category, Dimensions, DateAdded, IsActive, SKU, PublicId, Slug, CreatedBy)
-                                VALUES (@name, @description, @price, @category, @dimensions, GETDATE(), 1, @tempSku, NEWID(), @tempSlug, @createdBy)
+                                VALUES (@name, @description, @price, @category, @dimensions, GETDATE(), 1, NULL, NEWID(), @tempSlug, @createdBy)
                                 SELECT SCOPE_IDENTITY() as InventoryProductID
                             `);
 
                         const inventoryProductId = productResult.recordset[0].InventoryProductID;
 
-                        // Generate final SKU and Slug
-                        const { sku, slug } = generateProductIdentifiers(inventoryProductId, name);
+                        // Parent catalog group: slug/publicId only (SKU is per variation)
+                        const { slug } = generateProductIdentifiers(inventoryProductId, name);
                         const finalPublicId = generateGuid();
 
-                        // Update with final identifiers
                         await transaction.request()
                             .input('inventoryProductId', sql.Int, inventoryProductId)
-                            .input('sku', sql.NVarChar, sku)
                             .input('publicId', sql.NVarChar, finalPublicId)
                             .input('slug', sql.NVarChar, slug)
-                            .query('UPDATE InventoryProducts SET SKU = @sku, PublicId = CAST(@publicId AS UNIQUEIDENTIFIER), Slug = @slug WHERE InventoryProductID = @inventoryProductId');
+                            .query(`
+                                UPDATE InventoryProducts
+                                SET PublicId = CAST(@publicId AS UNIQUEIDENTIFIER), Slug = @slug
+                                WHERE InventoryProductID = @inventoryProductId
+                            `);
 
-                        // Handle file uploads
-                        if (req.file) {
-                            const imageUrl = publicUrlFromMulterProductFile(req.file);
-                            await transaction.request()
-                                .input('inventoryProductId', sql.Int, inventoryProductId)
-                                .input('imageUrl', sql.NVarChar, imageUrl)
-                                .query('UPDATE InventoryProducts SET ImageURL = @imageUrl WHERE InventoryProductID = @inventoryProductId');
+                        let materialsCollected = [];
+                        if (requiredMaterials && String(requiredMaterials).trim() !== '' && String(requiredMaterials).trim() !== '[]') {
+                            let materialsData = [];
+                            try {
+                                materialsData = typeof requiredMaterials === 'string' ? JSON.parse(requiredMaterials) : requiredMaterials;
+                            } catch (parseMatErr) {
+                                console.error('ProductInventory/Add - requiredMaterials parse error:', parseMatErr.message);
+                                throw new Error('Invalid recipe materials data.');
+                            }
+                            if (Array.isArray(materialsData) && materialsData.length > 0) {
+                                await saveInventoryProductMaterials(transaction, inventoryProductId, materialsData);
+                                materialsCollected = await getInventoryProductMaterials(transaction, inventoryProductId);
+                                console.log('ProductInventory/Add - Saved recipe:', materialsCollected.length, 'material(s)');
+                            }
                         }
 
-                        // Update inventory quantities directly in InventoryProducts if quantity is provided
-                        if (initialQuantity > 0) {
+                        let variationStockTotal = 0;
+                        const catalogVariationRows = [];
+                        for (let vi = 0; vi < validVariations.length; vi++) {
+                            const v = validVariations[vi];
+                            const variationName = (v.variationName || '').trim();
+                            const variationQuantity = parseInt(v.quantity, 10) || 0;
+                            if (!variationName || variationQuantity <= 0) continue;
+
+                            const variationPrice = parentPrice;
+
+                            variationStockTotal += variationQuantity;
+                            const media = mediaByVariation[vi] || { mainFile: null, modelFile: null, thumbFiles: [] };
+                            const mediaUrls = resolveVariationMediaUrls(media, publicUrlFromMulterVariationFile);
+                            const variationImageUrl = mediaUrls.imageUrl;
+                            const thumbJson = mediaUrls.thumbJson;
+                            const model3dUrl = mediaUrls.model3d;
+
+                            const insertVar = await transaction.request()
+                                .input('inventoryProductID', sql.Int, inventoryProductId)
+                                .input('variationName', sql.NVarChar, variationName)
+                                .input('color', sql.NVarChar, (v.color || '').trim() || null)
+                                .input('quantity', sql.Int, variationQuantity)
+                                .input('price', sql.Decimal(10, 2), variationPrice)
+                                .input('variationImageUrl', sql.NVarChar, variationImageUrl)
+                                .input('thumbJson', sql.NVarChar, thumbJson)
+                                .input('model3d', sql.NVarChar, model3dUrl)
+                                .input('createdBy', sql.Int, req.session.user.id)
+                                .query(`
+                                    INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity, Price, VariationImageURL, ThumbnailURLs, Model3D, IsActive, CreatedBy)
+                                    OUTPUT INSERTED.VariationID
+                                    VALUES (NULL, @inventoryProductID, @variationName, @color, @quantity, @quantity, @price, @variationImageUrl, @thumbJson, @model3d, 1, @createdBy)
+                                `);
+
+                            const variationId = insertVar.recordset[0].VariationID;
+                            const variationSku = await assignVariationSku(transaction, variationId, variationName);
+                            catalogVariationRows.push({
+                                variationId,
+                                variationName,
+                                color: (v.color || '').trim() || null,
+                                quantity: variationQuantity,
+                                price: variationPrice,
+                                imageUrl: variationImageUrl,
+                                thumbnailUrls: mediaUrls.thumbnailUrls,
+                                model3d: model3dUrl,
+                                sku: variationSku
+                            });
+                        }
+                        console.log('ProductInventory/Add - Created', catalogVariationRows.length, 'variation(s) for InventoryProductID:', inventoryProductId);
+
+                        await createStorefrontProductFromInventory(
+                            transaction,
+                            inventoryProductId,
+                            req.session.user.id,
+                            catalogVariationRows
+                        );
+
+                        const productAvailableQty = variationStockTotal;
+                        if (productAvailableQty > 0) {
                             await transaction.request()
                                 .input('inventoryProductId', sql.Int, inventoryProductId)
-                                .input('availableQty', sql.Int, initialQuantity)
+                                .input('availableQty', sql.Int, productAvailableQty)
                                 .input('status', sql.NVarChar, 'available')
                                 .query(`
                                     UPDATE InventoryProducts 
@@ -24329,10 +24666,8 @@ module.exports = function (sql, pool, getStripe = null) {
                                     WHERE InventoryProductID = @inventoryProductId
                                 `);
 
-                            console.log('ProductInventory/Add - Updated initial inventory quantity:', initialQuantity);
+                            console.log('ProductInventory/Add - Updated product inventory quantity:', productAvailableQty);
 
-                            // Sync stock to Products table for CMS display (if ProductID is linked)
-                            // Check if this InventoryProduct is linked to a Products.ProductID
                             try {
                                 const productLinkResult = await transaction.request()
                                     .input('inventoryProductId', sql.Int, inventoryProductId)
@@ -24345,58 +24680,21 @@ module.exports = function (sql, pool, getStripe = null) {
                                 if (productLinkResult.recordset.length > 0 && productLinkResult.recordset[0].ProductID) {
                                     const linkedProductId = productLinkResult.recordset[0].ProductID;
                                     await syncInventoryToProductsStock(linkedProductId, transaction);
-                                    console.log(`[PRODUCT INVENTORY ADD] Synced stock to Products table for ProductID ${linkedProductId} (from InventoryProductID ${inventoryProductId})`);
-                                } else {
-                                    console.log(`[PRODUCT INVENTORY ADD] No ProductID linked for InventoryProductID ${inventoryProductId}, skipping sync to Products (new inventory product)`);
                                 }
                             } catch (syncErr) {
                                 console.error(`[PRODUCT INVENTORY ADD] Error syncing stock to Products for InventoryProductID ${inventoryProductId}:`, syncErr);
-                                // Don't fail the request if sync fails
                             }
                         }
 
-                        // Handle required materials (if InventoryProductMaterials table exists)
-                        if (requiredMaterials) {
-                            try {
-                                // Check if InventoryProductMaterials table exists
-                                const tableCheck = await transaction.request()
-                                    .query(`
-                                        SELECT COUNT(*) as tableExists
-                                        FROM INFORMATION_SCHEMA.TABLES 
-                                        WHERE TABLE_NAME = 'InventoryProductMaterials'
-                                    `);
-
-                                if (tableCheck.recordset[0].tableExists > 0) {
-                                    const materials = typeof requiredMaterials === 'string' ? JSON.parse(requiredMaterials) : requiredMaterials;
-                                    for (const material of materials) {
-                                        if (material.materialId && material.quantityRequired > 0) {
-                                            try {
-                                                await transaction.request()
-                                                    .input('inventoryProductId', sql.Int, inventoryProductId)
-                                                    .input('materialId', sql.Int, material.materialId)
-                                                    .input('quantityRequired', sql.Int, material.quantityRequired)
-                                                    .query(`
-                                                INSERT INTO InventoryProductMaterials (InventoryProductID, MaterialID, QuantityRequired)
-                                                VALUES (@inventoryProductId, @materialId, @quantityRequired)
-                                            `);
-                                            } catch (insertErr) {
-                                                console.log('Error inserting material:', insertErr.message);
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    console.log('InventoryProductMaterials table does not exist, skipping materials insert');
-                                }
-                            } catch (materialsErr) {
-                                console.log('Error handling required materials:', materialsErr.message);
-                            }
+                        const stockToConsume = productAvailableQty;
+                        if (stockToConsume > 0 && materialsCollected.length > 0) {
+                            await decreaseMaterialsForProduct(transaction, inventoryProductId, stockToConsume, materialsCollected);
                         }
 
                         await transaction.commit();
 
                         console.log('ProductInventory/Add - Product created successfully with ID:', inventoryProductId);
-                        req.flash('success', 'Product created successfully in inventory!');
-                        res.redirect('/Employee/Admin/ProductInventory');
+                        return respondSuccess(inventoryProductId);
                     } catch (err) {
                         await transaction.rollback();
                         console.error('ProductInventory/Add - Transaction error:', err);
@@ -24405,8 +24703,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 } catch (err) {
                     console.error('ProductInventory/Add - Error creating inventory product:', err);
                     console.error('ProductInventory/Add - Error stack:', err.stack);
-                    req.flash('error', 'Failed to create product: ' + err.message);
-                    res.redirect('/Employee/Admin/ProductInventory');
+                    return respondError('Failed to create product: ' + err.message, 500);
                 }
             });
 
@@ -24646,6 +24943,132 @@ module.exports = function (sql, pool, getStripe = null) {
             });
 
             // =============================================================================
+            // INVENTORY PRODUCT RESTOCK
+            // =============================================================================
+            router.post('/api/admin/inventory-products/restock', isAuthenticated, async (req, res) => {
+                try {
+                    await pool.connect();
+                    const inventoryProductId = parseInt(req.body.inventoryProductId, 10);
+                    const variationId = req.body.variationId ? parseInt(req.body.variationId, 10) : null;
+                    const addQty = parseInt(req.body.quantity, 10);
+
+                    if (!inventoryProductId || isNaN(inventoryProductId) || !addQty || addQty <= 0) {
+                        return res.json({ success: false, message: 'Product and a positive quantity are required.' });
+                    }
+
+                    const productResult = await pool.request()
+                        .input('id', sql.Int, inventoryProductId)
+                        .query(`
+                            SELECT InventoryProductID, ProductID,
+                                COALESCE(AvailableQuantity, 0) as AvailableQuantity,
+                                COALESCE(DamagedQuantity, 0) as DamagedQuantity,
+                                COALESCE(AvailableQuantity, 0) + COALESCE(DamagedQuantity, 0) as TotalQuantity
+                            FROM InventoryProducts
+                            WHERE InventoryProductID = @id AND IsActive = 1
+                        `);
+
+                    if (!productResult.recordset.length) {
+                        return res.json({ success: false, message: 'Product not found.' });
+                    }
+
+                    const product = productResult.recordset[0];
+                    const linkedProductId = product.ProductID || null;
+                    const hasVariations = await productHasActiveInventoryVariations(inventoryProductId);
+
+                    if (hasVariations) {
+                        if (!variationId) {
+                            return res.json({
+                                success: false,
+                                message: 'This product uses variation stock. Select a variation to restock.'
+                            });
+                        }
+
+                        const varCheck = await pool.request()
+                            .input('variationId', sql.Int, variationId)
+                            .input('inventoryProductId', sql.Int, inventoryProductId)
+                            .query(`
+                                SELECT VariationID FROM InventoryProductVariations
+                                WHERE VariationID = @variationId AND InventoryProductID = @inventoryProductId AND IsActive = 1
+                            `);
+
+                        if (!varCheck.recordset.length) {
+                            return res.json({ success: false, message: 'Variation not found for this product.' });
+                        }
+
+                        const restockTx = new sql.Transaction(pool);
+                        await restockTx.begin();
+                        try {
+                            await restockTx.request()
+                                .input('variationId', sql.Int, variationId)
+                                .input('addQty', sql.Int, addQty)
+                                .query(`
+                                    UPDATE InventoryProductVariations
+                                    SET Quantity = COALESCE(Quantity, 0) + @addQty,
+                                        AvailableQuantity = COALESCE(AvailableQuantity, 0) + @addQty
+                                    WHERE VariationID = @variationId
+                                `);
+                            await applyMaterialsDeltaForInventoryProduct(restockTx, inventoryProductId, addQty);
+                            await syncInventoryProductQtyFromVariations(inventoryProductId, restockTx);
+                            await restockTx.commit();
+                        } catch (restockVarErr) {
+                            await restockTx.rollback();
+                            throw restockVarErr;
+                        }
+
+                        try {
+                            await syncInventoryVariationToProductsVariation(variationId, null);
+                        } catch (syncErr) {
+                            console.error('[RESTOCK] Variation sync error:', syncErr);
+                        }
+
+                        return res.json({ success: true, message: `Added ${addQty} to variation stock.` });
+                    }
+
+                    if (variationId) {
+                        return res.json({
+                            success: false,
+                            message: 'This product has no variations. Restock product stock instead.'
+                        });
+                    }
+
+                    const restockProductTx = new sql.Transaction(pool);
+                    await restockProductTx.begin();
+                    try {
+                        await restockProductTx.request()
+                            .input('id', sql.Int, inventoryProductId)
+                            .input('addQty', sql.Int, addQty)
+                            .query(`
+                                UPDATE InventoryProducts
+                                SET AvailableQuantity = COALESCE(AvailableQuantity, 0) + @addQty,
+                                    InventoryStatus = CASE
+                                        WHEN COALESCE(AvailableQuantity, 0) + @addQty > 0 THEN 'available'
+                                        ELSE InventoryStatus
+                                    END
+                                WHERE InventoryProductID = @id
+                            `);
+                        await applyMaterialsDeltaForInventoryProduct(restockProductTx, inventoryProductId, addQty);
+                        await restockProductTx.commit();
+                    } catch (restockProdErr) {
+                        await restockProductTx.rollback();
+                        throw restockProdErr;
+                    }
+
+                    if (linkedProductId) {
+                        try {
+                            await syncInventoryToProductsStock(linkedProductId, null);
+                        } catch (syncErr) {
+                            console.error('[RESTOCK] Product sync error:', syncErr);
+                        }
+                    }
+
+                    return res.json({ success: true, message: `Added ${addQty} to product stock.` });
+                } catch (err) {
+                    console.error('Restock error:', err);
+                    return res.json({ success: false, message: 'Failed to restock: ' + err.message });
+                }
+            });
+
+            // =============================================================================
             // INVENTORY PRODUCT VARIATIONS ROUTES
             // =============================================================================
 
@@ -24731,6 +25154,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                 v.ProductID,
                                 v.InventoryProductID,
                                 v.VariationName,
+                                v.SKU,
                                 v.Color,
                                 v.Quantity,
                                 -- If AvailableQuantity is NULL or 0, use Quantity; otherwise use AvailableQuantity
@@ -24762,10 +25186,19 @@ module.exports = function (sql, pool, getStripe = null) {
                     const totalVariationQuantity = result.recordset
                         .reduce((sum, v) => sum + (v.Quantity || 0), 0);
 
-                    const variations = result.recordset.map((row) => ({
-                        ...row,
-                        VariationImageURL: normalizeProductAssetUrl(row.VariationImageURL) || row.VariationImageURL || null
-                    }));
+                    await ensureVariationMediaColumns(pool);
+                    const variations = [];
+                    for (const row of result.recordset) {
+                        let sku = row.SKU;
+                        if (!sku || !String(sku).trim()) {
+                            sku = await assignVariationSku(pool, row.VariationID, row.VariationName);
+                        }
+                        variations.push({
+                            ...row,
+                            SKU: sku,
+                            VariationImageURL: normalizeProductAssetUrl(row.VariationImageURL) || row.VariationImageURL || null
+                        });
+                    }
 
                     res.json({
                         success: true,
@@ -24784,11 +25217,15 @@ module.exports = function (sql, pool, getStripe = null) {
             });
 
             // Add new inventory product variation (supports both ProductID and InventoryProductID)
-            router.post('/api/admin/inventory-product-variations/add', isAuthenticated, variationUpload.single('variationImage'), async (req, res) => {
+            router.post('/api/admin/inventory-product-variations/add', isAuthenticated, productUpload.fields([
+                { name: 'variationMainImage', maxCount: 1 },
+                { name: 'variationThumbnail', maxCount: 4 },
+                { name: 'variationModel3d', maxCount: 1 }
+            ]), async (req, res) => {
                 try {
                     await pool.connect();
+                    await ensureVariationMediaColumns(pool);
                     console.log('Add inventory variation - body:', req.body);
-                    console.log('Add inventory variation - files:', req.file);
                     const { variationName, color, quantity, inventoryProductID, productID, price, isActive } = req.body;
 
                     // Support both productID and inventoryProductID
@@ -24911,11 +25348,10 @@ module.exports = function (sql, pool, getStripe = null) {
                     // Validation removed: total variation quantity can exceed product stock
                     // (User requested removal of this validation)
 
-                    // Handle image upload
-                    let imageUrl = null;
-                    if (req.file) {
-                        imageUrl = `/uploads/variations/${req.file.filename}`;
-                    }
+                    const mediaUrls = resolveVariationMediaUrls(
+                        parseSingleVariationMediaFiles(req.files),
+                        publicUrlFromMulterVariationFile
+                    );
 
                     // Insert variation - use ProductID or InventoryProductID based on what's available
                     const result = await pool.request()
@@ -24925,16 +25361,37 @@ module.exports = function (sql, pool, getStripe = null) {
                         .input('color', sql.NVarChar, color || null)
                         .input('quantity', sql.Int, variationQuantity)
                         .input('price', sql.Decimal(10, 2), price ? parseFloat(price) : null)
-                        .input('imageUrl', sql.NVarChar, imageUrl)
+                        .input('imageUrl', sql.NVarChar, mediaUrls.imageUrl)
+                        .input('thumbJson', sql.NVarChar, mediaUrls.thumbJson)
+                        .input('model3d', sql.NVarChar, mediaUrls.model3d)
                         .input('isActive', sql.Bit, isActive === '1' ? 1 : 0)
                         .input('createdBy', sql.Int, req.session.user ? req.session.user.id : null)
                         .query(`
-                            INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Quantity, Price, VariationImageURL, IsActive, CreatedBy)
+                            INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity, Price, VariationImageURL, ThumbnailURLs, Model3D, IsActive, CreatedBy)
                                 OUTPUT INSERTED.VariationID
-                            VALUES (@productID, @inventoryProductID, @variationName, @color, @quantity, @price, @imageUrl, @isActive, @createdBy)
+                            VALUES (@productID, @inventoryProductID, @variationName, @color, @quantity, @quantity, @price, @imageUrl, @thumbJson, @model3d, @isActive, @createdBy)
                         `);
 
                     const variationID = result.recordset[0].VariationID;
+                    const variationSku = await assignVariationSku(pool, variationID, variationName);
+
+                    const linkedProductResult = await pool.request()
+                        .input('inventoryProductId', sql.Int, actualInventoryProductID)
+                        .query('SELECT ProductID FROM InventoryProducts WHERE InventoryProductID = @inventoryProductId');
+                    const linkedProductId = linkedProductResult.recordset[0]?.ProductID;
+                    if (linkedProductId) {
+                        await upsertProductVariationWithId(pool, variationID, linkedProductId, {
+                            variationName,
+                            color: color || null,
+                            quantity: variationQuantity,
+                            price: price ? parseFloat(price) : null,
+                            imageUrl: mediaUrls.imageUrl,
+                            thumbnailUrls: mediaUrls.thumbnailUrls,
+                            model3d: mediaUrls.model3d,
+                            sku: variationSku
+                        }, req.session.user?.id);
+                        await syncInventoryVariationToProductsVariation(variationID, null);
+                    }
 
                     // Sync variation stock to ProductVariations table for CMS display (if ProductVariation exists)
                     console.log(`[VARIATION ADD] ====== STARTING VARIATION SYNC PROCESS ======`);
@@ -24975,6 +25432,14 @@ module.exports = function (sql, pool, getStripe = null) {
                         console.error(`[VARIATION ADD] ❌ Error syncing variation stock to ProductVariations for VariationID ${variationID}:`, syncErr);
                         console.error(`[VARIATION ADD] Error details:`, syncErr.message, syncErr.stack);
                         // Don't fail the request if sync fails
+                    }
+
+                    if (actualInventoryProductID) {
+                        try {
+                            await syncInventoryProductQtyFromVariations(actualInventoryProductID);
+                        } catch (syncProdErr) {
+                            console.error('[VARIATION ADD] Error syncing product qty from variations:', syncProdErr);
+                        }
                     }
 
                     res.json({
@@ -25086,7 +25551,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     // Handle image upload
                     let imageUrl = currentImageURL;
                     if (req.file) {
-                        imageUrl = `/uploads/variations/${req.file.filename}`;
+                        imageUrl = publicUrlFromMulterVariationFile(req.file);
                     }
 
                     // Update variation - preserve ProductID or InventoryProductID
@@ -25164,6 +25629,14 @@ module.exports = function (sql, pool, getStripe = null) {
                         // Don't fail the request if sync fails
                     }
 
+                    if (inventoryProductID) {
+                        try {
+                            await syncInventoryProductQtyFromVariations(inventoryProductID);
+                        } catch (syncProdErr) {
+                            console.error('[VARIATION EDIT] Error syncing product qty from variations:', syncProdErr);
+                        }
+                    }
+
                     res.json({
                         success: true,
                         message: 'Variation updated successfully.'
@@ -25189,9 +25662,9 @@ module.exports = function (sql, pool, getStripe = null) {
                         .query(`
                             SELECT 
                                 VariationID,
+                                InventoryProductID,
                                 VariationName,
                                 Quantity,
-                                -- If AvailableQuantity is NULL or 0, use Quantity; otherwise use AvailableQuantity
                                 CASE 
                                     WHEN AvailableQuantity IS NULL OR AvailableQuantity = 0 
                                     THEN Quantity
@@ -25201,7 +25674,9 @@ module.exports = function (sql, pool, getStripe = null) {
                                 COALESCE(RepairedQuantity, 0) as RepairedQuantity,
                                 COALESCE(DisposedQuantity, 0) as DisposedQuantity,
                                 COALESCE(Notes, '') as Notes,
-                                COALESCE(VariationImageURL, '') as VariationImageURL
+                                COALESCE(VariationImageURL, '') as VariationImageURL,
+                                ThumbnailURLs,
+                                Model3D
                             FROM InventoryProductVariations
                             WHERE VariationID = @variationID
                         `);
@@ -25227,11 +25702,15 @@ module.exports = function (sql, pool, getStripe = null) {
             });
 
             // Update variation status quantities
-            router.post('/api/admin/inventory-product-variations/update-status', isAuthenticated, variationUpload.single('variationImage'), async (req, res) => {
+            router.post('/api/admin/inventory-product-variations/update-status', isAuthenticated, productUpload.fields([
+                { name: 'variationMainImage', maxCount: 1 },
+                { name: 'variationThumbnail', maxCount: 4 },
+                { name: 'variationModel3d', maxCount: 1 }
+            ]), async (req, res) => {
                 try {
                     await pool.connect();
+                    await ensureVariationMediaColumns(pool);
                     console.log('Update variation status request body:', req.body);
-                    console.log('Uploaded file:', req.file);
 
                     // Handle form data (from FormData)
                     const variationID = req.body.variationID;
@@ -25256,12 +25735,13 @@ module.exports = function (sql, pool, getStripe = null) {
                         hasImage: !!req.file
                     });
 
-                    // Handle variation image upload if provided
-                    let variationImageUrl = null;
-                    if (req.file) {
-                        variationImageUrl = `/uploads/variations/${req.file.filename}`;
-                        console.log('New variation image uploaded:', variationImageUrl);
-                    }
+                    const uploadedMedia = resolveVariationMediaUrls(
+                        parseSingleVariationMediaFiles(req.files),
+                        publicUrlFromMulterVariationFile
+                    );
+                    const hasNewMain = !!uploadedMedia.imageUrl;
+                    const hasNewThumbs = uploadedMedia.thumbnailUrls && uploadedMedia.thumbnailUrls.length > 0;
+                    const hasNewModel = !!uploadedMedia.model3d;
 
                     // Validation: quantities cannot be negative
                     if (availableQty < 0 || damagedQty < 0 || repairedQty < 0 || disposedQty < 0) {
@@ -25302,26 +25782,30 @@ module.exports = function (sql, pool, getStripe = null) {
                         });
                     }
 
+                    const inventoryProductId = variationCheck.recordset[0].InventoryProductID;
                     const oldQuantity = variationCheck.recordset[0].Quantity || 0;
-                    console.log('Old quantity:', oldQuantity, 'New quantity:', totalQty);
+                    const stockDelta = totalQty - oldQuantity;
+                    console.log('Old quantity:', oldQuantity, 'New quantity:', totalQty, 'Stock delta:', stockDelta);
 
-                    // Get current variation image URL if not updating
-                    let finalVariationImageUrl = variationImageUrl;
-                    if (!finalVariationImageUrl) {
-                        const currentImageResult = await pool.request()
-                            .input('variationID', sql.Int, parsedVariationID)
-                            .query(`
-                                SELECT VariationImageURL 
-                                FROM InventoryProductVariations 
-                                WHERE VariationID = @variationID
-                            `);
-                        if (currentImageResult.recordset.length > 0) {
-                            finalVariationImageUrl = currentImageResult.recordset[0].VariationImageURL;
-                        }
-                    }
+                    const currentMediaResult = await pool.request()
+                        .input('variationID', sql.Int, parsedVariationID)
+                        .query(`
+                            SELECT VariationImageURL, ThumbnailURLs, Model3D
+                            FROM InventoryProductVariations
+                            WHERE VariationID = @variationID
+                        `);
+                    const currentMedia = currentMediaResult.recordset[0] || {};
+                    const finalVariationImageUrl = hasNewMain
+                        ? uploadedMedia.imageUrl
+                        : (currentMedia.VariationImageURL || null);
+                    const finalThumbJson = hasNewThumbs
+                        ? uploadedMedia.thumbJson
+                        : (currentMedia.ThumbnailURLs || null);
+                    const finalModel3d = hasNewModel
+                        ? uploadedMedia.model3d
+                        : (currentMedia.Model3D || null);
 
-                    // Update variation status quantities and image
-                    let updateQuery = `
+                    const updateQuery = `
                             UPDATE InventoryProductVariations 
                             SET AvailableQuantity = @availableQuantity,
                                 DamagedQuantity = @damagedQuantity,
@@ -25329,15 +25813,11 @@ module.exports = function (sql, pool, getStripe = null) {
                                 DisposedQuantity = @disposedQuantity,
                                 Quantity = @totalQuantity,
                                 Notes = @notes,
+                                VariationImageURL = @variationImageUrl,
+                                ThumbnailURLs = @thumbJson,
+                                Model3D = @model3d,
                                 UpdatedAt = GETDATE()
-                    `;
-
-                    if (variationImageUrl) {
-                        updateQuery += `, VariationImageURL = @variationImageUrl`;
-                    }
-
-                    updateQuery += `
-                            WHERE VariationID = @variationID
+                            WHERE VariationID = @variationID;
                             
                             SELECT 
                                 VariationID,
@@ -25345,38 +25825,69 @@ module.exports = function (sql, pool, getStripe = null) {
                                 DamagedQuantity,
                                 RepairedQuantity,
                                 DisposedQuantity,
-                            Quantity,
-                            VariationImageURL
+                                Quantity,
+                                VariationImageURL,
+                                ThumbnailURLs,
+                                Model3D
                             FROM InventoryProductVariations
-                        WHERE VariationID = @variationID
+                            WHERE VariationID = @variationID
                     `;
 
-                    const updateRequest = pool.request()
-                        .input('variationID', sql.Int, parsedVariationID)
-                        .input('availableQuantity', sql.Int, availableQty)
-                        .input('damagedQuantity', sql.Int, damagedQty)
-                        .input('repairedQuantity', sql.Int, repairedQty)
-                        .input('disposedQuantity', sql.Int, disposedQty)
-                        .input('totalQuantity', sql.Int, totalQty)
-                        .input('notes', sql.NVarChar, notes || null);
+                    const variationTransaction = new sql.Transaction(pool);
+                    await variationTransaction.begin();
 
-                    if (variationImageUrl) {
-                        updateRequest.input('variationImageUrl', sql.NVarChar, variationImageUrl);
-                    }
-
-                    const updateResult = await updateRequest.query(updateQuery);
-
-                    // Also update ProductVariations.VariationImageURL if variation image was updated
-                    if (variationImageUrl) {
-                        await pool.request()
+                    let updateResult;
+                    try {
+                        updateResult = await variationTransaction.request()
                             .input('variationID', sql.Int, parsedVariationID)
-                            .input('variationImageUrl', sql.NVarChar, variationImageUrl)
+                            .input('availableQuantity', sql.Int, availableQty)
+                            .input('damagedQuantity', sql.Int, damagedQty)
+                            .input('repairedQuantity', sql.Int, repairedQty)
+                            .input('disposedQuantity', sql.Int, disposedQty)
+                            .input('totalQuantity', sql.Int, totalQty)
+                            .input('notes', sql.NVarChar, notes || null)
+                            .input('variationImageUrl', sql.NVarChar, finalVariationImageUrl)
+                            .input('thumbJson', sql.NVarChar, finalThumbJson)
+                            .input('model3d', sql.NVarChar, finalModel3d)
+                            .query(updateQuery);
+
+                        if (stockDelta !== 0 && inventoryProductId) {
+                            await applyMaterialsDeltaForInventoryProduct(variationTransaction, inventoryProductId, stockDelta);
+                        }
+
+                        if (req.body.recipeMaterials !== undefined && req.body.recipeMaterials !== null && inventoryProductId) {
+                            let recipeData = [];
+                            try {
+                                recipeData = typeof req.body.recipeMaterials === 'string'
+                                    ? JSON.parse(req.body.recipeMaterials)
+                                    : req.body.recipeMaterials;
+                            } catch (recipeParseErr) {
+                                console.error('[MATERIALS] variation recipeMaterials parse error:', recipeParseErr.message);
+                                throw new Error('Invalid recipe data.');
+                            }
+                            if (Array.isArray(recipeData)) {
+                                await saveInventoryProductMaterials(variationTransaction, inventoryProductId, recipeData);
+                            }
+                        }
+
+                        await variationTransaction.request()
+                            .input('variationID', sql.Int, parsedVariationID)
+                            .input('variationImageUrl', sql.NVarChar, finalVariationImageUrl)
+                            .input('thumbJson', sql.NVarChar, finalThumbJson)
+                            .input('model3d', sql.NVarChar, finalModel3d)
                             .query(`
                                 UPDATE ProductVariations 
-                                SET VariationImageURL = @variationImageUrl
-                            WHERE VariationID = @variationID
-                        `);
-                        console.log('Updated ProductVariations.VariationImageURL:', variationImageUrl);
+                                SET VariationImageURL = @variationImageUrl,
+                                    ThumbnailURLs = @thumbJson,
+                                    Model3D = @model3d,
+                                    UpdatedAt = GETDATE()
+                                WHERE VariationID = @variationID
+                            `);
+
+                        await variationTransaction.commit();
+                    } catch (variationTxErr) {
+                        await variationTransaction.rollback();
+                        throw variationTxErr;
                     }
 
                     console.log('Update result rows affected:', updateResult.rowsAffected);
@@ -25430,6 +25941,14 @@ module.exports = function (sql, pool, getStripe = null) {
                         console.error(`[VARIATION UPDATE] ❌ Error syncing variation stock to ProductVariations for VariationID ${parsedVariationID}:`, syncErr);
                         console.error(`[VARIATION UPDATE] Error details:`, syncErr.message, syncErr.stack);
                         // Don't fail the request if sync fails
+                    }
+
+                    if (inventoryProductId) {
+                        try {
+                            await syncInventoryProductQtyFromVariations(inventoryProductId);
+                        } catch (syncProdErr) {
+                            console.error('[VARIATION UPDATE] Error syncing product qty from variations:', syncProdErr);
+                        }
                     }
 
                     res.json({
@@ -26024,9 +26543,58 @@ module.exports = function (sql, pool, getStripe = null) {
                             };
 
                             console.log(`[INVENTORY UPDATE] Product ${productId}:`, inventoryChange);
+
+                            const currentStockTotal = (currentAvailable || 0) + (currentDamaged || 0);
+                            const newStockTotal = quantities.available + quantities.damaged;
+                            const stockDelta = newStockTotal - currentStockTotal;
+                            if (stockDelta !== 0) {
+                                await applyMaterialsDeltaForInventoryProduct(transaction, parseInt(productId, 10), stockDelta);
+                            }
+
+                            if (req.body.recipeMaterials !== undefined && req.body.recipeMaterials !== null) {
+                                let recipeData = [];
+                                try {
+                                    recipeData = typeof req.body.recipeMaterials === 'string'
+                                        ? JSON.parse(req.body.recipeMaterials)
+                                        : req.body.recipeMaterials;
+                                } catch (recipeParseErr) {
+                                    console.error('[MATERIALS] recipeMaterials parse error:', recipeParseErr.message);
+                                    throw new Error('Invalid recipe data.');
+                                }
+                                if (Array.isArray(recipeData)) {
+                                    await saveInventoryProductMaterials(transaction, parseInt(productId, 10), recipeData);
+                                }
+                            }
+
+                            const syncedVariationIds = await syncInventoryVariationsFromProduct(
+                                parseInt(productId, 10),
+                                quantities,
+                                transaction
+                            );
+                            if (syncedVariationIds.length > 0) {
+                                console.log(`[INVENTORY UPDATE] Synced ${syncedVariationIds.length} variation(s) from product ${productId}`);
+                            }
                         }
 
                         await transaction.commit();
+
+                        try {
+                            const variationIdsToSync = await pool.request()
+                                .input('inventoryProductId', sql.Int, parseInt(productId, 10))
+                                .query(`
+                                    SELECT VariationID FROM InventoryProductVariations
+                                    WHERE InventoryProductID = @inventoryProductId AND IsActive = 1
+                                `);
+                            for (const row of variationIdsToSync.recordset || []) {
+                                try {
+                                    await syncInventoryVariationToProductsVariation(row.VariationID, null);
+                                } catch (varSyncErr) {
+                                    console.error('[INVENTORY UPDATE] Variation CMS sync error:', varSyncErr);
+                                }
+                            }
+                        } catch (postSyncErr) {
+                            console.error('[INVENTORY UPDATE] Post-commit variation sync error:', postSyncErr);
+                        }
 
                         // Sync stock to Products table for CMS display
                         // Find ProductID from InventoryProducts table (InventoryProducts.ProductID links to Products.ProductID)
@@ -26082,9 +26650,12 @@ module.exports = function (sql, pool, getStripe = null) {
                             // Don't fail the request if sync fails
                         }
 
+                        const hasVariations = await productHasActiveInventoryVariations(parseInt(productId, 10));
                         res.json({
                             success: true,
-                            message: 'Inventory quantities updated successfully'
+                            message: hasVariations
+                                ? 'Inventory and linked product variations updated successfully.'
+                                : 'Inventory quantities updated successfully.'
                         });
                     } catch (err) {
                         await transaction.rollback();
@@ -26323,6 +26894,169 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
+    // Inventory product restock (top-level — always registered)
+    router.post('/api/admin/inventory-products/restock', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const inventoryProductId = parseInt(req.body.inventoryProductId, 10);
+            const variationId = req.body.variationId ? parseInt(req.body.variationId, 10) : null;
+            const addQty = parseInt(req.body.quantity, 10);
+
+            if (!inventoryProductId || isNaN(inventoryProductId) || !addQty || addQty <= 0) {
+                return res.json({ success: false, message: 'Product and a positive quantity are required.' });
+            }
+
+            const productResult = await pool.request()
+                .input('id', sql.Int, inventoryProductId)
+                .query(`
+                    SELECT InventoryProductID, ProductID,
+                        COALESCE(AvailableQuantity, 0) as AvailableQuantity,
+                        COALESCE(DamagedQuantity, 0) as DamagedQuantity,
+                        COALESCE(AvailableQuantity, 0) + COALESCE(DamagedQuantity, 0) as TotalQuantity
+                    FROM InventoryProducts
+                    WHERE InventoryProductID = @id AND IsActive = 1
+                `);
+
+            if (!productResult.recordset.length) {
+                return res.json({ success: false, message: 'Product not found.' });
+            }
+
+            const product = productResult.recordset[0];
+            const linkedProductId = product.ProductID || null;
+            const hasVariations = await productHasActiveInventoryVariations(inventoryProductId);
+
+            if (hasVariations) {
+                if (!variationId) {
+                    return res.json({
+                        success: false,
+                        message: 'This product uses variation stock. Select a variation to restock.'
+                    });
+                }
+
+                const varCheck = await pool.request()
+                    .input('variationId', sql.Int, variationId)
+                    .input('inventoryProductId', sql.Int, inventoryProductId)
+                    .query(`
+                        SELECT VariationID FROM InventoryProductVariations
+                        WHERE VariationID = @variationId AND InventoryProductID = @inventoryProductId AND IsActive = 1
+                    `);
+
+                if (!varCheck.recordset.length) {
+                    return res.json({ success: false, message: 'Variation not found for this product.' });
+                }
+
+                const restockVarTx = new sql.Transaction(pool);
+                await restockVarTx.begin();
+                try {
+                    await restockVarTx.request()
+                        .input('variationId', sql.Int, variationId)
+                        .input('addQty', sql.Int, addQty)
+                        .query(`
+                            UPDATE InventoryProductVariations
+                            SET Quantity = COALESCE(Quantity, 0) + @addQty,
+                                AvailableQuantity = COALESCE(AvailableQuantity, 0) + @addQty
+                            WHERE VariationID = @variationId
+                        `);
+                    await applyMaterialsDeltaForInventoryProduct(restockVarTx, inventoryProductId, addQty);
+                    await syncInventoryProductQtyFromVariations(inventoryProductId, restockVarTx);
+                    await restockVarTx.commit();
+                } catch (restockVarTxErr) {
+                    await restockVarTx.rollback();
+                    throw restockVarTxErr;
+                }
+
+                try {
+                    await syncInventoryVariationToProductsVariation(variationId, null);
+                } catch (syncErr) {
+                    console.error('[RESTOCK] Variation sync error:', syncErr);
+                }
+
+                return res.json({ success: true, message: `Added ${addQty} to variation stock.` });
+            }
+
+            if (variationId) {
+                return res.json({
+                    success: false,
+                    message: 'This product has no variations. Restock product stock instead.'
+                });
+            }
+
+            const restockProdTxTop = new sql.Transaction(pool);
+            await restockProdTxTop.begin();
+            try {
+                await restockProdTxTop.request()
+                    .input('id', sql.Int, inventoryProductId)
+                    .input('addQty', sql.Int, addQty)
+                    .query(`
+                        UPDATE InventoryProducts
+                        SET AvailableQuantity = COALESCE(AvailableQuantity, 0) + @addQty,
+                            InventoryStatus = CASE
+                                WHEN COALESCE(AvailableQuantity, 0) + @addQty > 0 THEN 'available'
+                                ELSE InventoryStatus
+                            END
+                        WHERE InventoryProductID = @id
+                    `);
+                await applyMaterialsDeltaForInventoryProduct(restockProdTxTop, inventoryProductId, addQty);
+                await restockProdTxTop.commit();
+            } catch (restockProdTxTopErr) {
+                await restockProdTxTop.rollback();
+                throw restockProdTxTopErr;
+            }
+
+            if (linkedProductId) {
+                try {
+                    await syncInventoryToProductsStock(linkedProductId, null);
+                } catch (syncErr) {
+                    console.error('[RESTOCK] Product sync error:', syncErr);
+                }
+            }
+
+            return res.json({ success: true, message: `Added ${addQty} to product stock.` });
+        } catch (err) {
+            console.error('Restock error:', err);
+            return res.json({ success: false, message: 'Failed to restock: ' + err.message });
+        }
+    });
+
+    router.get('/api/admin/inventory-products/:id/materials', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const inventoryProductId = parseInt(req.params.id, 10);
+            if (!inventoryProductId || isNaN(inventoryProductId)) {
+                return res.json({ success: false, message: 'Invalid inventory product ID', materials: [] });
+            }
+
+            let materials = [];
+            try {
+                const result = await pool.request()
+                    .input('inventoryProductId', sql.Int, inventoryProductId)
+                    .query(`
+                        SELECT ipm.MaterialID, ipm.QuantityRequired, rm.Name as MaterialName, rm.Unit
+                        FROM InventoryProductMaterials ipm
+                        INNER JOIN RawMaterials rm ON ipm.MaterialID = rm.MaterialID
+                        WHERE ipm.InventoryProductID = @inventoryProductId AND rm.IsActive = 1
+                        ORDER BY rm.Name
+                    `);
+                materials = result.recordset || [];
+            } catch (tableErr) {
+                console.log('[MATERIALS] InventoryProductMaterials fetch:', tableErr.message);
+            }
+
+            if (materials.length === 0) {
+                const recipeRows = await getInventoryProductMaterials(pool, inventoryProductId);
+                materials = recipeRows.map((m) => ({
+                    MaterialID: m.materialId,
+                    QuantityRequired: m.quantityRequired
+                }));
+            }
+
+            res.json({ success: true, materials });
+        } catch (err) {
+            console.error('Error fetching inventory product materials:', err);
+            res.json({ success: false, message: 'Failed to load recipe.', materials: [] });
+        }
+    });
+
     // =============================================================================
     // INVENTORY ROUTES (All roles can access by default)
     // =============================================================================
@@ -26406,7 +27140,8 @@ module.exports = function (sql, pool, getStripe = null) {
         res.render('EmpLogin/EmpLogin', {
             title: 'Login',
             error: req.flash('error'),
-            success: req.flash('success')
+            success: req.flash('success'),
+            email: req.flash('email')[0] || ''
         });
     });
 
@@ -26431,7 +27166,8 @@ module.exports = function (sql, pool, getStripe = null) {
         res.render('EmpLogin/EmpLogin', {
             title: 'Employee Login',
             error: req.flash('error'),
-            success: req.flash('success')
+            success: req.flash('success'),
+            email: req.flash('email')[0] || ''
         });
     });
 
@@ -26439,14 +27175,16 @@ module.exports = function (sql, pool, getStripe = null) {
     router.post('/auth/login', async (req, res) => {
         try {
             const { email, password, rememberMe } = req.body;
+            const loginIdentifier = typeof email === 'string' ? email.trim() : '';
 
             console.log('=== LOGIN ATTEMPT ===');
-            console.log('Email:', email);
+            console.log('Login identifier:', loginIdentifier);
             console.log('Password provided:', password ? 'Yes' : 'No');
 
-            if (!email || !password) {
-                console.log('Missing email or password');
-                req.flash('error', 'Email and password are required.');
+            if (!loginIdentifier || !password) {
+                console.log('Missing login identifier or password');
+                req.flash('error', 'Email or username and password are required.');
+                if (loginIdentifier) req.flash('email', loginIdentifier);
                 return res.redirect('/login');
             }
 
@@ -26454,14 +27192,19 @@ module.exports = function (sql, pool, getStripe = null) {
             await pool.connect();
             console.log('Database connected successfully');
 
-            // Find user by email using plain text query
+            // Find user by email or username (case-insensitive)
             const userResult = await pool.request()
-                .input('email', sql.NVarChar, email)
-                .query('SELECT * FROM Users WHERE Email = @email');
+                .input('loginId', sql.NVarChar, loginIdentifier)
+                .query(`
+                    SELECT TOP 1 *
+                    FROM Users
+                    WHERE LOWER(LTRIM(RTRIM(Email))) = LOWER(@loginId)
+                       OR LOWER(LTRIM(RTRIM(Username))) = LOWER(@loginId)
+                `);
 
             const user = userResult.recordset[0];
 
-            console.log('Login attempt for email:', email);
+            console.log('Login attempt for:', loginIdentifier);
             console.log('User found:', user ? 'Yes' : 'No');
             if (user) {
                 console.log('User details:', {
@@ -26475,7 +27218,8 @@ module.exports = function (sql, pool, getStripe = null) {
             }
 
             if (!user) {
-                req.flash('error', 'Invalid email or password.');
+                req.flash('error', 'Invalid email, username, or password.');
+                req.flash('email', loginIdentifier);
                 return res.redirect('/login');
             }
 
@@ -26486,7 +27230,8 @@ module.exports = function (sql, pool, getStripe = null) {
 
             if (passwordResult.recordset.length === 0) {
                 console.log('No password hash found for user');
-                req.flash('error', 'Invalid email or password.');
+                req.flash('error', 'Invalid email, username, or password.');
+                req.flash('email', loginIdentifier);
                 return res.redirect('/login');
             }
 
@@ -26544,7 +27289,8 @@ module.exports = function (sql, pool, getStripe = null) {
                     `Failed login attempt - incorrect password from ${req.ip || 'unknown IP'}`
                 );
 
-                req.flash('error', 'Invalid email or password.');
+                req.flash('error', 'Invalid email, username, or password.');
+                req.flash('email', loginIdentifier);
                 return res.redirect('/login');
             }
 
@@ -28011,10 +28757,12 @@ module.exports = function (sql, pool, getStripe = null) {
             if (status !== 'Receive' && status !== 'Received') {
                 return res.status(400).json({ success: false, message: 'Order is not in a receivable state.' });
             }
-            // If it's a replacement or refund order, mark as 'Completed Returned', otherwise 'Completed'
-            const newStatus = (orderData.ActionType === 'replacement' || orderData.ActionType === 'refund')
-                ? 'Completed Returned'
-                : 'Completed';
+            let newStatus = 'Completed';
+            if (orderData.ActionType === 'replacement') {
+                newStatus = 'Completed Returned';
+            } else if (orderData.ActionType === 'refund') {
+                newStatus = 'Refunded';
+            }
 
             // Update status
             await pool.request()
@@ -28674,8 +29422,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     }
                 }
             }
-            // Update order status to Processing so it appears in OrdersProcessing page
-            // This happens after pickup - order is ready for replacement processing
+            // Move to Processing for replacement delivery (Orders Processing page, not Returned Orders)
             await transaction.request()
                 .input('orderId', sql.Int, orderId)
                 .query(`
@@ -28686,7 +29433,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
             await transaction.commit();
 
-            console.log(`[REPLACEMENT] ✅ Order ${orderId} moved to Processing status for replacement delivery`);
+            console.log(`[REPLACEMENT] ✅ Order ${orderId} moved to Orders Processing for replacement delivery`);
 
             return res.json({
                 success: true,
@@ -31095,32 +31842,22 @@ module.exports = function (sql, pool, getStripe = null) {
     // PRODUCT MANAGEMENT ROUTES
     // =============================================================================
 
-    // GET route for Admin Products page
-    router.get('/Employee/Admin/Products', isAuthenticated, async (req, res) => {
+    // Admin Products page removed — catalog is managed via Product Inventory only
+    router.get('/Employee/Admin/Products', isAuthenticated, (req, res) => {
+        const q = new URLSearchParams(req.query).toString();
+        return res.redirect('/Employee/Admin/ProductInventory' + (q ? `?${q}` : ''));
+    });
+
+    router.get('/Employee/Admin/Products/_legacy', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
-            // Keep Products.SKU aligned with ProductInventory (InventoryProducts) source of truth
+            // Catalog parent products have no SKU; sellable units use variation SKUs only
             await pool.request().query(`
                 UPDATE p
-                SET p.SKU = src.SKU
+                SET p.SKU = NULL, p.UpdatedAt = GETDATE()
                 FROM Products p
-                OUTER APPLY (
-                    SELECT TOP 1 ip.SKU
-                    FROM InventoryProducts ip
-                    WHERE ip.IsActive = 1
-                      AND ip.SKU IS NOT NULL
-                      AND (
-                           ip.ProductID = p.ProductID
-                        OR ip.InventoryProductID = p.ProductID
-                      )
-                    ORDER BY
-                        CASE WHEN ip.ProductID = p.ProductID THEN 0 ELSE 1 END,
-                        ip.DateUpdated DESC,
-                        ip.DateAdded DESC,
-                        ip.InventoryProductID DESC
-                ) src
-                WHERE src.SKU IS NOT NULL
-                  AND ISNULL(p.SKU, '') <> src.SKU
+                INNER JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
+                WHERE p.SKU IS NOT NULL
             `);
             const page = parseInt(req.query.page) || 1;
             const limit = 20;
@@ -32035,46 +32772,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     }
                 }
 
-                // Handle required materials
-                if (requiredMaterials) {
-                    const materials = JSON.parse(requiredMaterials);
-                    for (const material of materials) {
-                        if (material.materialId && material.quantityRequired > 0) {
-                            // Insert into ProductMaterials
-                            await transaction.request()
-                                .input('productId', sql.Int, productId)
-                                .input('materialId', sql.Int, material.materialId)
-                                .input('quantityRequired', sql.Int, material.quantityRequired)
-                                .query(`
-                                    INSERT INTO ProductMaterials (ProductID, MaterialID, QuantityRequired)
-                                    VALUES (@productId, @materialId, @quantityRequired)
-                                `);
-
-                            // Decrease raw material quantity
-                            const materialCheckResult = await transaction.request()
-                                .input('materialId', sql.Int, material.materialId)
-                                .query('SELECT QuantityAvailable, Name FROM RawMaterials WHERE MaterialID = @materialId AND IsActive = 1');
-
-                            if (materialCheckResult.recordset.length > 0) {
-                                const currentQuantity = materialCheckResult.recordset[0].QuantityAvailable || 0;
-                                const newQuantity = Math.max(0, currentQuantity - material.quantityRequired);
-
-                                await transaction.request()
-                                    .input('materialId', sql.Int, material.materialId)
-                                    .input('newQuantity', sql.Int, newQuantity)
-                                    .query(`
-                                        UPDATE RawMaterials 
-                                        SET QuantityAvailable = @newQuantity, LastUpdated = GETDATE()
-                                        WHERE MaterialID = @materialId
-                                    `);
-
-                                console.log(`[MATERIALS] Decreased ${materialCheckResult.recordset[0].Name} by ${material.quantityRequired} (${currentQuantity} -> ${newQuantity})`);
-                            } else {
-                                console.error(`[MATERIALS] Material ${material.materialId} not found in RawMaterials`);
-                            }
-                        }
-                    }
-                }
+                // Raw material recipes are managed on Product Inventory only (InventoryProductMaterials)
 
                 // Link InventoryProducts to Products by setting ProductID in InventoryProducts
                 console.log('[PRODUCT ADD] ====== STARTING LINK PROCESS ======');
@@ -32374,88 +33072,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     }
                 }
 
-                // Handle required materials
-                // First, get old materials to restore quantities
-                const oldMaterialsResult = await transaction.request()
-                    .input('productId', sql.Int, productid)
-                    .query(`
-                        SELECT MaterialID, QuantityRequired 
-                        FROM ProductMaterials 
-                        WHERE ProductID = @productId
-                    `);
-
-                const oldMaterials = oldMaterialsResult.recordset || [];
-
-                // Restore quantities for old materials (increase raw material quantity)
-                for (const oldMaterial of oldMaterials) {
-                    const materialCheckResult = await transaction.request()
-                        .input('materialId', sql.Int, oldMaterial.MaterialID)
-                        .query('SELECT QuantityAvailable, Name FROM RawMaterials WHERE MaterialID = @materialId AND IsActive = 1');
-
-                    if (materialCheckResult.recordset.length > 0) {
-                        const currentQuantity = materialCheckResult.recordset[0].QuantityAvailable || 0;
-                        const restoredQuantity = currentQuantity + oldMaterial.QuantityRequired;
-
-                        await transaction.request()
-                            .input('materialId', sql.Int, oldMaterial.MaterialID)
-                            .input('restoredQuantity', sql.Int, restoredQuantity)
-                            .query(`
-                                UPDATE RawMaterials 
-                                SET QuantityAvailable = @restoredQuantity, LastUpdated = GETDATE()
-                                WHERE MaterialID = @materialId
-                            `);
-
-                        console.log(`[MATERIALS] Restored ${materialCheckResult.recordset[0].Name} by ${oldMaterial.QuantityRequired} (${currentQuantity} -> ${restoredQuantity})`);
-                    } else {
-                        console.error(`[MATERIALS] Material ${oldMaterial.MaterialID} not found in RawMaterials during restore`);
-                    }
-                }
-
-                // Delete existing materials
-                await transaction.request()
-                    .input('productId', sql.Int, productid)
-                    .query('DELETE FROM ProductMaterials WHERE ProductID = @productId');
-
-                // Insert new materials and decrease quantities
-                if (requiredMaterials) {
-                    const materials = JSON.parse(requiredMaterials);
-                    for (const material of materials) {
-                        if (material.materialId && material.quantityRequired > 0) {
-                            // Insert into ProductMaterials
-                            await transaction.request()
-                                .input('productId', sql.Int, productid)
-                                .input('materialId', sql.Int, material.materialId)
-                                .input('quantityRequired', sql.Int, material.quantityRequired)
-                                .query(`
-                                    INSERT INTO ProductMaterials (ProductID, MaterialID, QuantityRequired)
-                                    VALUES (@productId, @materialId, @quantityRequired)
-                                `);
-
-                            // Decrease raw material quantity
-                            const materialCheckResult = await transaction.request()
-                                .input('materialId', sql.Int, material.materialId)
-                                .query('SELECT QuantityAvailable, Name FROM RawMaterials WHERE MaterialID = @materialId AND IsActive = 1');
-
-                            if (materialCheckResult.recordset.length > 0) {
-                                const currentQuantity = materialCheckResult.recordset[0].QuantityAvailable || 0;
-                                const newQuantity = Math.max(0, currentQuantity - material.quantityRequired);
-
-                                await transaction.request()
-                                    .input('materialId', sql.Int, material.materialId)
-                                    .input('newQuantity', sql.Int, newQuantity)
-                                    .query(`
-                                        UPDATE RawMaterials 
-                                        SET QuantityAvailable = @newQuantity, LastUpdated = GETDATE()
-                                        WHERE MaterialID = @materialId
-                                    `);
-
-                                console.log(`[MATERIALS] Decreased ${materialCheckResult.recordset[0].Name} by ${material.quantityRequired} (${currentQuantity} -> ${newQuantity})`);
-                            } else {
-                                console.error(`[MATERIALS] Material ${material.materialId} not found in RawMaterials`);
-                            }
-                        }
-                    }
-                }
+                // Raw material recipes are managed on Product Inventory only
 
                 await transaction.commit();
 
@@ -32833,7 +33450,7 @@ module.exports = function (sql, pool, getStripe = null) {
             // Handle image upload
             let imageUrl = null;
             if (req.file) {
-                imageUrl = `/uploads/variations/${req.file.filename}`;
+                imageUrl = publicUrlFromMulterVariationFile(req.file);
             }
 
             let variationID;
@@ -33032,7 +33649,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 // Delete old variation image
                 await deleteOldImageFile(currentImageUrl);
 
-                imageUrl = `/uploads/variations/${req.file.filename}`;
+                imageUrl = publicUrlFromMulterVariationFile(req.file);
             }
 
             // Build update query for variation

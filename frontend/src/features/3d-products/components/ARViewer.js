@@ -104,7 +104,7 @@ const ARViewer = ({ isOpen, onClose, product, modelPath }) => {
         clearTimeout(timeout);
       };
     }
-  }, [modelViewerRef.current, isARAvailable, isLoading]);
+  }, [isARAvailable, isLoading]);
 
   // Handle escape key to close modal
   useEffect(() => {

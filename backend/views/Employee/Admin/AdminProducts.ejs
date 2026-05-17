@@ -1020,7 +1020,7 @@
                             
                             <!-- Select from Inventory Products -->
                             <div class="form-group">
-                                <label for="selectInventoryProduct">Link to Inventory Product <span style="color: #dc3545;">*</span>:</label>
+                                <label for="selectInventoryProduct">Inventory Products <span style="color: #dc3545;">*</span>:</label>
                                 <select id="selectInventoryProduct" name="selectInventoryProduct" required style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
                                     <option value="">-- Select an inventory product --</option>
                                 </select>
@@ -1155,8 +1155,8 @@
                                 </div>
                             </div>
 
-                            <!-- Materials Section -->
-                            <div class="form-section">
+                            <!-- Materials: managed in Product Inventory only -->
+                            <div class="form-section" style="display:none !important;" aria-hidden="true">
                                 <div class="form-section-header" onclick="toggleFormSection('add', 'materials')">
                                     <h4>Required Materials</h4>
                                     <span class="form-section-toggle" id="addMaterialsToggle">▼</span>
@@ -1590,8 +1590,8 @@
                     </div>
                 </div>
 
-                <!-- Materials Section -->
-                <div class="form-section">
+                <!-- Materials: managed in Product Inventory only -->
+                <div class="form-section" style="display:none !important;" aria-hidden="true">
                     <div class="form-section-header" onclick="toggleFormSection('edit', 'materials')">
                         <h4>Required Materials</h4>
                         <span class="form-section-toggle" id="editMaterialsToggle">▼</span>
@@ -1649,7 +1649,7 @@
                     
                     <!-- Dropdown to link to inventory variations -->
                     <div style="margin-bottom: 15px;">
-                        <label for="selectInventoryVariation">Link to Inventory Variation <span style="color: #dc3545;">*</span>:</label>
+                        <label for="selectInventoryVariation">Inventory Variation <span style="color: #dc3545;">*</span>:</label>
                         <select id="selectInventoryVariation" required style="width: 100%; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
                             <option value="">-- Select an inventory variation --</option>
                         </select>
@@ -1792,9 +1792,6 @@
         document.getElementById('addProductBtn').addEventListener('click', function(event) {
             event.preventDefault();
             document.getElementById('addProductModal').classList.add('show');
-            document.getElementById('addMaterialsContainer').innerHTML = '';
-            addMaterialRow('add');
-            updateMaterialsSummary('add');
             
             // Load products from inventory
             loadInventoryProducts();
@@ -1861,9 +1858,6 @@
                 document.getElementById('stockquantity').value = '';
                 document.getElementById('category').value = '';
                 document.getElementById('inventoryProductId').value = '';
-                document.getElementById('addMaterialsContainer').innerHTML = '';
-                addMaterialRow('add');
-                updateMaterialsSummary('add');
                 // Clear dimensions
                 document.getElementById('length').value = '';
                 document.getElementById('width').value = '';
@@ -1991,19 +1985,6 @@
                         } catch (e) {
                             console.log('Error parsing dimensions:', e);
                         }
-                    }
-                    
-                    // Populate materials
-                    if (product.RequiredMaterials && product.RequiredMaterials.length > 0) {
-                        document.getElementById('addMaterialsContainer').innerHTML = '';
-                        product.RequiredMaterials.forEach((material, index) => {
-                            addMaterialRow('add', material.MaterialID, material.QuantityRequired);
-                        });
-                        updateMaterialsSummary('add');
-                    } else {
-                        document.getElementById('addMaterialsContainer').innerHTML = '';
-                        addMaterialRow('add');
-                        updateMaterialsSummary('add');
                     }
                     
                     // Note: Images and 3D model cannot be pre-populated from file inputs
@@ -2296,33 +2277,6 @@
                     }
                 }
 
-                // Clear existing materials
-                document.getElementById('editMaterialsContainer').innerHTML = '';
-
-                // Fetch and populate materials for editing
-                const productId = btn.getAttribute('data-id');
-                fetch(`/api/products/${productId}/materials`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success && data.materials.length > 0) {
-                            // Auto-expand materials section if there are existing materials
-                            expandFormSection('edit', 'materials');
-                            data.materials.forEach(pm => {
-                                addMaterialRow('edit', pm.MaterialID, pm.QuantityRequired);
-                            });
-                            updateMaterialsSummary('edit');
-                        } else {
-                            // If no materials, add one empty row
-                            addMaterialRow('edit');
-                            updateMaterialsSummary('edit');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error fetching product materials:', error);
-                        addMaterialRow('edit'); // Add an empty row on error
-                        updateMaterialsSummary('edit');
-                    });
-
                 editProductModal.classList.add('show');
             });
         });
@@ -2514,22 +2468,25 @@
             updateMaterialsSummary(type);
         }
 
-        document.getElementById('addMaterialRowBtn').addEventListener('click', () => {
-            expandFormSection('add', 'materials');
-            addMaterialRow('add');
-        });
-        document.getElementById('editMaterialRowBtn').addEventListener('click', () => {
-            expandFormSection('edit', 'materials');
-            addMaterialRow('edit');
-        });
+        const addMaterialRowBtnEl = document.getElementById('addMaterialRowBtn');
+        if (addMaterialRowBtnEl) {
+            addMaterialRowBtnEl.addEventListener('click', () => {
+                expandFormSection('add', 'materials');
+                addMaterialRow('add');
+            });
+        }
+        const editMaterialRowBtnEl = document.getElementById('editMaterialRowBtn');
+        if (editMaterialRowBtnEl) {
+            editMaterialRowBtnEl.addEventListener('click', () => {
+                expandFormSection('edit', 'materials');
+                addMaterialRow('edit');
+            });
+        }
 
         // Modify form submissions to include raw materials data
         document.getElementById('addProductForm').addEventListener('submit', function(event) {
             event.preventDefault();
             const formData = new FormData(this);
-            const requiredMaterials = getRequiredMaterials('add');
-            formData.append('requiredMaterials', JSON.stringify(requiredMaterials));
-            
             // Add dimensions data
             const dimensions = {
                 length: document.getElementById('length').value,
@@ -2565,9 +2522,6 @@
         document.getElementById('editProductForm').addEventListener('submit', function(event) {
             event.preventDefault();
             const formData = new FormData(this);
-            const requiredMaterials = getRequiredMaterials('edit');
-            formData.append('requiredMaterials', JSON.stringify(requiredMaterials));
-            
             // Add dimensions data
             const dimensions = {
                 length: document.getElementById('editLength').value,
@@ -2735,19 +2689,20 @@
                 html += `</table>`;
                 viewProductDetails.innerHTML = html;
                 // Fetch and display required materials
-                viewProductMaterials.innerHTML = '<div style="text-align:center;color:#888;">Loading required materials...</div>';
-                fetch(`/api/products/${btn.getAttribute('data-id')}/materials`)
+                viewProductMaterials.innerHTML = '<div style="text-align:center;color:#888;">Loading recipe...</div>';
+                const invIdForRecipe = btn.closest('tr')?.getAttribute('data-inventory-product-id');
+                fetch(invIdForRecipe ? `/api/admin/inventory-products/${invIdForRecipe}/materials` : '/api/admin/inventory-products/0/materials', { credentials: 'include' })
                     .then(res => res.json())
                     .then(data => {
                         if (data.success && data.materials.length > 0) {
-                            let matHtml = `<h4>Required Raw Materials</h4><table style='width:100%;border-collapse:collapse;margin-top:8px;'><tr><th style='text-align:left;'>Material</th><th style='text-align:right;'>Quantity Required</th></tr>`;
+                            let matHtml = `<h4>Production Recipe</h4><table style='width:100%;border-collapse:collapse;margin-top:8px;'><tr><th style='text-align:left;'>Material</th><th style='text-align:right;'>Qty / unit</th></tr>`;
                             data.materials.forEach(mat => {
                                 matHtml += `<tr><td>${mat.MaterialName}</td><td style='text-align:right;'>${mat.QuantityRequired}</td></tr>`;
                             });
                             matHtml += `</table>`;
                             viewProductMaterials.innerHTML = matHtml;
                         } else {
-                            viewProductMaterials.innerHTML = '<div style="color:#888;text-align:center;">No required raw materials set for this product.</div>';
+                            viewProductMaterials.innerHTML = '<div style="color:#888;text-align:center;">No recipe. Add in Product Inventory.</div>';
                         }
                     })
                     .catch(() => {

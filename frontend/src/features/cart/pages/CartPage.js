@@ -3,30 +3,22 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../../../shared/contexts/CartContext';
 import { useCurrency } from '../../../shared/contexts/CurrencyContext';
 import CartItem from '../components/CartItem';
-import AudioLoader from '../../../shared/components/ui/AudioLoader';
 import ConfirmationModal from '../../../shared/components/ui/ConfirmationModal';
 import PageHeader from '../../../shared/components/layout/PageHeader';
 import '../components/cart.css';
 import { 
   ShoppingCartIcon, 
-  ShoppingBagIcon,
-  TrashIcon, 
-  PlusIcon, 
-  MinusIcon,
-  CreditCardIcon,
-  CheckCircleIcon,
-  ArrowLeftIcon
+  ShoppingBagIcon
 } from '../../../shared/components/ui/SvgIcons';
 import '../components/cart-discounts.css';
 
 const Cart = () => {
     const navigate = useNavigate();
-    const { items, updateQuantity, removeFromCart, clearCart, getTotal, getSubtotal, getItemCount, CART_LIMITS, lastError } = useCart();
+    const { items, updateQuantity, removeFromCart, clearCart, CART_LIMITS, lastError } = useCart();
     const { formatPrice } = useCurrency();
     const [showClearConfirmation, setShowClearConfirmation] = useState(false);
     const [showRemoveModal, setShowRemoveModal] = useState(false);
     const [itemToRemove, setItemToRemove] = useState(null);
-    const [currentTheme, setCurrentTheme] = useState('default');
     const [showBulkOrderModal, setShowBulkOrderModal] = useState(false);
     const [itemIdForBulkOrder, setItemIdForBulkOrder] = useState(null);
     const [showInsufficientStockModal, setShowInsufficientStockModal] = useState(false);
@@ -53,29 +45,6 @@ const Cart = () => {
             return newChecked;
         });
     }, [items]);
-
-    // Detect current theme from body class
-    useEffect(() => {
-        const detectTheme = () => {
-            const bodyClasses = document.body.className;
-            if (bodyClasses.includes('theme-christmas')) {
-                setCurrentTheme('christmas');
-            } else if (bodyClasses.includes('theme-dark')) {
-                setCurrentTheme('dark');
-            } else {
-                setCurrentTheme('default');
-            }
-        };
-
-        // Initial detection
-        detectTheme();
-
-        // Listen for theme changes
-        const observer = new MutationObserver(detectTheme);
-        observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-
-        return () => observer.disconnect();
-    }, []);
 
     const handleCheck = (id, checked) => {
       setCheckedItems(prev => ({ ...prev, [id]: checked }));

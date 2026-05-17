@@ -1,11 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { 
   OrbitControls, 
-  useGLTF, 
   PerspectiveCamera,
-  Html,
-  useLoader
+  Html
 } from '@react-three/drei';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { LoadingManager } from 'three';
@@ -17,7 +15,7 @@ import PageHeader from '../../../shared/components/layout/PageHeader';
 import AudioLoader from '../../../shared/components/ui/AudioLoader';
 import CartSuccessModal from '../../../shared/components/ui/CartSuccessModal';
 import ConfirmationModal from '../../../shared/components/ui/ConfirmationModal';
-import { getImageUrl, getModel3dUrl } from '../../../shared/utils/imageUtils';
+import { getModel3dUrl } from '../../../shared/utils/imageUtils';
 import ARViewer from '../components/ARViewer';
 import QRCodeModal from '../components/QRCodeModal';
 import './3d-products.css';
@@ -33,7 +31,6 @@ const SafeOrbitControls = React.forwardRef(({ isMobile, ...props }, ref) => {
       // Add error handling for touch events
       const originalHandleTouchMoveDolly = controls.handleTouchMoveDolly;
       const originalHandleTouchMoveDollyPan = controls.handleTouchMoveDollyPan;
-      const originalOnTouchMove = controls.domElement?.onTouchMove;
       
       // Wrap touch handlers with error handling
       controls.handleTouchMoveDolly = function(event) {
@@ -168,74 +165,6 @@ const LoadingBox = () => {
       <meshStandardMaterial color="#FCBD45" wireframe />
     </mesh>
   );
-};
-
-// Inner component that uses useGLTF (must be called unconditionally)
-const GLTFLoaderInner = ({ blobUrl, onLoadingChange, onErrorChange }) => {
-  // useGLTF is called unconditionally - it will handle null/undefined gracefully or suspend
-  const gltf = useGLTF(blobUrl);
-  
-  useEffect(() => {
-    if (gltf && gltf.scene) {
-      console.log('GLTFLoaderInner - GLTF loaded and processed successfully');
-    }
-  }, [gltf]);
-  
-  useEffect(() => {
-    if (gltf && gltf.scene) {
-      try {
-        // Enhanced material processing for texture visibility
-        gltf.scene.traverse((child) => {
-          if (child.isMesh && child.material) {
-            // Apply texture visibility fixes
-            if (child.material.map) {
-              // Force optimal material properties for texture visibility
-              child.material.color.setHex(0xffffff); // White base color
-              child.material.roughness = 0.5; // Moderate roughness
-              child.material.metalness = 0.0; // Non-metallic
-              child.material.emissive.setHex(0x000000); // No emission
-              child.material.transparent = false;
-              child.material.opacity = 1.0;
-              child.material.side = 2; // THREE.FrontSide
-              
-              // Force texture updates
-              child.material.map.needsUpdate = true;
-              child.material.map.flipY = false;
-              child.material.map.generateMipmaps = true;
-              child.material.map.minFilter = 1006; // THREE.LinearMipmapLinearFilter
-              child.material.map.magFilter = 1003; // THREE.LinearFilter
-              child.material.map.wrapS = 1000; // THREE.RepeatWrapping
-              child.material.map.wrapT = 1000; // THREE.RepeatWrapping
-              // Ensure correct color space for textures on three@0.151
-              // color space left as default
-              
-              child.material.needsUpdate = true;
-            }
-          }
-        });
-        
-        if (onLoadingChange) onLoadingChange(false);
-        if (onErrorChange) onErrorChange(null);
-      } catch (processError) {
-        console.error('Error processing model:', processError);
-        if (onLoadingChange) onLoadingChange(false);
-        if (onErrorChange) onErrorChange(processError.message || 'Failed to process 3D model');
-      }
-    }
-  }, [gltf, onLoadingChange, onErrorChange]);
-
-  // Notify parent component about loading state
-  useEffect(() => {
-    if (onLoadingChange) {
-      onLoadingChange(!gltf || !gltf.scene);
-    }
-  }, [gltf, onLoadingChange]);
-
-  if (!gltf || !gltf.scene) {
-    return null;
-  }
-  
-  return <primitive object={gltf.scene} />;
 };
 
 // Model component that uses useLoader for better error handling
@@ -431,7 +360,8 @@ const ModelComponent = ({ modelPath, onLoadingChange, onErrorChange }) => {
       loadingRef.current = false;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [modelPath]); // Remove onLoadingChange and onErrorChange from dependencies to prevent re-runs
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per modelPath
+  }, [modelPath]);
   
   // Process the loaded model
   useEffect(() => {
@@ -469,6 +399,7 @@ const ModelComponent = ({ modelPath, onLoadingChange, onErrorChange }) => {
         if (onErrorChange) onErrorChange(processError.message || 'Failed to process 3D model');
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- process model when gltf loads; callbacks are stable enough
   }, [gltf, modelPath, onLoadingChange, onErrorChange]);
 
   if (loadError) {
@@ -827,7 +758,7 @@ const ThreeDProducts = () => {
       document.removeEventListener('securitypolicyviolation', handleCSPViolation);
     };
   }, []);
-  const [customizations, setCustomizations] = useState({
+  const [customizations] = useState({
     dimensions: {
       width: 60,
       depth: 51,
@@ -881,13 +812,10 @@ const ThreeDProducts = () => {
     }
   }, [isMobile, product, slug]);
 
-  const [priceAdjustment, setPriceAdjustment] = useState(0);
-  const [isResizing, setIsResizing] = useState(false);
   const [cameraAngle, setCameraAngle] = useState('front');
   const [isRotating360, setIsRotating360] = useState(false);
   const controlsRef = useRef();
   const cameraRef = useRef();
-  const modelRef = useRef();
 
   // Use the uploaded 3D model from the product, or show placeholder
   const modelPath = getModel3dUrl(product);
@@ -922,44 +850,6 @@ const ThreeDProducts = () => {
       });
     }
   }, [product, loadableModelPath]);
-
-  // Calculate price adjustments
-  useEffect(() => {
-    let adjustment = 0;
-    
-    // Hardware adjustments
-    if (customizations.colors.fittings === 'Premium') adjustment += 25;
-    if (customizations.colors.fittings === 'Luxury') adjustment += 50;
-    
-    setPriceAdjustment(adjustment);
-  }, [customizations]);
-
-  const handleCustomizationChange = (section, key, value) => {
-    setCustomizations(prev => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [key]: value
-      }
-    }));
-  };
-
-  // Handle dimension changes with visual feedback
-  const handleDimensionChange = (dimension, value) => {
-    setIsResizing(true);
-    handleCustomizationChange('dimensions', dimension, parseInt(value));
-    
-    // Reset resizing state after a short delay
-    setTimeout(() => {
-      setIsResizing(false);
-    }, 100);
-  };
-
-  const handleResetView = () => {
-    if (controlsRef.current) {
-      controlsRef.current.reset();
-    }
-  };
 
   // Handle 360-degree rotation
   const handle360Rotation = () => {
@@ -1042,9 +932,6 @@ const ThreeDProducts = () => {
   const hasDiscount = product?.hasDiscount && product?.discountInfo;
   const currentPrice = hasDiscount ? product.discountInfo.discountedPrice : basePrice;
   const originalPrice = hasDiscount ? basePrice : null;
-  const discountPercentage = hasDiscount && product.discountInfo.discountType === 'percentage' 
-    ? product.discountInfo.discountValue 
-    : null;
 
   // Handle adding product to bulk order and navigating
   const handleAddToBulkOrder = () => {
@@ -1228,12 +1115,6 @@ const ThreeDProducts = () => {
               </svg>
               <span>AR</span>
             </button>
-            
-            {isResizing && (
-              <div className="resizing-indicator">
-                <span>Resizing...</span>
-              </div>
-            )}
           </div>
 
           {/* Camera Angle Panel */}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../../shared/hooks/useAuth';
 import stripeService from '../services/stripeService';
 import paymongoService from '../services/paymongoService';
@@ -17,7 +17,6 @@ const CartIcon = () => (
 );
 
 const Payment = () => {
-    const navigate = useNavigate();
     const location = useLocation();
     const { user } = useAuth();
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('paymongo');
@@ -82,7 +81,6 @@ const Payment = () => {
         : JSON.parse(localStorage.getItem('cart') || '[]');
     
     // Get shipping information from checkout
-    const shippingMethod = location.state?.shippingMethod || 'pickup';
     const shippingCost = location.state?.shippingCost || 0;
     const extraDeliveryFee = location.state?.extraDeliveryFee || 0;
     const subtotal = location.state?.subtotal || 0;
@@ -144,11 +142,18 @@ const Payment = () => {
                     hasVariation: !!variationId
                 });
                 
+                const productIdentifier =
+                    item.product?.id ||
+                    item.product?.ProductID ||
+                    item.id ||
+                    item.productId;
+
                 return {
                     name: item.product?.name || item.name || 'Product',
                     quantity: item.quantity,
                     price: item.price,
-                    id: item.product?.id || item.product?.ProductID || item.id,
+                    id: productIdentifier,
+                    productId: productIdentifier,
                     variationId: variationId,
                     variationName: variationName,
                     useOriginalProduct: useOriginalProduct

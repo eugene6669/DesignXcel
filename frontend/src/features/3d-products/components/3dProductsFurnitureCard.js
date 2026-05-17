@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../../shared/contexts/CartContext';
 import { useCurrency } from '../../../shared/contexts/CurrencyContext';
 import QuickViewModal from '../../../shared/components/ui/QuickViewModal';
@@ -11,14 +11,16 @@ const ThreeDProductsFurnitureCard = ({ product }) => {
     id, 
     name, 
     price, 
-    images, 
-    image, 
-    description, 
-    rating = 0, 
-    reviews = 0,
+    rating = 0,
     hasDiscount = false,
     discountInfo = null,
-    categoryName
+    categoryName,
+    stockQuantity = 0,
+    stock = 0,
+    availableStock = null,
+    soldQuantity = 0,
+    hasVariations = false,
+    variationStockSum = null
   } = product || {
     id: 1,
     name: '3D Products Furniture',
@@ -30,7 +32,80 @@ const ThreeDProductsFurnitureCard = ({ product }) => {
   };
 
   const { formatPrice } = useCurrency();
-  
+  const productId = id || product?.ProductID || product?.id;
+  const baseStock =
+    stockQuantity ||
+    stock ||
+    product?.StockQuantity ||
+    product?.stockQuantity ||
+    0;
+  const [currentAvailableStock, setCurrentAvailableStock] = useState(
+    availableStock != null
+      ? availableStock
+      : (hasVariations && variationStockSum != null ? variationStockSum : null)
+  );
+  const [currentSoldQuantity, setCurrentSoldQuantity] = useState(
+    Number(soldQuantity ?? product?.sold ?? 0) || 0
+  );
+
+  useEffect(() => {
+    const fetchStock = () => {
+      if (!productId) return;
+      const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+      fetch(`${apiBase}/api/products/${productId}/available-stock`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success) {
+            const stockForCard = data.hasVariations
+              ? (data.variationStockSum ?? data.availableStock ?? 0)
+              : data.availableStock;
+            setCurrentAvailableStock(stockForCard);
+            if (data.soldQuantity != null) {
+              setCurrentSoldQuantity(Number(data.soldQuantity) || 0);
+            }
+          } else {
+            setCurrentAvailableStock(
+              availableStock != null
+                ? availableStock
+                : (hasVariations ? (variationStockSum ?? 0) : baseStock)
+            );
+          }
+        })
+        .catch((err) => {
+          console.error('Error fetching available stock for 3D furniture card:', err);
+          setCurrentAvailableStock(
+            availableStock != null
+              ? availableStock
+              : (hasVariations ? (variationStockSum ?? 0) : baseStock)
+          );
+        });
+    };
+
+    if (availableStock !== null && availableStock !== undefined) {
+      setCurrentAvailableStock(availableStock);
+    } else if (productId) {
+      fetchStock();
+      const interval = setInterval(fetchStock, 5000);
+      const handleVisibilityChange = () => {
+        if (!document.hidden) fetchStock();
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      return () => {
+        clearInterval(interval);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+    } else {
+      setCurrentAvailableStock(baseStock);
+    }
+  }, [productId, availableStock, baseStock, soldQuantity, product?.sold, hasVariations, variationStockSum]);
+
+  useEffect(() => {
+    const fromProduct = Number(soldQuantity ?? product?.sold ?? 0) || 0;
+    if (fromProduct > 0) {
+      setCurrentSoldQuantity(fromProduct);
+    }
+  }, [soldQuantity, product?.sold]);
+
   // Calculate display price and discount info from real data
   const displayPrice = hasDiscount && discountInfo ? discountInfo.discountedPrice : price;
   const originalPrice = hasDiscount && discountInfo ? price : null;
@@ -38,28 +113,24 @@ const ThreeDProductsFurnitureCard = ({ product }) => {
     ? discountInfo.discountValue 
     : null;
 
-  // Derive stock quantity from various possible fields
-  const stockQuantity = (product && (
-    product.StockQuantity ?? product.stock ?? product.quantity ?? product.stockQuantity ?? 0
-  ));
+  const currentStock =
+    currentAvailableStock !== null && currentAvailableStock !== undefined
+      ? currentAvailableStock
+      : baseStock;
 
-  // Stock status logic (same as ProductCard)
   const getStockStatus = () => {
-    if (stockQuantity === 0) {
+    if (currentStock === 0) {
       return { status: 'sold-out', label: 'Sold Out', color: '#DC3545', bgColor: '#F8D7DA' };
-    } else if (stockQuantity <= 5) {
-      return { status: 'low-stock', label: `Only ${stockQuantity} left`, color: '#856404', bgColor: '#FFF3CD' };
-    } else if (stockQuantity <= 10) {
-      return { status: 'limited-stock', label: `Limited Stock`, color: '#856404', bgColor: '#FFF3CD' };
-    } else {
-      return { status: 'in-stock', label: 'In Stock', color: '#155724', bgColor: '#D4EDDA' };
+    } else if (currentStock <= 5) {
+      return { status: 'low-stock', label: `Only ${currentStock} left`, color: '#856404', bgColor: '#FFF3CD' };
+    } else if (currentStock <= 10) {
+      return { status: 'limited-stock', label: 'Limited Stock', color: '#856404', bgColor: '#FFF3CD' };
     }
+    return { status: 'in-stock', label: 'In Stock', color: '#155724', bgColor: '#D4EDDA' };
   };
 
   const stockStatus = getStockStatus();
-
-  // Get sold quantity
-  const soldQuantity = product?.soldQuantity || product?.sold || 0;
+  const displaySoldQuantity = currentSoldQuantity;
 
     // Use the utility function to get the primary image URL
   const imageUrl = getPrimaryImageUrl(product);
@@ -67,30 +138,18 @@ const ThreeDProductsFurnitureCard = ({ product }) => {
   const { addToCart } = useCart();
   const navigate = useNavigate();
   const [quickOpen, setQuickOpen] = useState(false);
-  const handleAddToCart = () => {
-    addToCart(product, 1);
-  };
+
+  const productDetailPath = `/product/${product.slug || product.sku || productId}`;
+  const product3DPath = `/3d-products/${product.slug || product.sku || productId}`;
 
   const handle3DProducts = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    navigate(`/3d-products/${id}`);
-  };
-
-  // Simple stock pill style
-  const stockPillStyle = {
-    display: 'inline-block',
-    padding: '2px 8px',
-    borderRadius: '12px',
-    fontSize: '12px',
-    fontWeight: 600,
-    background: stockQuantity === 0 ? '#DC3545' : (stockQuantity <= 10 ? '#FF9800' : '#E5F7EE'),
-    color: stockQuantity === 0 ? '#fff' : (stockQuantity <= 10 ? '#222' : '#0F5132'),
-    border: stockQuantity === 0 ? '1px solid #b02a37' : (stockQuantity <= 10 ? '1px solid #ffa726' : '1px solid #A7E3C4')
+    navigate(product3DPath);
   };
 
   const handleCardClick = () => {
-    navigate(`/product/${product.slug || product.sku || id}`);
+    navigate(productDetailPath);
   };
 
   return (
@@ -161,7 +220,9 @@ const ThreeDProductsFurnitureCard = ({ product }) => {
             className="stock-dot" 
             style={{ backgroundColor: stockStatus.color }}
           ></div>
-          <span className="stock-text" style={{ fontWeight: 'bold' }}>{stockStatus.label}</span>
+          <span className="stock-text" style={{ fontWeight: 'bold' }}>
+            {currentStock > 0 ? `${currentStock} available` : 'Sold Out'}
+          </span>
         </div>
         
         {/* Sold quantity */}
@@ -172,7 +233,7 @@ const ThreeDProductsFurnitureCard = ({ product }) => {
             <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
             <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
           </svg>
-          <span className="sold-text" style={{ fontWeight: 'bold' }}>{soldQuantity} sold</span>
+          <span className="sold-text" style={{ fontWeight: 'bold' }}>{displaySoldQuantity} sold</span>
         </div>
         
         {/* Rating */}

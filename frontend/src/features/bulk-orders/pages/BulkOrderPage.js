@@ -7,7 +7,7 @@ import PageHeader from '../../../shared/components/layout/PageHeader';
 import Modal from '../../../shared/components/ui/Modal';
 import ConfirmationModal from '../../../shared/components/ui/ConfirmationModal';
 import AudioLoader from '../../../shared/components/ui/AudioLoader';
-import { getAllProducts, getCategories, searchProducts } from '../../products/services/productService';
+import { getAllProducts, getCategories } from '../../products/services/productService';
 import { getPrimaryImageUrl } from '../../../shared/utils/imageUtils';
 import stripeService from '../../checkout/services/stripeService';
 import './BulkOrderPage.css';
@@ -24,7 +24,6 @@ const BulkOrderPage = () => {
     const [showClearModal, setShowClearModal] = useState(false);
     const [showQuantityModal, setShowQuantityModal] = useState(false);
     const [quantityModalMessage, setQuantityModalMessage] = useState('');
-    const [successMessage, setSuccessMessage] = useState('');
     const [pickupDateTime, setPickupDateTime] = useState('');
     
     // Fetch available stock for a product
@@ -177,8 +176,6 @@ const BulkOrderPage = () => {
     const hasProcessedState = useRef(false);
     const hasLoadedFromStorage = useRef(false);
     const hasCheckedOut = useRef(false);
-    const lastDeduplicatedItems = useRef(null);
-    
     // Helper function to deduplicate items by productId
     const deduplicateItems = (items) => {
         if (!items || items.length === 0) return [];
@@ -1366,7 +1363,7 @@ const BulkOrderPage = () => {
                 title="Success!"
             >
                 <div className="success-message">
-                    <p>{successMessage}</p>
+                    <p>Your bulk order has been submitted successfully.</p>
                     <button 
                         onClick={() => {
                             setShowSuccessModal(false);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWishlist } from '../../contexts/WishlistContext';
 import { useCurrency } from '../../contexts/CurrencyContext';
@@ -7,10 +7,7 @@ import { getPrimaryImageUrl } from '../../utils/imageUtils';
 import { 
   XIcon, 
   HeartIcon, 
-  ShoppingBagIcon, 
-  TrashIcon,
-  EyeIcon,
-  StarIcon
+  ShoppingBagIcon
 } from '../ui/SvgIcons';
 import './wishlist-popup.css';
 

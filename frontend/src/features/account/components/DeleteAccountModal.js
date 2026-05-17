@@ -12,7 +12,7 @@ const DeleteAccountModal = ({ isOpen, onClose, user }) => {
     const [step, setStep] = useState(1); // 1: OTP, 2: Confirmation
     const [otpCode, setOtpCode] = useState('');
     const [otpSent, setOtpSent] = useState(false);
-    const [otpVerified, setOtpVerified] = useState(false);
+    const [, setOtpVerified] = useState(false);
     const [confirmationText, setConfirmationText] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');

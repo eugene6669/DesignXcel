@@ -7,6 +7,7 @@ import { StarIcon } from '../../../shared/components/ui/SvgIcons';
 import QuickViewModal from '../../../shared/components/ui/QuickViewModal';
 import AudioLoader from '../../../shared/components/ui/AudioLoader';
 import { getPrimaryImageUrl } from '../../../shared/utils/imageUtils';
+import { getSellableStock } from '../../../shared/utils/productUtils';
 import './product-card.css';
 
 const ProductCard = ({ product }) => {
@@ -22,6 +23,9 @@ const ProductCard = ({ product }) => {
     stock = 0,
     availableStock = null,
     soldQuantity = 0,
+    hasVariations = false,
+    requiresVariationSelection = false,
+    slug,
     has3DModel = false,
     Has3DModel = false,
     model3D = null,
@@ -35,6 +39,9 @@ const ProductCard = ({ product }) => {
 
   const { formatPrice } = useCurrency();
   const [currentAvailableStock, setCurrentAvailableStock] = useState(availableStock);
+  const [currentSoldQuantity, setCurrentSoldQuantity] = useState(
+    Number(soldQuantity ?? product?.sold ?? 0) || 0
+  );
   
   // Fetch available stock if not provided, and refresh periodically
   useEffect(() => {
@@ -45,7 +52,13 @@ const ProductCard = ({ product }) => {
           .then(res => res.json())
           .then(data => {
             if (data.success) {
-              setCurrentAvailableStock(data.availableStock);
+              const stockForCard = (hasVariations || requiresVariationSelection || data.hasVariations)
+                ? (data.variationStockSum ?? data.availableStock ?? 0)
+                : data.availableStock;
+              setCurrentAvailableStock(stockForCard);
+              if (data.soldQuantity != null) {
+                setCurrentSoldQuantity(Number(data.soldQuantity) || 0);
+              }
             } else {
               // Use availableStock from props if available, otherwise fallback to stockQuantity
               setCurrentAvailableStock(availableStock !== null && availableStock !== undefined ? availableStock : (stockQuantity || stock || 0));
@@ -89,7 +102,14 @@ const ProductCard = ({ product }) => {
     } else {
       setCurrentAvailableStock(stockQuantity || stock || 0);
     }
-  }, [id, availableStock, stockQuantity, stock]);
+  }, [id, availableStock, stockQuantity, stock, soldQuantity, product?.sold, hasVariations, requiresVariationSelection, product?.variationStockSum]);
+
+  useEffect(() => {
+    const fromProduct = Number(soldQuantity ?? product?.sold ?? 0) || 0;
+    if (fromProduct > 0) {
+      setCurrentSoldQuantity(fromProduct);
+    }
+  }, [soldQuantity, product?.sold]);
 
   // Calculate display price and discount info from real data
   const displayPrice = hasDiscount && discountInfo ? discountInfo.discountedPrice : price;
@@ -99,7 +119,7 @@ const ProductCard = ({ product }) => {
     : null;
 
   // Stock status logic - use available stock if available, otherwise use regular stock
-  const currentStock = currentAvailableStock !== null ? currentAvailableStock : (stockQuantity || stock || 0);
+  const currentStock = currentAvailableStock !== null ? currentAvailableStock : getSellableStock(product);
   const getStockStatus = () => {
     if (currentStock === 0) {
       return { status: 'sold-out', label: 'Sold Out', color: '#DC3545', bgColor: '#F8D7DA' };
@@ -130,25 +150,21 @@ const ProductCard = ({ product }) => {
   // Use the utility function to get the primary image URL
   const imageUrl = getPrimaryImageUrl(product);
 
-  const { addToCart, canAddItem, getRemainingSlots, CART_LIMITS } = useCart();
+  const { addToCart, canAddItem } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
   const navigate = useNavigate();
   const [quickOpen, setQuickOpen] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
 
+  const productDetailPath = `/product/${product.slug || product.sku || product.id}`;
+  const product3DPath = `/3d-products/${product.slug || product.sku || product.id}`;
+
   const handleCardClick = () => {
-    if (isNavigating) return; // Prevent multiple clicks
-    
+    if (isNavigating) return;
+
     setIsNavigating(true);
-    
-    // Small delay to show spinner before navigation
     setTimeout(() => {
-      // If product has 3D model, redirect to 3d-products-furniture page
-      if (has3DModelData) {
-        navigate('/3d-products-furniture');
-      } else {
-        navigate(`/product/${product.slug || product.sku || product.id}`);
-      }
+      navigate(productDetailPath);
     }, 100);
   };
 
@@ -216,10 +232,17 @@ const ProductCard = ({ product }) => {
           </button>
           <button 
             className="action-icon" 
-            aria-label="Add to cart" 
+            aria-label={hasVariations || requiresVariationSelection ? 'Choose options' : 'Add to cart'}
+            title={hasVariations || requiresVariationSelection ? 'Choose options on product page' : 'Add to cart'}
             onClick={(e) => { 
               e.preventDefault(); 
-              e.stopPropagation(); 
+              e.stopPropagation();
+
+              if (hasVariations || requiresVariationSelection) {
+                const path = slug ? `/product/${slug}` : `/product/${id}`;
+                navigate(path);
+                return;
+              }
               
               if (!canAddItem(product, 1)) {
                 return;
@@ -242,7 +265,7 @@ const ProductCard = ({ product }) => {
               onClick={(e) => { 
                 e.preventDefault(); 
                 e.stopPropagation(); 
-                navigate('/3d-products-furniture'); 
+                navigate(product3DPath);
               }}
               style={{ backgroundColor: '#FFC107', color: '#333' }}
             >
@@ -288,7 +311,7 @@ const ProductCard = ({ product }) => {
             <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
             <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
           </svg>
-          <span className="sold-text" style={{ fontWeight: 'bold' }}>{soldQuantity || 0} sold</span>
+          <span className="sold-text" style={{ fontWeight: 'bold' }}>{currentSoldQuantity} sold</span>
         </div>
         
         {/* Rating */}
@@ -303,12 +326,18 @@ const ProductCard = ({ product }) => {
         onClose={() => setQuickOpen(false)}
         product={product}
         formatPrice={formatPrice}
-        onAddToCart={(p) => { 
+        onAddToCart={(p) => {
+          if (hasVariations || requiresVariationSelection) {
+            const path = slug ? `/product/${slug}` : `/product/${id}`;
+            setQuickOpen(false);
+            navigate(path);
+            return;
+          }
           if (!canAddItem(p, 1)) {
             return;
           }
-          addToCart(p, 1); 
-          setQuickOpen(false); 
+          addToCart(p, 1);
+          setQuickOpen(false);
         }}
       />
 

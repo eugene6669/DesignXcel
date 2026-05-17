@@ -4,7 +4,6 @@ import { useCart } from '../../../shared/contexts/CartContext';
 import './checkout.css';
 import { useAuth } from '../../../shared/hooks/useAuth';
 import AudioLoader from '../../../shared/components/ui/AudioLoader';
-import ConfirmationModal from '../../../shared/components/ui/ConfirmationModal';
 import apiClient from '../../../shared/services/api/apiClient';
 import checkoutSessionManager from '../utils/checkoutSessionManager';
 import { getImageUrl } from '../../../shared/utils/imageUtils';
@@ -28,14 +27,6 @@ const TruckIcon = () => (
     </svg>
 );
 
-const InfoIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-        <path d="M12 16V12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M12 8H12.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-);
-
 const WarningIcon = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M12 9V13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -55,16 +46,13 @@ const CartIcon = () => (
 const CheckoutPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { items: cartItems, getSubtotal, getTotal, clearCart } = useCart();
+    const { items: cartItems, getTotal } = useCart();
     const { user, loading: authLoading } = useAuth();
-    const [currentTheme, setCurrentTheme] = useState('default');
-    
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [showTermsModal, setShowTermsModal] = useState(false);
     const [termsChecked, setTermsChecked] = useState(false);
     const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
-    const [isContentScrollable, setIsContentScrollable] = useState(true);
+    const [, setIsContentScrollable] = useState(true);
     const checkoutTermsContentRef = useRef(null);
     const [defaultAddress, setDefaultAddress] = useState(null);
     const [addresses, setAddresses] = useState([]);
@@ -119,29 +107,6 @@ const CheckoutPage = () => {
         
         fetchAddresses();
     }, [authLoading]);
-
-    // Detect current theme from body class
-    useEffect(() => {
-        const detectTheme = () => {
-            const bodyClasses = document.body.className;
-            if (bodyClasses.includes('theme-christmas')) {
-                setCurrentTheme('christmas');
-            } else if (bodyClasses.includes('theme-dark')) {
-                setCurrentTheme('dark');
-            } else {
-                setCurrentTheme('default');
-            }
-        };
-
-        // Initial detection
-        detectTheme();
-
-        // Listen for theme changes
-        const observer = new MutationObserver(detectTheme);
-        observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-
-        return () => observer.disconnect();
-    }, []);
 
     // Fetch public Terms and Conditions for frontend display
     useEffect(() => {
@@ -342,9 +307,6 @@ const CheckoutPage = () => {
     
     // Update extra delivery fee when items or quantities change
     useEffect(() => {
-        const items = location.state && Array.isArray(location.state.items) && location.state.items.length > 0
-            ? location.state.items
-            : cartItems;
         const fee = calculateExtraDeliveryFee();
         setExtraDeliveryFee(fee);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -374,16 +336,6 @@ const CheckoutPage = () => {
         address.Country || 'Philippines'
     ].filter(Boolean);
     
-    // If no address parts found, show a message
-    const fullAddressBlock = addressParts.length > 0 ? addressParts.join(',\n') : 'No address set. Please update your profile.';
-    
-    // Compose city/province/region
-    const city = address.City || '';
-    const province = address.Province || '';
-    const region = address.Region || '';
-    const barangay = address.Barangay || '';
-    const postalCode = address.PostalCode || '';
-    const country = address.Country || 'Philippines';
     const email = profile.email || address.Email || '';
     const phone = profile.phoneNumber || address.PhoneNumber || '';
 
@@ -410,25 +362,6 @@ const CheckoutPage = () => {
         }
     }, [items, navigate]);
 
-    const handleInputChange = (section, field, value) => {
-        if (section === 'shipping') {
-            // setShippingAddress(prev => ({ ...prev, [field]: value })); // Removed
-        } else if (section === 'billing') {
-            // setBillingAddress(prev => ({ ...prev, [field]: value })); // Removed
-        }
-    };
-
-    const handlePaymentSuccess = (paymentData) => {
-        console.log('Payment successful:', paymentData);
-        clearCart();
-        navigate('/order-confirmation', { state: { paymentData } });
-    };
-
-    const handlePaymentError = (error) => {
-        console.error('Payment error:', error);
-        setError('Payment failed. Please try again.');
-    };
-
     const handleAddressSelect = (address) => {
         setDefaultAddress(address);
         setShowAddressModal(false);
@@ -442,11 +375,6 @@ const CheckoutPage = () => {
         }).format(price);
     };
 
-    const handlePayNow = () => {
-        setHasScrolledToBottom(false);
-        setTermsChecked(false);
-        setShowTermsModal(true);
-    };
     const handleConfirmTerms = () => {
         // Validate pickup date/time if pickup is selected
         if (shippingMethod === 'pickup') {

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import ProductCard from '../components/ProductCard';
 import ProductFilter from '../components/ProductFilter';
@@ -9,13 +9,13 @@ import AudioLoader from '../../../shared/components/ui/AudioLoader';
 import '../../../app/pages.css';
 import '../../../shared/components/ui/modal.css';
 import apiClient from '../../../shared/services/api/apiClient';
+import { getSellableStock } from '../../../shared/utils/productUtils';
 
 const ProductCatalog = () => {
     const location = useLocation();
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [currentTheme, setCurrentTheme] = useState('default');
     const [filters, setFilters] = useState({
         categories: [],
         priceRange: '',
@@ -52,35 +52,14 @@ const ProductCatalog = () => {
         }
     }, [location.search]);
 
-    // Detect current theme from body class
-    useEffect(() => {
-        const detectTheme = () => {
-            const bodyClasses = document.body.className;
-            if (bodyClasses.includes('theme-christmas')) {
-                setCurrentTheme('christmas');
-            } else if (bodyClasses.includes('theme-dark')) {
-                setCurrentTheme('dark');
-            } else {
-                setCurrentTheme('default');
-            }
-        };
-
-        // Initial detection
-        detectTheme();
-
-        // Listen for theme changes
-        const observer = new MutationObserver(detectTheme);
-        observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-
-        return () => observer.disconnect();
-    }, []);
-
     useEffect(() => {
         loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load
     }, []);
 
     useEffect(() => {
         applyFilters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- filter when products/filters change
     }, [products, filters]);
 
     const loadData = async () => {
@@ -215,14 +194,14 @@ const ProductCatalog = () => {
 
         if (filters.inStock) {
             filtered = filtered.filter(product => {
-                const currentStock = product.stockQuantity || product.stock || product.quantity || 0;
+                const currentStock = getSellableStock(product);
                 return currentStock > 0;
             });
         }
 
         if (filters.outOfStock) {
             filtered = filtered.filter(product => {
-                const currentStock = product.stockQuantity || product.stock || product.quantity || 0;
+                const currentStock = getSellableStock(product);
                 return currentStock === 0;
             });
         }

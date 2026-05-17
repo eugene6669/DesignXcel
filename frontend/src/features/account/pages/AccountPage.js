@@ -25,10 +25,8 @@ import {
   CheckCircleIcon,
   ShoppingBagIcon,
   LogoutIcon,
-  EyeIcon,
   TruckIcon
 } from '../../../shared/components/ui/SvgIcons';
-import { PageLoader } from '../../../shared/components/ui';
 import '../components/account.css';
 
 const Account = () => {
@@ -47,14 +45,7 @@ const Account = () => {
     const [statsLoading, setStatsLoading] = useState(true);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     
-    // Delete account modal states
     const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [deleteStep, setDeleteStep] = useState(1); // 1: OTP, 2: Confirmation
-    const [otpCode, setOtpCode] = useState('');
-    const [otpSent, setOtpSent] = useState(false);
-    const [otpVerified, setOtpVerified] = useState(false);
-    const [confirmationText, setConfirmationText] = useState('');
-    const [deleteLoading, setDeleteLoading] = useState(false);
     
     // Logout confirmation modal state
     const [showLogoutModal, setShowLogoutModal] = useState(false);

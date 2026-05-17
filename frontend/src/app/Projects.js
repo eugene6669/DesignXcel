@@ -115,6 +115,7 @@ const Projects = () => {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyboard handlers tied to lightbox lifecycle
   }, [projectImages.length]);
 
 

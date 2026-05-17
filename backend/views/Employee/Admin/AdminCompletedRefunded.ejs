@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Completed Returned Orders - Admin</title>
+    <title>Completed Refunded Orders - Admin</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -753,12 +753,12 @@
 <body>
     <div class="dashboard-container">
         <div class="sidebar">
-            <%- include('partials/sidebar', { activePage: 'orders-completed-returned' }) %>
+            <%- include('partials/sidebar', { activePage: 'orders-completed-refunded' }) %>
         </div>
         <div class="main-content">
             <div class="header orders-header">
                 <div>
-                    <h2>Completed Returned Orders</h2>
+                    <h2>Completed Refunded Orders</h2>
                     <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem;">
                         <div class="orders-count-badge">
                             <span class="icon icon-box" aria-hidden="true">
@@ -907,7 +907,7 @@
                                     <div class="order-card-summary-main">
                                         <div class="order-card-title"><%= order.ReferenceNumber ? `Order ${order.ReferenceNumber}` : 'Order' %></div>
                                         <div class="order-card-meta">
-                                            <span class="order-card-status status-completed">Completed Returned</span>
+                                            <span class="order-card-status status-refunded" style="background:#fef3c7;color:#b45309;">Refunded</span>
                                             <span>Placed: <%= order.FormattedOrderDate || new Date(order.OrderDate).toLocaleString('en-US') %></span>
                                         </div>
                                         <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem;">
@@ -966,7 +966,7 @@
                                                             <% if (item.ImageURL) { %>
                                                                 <img src="<%= item.ImageURL %>" alt="<%= item.Name %>">
                                                             <% } else { %>
-                                                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem;">🖼️</div>
+                                                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem;">ðŸ–¼ï¸</div>
                                                             <% } %>
                                                         </div>
                                                         <div class="order-product-details">
@@ -1043,7 +1043,7 @@
                             <div class="payment-modal-content">
                                 <div class="payment-modal-header">
                                     <h3>Payment Details</h3>
-                                    <button class="payment-modal-close" onclick="closePaymentModal(<%= order.OrderID %>)">×</button>
+                                    <button class="payment-modal-close" onclick="closePaymentModal(<%= order.OrderID %>)">Ã—</button>
                                 </div>
                                 <div class="payment-modal-body" id="payment-modal-body-<%= order.OrderID %>">
                                     <div style="text-align: center; padding: 2rem;">
@@ -1124,7 +1124,7 @@
                                                                     status === 'received' || status === 'receive' ? 'status-receive' :
                                                                     status === 'completed' || status === 'completed returned' || status === 'refunded' ? 'status-completed' :
                                                                     status === 'cancelled' ? 'status-cancelled' : 'status-completed';
-                                                const statusDisplay = 'Completed Returned';
+                                                const statusDisplay = 'Refunded';
                                             %>
                                             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                                                 <span class="order-card-status <%= statusClass %>" style="display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;"><%= statusDisplay %></span>
@@ -1183,7 +1183,7 @@
                                                                         <% } else if (item.ImageURL) { %>
                                                                             <img src="<%= item.ImageURL %>" alt="<%= item.Name %>" style="width: 100%; height: 100%; object-fit: cover;">
                                                                         <% } else { %>
-                                                                            <div style="color: #94a3b8; font-size: 1.5rem;">🖼️</div>
+                                                                            <div style="color: #94a3b8; font-size: 1.5rem;">ðŸ–¼ï¸</div>
                                                                         <% } %>
                                                                     </div>
                                                                     <div style="flex: 1; min-width: 0;">
@@ -1871,7 +1871,7 @@
                 } else {
                     modalBody.innerHTML = `
                         <div style="text-align: center; padding: 2rem;">
-                            <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+                            <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">âš ï¸</div>
                             <p style="color: #6b7280; font-size: 1rem;">${result.message || 'Failed to retrieve payment details'}</p>
                         </div>
                     `;
@@ -1880,7 +1880,7 @@
                 console.error('Error checking payment status:', error);
                 modalBody.innerHTML = `
                     <div style="text-align: center; padding: 2rem;">
-                        <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+                        <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">âš ï¸</div>
                         <p style="color: #6b7280; font-size: 1rem;">Error checking payment status. Please try again.</p>
                     </div>
                 `;

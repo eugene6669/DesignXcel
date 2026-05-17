@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useProductSearch } from '../../../features/products/hooks/useProductSearch';
 import { useCart } from '../../../shared/contexts/CartContext';
 import { useWishlist } from '../../../shared/contexts/WishlistContext';
-import { FaEnvelope, FaPhone, FaMapMarkerAlt, FaSearch, FaUser, FaShoppingCart, FaBars, FaHeart } from 'react-icons/fa';
+import { FaSearch, FaUser, FaShoppingCart, FaBars, FaHeart } from 'react-icons/fa';
 import { getImageUrl } from '../../utils/imageUtils';
 import ModernThemeSwitcher from '../theme/ModernThemeSwitcher';
 import { ChristmasIcons } from '../christmas';
