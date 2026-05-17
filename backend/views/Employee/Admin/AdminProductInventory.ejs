@@ -717,6 +717,21 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class="form-group" style="margin-top: 10px; padding: 15px; border: 1px solid #dee2e6; border-radius: 6px; background: #f8f9fa;">
+                                <h4 style="margin: 0 0 8px 0; font-size: 1em;">Raw Materials</h4>
+                                <p style="color: #666; font-size: 0.85em; margin: 0 0 10px 0;">Qty per unit when this product is stocked. Initial variation quantities will deduct from Raw Materials stock on create.</p>
+                                <div id="createInventoryRecipeStatus" style="font-size: 0.9em; margin-bottom: 10px; color: #666;"><em>Optional — add materials used per unit</em></div>
+                                <div class="materials-section">
+                                    <div id="createInventoryMaterialsContainer"></div>
+                                    <button type="button" id="addCreateInventoryMaterialBtn" class="add-material-btn">+ Add Material</button>
+                                    <div id="createInventoryMaterialsSummary" style="margin-top: 10px; padding: 8px; background: #fff; border-radius: 4px; font-size: 0.9em;">
+                                        <strong>Selected materials:</strong>
+                                        <div id="createInventoryMaterialsSummaryList" style="margin-top: 4px; color: #666;"><em>No materials selected yet</em></div>
+                                    </div>
+                                </div>
+                                <input type="hidden" id="requiredMaterials" name="requiredMaterials" value="">
+                            </div>
+
 
                             <div class="form-group" style="margin-top: 10px; padding: 15px; border: 1px solid #dee2e6; border-radius: 6px; background: #f8f9fa;">
                                 <h4 style="margin: 0 0 12px 0; font-size: 1em; color: #333;">Product Variations <span style="color: #dc3545;">*</span></h4>
@@ -1208,9 +1223,14 @@ const urlParams = new URLSearchParams(window.location.search);
             addInventoryItemBtn.addEventListener('click', () => {
                 document.getElementById('addProductForm')?.reset();
                 resetCreateProductVariations();
-const createVarList = document.getElementById('createProductVariationsList');
+                resetCreateInventoryMaterials();
+                const createVarList = document.getElementById('createProductVariationsList');
                 if (createVarList) createVarList.appendChild(buildCreateProductVariationRow());
                 updateCreateVariationTotalSummary();
+                const createMatContainer = document.getElementById('createInventoryMaterialsContainer');
+                if (createMatContainer && allRawMaterials.length > 0) {
+                    createMatContainer.appendChild(createCreateInventoryMaterialRow());
+                }
                 addProductModal.style.display = 'block';
             });
         }
@@ -1219,6 +1239,7 @@ const createVarList = document.getElementById('createProductVariationsList');
             closeAddModal.addEventListener('click', () => {
                 if (addProductModal) addProductModal.style.display = 'none';
                 resetCreateProductVariations();
+                resetCreateInventoryMaterials();
 });
         }
 
@@ -1226,6 +1247,7 @@ const createVarList = document.getElementById('createProductVariationsList');
             cancelAddProduct.addEventListener('click', () => {
                 if (addProductModal) addProductModal.style.display = 'none';
                 resetCreateProductVariations();
+                resetCreateInventoryMaterials();
 });
         }
         // Handle form submissions with dimensions
@@ -1404,6 +1426,99 @@ const createVarList = document.getElementById('createProductVariationsList');
         }
         fetchRawMaterialsForInventory();
 
+        function updateCreateInventoryMaterialsSummary() {
+            const summaryList = document.getElementById('createInventoryMaterialsSummaryList');
+            const container = document.getElementById('createInventoryMaterialsContainer');
+            const statusEl = document.getElementById('createInventoryRecipeStatus');
+            if (!summaryList || !container) return;
+
+            const selected = [];
+            container.querySelectorAll('.material-row').forEach(row => {
+                const materialId = row.querySelector('.material-select')?.value;
+                const quantity = parseInt(row.querySelector('.material-quantity')?.value, 10) || 0;
+                if (materialId && quantity > 0) {
+                    const material = allRawMaterials.find(m => String(m.id) === String(materialId));
+                    if (material) selected.push({ name: material.name, quantity });
+                }
+            });
+
+            if (selected.length === 0) {
+                summaryList.innerHTML = '<em>No materials selected yet</em>';
+                if (statusEl) statusEl.innerHTML = '<span style="color:#856404;">Optional — add materials used per unit</span>';
+            } else {
+                summaryList.innerHTML = selected.map(m =>
+                    '<div style="margin: 2px 0;">' + m.name + ' — <strong>' + m.quantity + '</strong>/unit</div>'
+                ).join('');
+                if (statusEl) statusEl.innerHTML = '<span style="color:#155724;">Raw Materials set (' + selected.length + ' material(s))</span>';
+            }
+        }
+
+        function createCreateInventoryMaterialRow(selectedMaterialId = null, quantityRequired = 1) {
+            const materialRow = document.createElement('div');
+            materialRow.className = 'material-row';
+            const select = document.createElement('select');
+            select.className = 'material-select';
+            let optionsHtml = '<option value="">Select Material</option>';
+            allRawMaterials.forEach(material => {
+                optionsHtml += '<option value="' + material.id + '"' + (selectedMaterialId == material.id ? ' selected' : '') + '>' + material.name + '</option>';
+            });
+            select.innerHTML = optionsHtml;
+            select.addEventListener('change', updateCreateInventoryMaterialsSummary);
+            const quantityInput = document.createElement('input');
+            quantityInput.type = 'number';
+            quantityInput.className = 'material-quantity';
+            quantityInput.placeholder = 'Qty per unit';
+            quantityInput.min = '1';
+            quantityInput.value = quantityRequired;
+            quantityInput.addEventListener('input', updateCreateInventoryMaterialsSummary);
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'remove-material-btn';
+            removeButton.textContent = 'Remove';
+            removeButton.addEventListener('click', () => {
+                materialRow.remove();
+                updateCreateInventoryMaterialsSummary();
+            });
+            materialRow.appendChild(select);
+            materialRow.appendChild(quantityInput);
+            materialRow.appendChild(removeButton);
+            return materialRow;
+        }
+
+        function resetCreateInventoryMaterials() {
+            const container = document.getElementById('createInventoryMaterialsContainer');
+            if (container) container.innerHTML = '';
+            const hidden = document.getElementById('requiredMaterials');
+            if (hidden) hidden.value = '';
+            updateCreateInventoryMaterialsSummary();
+        }
+
+        function getCreateInventoryRequiredMaterials() {
+            const container = document.getElementById('createInventoryMaterialsContainer');
+            const materials = [];
+            if (!container) return materials;
+            container.querySelectorAll('.material-row').forEach(row => {
+                const materialId = row.querySelector('.material-select')?.value;
+                const quantity = parseInt(row.querySelector('.material-quantity')?.value, 10);
+                if (materialId && quantity > 0) {
+                    materials.push({ materialId: materialId, quantityRequired: quantity });
+                }
+            });
+            return materials;
+        }
+
+        const addCreateInventoryMaterialBtn = document.getElementById('addCreateInventoryMaterialBtn');
+        if (addCreateInventoryMaterialBtn) {
+            addCreateInventoryMaterialBtn.addEventListener('click', () => {
+                const container = document.getElementById('createInventoryMaterialsContainer');
+                if (container) {
+                    container.appendChild(createCreateInventoryMaterialRow());
+                    updateCreateInventoryMaterialsSummary();
+                }
+            });
+        }
+
+
         function updateEditVariationMaterialsSummary() {
             const summaryList = document.getElementById('editVariationMaterialsSummaryList');
             const container = document.getElementById('editVariationMaterialsContainer');
@@ -1560,6 +1675,15 @@ const createVarList = document.getElementById('createProductVariationsList');
                 const totalVariationQty = variations.reduce((sum, v) => sum + (v.quantity || 0), 0);
                 if (qtyField) qtyField.value = String(totalVariationQty);
                 if (jsonField) jsonField.value = JSON.stringify(variations);
+
+                const recipeRows = document.querySelectorAll('#createInventoryMaterialsContainer .material-row');
+                const recipeMaterials = getCreateInventoryRequiredMaterials();
+                if (recipeRows.length > 0 && recipeMaterials.length === 0) {
+                    showCustomPopup('For each recipe row, pick a material and quantity (or remove empty rows).', true);
+                    return;
+                }
+                const materialsField = document.getElementById('requiredMaterials');
+                if (materialsField) materialsField.value = JSON.stringify(recipeMaterials);
 
                 const formData = new FormData(this);
                 document.querySelectorAll('#createProductVariationsList .create-product-variation-row').forEach((row) => {

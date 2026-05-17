@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useCart } from '../../../shared/contexts/CartContext';
 import { useWishlist } from '../../../shared/contexts/WishlistContext';
@@ -200,18 +200,69 @@ const ProductDetail = () => {
     }
   };
 
-  // Handle image navigation
+  const normalizedThumbnails = useMemo(() => {
+    if (!product?.thumbnails) return [];
+    if (Array.isArray(product.thumbnails)) return product.thumbnails.filter(Boolean);
+    if (typeof product.thumbnails === 'string') {
+      const raw = product.thumbnails.trim();
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.filter(Boolean);
+        if (parsed && typeof parsed === 'string') return [parsed];
+      } catch (e) {
+        if (raw.includes(',')) {
+          return raw.split(',').map((s) => s.trim()).filter(Boolean);
+        }
+        return raw ? [raw] : [];
+      }
+    }
+    return [];
+  }, [product?.thumbnails]);
+
+  const galleryImages = useMemo(() => {
+    if (!product) return [];
+
+    const rawImages = [
+      product.image,
+      ...(Array.isArray(product.images) ? product.images : (product.images ? [product.images] : [])),
+      ...normalizedThumbnails
+    ].filter(Boolean);
+
+    const productMainImage = rawImages[0] || null;
+    const extraFromProduct = [...new Set(rawImages.slice(1).concat(normalizedThumbnails))].filter(
+      (img) => img && img !== productMainImage
+    );
+
+    if (selectedVariation) {
+      const variationThumbList = Array.isArray(selectedVariation.thumbnails)
+        ? selectedVariation.thumbnails.filter(Boolean)
+        : [];
+      const main =
+        selectedVariation.imageUrl ||
+        variationThumbList[0] ||
+        productMainImage;
+      if (variationThumbList.length >= 4) {
+        return [main, ...variationThumbList.slice(0, 4)].filter(Boolean);
+      }
+      const variationExtras = variationThumbList.filter((url) => url !== main);
+      const strip = [...new Set([...variationExtras, ...extraFromProduct].filter((url) => url !== main))].slice(
+        0,
+        4
+      );
+      return [main, ...strip].filter(Boolean);
+    }
+
+    const strip = extraFromProduct.slice(0, 4);
+    return productMainImage ? [productMainImage, ...strip] : strip;
+  }, [product, normalizedThumbnails, selectedVariation]);
+
   const handleImageNavigation = (direction) => {
-    if (!allImages || allImages.length <= 1) return;
-    
+    if (!galleryImages || galleryImages.length <= 1) return;
+
     if (direction === 'prev') {
-      setSelectedImageIndex(prev => 
-        prev === 0 ? allImages.length - 1 : prev - 1
-      );
+      setSelectedImageIndex((prev) => (prev === 0 ? galleryImages.length - 1 : prev - 1));
     } else {
-      setSelectedImageIndex(prev => 
-        prev === allImages.length - 1 ? 0 : prev + 1
-      );
+      setSelectedImageIndex((prev) => (prev === galleryImages.length - 1 ? 0 : prev + 1));
     }
   };
 
@@ -366,49 +417,9 @@ const ProductDetail = () => {
     );
   }
 
-  // Normalize thumbnails in case API returns a JSON string or comma-separated list
-  let normalizedThumbnails = [];
-  if (product.thumbnails) {
-    if (Array.isArray(product.thumbnails)) {
-      normalizedThumbnails = product.thumbnails;
-    } else if (typeof product.thumbnails === 'string') {
-      const raw = product.thumbnails.trim();
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          normalizedThumbnails = parsed;
-        } else if (parsed && typeof parsed === 'string') {
-          normalizedThumbnails = [parsed];
-        }
-      } catch (e) {
-        if (raw.includes(',')) {
-          normalizedThumbnails = raw.split(',').map(s => s.trim()).filter(Boolean);
-        } else {
-          normalizedThumbnails = [raw];
-        }
-      }
-    }
-  }
+  const allImages = galleryImages;
+  const thumbStripImages = allImages.slice(1, 5);
 
-  // Prepare images array - merge all possible image sources (main + thumbnails)
-  const rawImages = [
-    product.image,
-    ...(Array.isArray(product.images) ? product.images : (product.images ? [product.images] : [])),
-    ...normalizedThumbnails
-  ].filter(Boolean);
-
-  // Base main image from product data
-  const productMainImage = rawImages[0] || null;
-  const productThumbnails = rawImages.slice(1);
-  
-  const variationThumbs = selectedVariation?.thumbnails?.length
-    ? selectedVariation.thumbnails
-    : (selectedVariation?.imageUrl ? [selectedVariation.imageUrl] : []);
-
-  const mainImage = variationThumbs[0] || productMainImage;
-
-  const allImages = [...new Set([mainImage, ...variationThumbs.slice(1), ...productThumbnails].filter(Boolean))];
-  
   const currentImage = allImages[selectedImageIndex] || '/logo192.png';
   const imageUrl = getImageUrl(currentImage);
 
@@ -442,6 +453,12 @@ const ProductDetail = () => {
   ];
 
   const handleVariationSelect = (variation) => {
+    if (selectedVariation?.id === variation.id) {
+      setSelectedVariation(null);
+      setVariationRequiredMessage('');
+      setSelectedImageIndex(0);
+      return;
+    }
     setSelectedVariation(variation);
     setVariationRequiredMessage('');
     setSelectedImageIndex(0);
@@ -555,7 +572,7 @@ const ProductDetail = () => {
             {/* Thumbnails - Show exactly 4 thumbnails */}
             <div className="pdp-thumbs">
               {Array.from({ length: 4 }, (_, index) => {
-                const image = allImages[index + 1] || null; // Skip main image (index 0)
+                const image = thumbStripImages[index] || null;
                 const thumbUrl = image ? getImageUrl(image) : null;
                 const isActive = (index + 1) === selectedImageIndex;
                 const hasImage = !!image;
@@ -602,7 +619,7 @@ const ProductDetail = () => {
               <h1 className="pdp-title">{product.name}</h1>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {hasVariations && !selectedVariation ? (
-                  <span className="stock-badge in-stock" style={{ background: '#6c757d' }}>
+                  <span className={`stock-badge ${variationStockSum > 0 ? 'select-option' : 'out-of-stock'}`}>
                     {variationStockSum > 0 ? 'Select an option' : 'Out of Stock'}
                   </span>
                 ) : stockQuantity > 0 ? (
@@ -614,7 +631,7 @@ const ProductDetail = () => {
                 )}
               </div>
             </div>
-            
+
             {/* Rating */}
             {product.rating > 0 && (
               <div className="pdp-rating">
@@ -652,21 +669,29 @@ const ProductDetail = () => {
               <p>{product.description || 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna'}</p>
             </div>
 
-            {/* Product Variations */}
             {hasVariations && (
-              <div className="variation-cards-container">
-                <p style={{ margin: '0 0 10px', fontSize: '0.9em', color: '#666' }}>
-                  Choose an option <span style={{ color: '#dc3545' }}>*</span>
-                </p>
+              <section className="pdp-variations-section" aria-label="Product options">
+                <h2 className="pdp-variations-heading">
+                  Choose an option <span className="required-asterisk">*</span>
+                </h2>
                 {variationRequiredMessage && (
-                  <p style={{ margin: '0 0 10px', fontSize: '0.9em', color: '#dc3545' }}>{variationRequiredMessage}</p>
+                  <p className="variation-required-message">{variationRequiredMessage}</p>
                 )}
+                <div className="variation-cards-container">
                 {variations.map((variation) => (
                   <div
                     key={variation.id}
                     className={`variation-card ${selectedVariation?.id === variation.id ? 'selected' : ''}`}
                     onClick={() => handleVariationSelect(variation)}
-                    title="Select this option"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleVariationSelect(variation);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    title={selectedVariation?.id === variation.id ? 'Click again to clear selection' : 'Select this option'}
                   >
                     {variation.imageUrl && (
                       <div className="variation-image">
@@ -690,11 +715,11 @@ const ProductDetail = () => {
                     </div>
                   </div>
                 ))}
-              </div>
+                </div>
+              </section>
             )}
 
 
-            {/* Quantity and Action Buttons */}
             <div className="pdp-actions">
               <div className="quantity-selector">
                 <button 
