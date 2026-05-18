@@ -523,7 +523,7 @@
         .stock-qty { font-weight: 700; font-size: 1.05em; display: inline-block; min-width: 2em; text-align: center; }
         .stock-qty-negative { color: #b02a37; }
         .stock-qty-out { color: #DC3545; }
-        .stock-qty-critical { color: #e65100; }
+        .stock-qty-critical { color: #FF9800; }
         .stock-qty-low { color: #d4af37; }
         .stock-qty-normal { color: #28a745; }
         .stock-qty-available { color: #28a745; }
@@ -532,7 +532,7 @@
         .inventory-list-toolbar label { display: block; font-size: 0.85em; margin-bottom: 4px; color: #555; }
         .inventory-list-toolbar input,
         .inventory-list-toolbar select { padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.9em; }
-        .inventory-list-summary { font-size: 0.9em; color: #666; margin: 0; white-space: nowrap; }
+        .inventory-list-summary { font-size: 0.78em; color: #868e96; margin: 6px 0 0; white-space: nowrap; }
         .inventory-list-empty { color: #666; margin: 16px 0; }
         .inventory-pagination { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin: 20px 0 8px; }
         .inventory-pagination a,
@@ -540,6 +540,67 @@
         .inventory-pagination a:hover { background: #f8f9fa; }
         .inventory-pagination .current { background: #007bff; color: #fff; border-color: #007bff; }
         .inventory-pagination .disabled { color: #9ca3af; pointer-events: none; background: #f3f4f6; }
+        .inventory-filter-card {
+            background: #fff;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+        }
+        .inventory-filter-form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 8px;
+            align-items: flex-end;
+        }
+        .inventory-filter-field { min-width: 130px; flex: 1 1 150px; }
+        .inventory-filter-field label {
+            display: block;
+            font-size: 0.72em;
+            font-weight: 500;
+            margin-bottom: 2px;
+            color: #6c757d;
+        }
+        .inventory-filter-field input,
+        .inventory-filter-field select {
+            width: 100%;
+            padding: 5px 8px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            font-size: 0.85em;
+            background: #fff;
+        }
+        .inventory-filter-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+            flex: 0 0 auto;
+        }
+        .inventory-filter-actions .pi-btn {
+            padding: 5px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .inventory-filter-actions .pi-btn-primary { background: #007bff; color: #fff; }
+        .inventory-filter-actions .pi-btn-primary:hover { background: #0069d9; }
+        .inventory-filter-actions .pi-btn-secondary { background: #6c757d; color: #fff; text-decoration: none; display: inline-flex; align-items: center; }
+        .inventory-filter-actions .pi-btn-secondary:hover { background: #5a6268; color: #fff; }
+        .archive-variation-btn {
+            background-color: #dc3545 !important;
+            color: #fff !important;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        .archive-variation-btn:hover { background-color: #c82333 !important; }
         .edit-material-btn {
             background-color: #ffc107;
             color: #000;
@@ -643,6 +704,14 @@
             font-weight: 600;
         }
         .pi-modal-compact .pi-btn-primary { background: #28a745; color: #fff; }
+        #addProductModal .pi-btn-primary {
+            background: #D4A017;
+            color: #1a1a1a;
+        }
+        #addProductModal .pi-btn-primary:hover {
+            background: #B8860B;
+            color: #1a1a1a;
+        }
         .pi-modal-compact .pi-btn-secondary { background: #6c757d; color: #fff; }
         .pi-modal-compact .pi-btn-info { background: #007bff; color: #fff; }
         .pi-modal-compact .close-button { margin-top: -4px; }
@@ -790,7 +859,7 @@
                 <button type="button" class="tab-button" data-tab="raw-materials" id="tabBtnRawMaterials">Raw Materials</button>
             </div>
 
-            <div id="productsTab" class="tab-content active">
+            <div id="productsTab" class="tab-content active" data-search-filter="<%= (typeof listFilters !== 'undefined' && listFilters.search) ? String(listFilters.search).replace(/"/g, '&quot;') : '' %>">
             <div class="content-area">
                 <div style="display: flex; justify-content: flex-start; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
                     <button type="button" id="addInventoryItemBtn" class="add-inventory-btn">Add Product</button>
@@ -880,9 +949,9 @@
                             </div>
                             
                             <div class="form-group pi-section">
-                                <h4>Raw Materials</h4>
-                                <p>Qty per unit when stocked. Initial variation quantities deduct from raw materials on create.</p>
-                                <div id="createInventoryRecipeStatus" style="font-size: 0.9em; margin-bottom: 10px; color: #666;"><em>Optional — add materials used per unit</em></div>
+                                <h4>Raw Materials <span style="color:#dc3545;">*</span></h4>
+                                <p>Qty per unit when stocked. Required — initial variation quantities deduct from these materials on create.</p>
+                                <div id="createInventoryRecipeStatus" style="font-size: 0.9em; margin-bottom: 10px; color: #666;"><em>Add at least one material used per unit</em></div>
                                 <div class="materials-section">
                                     <div id="createInventoryMaterialsContainer"></div>
                                     <button type="button" id="addCreateInventoryMaterialBtn" class="add-material-btn">+ Add Material</button>
@@ -960,13 +1029,14 @@
                     const invRangeEnd = invPag.totalCount > 0 ? Math.min(invPag.page * invPag.limit, invPag.totalCount) : 0;
                 %>
 
-                <div class="inventory-list-toolbar">
-                    <form method="get" action="/Employee/Admin/ProductInventory">
-                        <div>
+                <div class="inventory-filter-card" data-inventory-search="<%= (invFilters.search || '').replace(/"/g, '&quot;') %>">
+                    <form method="get" action="/Employee/Admin/ProductInventory" class="inventory-filter-form">
+                        <input type="hidden" name="page" value="1">
+                        <div class="inventory-filter-field">
                             <label for="invSearch">Search</label>
-                            <input type="text" id="invSearch" name="search" value="<%= invFilters.search || '' %>" placeholder="Name or SKU">
+                            <input type="search" id="invSearch" name="search" value="<%= invFilters.search || '' %>" placeholder="Name or variation SKU">
                         </div>
-                        <div>
+                        <div class="inventory-filter-field">
                             <label for="invCategory">Category</label>
                             <select id="invCategory" name="category">
                                 <option value="">All categories</option>
@@ -975,14 +1045,12 @@
                                 <% }); %>
                             </select>
                         </div>
-                        <div>
-                            <button type="submit" class="pi-btn pi-btn-primary" style="margin-top: 18px;">Apply</button>
+                        <div class="inventory-filter-actions">
+                            <button type="submit" class="pi-btn pi-btn-primary">Apply filters</button>
+                            <% if (invFilters.search || invFilters.category) { %>
+                            <a href="/Employee/Admin/ProductInventory" class="pi-btn pi-btn-secondary">Clear</a>
+                            <% } %>
                         </div>
-                        <% if (invFilters.search || invFilters.category) { %>
-                        <div style="align-self: flex-end;">
-                            <a href="/Employee/Admin/ProductInventory" style="font-size: 0.9em;">Clear filters</a>
-                        </div>
-                        <% } %>
                     </form>
                     <% if (invPag.totalCount > 0) { %>
                     <p class="inventory-list-summary">Showing <%= invRangeStart %>–<%= invRangeEnd %> of <%= invPag.totalCount %> products</p>
@@ -1234,20 +1302,21 @@
                             <label for="variationQuantity">Quantity</label>
                             <input type="number" id="variationQuantity" name="quantity" min="1" required>
                             <small id="availableStockInfo" style="display: block; margin-top: 5px; color: #666; font-size: 0.85em;"></small>
+                            <div id="addVariationRecipeStatus" style="margin-top: 8px; font-size: 0.85em; color: #555;"><em>Loading parent recipe…</em></div>
                         </div>
                     </div>
                     <div class="pi-form-grid" style="margin-top:10px;">
                         <div>
                             <label for="variationMainImage">Main Image</label>
-                            <input type="file" id="variationMainImage" class="variation-main-image" name="variationMainImage" accept="image/*">
+                            <input type="file" id="variationMainImage" class="variation-main-image" accept="image/*">
                         </div>
                         <div>
                             <label for="variationThumbnails">Thumbnails (up to 4)</label>
-                            <input type="file" id="variationThumbnails" class="variation-thumbnails" name="variationThumbnails" accept="image/*" multiple>
+                            <input type="file" id="variationThumbnails" class="variation-thumbnails" accept="image/*" multiple>
                         </div>
                         <div style="grid-column: span 2;">
                             <label for="variationModel3d">3D Model (GLB/GLTF)</label>
-                            <input type="file" id="variationModel3d" class="variation-model3d" name="variationModel3d" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
+                            <input type="file" id="variationModel3d" class="variation-model3d" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
                         </div>
                     </div>
                     <button type="submit" class="pi-btn pi-btn-primary" style="margin-top:10px;">Add Variation</button>
@@ -1361,7 +1430,7 @@
         </div>
     </div>
 
-    <script src="/js/Employee/Admin/product-inventory.js" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260518d" defer></script>
     <script src="/js/Employee/Admin/product-inventory-tabs.js" defer></script>
     <script src="/js/Employee/Admin/raw-materials-tab.js"></script>
 

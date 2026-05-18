@@ -78,7 +78,10 @@ async function ensureVariationMediaColumns(pool) {
 function mapVariationMediaFiles(files, variationsList) {
     const mainFiles = (files && files.variationMainImage) ? files.variationMainImage : [];
     const modelFiles = (files && files.variationModel3d) ? files.variationModel3d : [];
-    const thumbFiles = (files && files.variationThumbnail) ? files.variationThumbnail : [];
+    const thumbFiles = [
+        ...((files && files.variationThumbnail) ? files.variationThumbnail : []),
+        ...((files && files.variationThumbnails) ? files.variationThumbnails : [])
+    ];
     let mainIndex = 0;
     let thumbIndex = 0;
     let modelIndex = 0;
@@ -95,7 +98,9 @@ function mapVariationMediaFiles(files, variationsList) {
 function parseSingleVariationMediaFiles(files) {
     return {
         mainFile: (files && files.variationMainImage && files.variationMainImage[0]) || null,
-        thumbFiles: (files && files.variationThumbnail) ? files.variationThumbnail.slice(0, 4) : [],
+        thumbFiles: (files && files.variationThumbnail)
+            ? files.variationThumbnail.slice(0, 4)
+            : ((files && files.variationThumbnails) ? files.variationThumbnails.slice(0, 4) : []),
         modelFile: (files && files.variationModel3d && files.variationModel3d[0]) || null
     };
 }

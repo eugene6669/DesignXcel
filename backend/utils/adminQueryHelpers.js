@@ -162,7 +162,20 @@ function applyInventoryListFilters(request, filters = {}) {
     const search = String(filters.search || '').trim();
     if (search) {
         request.input('search', sql.NVarChar, `%${search}%`);
-        clause += ` AND (ip.Name LIKE @search OR ip.SKU LIKE @search)`;
+        clause += ` AND (
+            ip.Name LIKE @search
+            OR ip.SKU LIKE @search
+            OR EXISTS (
+                SELECT 1
+                FROM InventoryProductVariations iv
+                WHERE iv.InventoryProductID = ip.InventoryProductID
+                  AND iv.IsActive = 1
+                  AND (
+                      iv.SKU LIKE @search
+                      OR iv.VariationName LIKE @search
+                  )
+            )
+        )`;
     }
     const category = String(filters.category || '').trim();
     if (category) {
@@ -306,11 +319,59 @@ async function loadProductInventoryPageData(pool, options = {}) {
     };
 }
 
+async function fetchInventoryProductSummary(pool, inventoryProductId) {
+    const id = parseInt(inventoryProductId, 10);
+    if (!id || Number.isNaN(id)) return null;
+
+    const request = pool.request();
+    request.input('id', sql.Int, id);
+    const result = await request.query(`
+        ${INVENTORY_PRODUCT_LIST_CORE}
+        WHERE ip.IsActive = 1 AND ip.InventoryProductID = @id
+    `);
+    const row = result.recordset[0];
+    if (!row) return null;
+
+    return {
+        inventoryProductId: row.InventoryProductID,
+        totalQuantity: Number(row.TotalQuantity) || 0,
+        availableQuantity: Number(row.AvailableQuantity) || 0,
+        inventoryStatus: row.InventoryStatus || 'available'
+    };
+}
+
+async function fetchActiveRawMaterialsList(pool) {
+    const result = await pool.request().query(`
+        SELECT
+            MaterialID as id,
+            Name as name,
+            QuantityAvailable as stockQuantity,
+            Unit as unit,
+            LastUpdated as createdAt,
+            IsActive as active
+        FROM RawMaterials
+        WHERE IsActive = 1
+        ORDER BY Name ASC
+    `);
+    return result.recordset || [];
+}
+
+async function buildInventoryStockRefreshPayload(pool, inventoryProductId) {
+    const [summary, materials] = await Promise.all([
+        fetchInventoryProductSummary(pool, inventoryProductId),
+        fetchActiveRawMaterialsList(pool)
+    ]);
+    return { summary, materials };
+}
+
 module.exports = {
     getOrdersSchemaFlags,
     attachOrderItemsBatch,
     loadProductInventoryPageData,
     INVENTORY_LIST_PAGE_SIZE,
     countInventoryProducts,
-    fetchInventoryProductsPage
+    fetchInventoryProductsPage,
+    fetchInventoryProductSummary,
+    fetchActiveRawMaterialsList,
+    buildInventoryStockRefreshPayload
 };

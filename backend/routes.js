@@ -39,7 +39,9 @@ const { processGatewayRefund } = require('./utils/processGatewayRefund');
 const {
     getOrdersSchemaFlags,
     attachOrderItemsBatch,
-    loadProductInventoryPageData
+    loadProductInventoryPageData,
+    buildInventoryStockRefreshPayload,
+    fetchInventoryProductSummary
 } = require('./utils/adminQueryHelpers');
 const { invalidateAdminPageCache } = require('./utils/adminPageCache');
 const { resolveProductId } = require('./utils/productIdResolver');
@@ -1976,7 +1978,7 @@ module.exports = function (sql, pool, getStripe = null) {
         if (fieldname === 'inventoryImage' || fieldname === 'productImage') return 'inventory';
         if (fieldname === 'variationImage' || fieldname === 'variationMainImage') return 'variations';
         if (fieldname === 'variationModel3d') return 'models';
-        if (fieldname === 'variationThumbnail') return 'thumbnails';
+        if (fieldname === 'variationThumbnail' || fieldname === 'variationThumbnails') return 'thumbnails';
         return '';
     };
 
@@ -1996,7 +1998,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         ? `variations/${finalName}`
                         : file.fieldname === 'variationModel3d'
                             ? `products/models/${finalName}`
-                            : file.fieldname === 'variationThumbnail'
+                            : (file.fieldname === 'variationThumbnail' || file.fieldname === 'variationThumbnails')
                                 ? `products/thumbnails/${finalName}`
                                 : (subdirectory
                             ? `products/${subdirectory}/${finalName}`
@@ -2046,7 +2048,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     dest = path.join(__dirname, 'public', 'uploads', 'variations');
                 } else if (file.fieldname === 'variationModel3d') {
                     dest = path.join(__dirname, 'public', 'uploads', 'products', 'models');
-                } else if (file.fieldname === 'variationThumbnail') {
+                } else if (file.fieldname === 'variationThumbnail' || file.fieldname === 'variationThumbnails') {
                     dest = path.join(__dirname, 'public', 'uploads', 'products', 'thumbnails');
                 } else {
                     dest = path.join(__dirname, 'public', 'uploads', 'products');
@@ -2083,7 +2085,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 } else {
                     cb(new Error('Only GLB and GLTF files are allowed for 3D models!'), false);
                 }
-            } else if (file.fieldname === 'variationMainImage' || file.fieldname === 'variationThumbnail' || file.mimetype.startsWith('image/')) {
+            } else if (file.fieldname === 'variationMainImage' || file.fieldname === 'variationThumbnail' || file.fieldname === 'variationThumbnails' || file.mimetype.startsWith('image/')) {
                 cb(null, true);
             } else {
                 cb(new Error('Only image files are allowed!'), false);
@@ -24642,7 +24644,8 @@ module.exports = function (sql, pool, getStripe = null) {
             router.post('/Employee/Admin/ProductInventory/Add', isAuthenticated, productUpload.fields([
                 { name: 'variationMainImage', maxCount: 50 },
                 { name: 'variationModel3d', maxCount: 50 },
-                { name: 'variationThumbnail', maxCount: 200 }
+                { name: 'variationThumbnail', maxCount: 200 },
+                { name: 'variationThumbnails', maxCount: 200 }
             ]), async (req, res) => {
                 const wantsJson = req.get('X-Requested-With') === 'XMLHttpRequest' || (req.get('Accept') || '').includes('application/json');
                 const respondError = (message, status = 400) => {
@@ -24704,6 +24707,23 @@ module.exports = function (sql, pool, getStripe = null) {
                     });
                     if (validVariations.length === 0) {
                         return respondError('Each variation needs a name and initial quantity of at least 1.');
+                    }
+
+                    let materialsData = [];
+                    if (requiredMaterials && String(requiredMaterials).trim() !== '' && String(requiredMaterials).trim() !== '[]') {
+                        try {
+                            materialsData = typeof requiredMaterials === 'string' ? JSON.parse(requiredMaterials) : requiredMaterials;
+                        } catch (parseMatErr) {
+                            return respondError('Invalid recipe materials data.');
+                        }
+                    }
+                    const validMaterials = (Array.isArray(materialsData) ? materialsData : []).filter((m) => {
+                        const mid = parseInt(m.materialId || m.MaterialID, 10);
+                        const qty = parseInt(m.quantityRequired || m.QuantityRequired, 10);
+                        return mid && qty > 0;
+                    });
+                    if (validMaterials.length === 0) {
+                        return respondError('At least one raw material with quantity per unit is required.');
                     }
 
                     const catalogPrice = parentPrice;
@@ -24777,20 +24797,9 @@ module.exports = function (sql, pool, getStripe = null) {
                             `);
 
                         let materialsCollected = [];
-                        if (requiredMaterials && String(requiredMaterials).trim() !== '' && String(requiredMaterials).trim() !== '[]') {
-                            let materialsData = [];
-                            try {
-                                materialsData = typeof requiredMaterials === 'string' ? JSON.parse(requiredMaterials) : requiredMaterials;
-                            } catch (parseMatErr) {
-                                console.error('ProductInventory/Add - requiredMaterials parse error:', parseMatErr.message);
-                                throw new Error('Invalid recipe materials data.');
-                            }
-                            if (Array.isArray(materialsData) && materialsData.length > 0) {
-                                await saveInventoryProductMaterials(transaction, inventoryProductId, materialsData);
-                                materialsCollected = await getInventoryProductMaterials(transaction, inventoryProductId);
-                                console.log('ProductInventory/Add - Saved recipe:', materialsCollected.length, 'material(s)');
-                            }
-                        }
+                        await saveInventoryProductMaterials(transaction, inventoryProductId, validMaterials);
+                        materialsCollected = await getInventoryProductMaterials(transaction, inventoryProductId);
+                        console.log('ProductInventory/Add - Saved recipe:', materialsCollected.length, 'material(s)');
 
                         let variationStockTotal = 0;
                         const catalogVariationRows = [];
@@ -25160,6 +25169,24 @@ module.exports = function (sql, pool, getStripe = null) {
             // =============================================================================
             // INVENTORY PRODUCT RESTOCK
             // =============================================================================
+            router.get('/api/admin/inventory-products/:id/summary', isAuthenticated, async (req, res) => {
+                try {
+                    await pool.connect();
+                    const id = parseInt(req.params.id, 10);
+                    if (!id || Number.isNaN(id)) {
+                        return res.json({ success: false, message: 'Invalid product id.' });
+                    }
+                    const summary = await fetchInventoryProductSummary(pool, id);
+                    if (!summary) {
+                        return res.json({ success: false, message: 'Product not found.' });
+                    }
+                    return res.json({ success: true, summary });
+                } catch (err) {
+                    console.error('Inventory product summary error:', err);
+                    return res.json({ success: false, message: 'Failed to load product summary.' });
+                }
+            });
+
             router.post('/api/admin/inventory-products/restock', isAuthenticated, async (req, res) => {
                 try {
                     await pool.connect();
@@ -25236,7 +25263,11 @@ module.exports = function (sql, pool, getStripe = null) {
                             console.error('[RESTOCK] Variation sync error:', syncErr);
                         }
 
-                        return res.json({ success: true, message: `Added ${addQty} to variation stock.` });
+                        const variationRefresh = await buildInventoryStockRefreshPayload(pool, inventoryProductId);
+                        return res.json(Object.assign(
+                            { success: true, message: `Added ${addQty} to variation stock.` },
+                            variationRefresh
+                        ));
                     }
 
                     if (variationId) {
@@ -25276,7 +25307,11 @@ module.exports = function (sql, pool, getStripe = null) {
                         }
                     }
 
-                    return res.json({ success: true, message: `Added ${addQty} to product stock.` });
+                    const productRefresh = await buildInventoryStockRefreshPayload(pool, inventoryProductId);
+                    return res.json(Object.assign(
+                        { success: true, message: `Added ${addQty} to product stock.` },
+                        productRefresh
+                    ));
                 } catch (err) {
                     console.error('Restock error:', err);
                     return res.json({ success: false, message: 'Failed to restock: ' + err.message });
@@ -25382,7 +25417,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                 ISNULL(v.ReturnedQuantity, 0) as ReturnedQuantity,
                                 ISNULL(v.RepairedQuantity, 0) as RepairedQuantity,
                                 ISNULL(v.DisposedQuantity, 0) as DisposedQuantity,
-                                ISNULL(v.Price, 0) AS Price,
+                                COALESCE(NULLIF(v.Price, 0), ip.Price, p.Price, 0) AS Price,
                                 COALESCE(
                                     NULLIF(LTRIM(RTRIM(ISNULL(v.VariationImageURL, N''))), N''),
                                     pv.VariationImageURL
@@ -25390,12 +25425,36 @@ module.exports = function (sql, pool, getStripe = null) {
                                 v.IsActive,
                                 v.CreatedAt
                             FROM InventoryProductVariations v
+                            LEFT JOIN InventoryProducts ip ON ip.InventoryProductID = v.InventoryProductID
+                            LEFT JOIN Products p ON p.ProductID = COALESCE(v.ProductID, ip.ProductID)
                             LEFT JOIN ProductVariations pv ON pv.VariationID = v.VariationID
                             WHERE (v.ProductID = @productId OR v.InventoryProductID = @productId 
                                    OR v.ProductID = @requestedProductId OR v.InventoryProductID = @requestedProductId)
                                 AND v.IsActive = 1
                             ORDER BY v.CreatedAt DESC
                         `);
+
+                    const parentPriceResult = await pool.request()
+                        .input('productId', sql.Int, requestedProductId)
+                        .query(`
+                            SELECT TOP 1 ip.Price AS ParentPrice
+                            FROM InventoryProducts ip
+                            WHERE ip.InventoryProductID = @productId AND ip.IsActive = 1
+                        `);
+                    const parentProductPrice = parentPriceResult.recordset[0]?.ParentPrice != null
+                        ? parseFloat(parentPriceResult.recordset[0].ParentPrice)
+                        : null;
+
+                    let parentRecipeMaterials = [];
+                    try {
+                        const recipeRows = await getInventoryProductMaterials(pool, requestedProductId);
+                        parentRecipeMaterials = recipeRows.map((m) => ({
+                            MaterialID: m.materialId,
+                            QuantityRequired: m.quantityRequired
+                        }));
+                    } catch (recipeLoadErr) {
+                        console.log('[INVENTORY VARIATIONS API] parent recipe:', recipeLoadErr.message);
+                    }
 
                     // Get total variation quantity used (already filtered by IsActive = 1 in query)
                     const totalVariationQuantity = result.recordset
@@ -25420,7 +25479,9 @@ module.exports = function (sql, pool, getStripe = null) {
                         variations,
                         productStock: productStock,
                         totalVariationQuantity: totalVariationQuantity,
-                        availableStock: productStock - totalVariationQuantity
+                        availableStock: productStock - totalVariationQuantity,
+                        parentProductPrice,
+                        parentRecipeMaterials
                     });
                 } catch (err) {
                     console.error('Error fetching inventory product variations:', err);
@@ -25435,6 +25496,7 @@ module.exports = function (sql, pool, getStripe = null) {
             router.post('/api/admin/inventory-product-variations/add', isAuthenticated, productUpload.fields([
                 { name: 'variationMainImage', maxCount: 1 },
                 { name: 'variationThumbnail', maxCount: 4 },
+                { name: 'variationThumbnails', maxCount: 4 },
                 { name: 'variationModel3d', maxCount: 1 }
             ]), async (req, res) => {
                 try {
@@ -25568,27 +25630,60 @@ module.exports = function (sql, pool, getStripe = null) {
                         publicUrlFromMulterVariationFile
                     );
 
-                    // Insert variation - use ProductID or InventoryProductID based on what's available
-                    const result = await pool.request()
-                        .input('productID', sql.Int, actualProductID)
-                        .input('inventoryProductID', sql.Int, actualInventoryProductID)
-                        .input('variationName', sql.NVarChar, variationName)
-                        .input('color', sql.NVarChar, color || null)
-                        .input('quantity', sql.Int, variationQuantity)
-                        .input('price', sql.Decimal(10, 2), price ? parseFloat(price) : null)
-                        .input('imageUrl', sql.NVarChar, mediaUrls.imageUrl)
-                        .input('thumbJson', sql.NVarChar, mediaUrls.thumbJson)
-                        .input('model3d', sql.NVarChar, mediaUrls.model3d)
-                        .input('isActive', sql.Bit, isActive === '1' ? 1 : 0)
-                        .input('createdBy', sql.Int, req.session.user ? req.session.user.id : null)
-                        .query(`
-                            INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity, Price, VariationImageURL, ThumbnailURLs, Model3D, IsActive, CreatedBy)
-                                OUTPUT INSERTED.VariationID
-                            VALUES (@productID, @inventoryProductID, @variationName, @color, @quantity, @quantity, @price, @imageUrl, @thumbJson, @model3d, @isActive, @createdBy)
-                        `);
+                    let resolvedVariationPrice = price != null && String(price).trim() !== ''
+                        ? parseFloat(price)
+                        : null;
+                    if (resolvedVariationPrice == null || Number.isNaN(resolvedVariationPrice) || resolvedVariationPrice <= 0) {
+                        const parentPriceRow = await pool.request()
+                            .input('inventoryProductId', sql.Int, actualInventoryProductID)
+                            .query(`
+                                SELECT Price FROM InventoryProducts
+                                WHERE InventoryProductID = @inventoryProductId AND IsActive = 1
+                            `);
+                        const parentPriceVal = parentPriceRow.recordset[0]?.Price;
+                        if (parentPriceVal != null) {
+                            resolvedVariationPrice = parseFloat(parentPriceVal);
+                        }
+                    }
+                    if (resolvedVariationPrice == null || Number.isNaN(resolvedVariationPrice)) {
+                        resolvedVariationPrice = null;
+                    }
 
-                    const variationID = result.recordset[0].VariationID;
-                    const variationSku = await assignVariationSku(pool, variationID, variationName);
+                    const addVariationTx = new sql.Transaction(pool);
+                    await addVariationTx.begin();
+                    let variationID;
+                    let variationSku;
+                    try {
+                        const result = await addVariationTx.request()
+                            .input('productID', sql.Int, actualProductID)
+                            .input('inventoryProductID', sql.Int, actualInventoryProductID)
+                            .input('variationName', sql.NVarChar, variationName)
+                            .input('color', sql.NVarChar, color || null)
+                            .input('quantity', sql.Int, variationQuantity)
+                            .input('price', sql.Decimal(10, 2), resolvedVariationPrice)
+                            .input('imageUrl', sql.NVarChar, mediaUrls.imageUrl)
+                            .input('thumbJson', sql.NVarChar, mediaUrls.thumbJson)
+                            .input('model3d', sql.NVarChar, mediaUrls.model3d)
+                            .input('isActive', sql.Bit, isActive === '1' ? 1 : 0)
+                            .input('createdBy', sql.Int, req.session.user ? req.session.user.id : null)
+                            .query(`
+                                INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity, Price, VariationImageURL, ThumbnailURLs, Model3D, IsActive, CreatedBy)
+                                    OUTPUT INSERTED.VariationID
+                                VALUES (@productID, @inventoryProductID, @variationName, @color, @quantity, @quantity, @price, @imageUrl, @thumbJson, @model3d, @isActive, @createdBy)
+                            `);
+
+                        variationID = result.recordset[0].VariationID;
+                        variationSku = await assignVariationSku(addVariationTx, variationID, variationName);
+
+                        if (actualInventoryProductID && variationQuantity > 0) {
+                            await applyMaterialsDeltaForInventoryProduct(addVariationTx, actualInventoryProductID, variationQuantity);
+                        }
+
+                        await addVariationTx.commit();
+                    } catch (addVarTxErr) {
+                        await addVariationTx.rollback();
+                        throw addVarTxErr;
+                    }
 
                     const linkedProductResult = await pool.request()
                         .input('inventoryProductId', sql.Int, actualInventoryProductID)
@@ -25599,7 +25694,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             variationName,
                             color: color || null,
                             quantity: variationQuantity,
-                            price: price ? parseFloat(price) : null,
+                            price: resolvedVariationPrice,
                             imageUrl: mediaUrls.imageUrl,
                             thumbnailUrls: mediaUrls.thumbnailUrls,
                             model3d: mediaUrls.model3d,
@@ -25657,10 +25752,13 @@ module.exports = function (sql, pool, getStripe = null) {
                         }
                     }
 
-                    res.json({
-                        success: true,
-                        message: `Variation added successfully.`
-                    });
+                    const addVariationRefresh = actualInventoryProductID
+                        ? await buildInventoryStockRefreshPayload(pool, actualInventoryProductID)
+                        : {};
+                    res.json(Object.assign(
+                        { success: true, message: 'Variation added successfully.' },
+                        addVariationRefresh
+                    ));
                 } catch (err) {
                     console.error('Error adding inventory product variation:', err);
                     res.json({
@@ -25920,6 +26018,7 @@ module.exports = function (sql, pool, getStripe = null) {
             router.post('/api/admin/inventory-product-variations/update-status', isAuthenticated, productUpload.fields([
                 { name: 'variationMainImage', maxCount: 1 },
                 { name: 'variationThumbnail', maxCount: 4 },
+                { name: 'variationThumbnails', maxCount: 4 },
                 { name: 'variationModel3d', maxCount: 1 }
             ]), async (req, res) => {
                 try {
@@ -26166,11 +26265,17 @@ module.exports = function (sql, pool, getStripe = null) {
                         }
                     }
 
-                    res.json({
-                        success: true,
-                        message: 'Variation status updated successfully.',
-                        data: updateResult.recordset[0]
-                    });
+                    const statusRefresh = inventoryProductId
+                        ? await buildInventoryStockRefreshPayload(pool, inventoryProductId)
+                        : {};
+                    res.json(Object.assign(
+                        {
+                            success: true,
+                            message: 'Variation status updated successfully.',
+                            data: updateResult.recordset[0]
+                        },
+                        statusRefresh
+                    ));
                 } catch (err) {
                     console.error('Error updating variation status:', err);
                     res.json({
@@ -26217,10 +26322,21 @@ module.exports = function (sql, pool, getStripe = null) {
 
                     await cascadeArchiveCmsProductVariationFromInventoryVariationArchived(variationID);
 
-                    res.json({
-                        success: true,
-                        message: 'Variation archived successfully.'
-                    });
+                    const archivedInvProductId = variationResult.recordset[0].InventoryProductID;
+                    if (archivedInvProductId) {
+                        try {
+                            await syncInventoryProductQtyFromVariations(archivedInvProductId);
+                        } catch (syncErr) {
+                            console.error('[ARCHIVE VARIATION] Product qty sync error:', syncErr);
+                        }
+                    }
+                    const archiveRefresh = archivedInvProductId
+                        ? await buildInventoryStockRefreshPayload(pool, archivedInvProductId)
+                        : {};
+                    res.json(Object.assign(
+                        { success: true, message: 'Variation archived successfully.' },
+                        archiveRefresh
+                    ));
                 } catch (err) {
                     console.error('Error archiving inventory product variation:', err);
                     res.json({
@@ -27186,7 +27302,11 @@ module.exports = function (sql, pool, getStripe = null) {
                     console.error('[RESTOCK] Variation sync error:', syncErr);
                 }
 
-                return res.json({ success: true, message: `Added ${addQty} to variation stock.` });
+                const variationRefreshDup = await buildInventoryStockRefreshPayload(pool, inventoryProductId);
+                return res.json(Object.assign(
+                    { success: true, message: `Added ${addQty} to variation stock.` },
+                    variationRefreshDup
+                ));
             }
 
             if (variationId) {
@@ -27226,7 +27346,11 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
-            return res.json({ success: true, message: `Added ${addQty} to product stock.` });
+            const productRefreshDup = await buildInventoryStockRefreshPayload(pool, inventoryProductId);
+            return res.json(Object.assign(
+                { success: true, message: `Added ${addQty} to product stock.` },
+                productRefreshDup
+            ));
         } catch (err) {
             console.error('Restock error:', err);
             return res.json({ success: false, message: 'Failed to restock: ' + err.message });

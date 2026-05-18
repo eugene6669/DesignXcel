@@ -6,7 +6,6 @@
             <button type="button" id="rmManageUnitsBtn" class="add-material-btn" style="background:#17a2b8;color:#fff;">Manage Units</button>
         </div>
         <div class="stock-legend rm-legend">
-            <span><i style="background:#b02a37;"></i> Negative</span>
             <span><i style="background:#DC3545;"></i> Out of stock (0)</span>
             <span><i style="background:#FF9800;"></i> Critical (1–10)</span>
             <span><i style="background:#d4af37;"></i> Low (11–20)</span>
@@ -33,7 +32,7 @@
                         else if (n <= 10) qtyClass = 'stock-qty-critical';
                         else if (n <= 20) qtyClass = 'stock-qty-low';
                     %>
-                        <tr>
+                        <tr data-material-id="<%= material.MaterialID %>">
                             <td><%= material.Name %></td>
                             <td class="qty-col"><span class="stock-qty <%= qtyClass %>"><%= qty %></span></td>
                             <td><%= material.Unit %></td>
