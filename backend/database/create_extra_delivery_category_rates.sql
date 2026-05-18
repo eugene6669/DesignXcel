@@ -41,6 +41,6 @@ END
 
 IF NOT EXISTS (SELECT 1 FROM dbo.SystemSettings WHERE SettingKey = 'EXTRA_DELIVERY_MIN_CART_QTY')
 BEGIN
-    INSERT INTO dbo.SystemSettings (SettingKey, SettingValue, Description, UpdatedBy)
+    INSERT INTO dbo.SystemSettings (SettingKey, SettingValue, Description, UpdatedByUsername)
     VALUES ('EXTRA_DELIVERY_MIN_CART_QTY', '4', 'Minimum total cart quantity before extra delivery fees apply', 'System');
 END

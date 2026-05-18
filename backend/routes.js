@@ -10815,7 +10815,7 @@ module.exports = function (sql, pool, getStripe = null) {
             IF OBJECT_ID('dbo.SystemSettings','U') IS NOT NULL
             AND NOT EXISTS (SELECT 1 FROM SystemSettings WHERE SettingKey = 'EXTRA_DELIVERY_MIN_CART_QTY')
             BEGIN
-                INSERT INTO SystemSettings (SettingKey, SettingValue, Description, UpdatedBy)
+                INSERT INTO SystemSettings (SettingKey, SettingValue, Description, UpdatedByUsername)
                 VALUES ('EXTRA_DELIVERY_MIN_CART_QTY', '4', 'Minimum total cart quantity before extra delivery fees apply', 'System');
             END
         `);
@@ -10894,7 +10894,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         UPDATE SystemSettings SET SettingValue = @val, UpdatedAt = GETDATE()
                         WHERE SettingKey = 'EXTRA_DELIVERY_MIN_CART_QTY'
                     ELSE
-                        INSERT INTO SystemSettings (SettingKey, SettingValue, Description, UpdatedBy)
+                        INSERT INTO SystemSettings (SettingKey, SettingValue, Description, UpdatedByUsername)
                         VALUES ('EXTRA_DELIVERY_MIN_CART_QTY', @val, 'Minimum total cart quantity before extra delivery fees apply', 'Admin')
                 `);
             res.json({ success: true, minCartQuantity: qty });
