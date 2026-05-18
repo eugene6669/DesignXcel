@@ -1901,16 +1901,18 @@ app.use((req, res, next) => {
 // Parse Azure SQL Server connection string
 function parseConnectionString(connectionString) {
     const config = {};
-    const pairs = connectionString.split(';');
+    const pairs = connectionString.split(';').filter(part => part.trim().length > 0);
 
     for (const pair of pairs) {
-        const [key, value] = pair.split('=');
-        if (key && value) {
-            const cleanKey = key.trim().toLowerCase();
-            const cleanValue = value.trim();
+        const eqIndex = pair.indexOf('=');
+        if (eqIndex === -1) continue;
+        const cleanKey = pair.slice(0, eqIndex).trim().toLowerCase();
+        const cleanValue = pair.slice(eqIndex + 1).trim();
+        if (!cleanValue) continue;
 
-            switch (cleanKey) {
+        switch (cleanKey) {
                 case 'server':
+                case 'data source':
                     // Remove tcp: prefix and handle port properly
                     let serverValue = cleanValue;
                     if (serverValue.startsWith('tcp:')) {
@@ -1945,8 +1947,11 @@ function parseConnectionString(connectionString) {
                 case 'connection timeout':
                     config.connectionTimeout = parseInt(cleanValue) * 1000; // Convert to milliseconds
                     break;
-            }
         }
+    }
+
+    if (!config.server && process.env.DB_SERVER) {
+        config.server = process.env.DB_SERVER;
     }
 
     return config;
