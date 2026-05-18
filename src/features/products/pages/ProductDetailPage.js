@@ -655,30 +655,7 @@ const ProductDetail = () => {
                     <td>Product ID</td>
                     <td>{product?.id || 'N/A'}</td>
                   </tr>
-                  <tr>
-                    <td>Dimensions</td>
-                    <td>
-                      {(() => {
-                        try {
-                          const dimensions = product?.specifications;
-                          if (dimensions && (dimensions.length || dimensions.width || dimensions.height || dimensions.weight)) {
-                            return (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {dimensions.length && <div><strong>Length:</strong> {dimensions.length} cm</div>}
-                                {dimensions.width && <div><strong>Width:</strong> {dimensions.width} cm</div>}
-                                {dimensions.height && <div><strong>Height:</strong> {dimensions.height} cm</div>}
-                                {dimensions.weight && <div><strong>Weight:</strong> {dimensions.weight} kg</div>}
-                                {dimensions.notes && <div><strong>Notes:</strong> {dimensions.notes}</div>}
-                              </div>
-                            );
-                          }
-                          return 'N/A';
-                        } catch (e) {
-                          return 'N/A';
-                        }
-                      })()}
-                    </td>
-                  </tr>
+
                   <tr>
                     <td>Material</td>
                     <td>{product?.material || 'N/A'}</td>

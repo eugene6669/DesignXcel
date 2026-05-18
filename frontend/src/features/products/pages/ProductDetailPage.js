@@ -1082,39 +1082,7 @@ const ProductDetail = () => {
                         : (product?.sku || 'N/A')}
                     </td>
                   </tr>
-                  <tr>
-                    <td>Dimensions</td>
-                    <td>
-                      {(() => {
-                        try {
-                          const dimensions = product?.specifications;
-                          const dimUnit = dimensions?.unit || 'cm';
-                          if (dimensions && (dimensions.length || dimensions.width || dimensions.height || dimensions.weight)) {
-                            return (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {dimensions.length != null && dimensions.length !== '' && (
-                                  <div><strong>Length:</strong> {dimensions.length} {dimUnit}</div>
-                                )}
-                                {dimensions.width != null && dimensions.width !== '' && (
-                                  <div><strong>Width:</strong> {dimensions.width} {dimUnit}</div>
-                                )}
-                                {dimensions.height != null && dimensions.height !== '' && (
-                                  <div><strong>Height:</strong> {dimensions.height} {dimUnit}</div>
-                                )}
-                                {dimensions.weight != null && dimensions.weight !== '' && (
-                                  <div><strong>Weight:</strong> {dimensions.weight} kg</div>
-                                )}
-                                {dimensions.notes && <div><strong>Notes:</strong> {dimensions.notes}</div>}
-                              </div>
-                            );
-                          }
-                          return 'N/A';
-                        } catch (e) {
-                          return 'N/A';
-                        }
-                      })()}
-                    </td>
-                  </tr>
+
                   <tr>
                     <td>Material</td>
                     <td>{additionalInfoMaterial}</td>
