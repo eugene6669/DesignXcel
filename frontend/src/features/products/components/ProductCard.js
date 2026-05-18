@@ -8,6 +8,7 @@ import QuickViewModal from '../../../shared/components/ui/QuickViewModal';
 import AudioLoader from '../../../shared/components/ui/AudioLoader';
 import { getPrimaryImageUrl } from '../../../shared/utils/imageUtils';
 import { getSellableStock } from '../../../shared/utils/productUtils';
+import { useAvailableStock } from '../../../shared/hooks/useAvailableStock';
 import './product-card.css';
 
 const ProductCard = ({ product }) => {
@@ -38,71 +39,14 @@ const ProductCard = ({ product }) => {
   };
 
   const { formatPrice } = useCurrency();
-  const [currentAvailableStock, setCurrentAvailableStock] = useState(availableStock);
+  const initialStock =
+    availableStock !== null && availableStock !== undefined
+      ? availableStock
+      : getSellableStock(product);
+  const currentAvailableStock = useAvailableStock(id, initialStock);
   const [currentSoldQuantity, setCurrentSoldQuantity] = useState(
     Number(soldQuantity ?? product?.sold ?? 0) || 0
   );
-  
-  // Fetch available stock if not provided, and refresh periodically
-  useEffect(() => {
-    const fetchStock = () => {
-      if (id) {
-        const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-        fetch(`${apiBase}/api/products/${id}/available-stock`)
-          .then(res => res.json())
-          .then(data => {
-            if (data.success) {
-              const stockForCard = (hasVariations || requiresVariationSelection || data.hasVariations)
-                ? (data.variationStockSum ?? data.availableStock ?? 0)
-                : data.availableStock;
-              setCurrentAvailableStock(stockForCard);
-              if (data.soldQuantity != null) {
-                setCurrentSoldQuantity(Number(data.soldQuantity) || 0);
-              }
-            } else {
-              // Use availableStock from props if available, otherwise fallback to stockQuantity
-              setCurrentAvailableStock(availableStock !== null && availableStock !== undefined ? availableStock : (stockQuantity || stock || 0));
-            }
-          })
-          .catch(err => {
-            console.error('Error fetching available stock for product card:', err);
-            // Use availableStock from props if available, otherwise fallback to stockQuantity
-            setCurrentAvailableStock(availableStock !== null && availableStock !== undefined ? availableStock : (stockQuantity || stock || 0));
-          });
-      } else if (availableStock !== null && availableStock !== undefined) {
-        setCurrentAvailableStock(availableStock);
-      } else {
-        setCurrentAvailableStock(stockQuantity || stock || 0);
-      }
-    };
-
-    // Use availableStock from props if provided
-    if (availableStock !== null && availableStock !== undefined) {
-      setCurrentAvailableStock(availableStock);
-    } else if (id) {
-      // Fetch if not provided
-      fetchStock();
-      
-      // Refresh every 5 seconds
-      const interval = setInterval(fetchStock, 5000);
-      
-      // Refresh on visibility change
-      const handleVisibilityChange = () => {
-        if (!document.hidden) {
-          fetchStock();
-        }
-      };
-      
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      
-      return () => {
-        clearInterval(interval);
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-      };
-    } else {
-      setCurrentAvailableStock(stockQuantity || stock || 0);
-    }
-  }, [id, availableStock, stockQuantity, stock, soldQuantity, product?.sold, hasVariations, requiresVariationSelection, product?.variationStockSum]);
 
   useEffect(() => {
     const fromProduct = Number(soldQuantity ?? product?.sold ?? 0) || 0;

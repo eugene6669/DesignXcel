@@ -62,6 +62,8 @@ const CheckoutPage = () => {
     const [shippingMethod, setShippingMethod] = useState('pickup'); // 'pickup' or RateID
     const [shippingCost, setShippingCost] = useState(0);
     const [extraDeliveryFee, setExtraDeliveryFee] = useState(0);
+    const [extraDeliveryRates, setExtraDeliveryRates] = useState([]);
+    const [extraDeliveryMinCartQty, setExtraDeliveryMinCartQty] = useState(4);
     const [showAddressModal, setShowAddressModal] = useState(false);
     const [pickupDateTime, setPickupDateTime] = useState('');
     
@@ -239,78 +241,94 @@ const CheckoutPage = () => {
         setShippingCost(newShippingCost);
     }, [shippingMethod, deliveryRates]);
 
-    // Calculate extra delivery fee based on quantity > 4 and product categories
-    // Fee is charged per item (not per quantity) - flat fee for each item that has quantity > 4
+    const resolveExtraDeliveryRateForCategory = (categoryName, ratesList) => {
+        const rates = ratesList && ratesList.length > 0 ? ratesList : [];
+        const categoryKey = String(categoryName || '').toLowerCase().trim();
+        let defaultRate = 100;
+
+        for (const row of rates) {
+            const name = row.CategoryName || row.categoryName || '';
+            const fee = Number(row.FeePerItem ?? row.feePerItem) || 0;
+            if (row.IsDefault || row.isDefault) {
+                defaultRate = fee;
+                continue;
+            }
+            const key = name.toLowerCase();
+            if (key && (key === categoryKey || categoryKey.includes(key) || key.includes(categoryKey))) {
+                return fee;
+            }
+        }
+        return defaultRate;
+    };
+
+    const resolveExtraDeliveryMinItemQty = (categoryName, ratesList) => {
+        const categoryKey = String(categoryName || '').toLowerCase().trim();
+        for (const row of ratesList || []) {
+            if (row.IsDefault || row.isDefault) continue;
+            const key = (row.CategoryName || row.categoryName || '').toLowerCase();
+            if (key && (key === categoryKey || categoryKey.includes(key) || key.includes(categoryKey))) {
+                return Number(row.MinItemQuantity ?? row.minItemQuantity) || 4;
+            }
+        }
+        const def = (ratesList || []).find((r) => r.IsDefault || r.isDefault);
+        return def ? (Number(def.MinItemQuantity ?? def.minItemQuantity) || 4) : 4;
+    };
+
+    // Calculate extra delivery fee from admin-configured category rates
     const calculateExtraDeliveryFee = () => {
-        // Use only checked items if passed from Cart.js, otherwise use all cart items
         const items = location.state && Array.isArray(location.state.items) && location.state.items.length > 0
             ? location.state.items
             : cartItems;
-        
+
         if (!items || items.length === 0) {
             return 0;
         }
-        
-        // Calculate total quantity
+
         const totalQuantity = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-        
-        // Only apply extra fee if total quantity > 4
-        if (totalQuantity <= 4) {
+        const minCartQty = Number(extraDeliveryMinCartQty) || 4;
+
+        if (totalQuantity <= minCartQty) {
             return 0;
         }
-        
-        // Category-based rates (per item, not per quantity)
-        // Cabinet and similar heavy items: higher rate
-        // Chair and similar lighter items: lower rate
-        const categoryRates = {
-            'Cabinet': 150,      // Higher rate for cabinets
-            'cabinet': 150,
-            'Cabinets': 150,
-            'cabinets': 150,
-            'Chair': 80,         // Lower rate for chairs
-            'chair': 80,
-            'Chairs': 80,
-            'chairs': 80,
-            'Table': 100,        // Medium rate for tables
-            'table': 100,
-            'Tables': 100,
-            'tables': 100,
-            'default': 100        // Default rate for other categories
-        };
-        
+
         let extraFee = 0;
-        
-        // Calculate fee for each item - flat fee per item if that item's quantity > 4
-        items.forEach(item => {
+
+        items.forEach((item) => {
             const quantity = item.quantity || 0;
-            // Only charge extra fee if this specific item has quantity > 4
-            if (quantity > 4) {
-                const category = item.product?.category || item.product?.Category || item.product?.categoryName || 'default';
-                const categoryKey = category.toLowerCase();
-                
-                // Find matching rate (case-insensitive)
-                let rate = categoryRates.default;
-                for (const [key, value] of Object.entries(categoryRates)) {
-                    if (key.toLowerCase() === categoryKey || categoryKey.includes(key.toLowerCase())) {
-                        rate = value;
-                        break;
-                    }
-                }
-                
-                // Charge flat fee per item (not multiplied by quantity)
+            const category = item.product?.category || item.product?.Category || item.product?.categoryName || 'default';
+            const minItemQty = resolveExtraDeliveryMinItemQty(category, extraDeliveryRates);
+
+            if (quantity > minItemQty) {
+                const rate = resolveExtraDeliveryRateForCategory(category, extraDeliveryRates);
                 extraFee += rate;
             }
         });
-        
-        return Math.round(extraFee * 100) / 100; // Round to 2 decimal places
+
+        return Math.round(extraFee * 100) / 100;
     };
-    
-    // Update extra delivery fee when items or quantities change
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await apiClient.get('/api/extra-delivery-category-rates');
+                if (cancelled || !res?.success) return;
+                setExtraDeliveryRates(res.rates || []);
+                if (res.minCartQuantity != null) {
+                    setExtraDeliveryMinCartQty(res.minCartQuantity);
+                }
+            } catch (err) {
+                console.warn('[Checkout] Could not load extra delivery category rates:', err.message);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
     useEffect(() => {
         const fee = calculateExtraDeliveryFee();
         setExtraDeliveryFee(fee);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cartItems, location.state]);
+    }, [cartItems, location.state, extraDeliveryRates, extraDeliveryMinCartQty]);
     
     // Calculate total including shipping and extra delivery fee
     const getTotalWithShipping = () => {

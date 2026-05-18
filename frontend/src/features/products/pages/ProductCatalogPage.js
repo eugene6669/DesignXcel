@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import ProductCard from '../components/ProductCard';
 import ProductFilter from '../components/ProductFilter';
@@ -10,6 +10,7 @@ import '../../../app/pages.css';
 import '../../../shared/components/ui/modal.css';
 import apiClient from '../../../shared/services/api/apiClient';
 import { getSellableStock } from '../../../shared/utils/productUtils';
+import { usePrimeAvailableStockBatch } from '../../../shared/hooks/useAvailableStock';
 
 const ProductCatalog = () => {
     const location = useLocation();
@@ -31,6 +32,12 @@ const ProductCatalog = () => {
     const [filteredProducts, setFilteredProducts] = useState([]);
     const [selectedCategoryName, setSelectedCategoryName] = useState('');
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+
+    const productIdsForStock = useMemo(
+        () => products.map((p) => p.id).filter(Boolean),
+        [products]
+    );
+    usePrimeAvailableStockBatch(productIdsForStock);
 
     // Parse URL parameters
     useEffect(() => {
@@ -131,8 +138,7 @@ const ProductCatalog = () => {
                 });
             };
 
-            const hydratedProducts = await hydrateMaterials(productsData);
-            setProducts(hydratedProducts);
+            setProducts(productsData);
             setCategories([
                 { id: '', name: 'All Products', count: productsData.length },
                 ...categoriesData.map(cat => ({
@@ -141,6 +147,9 @@ const ProductCatalog = () => {
                     count: productsData.filter(p => p.categoryName === cat).length
                 }))
             ]);
+            hydrateMaterials(productsData)
+                .then((hydrated) => setProducts(hydrated))
+                .catch(() => {});
         } catch (error) {
             console.error('Error loading data:', error);
         } finally {

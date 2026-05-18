@@ -64,6 +64,13 @@ const { generateTransactionId } = require('./utils/generateTransactionId');
 const { calculateEstimatedDeliveryDate, formatEstimatedDeliveryDate } = require('./utils/deliveryEstimate');
 const { cleanupExpiredDiscountsSafe } = require('./utils/cleanupExpiredDiscounts');
 const { mapProductRecordAssetUrls } = require('./utils/productAssetUrls');
+const { ORDER_ITEMS_CATALOG_CROSS_APPLY } = require('./utils/orderItemCatalogResolveSql');
+const { resolveProductId: resolveProductIdFromDb } = require('./utils/productIdResolver');
+const {
+    computeAvailableStock,
+    computeAvailableStockBatch,
+    computeVariationAvailableStockMap
+} = require('./utils/availableStockCalculator');
 
 const app = express();
 
@@ -359,8 +366,9 @@ app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), as
                         console.log('[STRIPE WEBHOOK] Could not check for TransactionID column, assuming it does not exist');
                     }
 
-                    // Generate transaction ID
-                    const transactionId = generateTransactionId(manilaTime);
+                    // Prefer Stripe PaymentIntent id; fallback to internal TXN reference
+                    const transactionId =
+                        stripePaymentIntentIdFromCheckoutSession(session) || generateTransactionId(manilaTime);
 
                     console.log('[STRIPE WEBHOOK] Creating regular Order for bulk order with values:', {
                         customerId: customer.CustomerID,
@@ -1070,9 +1078,10 @@ app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), as
                 console.log('[STRIPE WEBHOOK] Could not check for TransactionID column, assuming it does not exist:', err.message);
             }
 
-            // Generate transaction ID (always generate, even if column doesn't exist yet)
-            const transactionId = generateTransactionId(manilaTime);
-            console.log('[STRIPE WEBHOOK] Generated Transaction ID:', transactionId);
+            // Prefer Stripe PaymentIntent id (pi_) for gateway reconciliation; fallback to TXN
+            const transactionId =
+                stripePaymentIntentIdFromCheckoutSession(session) || generateTransactionId(manilaTime);
+            console.log('[STRIPE WEBHOOK] Order TransactionID / gateway id:', transactionId);
 
             // Build the request with all parameters
             const request = pool.request()
@@ -1859,6 +1868,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads'), {
 }));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+if (process.env.NODE_ENV === 'production') {
+    app.set('view cache', true);
+}
 
 // Trust proxy for Railway/Heroku/etc (important for HTTPS and correct IP detection)
 // Must be set before session configuration
@@ -3903,7 +3915,8 @@ app.get('/api/products', async (req, res) => {
                     SELECT SUM(oi.Quantity)
                     FROM OrderItems oi
                     INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                    WHERE oi.ProductID = p.ProductID
+                    ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                    WHERE cat.CatalogProductID = p.ProductID
                     AND o.Status = N'Pending'
                 ), 0) as availableStock,
                 COALESCE(sold.soldQuantity, 0) as soldQuantity,
@@ -3945,6 +3958,7 @@ app.get('/api/products', async (req, res) => {
         `);
 
         console.log('Products API: Query executed, found', result.recordset.length, 'products');
+        res.setHeader('Cache-Control', 'private, max-age=15');
 
         // Process images - convert single image URL to array
         const products = result.recordset.map((product) => {
@@ -3992,33 +4006,7 @@ app.get('/api/products', async (req, res) => {
 
 // Resolve product identifier (ProductID, PublicId, Slug, or SKU) to ProductID
 async function resolveProductId(identifier) {
-    const value = String(identifier || '').trim();
-    if (!value) return null;
-
-    const isNumeric = /^\d+$/.test(value);
-    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-
-    let query = `
-        SELECT TOP 1 ProductID
-        FROM Products WITH (NOLOCK)
-        WHERE IsActive = 1
-          AND (
-                (@isNumeric = 1 AND ProductID = TRY_CAST(@identifier AS INT))
-             OR (@isUUID = 1 AND PublicId = TRY_CAST(@identifier AS UNIQUEIDENTIFIER))
-             OR Slug = @identifier
-             OR SKU = @identifier
-          )
-        ORDER BY DateAdded DESC, ProductID DESC
-    `;
-
-    const result = await pool.request()
-        .input('identifier', sql.NVarChar, value)
-        .input('isNumeric', sql.Bit, isNumeric ? 1 : 0)
-        .input('isUUID', sql.Bit, isUUID ? 1 : 0)
-        .query(query);
-
-    if (!result.recordset.length) return null;
-    return result.recordset[0].ProductID || null;
+    return resolveProductIdFromDb(pool, identifier);
 }
 
 /** Cart/checkout item may send id (PublicId), productId, or ProductID. */
@@ -4032,6 +4020,21 @@ function getCheckoutItemProductIdentifier(item) {
         item.product?.ProductID ||
         ''
     ).trim();
+}
+
+/** Stripe Checkout session → PaymentIntent id (pi_) for Orders.TransactionID / receipts. */
+function stripePaymentIntentIdFromCheckoutSession(session) {
+    if (!session || session.payment_intent == null) return '';
+    const pi = session.payment_intent;
+    if (typeof pi === 'string') {
+        const s = pi.trim();
+        return /^pi_/i.test(s) ? s : '';
+    }
+    if (typeof pi === 'object' && pi && pi.id) {
+        const s = String(pi.id).trim();
+        return /^pi_/i.test(s) ? s : '';
+    }
+    return '';
 }
 
 function getPayMongoAuthHeader() {
@@ -4076,12 +4079,30 @@ function isPayMongoCheckoutSessionPaid(attrs) {
     return false;
 }
 
+function getCheckoutItemVariationId(item) {
+    if (!item || typeof item !== 'object') return null;
+    const v =
+        item.variationId ??
+        item.VariationID ??
+        item.variation?.id ??
+        item.variation?.VariationID ??
+        item.product?.variationId ??
+        item.product?.VariationID;
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 /** Shared stock validation for Stripe/PayMongo checkout (supports UUID PublicId in item.id). */
 async function validateCheckoutItemsStock(items) {
     const stockIssues = [];
     if (!items || !Array.isArray(items)) {
         return ['No items provided'];
     }
+
+    const {
+        getProductVariationQuantity,
+        productHasActiveProductVariations
+    } = require('./utils/productVariationPolicy');
 
     await pool.connect();
 
@@ -4105,25 +4126,56 @@ async function validateCheckoutItemsStock(items) {
             continue;
         }
 
-        const actualStock = productResult.recordset[0].StockQuantity || 0;
         const productName = productResult.recordset[0].Name || 'Unknown Product';
+        const cmsProductStock = productResult.recordset[0].StockQuantity || 0;
+        const variationId = getCheckoutItemVariationId(item);
+        const hasVariations = await productHasActiveProductVariations(pool, productId);
 
-        const pendingResult = await pool.request()
-            .input('productId', sql.Int, productId)
-            .query(`
-                SELECT ISNULL(SUM(oi.Quantity), 0) as PendingQuantity
-                FROM OrderItems oi
-                INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                WHERE oi.ProductID = @productId
-                AND o.Status = 'Pending'
-            `);
+        let actualStock;
+        let pendingQuantity;
 
-        const pendingQuantity = pendingResult.recordset[0].PendingQuantity || 0;
+        if (hasVariations) {
+            if (!variationId) {
+                stockIssues.push(
+                    `${productName}: Select a variation before checkout (variation stock is tracked per option).`
+                );
+                continue;
+            }
+            actualStock = await getProductVariationQuantity(pool, productId, variationId);
+            const pendingResult = await pool.request()
+                .input('productId', sql.Int, productId)
+                .input('variationId', sql.Int, variationId)
+                .query(`
+                    SELECT ISNULL(SUM(oi.Quantity), 0) as PendingQuantity
+                    FROM OrderItems oi
+                    INNER JOIN Orders o ON oi.OrderID = o.OrderID
+                    ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                    WHERE cat.CatalogProductID = @productId
+                    AND oi.VariationID = @variationId
+                    AND o.Status = N'Pending'
+                `);
+            pendingQuantity = pendingResult.recordset[0].PendingQuantity || 0;
+        } else {
+            actualStock = cmsProductStock;
+            const pendingResult = await pool.request()
+                .input('productId', sql.Int, productId)
+                .query(`
+                    SELECT ISNULL(SUM(oi.Quantity), 0) as PendingQuantity
+                    FROM OrderItems oi
+                    INNER JOIN Orders o ON oi.OrderID = o.OrderID
+                    ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                    WHERE cat.CatalogProductID = @productId
+                    AND o.Status = N'Pending'
+                `);
+            pendingQuantity = pendingResult.recordset[0].PendingQuantity || 0;
+        }
+
         const availableStock = Math.max(0, actualStock - pendingQuantity);
 
         if (requestedQuantity > availableStock) {
+            const scope = hasVariations && variationId ? `variation #${variationId}` : 'product';
             stockIssues.push(
-                `${productName}: Requested ${requestedQuantity}, but only ${availableStock} available (${actualStock} in stock, ${pendingQuantity} in pending orders)`
+                `${productName}: Requested ${requestedQuantity}, but only ${availableStock} available for this ${scope} (${actualStock} in stock, ${pendingQuantity} in pending orders)`
             );
         }
     }
@@ -4877,6 +4929,43 @@ app.post('/api/confirm-payment', async (req, res) => {
 // Cache whether BulkOrders.OrderID column exists to avoid repeated metadata lookups
 let hasBulkOrdersOrderIdColumn = null;
 
+// Batch sellable stock (one request for product grids — faster than per-card polling)
+app.post('/api/products/available-stock/batch', async (req, res) => {
+    try {
+        await pool.connect();
+        const productIds = Array.isArray(req.body?.productIds) ? req.body.productIds : [];
+        if (productIds.length === 0) {
+            return res.json({ success: true, stocks: {} });
+        }
+        if (productIds.length > 80) {
+            return res.status(400).json({ success: false, message: 'Maximum 80 products per batch' });
+        }
+        const result = await computeAvailableStockBatch(pool, resolveProductId, productIds);
+        res.setHeader('Cache-Control', 'private, max-age=3');
+        return res.json(result);
+    } catch (err) {
+        console.error('Error in batch available stock:', err);
+        res.status(500).json({ success: false, message: 'Failed to calculate available stock' });
+    }
+});
+
+// Per-variation sellable stock for product detail (one request)
+app.get('/api/products/:productId/available-stock/variations', async (req, res) => {
+    try {
+        await pool.connect();
+        const productId = await resolveProductId(req.params.productId);
+        if (!productId || productId <= 0) {
+            return res.status(400).json({ success: false, message: 'Invalid product identifier' });
+        }
+        const result = await computeVariationAvailableStockMap(pool, productId);
+        res.setHeader('Cache-Control', 'private, max-age=3');
+        return res.json(result);
+    } catch (err) {
+        console.error('Error in variation available stock map:', err);
+        res.status(500).json({ success: false, message: 'Failed to calculate variation stock' });
+    }
+});
+
 // Get available stock for a product (accounting for pending orders)
 app.get('/api/products/:productId/available-stock', async (req, res) => {
     try {
@@ -4890,93 +4979,14 @@ app.get('/api/products/:productId/available-stock', async (req, res) => {
             });
         }
 
-        // Get actual stock quantity
-        const productResult = await pool.request()
-            .input('productId', sql.Int, productId)
-            .query('SELECT StockQuantity, Name FROM Products WHERE ProductID = @productId AND IsActive = 1');
-
-        if (productResult.recordset.length === 0) {
-            return res.json({
-                success: false,
-                message: 'Product not found'
-            });
-        }
-
-        const {
-            productHasActiveProductVariations,
-            getProductVariationStockSum,
-            getProductVariationQuantity
-        } = require('./utils/productVariationPolicy');
-
         const variationIdParam = req.query.variationId;
-        const parsedVariationId = variationIdParam != null && variationIdParam !== ''
-            ? parseInt(variationIdParam, 10)
-            : null;
+        const stockRow = await computeAvailableStock(pool, productId, {
+            variationId: variationIdParam
+        });
 
-        const hasVariations = await productHasActiveProductVariations(pool, productId);
-
-        let actualStock = productResult.recordset[0].StockQuantity || 0;
-        if (hasVariations) {
-            if (parsedVariationId && !Number.isNaN(parsedVariationId)) {
-                actualStock = await getProductVariationQuantity(pool, productId, parsedVariationId);
-            } else {
-                actualStock = await getProductVariationStockSum(pool, productId);
-            }
+        if (!stockRow.success) {
+            return res.json(stockRow);
         }
-
-        // Calculate pending quantities from regular orders
-        let pendingQuery = `
-                SELECT ISNULL(SUM(oi.Quantity), 0) as PendingQuantity
-                FROM OrderItems oi
-                INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                WHERE oi.ProductID = @productId
-                AND o.Status = 'Pending'
-            `;
-        const pendingRequest = pool.request().input('productId', sql.Int, productId);
-        if (hasVariations && parsedVariationId && !Number.isNaN(parsedVariationId)) {
-            pendingQuery += ' AND oi.VariationID = @variationId';
-            pendingRequest.input('variationId', sql.Int, parsedVariationId);
-        } else if (hasVariations) {
-            pendingQuery += ' AND oi.VariationID IS NOT NULL';
-        }
-
-        const pendingOrdersResult = await pendingRequest.query(pendingQuery);
-
-        const pendingQuantity = pendingOrdersResult.recordset[0].PendingQuantity || 0;
-
-        // Calculate pending quantities from bulk orders (check if OrderID column exists, cached)
-        let bulkPendingQuantity = 0;
-        try {
-            if (hasBulkOrdersOrderIdColumn === null) {
-                const bulkOrderCheck = await pool.request().query(`
-                    SELECT COUNT(*) as columnExists
-                    FROM sys.columns 
-                    WHERE object_id = OBJECT_ID(N'[dbo].[BulkOrders]') 
-                    AND name = 'OrderID'
-                `);
-                hasBulkOrdersOrderIdColumn = bulkOrderCheck.recordset[0].columnExists > 0;
-            }
-
-            if (hasBulkOrdersOrderIdColumn) {
-                // Check for bulk orders that are pending but not yet linked to Orders
-                const bulkItemsResult = await pool.request()
-                    .input('productId', sql.Int, productId)
-                    .query(`
-                        SELECT ISNULL(SUM(boi.Quantity), 0) as BulkPendingQuantity
-                        FROM BulkOrderItems boi
-                        INNER JOIN BulkOrders bo ON boi.BulkOrderID = bo.BulkOrderID
-                        WHERE boi.ProductID = @productId
-                        AND bo.Status = 'Pending'
-                        AND (bo.OrderID IS NULL)
-                    `);
-                bulkPendingQuantity = bulkItemsResult.recordset[0].BulkPendingQuantity || 0;
-            }
-        } catch (bulkError) {
-            console.log('Bulk order check skipped:', bulkError.message);
-        }
-
-        const totalPending = pendingQuantity + bulkPendingQuantity;
-        const availableStock = Math.max(0, actualStock - totalPending);
 
         const soldResult = await pool.request()
             .input('productId', sql.Int, productId)
@@ -4999,24 +5009,10 @@ app.get('/api/products/:productId/available-stock', async (req, res) => {
                   AND cat.CatalogProductID = @productId
             `);
 
-        const soldQuantity = soldResult.recordset[0]?.soldQuantity || 0;
-
-        const variationStockSum = hasVariations
-            ? await getProductVariationStockSum(pool, productId)
-            : null;
-
+        res.setHeader('Cache-Control', 'private, max-age=3');
         res.json({
-            success: true,
-            productId: productId,
-            productName: productResult.recordset[0].Name,
-            actualStock: actualStock,
-            pendingQuantity: totalPending,
-            availableStock: availableStock,
-            soldQuantity: soldQuantity,
-            hasVariations,
-            requiresVariationSelection: hasVariations,
-            variationStockSum,
-            variationId: parsedVariationId && !Number.isNaN(parsedVariationId) ? parsedVariationId : null
+            ...stockRow,
+            soldQuantity: soldResult.recordset[0]?.soldQuantity || 0
         });
     } catch (err) {
         console.error('Error calculating available stock:', err);
@@ -5088,8 +5084,9 @@ app.post('/api/check-bulk-order-stock', async (req, res) => {
                     SELECT ISNULL(SUM(oi.Quantity), 0) as PendingQuantity
                     FROM OrderItems oi
                     INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                    WHERE oi.ProductID = @productId
-                    AND o.Status = 'Pending'
+                    ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                    WHERE cat.CatalogProductID = @productId
+                    AND o.Status = N'Pending'
                 `);
 
             const pendingQuantity = pendingResult.recordset[0].PendingQuantity || 0;
@@ -5509,16 +5506,22 @@ app.post('/api/test-webhook', async (req, res) => {
     }
 
     // Simulate the webhook event data
+    const mockSessionObject = {
+        id: req.body.sessionId || 'cs_test_' + Date.now(),
+        customer_email: req.body.email || actualSession?.customer_email || 'augmentdoe@gmail.com',
+        metadata: metadata,
+        amount_total: amountTotalCents,
+        currency: 'php',
+        payment_intent: (() => {
+            const pi = actualSession?.payment_intent;
+            if (typeof pi === 'string') return pi;
+            return pi?.id || null;
+        })()
+    };
     const mockEvent = {
         type: 'checkout.session.completed',
         data: {
-            object: {
-                id: req.body.sessionId || 'cs_test_' + Date.now(),
-                customer_email: req.body.email || actualSession?.customer_email || 'augmentdoe@gmail.com',
-                metadata: metadata,
-                amount_total: amountTotalCents,
-                currency: 'php'
-            }
+            object: mockSessionObject
         }
     };
 
@@ -5766,8 +5769,11 @@ app.post('/api/test-webhook', async (req, res) => {
                             .query('UPDATE Orders SET ReferenceNumber = @referenceNumber WHERE OrderID = @orderId');
                         console.log('[TEST WEBHOOK] Reference number generated:', referenceNumber);
 
-                        // Generate and update transaction ID
-                        const transactionId = generateTransactionId(manilaTime);
+                        const paymongoPid = String(req.body.paymongoPaymentId || '').trim();
+                        const transactionId =
+                            paymongoPid ||
+                            stripePaymentIntentIdFromCheckoutSession(session) ||
+                            generateTransactionId(manilaTime);
                         console.log('[TEST WEBHOOK] Attempting to update TransactionID for bulk order OrderID:', orderId, 'TransactionID:', transactionId);
                         try {
                             const updateResult = await transaction.request()
@@ -6462,8 +6468,11 @@ app.post('/api/test-webhook', async (req, res) => {
                     .query('UPDATE Orders SET ReferenceNumber = @referenceNumber WHERE OrderID = @orderId');
                 console.log('[TEST WEBHOOK] Reference number generated:', referenceNumber);
 
-                // Generate and update transaction ID
-                const transactionId = generateTransactionId(manilaTime);
+                const paymongoPid = String(req.body.paymongoPaymentId || '').trim();
+                const transactionId =
+                    paymongoPid ||
+                    stripePaymentIntentIdFromCheckoutSession(session) ||
+                    generateTransactionId(manilaTime);
                 console.log('[TEST WEBHOOK] Attempting to update TransactionID for OrderID:', orderId, 'TransactionID:', transactionId);
                 try {
                     const updateResult = await pool.request()
@@ -7010,14 +7019,15 @@ app.get('/api/admin/payment-status/:orderId', async (req, res) => {
         let primaryPaymentId = '';
         if (/^(pay_|pi_|ch_)/i.test(txn)) {
             primaryPaymentId = txn;
-        } else if (/^TXN/i.test(txn)) {
-            primaryPaymentId = txn;
         }
         if (!primaryPaymentId && stripeDetails.payment_intent_id) {
             primaryPaymentId = String(stripeDetails.payment_intent_id);
         }
         if (!primaryPaymentId && stripeDetails.paymongo_payment_id) {
             primaryPaymentId = String(stripeDetails.paymongo_payment_id);
+        }
+        if (!primaryPaymentId && /^TXN/i.test(txn)) {
+            primaryPaymentId = txn;
         }
 
         let displayPaymentId = primaryPaymentId;
@@ -7029,7 +7039,7 @@ app.get('/api/admin/payment-status/:orderId', async (req, res) => {
                 : 'Gateway checkout session ID';
         } else {
             order.PaymentIdentifier = displayPaymentId;
-            order.PaymentIdentifierLabel = 'Payment / transaction ID';
+            order.PaymentIdentifierLabel = displayPaymentId ? 'Payment ID' : 'Payment / transaction ID';
         }
 
         if (sid && primaryPaymentId && sid !== primaryPaymentId) {

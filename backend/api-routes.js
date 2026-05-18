@@ -11,8 +11,10 @@ const {
     enrichProductsWithVariationPolicy,
     enrichProductsAssetsFromInventory,
     enrichProductAssetsFromInventory,
+    enrichProductDetailFromInventory,
     parseThumbnailUrlsField
 } = require('./utils/productVariationPolicy');
+const { ORDER_ITEMS_CATALOG_CROSS_APPLY } = require('./utils/orderItemCatalogResolveSql');
 
 const UUID_IDENTIFIER_RE =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -2834,8 +2836,9 @@ module.exports = function(sql, pool) {
                             SELECT SUM(oi.Quantity)
                             FROM OrderItems oi
                             INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                            WHERE oi.ProductID = p.ProductID
-                            AND o.Status = 'Pending'
+                            ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                            WHERE cat.CatalogProductID = p.ProductID
+                            AND o.Status = N'Pending'
                         ), 0) as availableStock,
                         p.Category as categoryName,
                         p.ImageURL as images,
@@ -2920,8 +2923,9 @@ module.exports = function(sql, pool) {
                             SELECT SUM(oi.Quantity)
                             FROM OrderItems oi
                             INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                            WHERE oi.ProductID = p.ProductID
-                            AND o.Status = 'Pending'
+                            ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                            WHERE cat.CatalogProductID = p.ProductID
+                            AND o.Status = N'Pending'
                         ), 0) as availableStock,
                         p.Category as categoryName,
                         p.ImageURL as images,
@@ -3013,8 +3017,9 @@ module.exports = function(sql, pool) {
                             SELECT SUM(oi.Quantity)
                             FROM OrderItems oi
                             INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                            WHERE oi.ProductID = p.ProductID
-                            AND o.Status = 'Pending'
+                            ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                            WHERE cat.CatalogProductID = p.ProductID
+                            AND o.Status = N'Pending'
                         ), 0) as availableStock,
                         p.Category as categoryName,
                         p.ImageURL as images,
@@ -3148,6 +3153,7 @@ module.exports = function(sql, pool) {
             let productsWithPolicy = await enrichProductsWithVariationPolicy(pool, products);
             productsWithPolicy = await enrichProductsAssetsFromInventory(pool, productsWithPolicy);
 
+            res.setHeader('Cache-Control', 'private, max-age=15');
             res.json({
                 success: true,
                 products: productsWithPolicy
@@ -3415,8 +3421,9 @@ module.exports = function(sql, pool) {
                                 SELECT SUM(oi.Quantity)
                                 FROM OrderItems oi
                                 INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                                WHERE oi.ProductID = p.ProductID
-                                AND o.Status = 'Pending'
+                                ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                                WHERE cat.CatalogProductID = p.ProductID
+                                AND o.Status = N'Pending'
                             ), 0) as availableStock,
                             p.Category as categoryName,
                             p.ImageURL as images,
@@ -3476,8 +3483,9 @@ module.exports = function(sql, pool) {
                                 SELECT SUM(oi.Quantity)
                                 FROM OrderItems oi
                                 INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                                WHERE oi.ProductID = p.ProductID
-                                AND o.Status = 'Pending'
+                                ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                                WHERE cat.CatalogProductID = p.ProductID
+                                AND o.Status = N'Pending'
                             ), 0) as availableStock,
                             p.Category as categoryName,
                             p.ImageURL as images,
@@ -3511,8 +3519,9 @@ module.exports = function(sql, pool) {
                                 SELECT SUM(oi.Quantity)
                                 FROM OrderItems oi
                                 INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                                WHERE oi.ProductID = p.ProductID
-                                AND o.Status = 'Pending'
+                                ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                                WHERE cat.CatalogProductID = p.ProductID
+                                AND o.Status = N'Pending'
                             ), 0) as availableStock,
                             p.Category as categoryName,
                             p.ImageURL as images,
@@ -3572,8 +3581,9 @@ module.exports = function(sql, pool) {
                                 SELECT SUM(oi.Quantity)
                                 FROM OrderItems oi
                                 INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                                WHERE oi.ProductID = p.ProductID
-                                AND o.Status = 'Pending'
+                                ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                                WHERE cat.CatalogProductID = p.ProductID
+                                AND o.Status = N'Pending'
                             ), 0) as availableStock,
                             p.Category as categoryName,
                             p.ImageURL as images,
@@ -3606,8 +3616,9 @@ module.exports = function(sql, pool) {
                                 SELECT SUM(oi.Quantity)
                                 FROM OrderItems oi
                                 INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                                WHERE oi.ProductID = p.ProductID
-                                AND o.Status = 'Pending'
+                                ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                                WHERE cat.CatalogProductID = p.ProductID
+                                AND o.Status = N'Pending'
                             ), 0) as availableStock,
                             p.Category as categoryName,
                             p.ImageURL as images,
@@ -3666,8 +3677,9 @@ module.exports = function(sql, pool) {
                                 SELECT SUM(oi.Quantity)
                                 FROM OrderItems oi
                                 INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                                WHERE oi.ProductID = p.ProductID
-                                AND o.Status = 'Pending'
+                                ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                                WHERE cat.CatalogProductID = p.ProductID
+                                AND o.Status = N'Pending'
                             ), 0) as availableStock,
                             p.Category as categoryName,
                             p.ImageURL as images,
@@ -3701,8 +3713,9 @@ module.exports = function(sql, pool) {
                                 SELECT SUM(oi.Quantity)
                                 FROM OrderItems oi
                                 INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                                WHERE oi.ProductID = p.ProductID
-                                AND o.Status = 'Pending'
+                                ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                                WHERE cat.CatalogProductID = p.ProductID
+                                AND o.Status = N'Pending'
                             ), 0) as availableStock,
                             p.Category as categoryName,
                             p.ImageURL as images,
@@ -3762,8 +3775,9 @@ module.exports = function(sql, pool) {
                                 SELECT SUM(oi.Quantity)
                                 FROM OrderItems oi
                                 INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                                WHERE oi.ProductID = p.ProductID
-                                AND o.Status = 'Pending'
+                                ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
+                                WHERE cat.CatalogProductID = p.ProductID
+                                AND o.Status = N'Pending'
                             ), 0) as availableStock,
                             p.Category as categoryName,
                             p.ImageURL as images,
@@ -3865,6 +3879,7 @@ module.exports = function(sql, pool) {
                 mapProductRecordAssetUrls(product)
             );
             productWithPolicy = await enrichProductAssetsFromInventory(pool, productWithPolicy);
+            productWithPolicy = await enrichProductDetailFromInventory(pool, productWithPolicy);
 
             res.json({
                 success: true,
@@ -3951,8 +3966,16 @@ module.exports = function(sql, pool) {
                         pv.VariationName as name,
                         COALESCE(ipv.SKU, pv.SKU) as sku,
                         pv.Color as color,
-                        pv.Quantity as quantity,
-                        ISNULL(pv.Price, 0) as price,
+                        COALESCE(
+                            CASE
+                                WHEN ipv.AvailableQuantity IS NULL OR ipv.AvailableQuantity = 0
+                                THEN COALESCE(ipv.Quantity, 0)
+                                ELSE ipv.AvailableQuantity
+                            END,
+                            pv.Quantity,
+                            0
+                        ) as quantity,
+                        ISNULL(NULLIF(ipv.Price, 0), ISNULL(pv.Price, 0)) as price,
                         COALESCE(ipv.VariationImageURL, pv.VariationImageURL) as imageUrl,
                         COALESCE(ipv.ThumbnailURLs, pv.ThumbnailURLs) as thumbnails,
                         COALESCE(ipv.Model3D, pv.Model3D) as model3d,

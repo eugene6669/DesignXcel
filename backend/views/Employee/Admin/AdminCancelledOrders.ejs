@@ -1803,7 +1803,7 @@
                     `;
                     
                     const paymentIdentifier = details.PaymentIdentifier || details.StripeSessionID || details.TransactionID;
-                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment / transaction ID';
+                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment ID';
                     if (paymentIdentifier) {
                         html += `
                             <div class="payment-info-row">

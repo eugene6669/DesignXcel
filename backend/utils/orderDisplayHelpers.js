@@ -19,7 +19,11 @@ function dedupeDoubledTransactionId(tid) {
         if (uniq.length === 1) {
             return uniq[0];
         }
-        const payPick = uniq.find((p) => p.startsWith('pay_'));
+        const piPick = uniq.find((p) => /^pi_/i.test(p));
+        if (piPick) {
+            return piPick;
+        }
+        const payPick = uniq.find((p) => /^pay_/i.test(p));
         if (payPick) {
             return payPick;
         }

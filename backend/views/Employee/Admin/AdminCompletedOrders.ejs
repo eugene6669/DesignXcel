@@ -995,7 +995,7 @@
                                                 <% } %>
                                             </div>
                                             <% if (order.TransactionID) { %>
-                                            <div>Payment ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                            <div>Payment Reference: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
                                             <% } %>
                                             <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
                                             <div>Delivery Cost: <strong>₱<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
@@ -1206,7 +1206,7 @@
                                                             <% } %>
                                                         </div>
                                                         <% if (order.TransactionID) { %>
-                                                        <div>Payment ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                                        <div>Payment Reference: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
                                                         <% } %>
                                                         <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
                                                         <% if ((order.DeliveryTypeName === 'Pick up' || order.DeliveryType === 'pickup') && order.PickupDate) { %>
@@ -1795,7 +1795,7 @@
                     `;
                     
                     const paymentIdentifier = details.PaymentIdentifier || details.StripeSessionID || details.TransactionID;
-                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment / transaction ID';
+                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment ID';
                     if (paymentIdentifier) {
                         html += `
                             <div class="payment-info-row">

@@ -10,6 +10,11 @@ import ConfirmationModal from '../../../shared/components/ui/ConfirmationModal';
 import { PageLoader } from '../../../shared/components/ui';
 import ReviewSection from '../../reviews/components/ReviewSection';
 import { getImageUrl } from '../../../shared/utils/imageUtils';
+import {
+  fetchVariationStockMap,
+  fetchAvailableStock,
+  subscribeStockRefresh
+} from '../../../shared/services/availableStockService';
 import './product-detail.css';
 
 const ProductDetail = () => {
@@ -37,6 +42,8 @@ const ProductDetail = () => {
   const [addingToCart, setAddingToCart] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [availableStock, setAvailableStock] = useState(null);
+  /** Per-variation sellable qty from /available-stock (includes pending reservations). */
+  const [variationAvailableById, setVariationAvailableById] = useState({});
   const [showBulkOrderModal, setShowBulkOrderModal] = useState(false);
   const [showInsufficientStockModal, setShowInsufficientStockModal] = useState(false);
   const [insufficientStockMessage, setInsufficientStockMessage] = useState('');
@@ -148,44 +155,88 @@ const ProductDetail = () => {
 
   const hasVariations = variations.length > 0;
 
-  // Fetch available stock (per variation when product has options)
+  const variationIdsKey = useMemo(
+    () => variations.map((v) => String(v.id)).sort().join(','),
+    [variations]
+  );
+
+  const anyVariationInStockFromApi = useMemo(() => {
+    if (!variations.length) return false;
+    return variations.some((v) => {
+      const fromMap = variationAvailableById[v.id];
+      const q = fromMap !== undefined ? fromMap : Number(v.quantity) || 0;
+      return q > 0;
+    });
+  }, [variations, variationAvailableById]);
+
+  // One API call for all variation sellable qty (includes pending checkout reservations).
+  useEffect(() => {
+    if (!product?.id || !variations.length) {
+      setVariationAvailableById({});
+      return undefined;
+    }
+    let cancelled = false;
+
+    const loadAll = async () => {
+      const result = await fetchVariationStockMap(product.id);
+      if (cancelled) return;
+      if (result.success && result.byVariationId) {
+        setVariationAvailableById(result.byVariationId);
+        if (result.availableStock != null && !selectedVariation?.id) {
+          setAvailableStock(result.availableStock);
+        }
+      }
+    };
+
+    loadAll();
+    const unsub = subscribeStockRefresh(loadAll);
+    const interval = setInterval(loadAll, 12000);
+    return () => {
+      cancelled = true;
+      unsub();
+      clearInterval(interval);
+    };
+  }, [product?.id, variationIdsKey, selectedVariation?.id]);
+
+  useEffect(() => {
+    if (!product?.id || !hasVariations || selectedVariation) return;
+    setAvailableStock(anyVariationInStockFromApi ? null : 0);
+  }, [product?.id, hasVariations, selectedVariation, anyVariationInStockFromApi]);
+
+  // Selected variation or simple product sellable qty
   useEffect(() => {
     if (!product?.id) {
       setAvailableStock(null);
-      return;
+      return undefined;
     }
-
     if (hasVariations && !selectedVariation?.id) {
-      const anyInStock = variations.some((v) => (v.quantity || 0) > 0);
-      setAvailableStock(anyInStock ? null : 0);
-      return;
+      return undefined;
     }
 
-    const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-    const stockUrl = selectedVariation?.id
-      ? `${apiBase}/api/products/${product.id}/available-stock?variationId=${selectedVariation.id}`
-      : `${apiBase}/api/products/${product.id}/available-stock`;
-
-    fetch(stockUrl)
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setAvailableStock(data.availableStock);
-        } else if (hasVariations && selectedVariation) {
-          setAvailableStock(selectedVariation.quantity || 0);
-        } else {
-          setAvailableStock(product.stockQuantity || 0);
-        }
-      })
-      .catch(err => {
-        console.error('Error fetching available stock:', err);
-        if (hasVariations && selectedVariation) {
-          setAvailableStock(selectedVariation.quantity || 0);
-        } else {
-          setAvailableStock(product.stockQuantity || 0);
-        }
+    let cancelled = false;
+    const refresh = async () => {
+      const { sellable } = await fetchAvailableStock(product.id, {
+        variationId: selectedVariation?.id
       });
-  }, [product?.id, product?.stockQuantity, hasVariations, selectedVariation?.id, variations]);
+      if (cancelled) return;
+      if (sellable != null) {
+        setAvailableStock(sellable);
+      } else if (hasVariations && selectedVariation) {
+        setAvailableStock(selectedVariation.quantity || 0);
+      } else {
+        setAvailableStock(product.stockQuantity || 0);
+      }
+    };
+
+    refresh();
+    const unsub = subscribeStockRefresh(refresh);
+    const interval = setInterval(refresh, 12000);
+    return () => {
+      cancelled = true;
+      unsub();
+      clearInterval(interval);
+    };
+  }, [product?.id, product?.stockQuantity, hasVariations, selectedVariation?.id]);
 
   // Load variations function
   const loadVariations = async () => {
@@ -431,11 +482,21 @@ const ProductDetail = () => {
   const hasDiscount = product.hasDiscount && product.discountInfo;
   const displayPrice = hasDiscount ? product.discountInfo.discountedPrice : basePrice;
   const originalPrice = hasDiscount ? basePrice : null;
-  const variationStockSum = variations.reduce((sum, v) => sum + (Number(v.quantity) || 0), 0);
+  const variationStockSum = variations.reduce((sum, v) => {
+    const q =
+      variationAvailableById[v.id] !== undefined
+        ? variationAvailableById[v.id]
+        : Number(v.quantity) || 0;
+    return sum + q;
+  }, 0);
 
   const stockQuantity = hasVariations
     ? (selectedVariation
-        ? (availableStock !== null ? availableStock : (selectedVariation.quantity || 0))
+        ? (availableStock !== null
+            ? availableStock
+            : (variationAvailableById[selectedVariation.id] !== undefined
+                ? variationAvailableById[selectedVariation.id]
+                : (selectedVariation.quantity || 0)))
         : variationStockSum)
     : (availableStock !== null ? availableStock : (product.stockQuantity || 0));
 
@@ -444,6 +505,29 @@ const ProductDetail = () => {
     : stockQuantity > 0;
   const isLowStock = stockQuantity > 0 && stockQuantity <= 10;
   const canPurchase = hasVariations ? Boolean(selectedVariation?.id) && stockQuantity > 0 : isInStock;
+
+  const additionalInfoStockLabel = (() => {
+    if (hasVariations) {
+      if (selectedVariation) {
+        if (stockQuantity <= 0) return 'Out of Stock';
+        return isLowStock ? `Low Stock (${stockQuantity} available)` : 'In Stock';
+      }
+      return variationStockSum > 0 ? 'In Stock — select a variation' : 'Out of Stock';
+    }
+    if (!isInStock) return 'Out of Stock';
+    return isLowStock ? `Low Stock (${stockQuantity} available)` : 'In Stock';
+  })();
+
+  const additionalInfoColors =
+    (Array.isArray(product?.colors) && product.colors.length > 0)
+      ? product.colors.join(', ')
+      : (selectedVariation?.color || product?.color || 'N/A');
+
+  const additionalInfoMaterial =
+    product?.material
+    || (Array.isArray(product?.materials) && product.materials.length > 0
+      ? product.materials.join(', ')
+      : 'N/A');
 
   // Breadcrumb items
   const breadcrumbItems = [
@@ -678,7 +762,12 @@ const ProductDetail = () => {
                   <p className="variation-required-message">{variationRequiredMessage}</p>
                 )}
                 <div className="variation-cards-container">
-                {variations.map((variation) => (
+                {variations.map((variation) => {
+                  const sellableQty =
+                    variationAvailableById[variation.id] !== undefined
+                      ? variationAvailableById[variation.id]
+                      : Number(variation.quantity) || 0;
+                  return (
                   <div
                     key={variation.id}
                     className={`variation-card ${selectedVariation?.id === variation.id ? 'selected' : ''}`}
@@ -708,13 +797,14 @@ const ProductDetail = () => {
                       )}
                       <div className="variation-quantity">
                         <span className="quantity-label">Available:</span>
-                        <span className={`quantity-value ${variation.quantity > 0 ? 'in-stock' : 'out-of-stock'}`}>
-                          {variation.quantity > 0 ? variation.quantity : 'Out of Stock'}
+                        <span className={`quantity-value ${sellableQty > 0 ? 'in-stock' : 'out-of-stock'}`}>
+                          {sellableQty > 0 ? sellableQty : 'Out of Stock'}
                         </span>
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
                 </div>
               </section>
             )}
@@ -998,13 +1088,22 @@ const ProductDetail = () => {
                       {(() => {
                         try {
                           const dimensions = product?.specifications;
+                          const dimUnit = dimensions?.unit || 'cm';
                           if (dimensions && (dimensions.length || dimensions.width || dimensions.height || dimensions.weight)) {
                             return (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {dimensions.length && <div><strong>Length:</strong> {dimensions.length} cm</div>}
-                                {dimensions.width && <div><strong>Width:</strong> {dimensions.width} cm</div>}
-                                {dimensions.height && <div><strong>Height:</strong> {dimensions.height} cm</div>}
-                                {dimensions.weight && <div><strong>Weight:</strong> {dimensions.weight} kg</div>}
+                                {dimensions.length != null && dimensions.length !== '' && (
+                                  <div><strong>Length:</strong> {dimensions.length} {dimUnit}</div>
+                                )}
+                                {dimensions.width != null && dimensions.width !== '' && (
+                                  <div><strong>Width:</strong> {dimensions.width} {dimUnit}</div>
+                                )}
+                                {dimensions.height != null && dimensions.height !== '' && (
+                                  <div><strong>Height:</strong> {dimensions.height} {dimUnit}</div>
+                                )}
+                                {dimensions.weight != null && dimensions.weight !== '' && (
+                                  <div><strong>Weight:</strong> {dimensions.weight} kg</div>
+                                )}
                                 {dimensions.notes && <div><strong>Notes:</strong> {dimensions.notes}</div>}
                               </div>
                             );
@@ -1018,19 +1117,30 @@ const ProductDetail = () => {
                   </tr>
                   <tr>
                     <td>Material</td>
-                    <td>{product?.material || 'N/A'}</td>
+                    <td>{additionalInfoMaterial}</td>
                   </tr>
                   <tr>
                     <td>Color Options</td>
-                    <td>{product?.colors ? product.colors.join(', ') : (product?.color || 'N/A')}</td>
+                    <td>{additionalInfoColors}</td>
                   </tr>
                   <tr>
                     <td>Stock Status</td>
-                    <td>{product?.stockQuantity > 0 ? 'In Stock' : 'Out of Stock'}</td>
+                    <td>{additionalInfoStockLabel}</td>
                   </tr>
                   <tr>
                     <td>Price</td>
-                    <td>{product ? formatPrice(product.price) : 'N/A'}</td>
+                    <td>
+                      {product ? (
+                        <>
+                          {formatPrice(displayPrice)}
+                          {originalPrice != null && originalPrice !== displayPrice && (
+                            <span style={{ marginLeft: '8px', textDecoration: 'line-through', opacity: 0.65 }}>
+                              {formatPrice(originalPrice)}
+                            </span>
+                          )}
+                        </>
+                      ) : 'N/A'}
+                    </td>
                   </tr>
                 </tbody>
               </table>

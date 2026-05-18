@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { invalidateAvailableStockCache } from '../../../shared/services/availableStockService';
 import { useParams, useLocation, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../shared/hooks/useAuth';
 import stripeService from '../services/stripeService';
@@ -56,7 +57,7 @@ const persistOrderReceiptNotification = (orderNumber, user) => {
     window.dispatchEvent(new Event('storage'));
 };
 
-/** Collapse duplicated gateway transaction ids (e.g. pay_x,pay_x or doubled string). */
+/** Collapse duplicated gateway transaction ids (e.g. pay_x,pay_x or doubled string). Prefer pi_ / pay_ over TXN. */
 const normalizeDisplayTransactionId = (tid) => {
     if (tid == null || tid === '') return tid;
     const s = String(tid).trim();
@@ -64,12 +65,29 @@ const normalizeDisplayTransactionId = (tid) => {
         const parts = s.split(',').map((p) => p.trim()).filter(Boolean);
         const uniq = [...new Set(parts)];
         if (uniq.length === 1) return uniq[0];
-        const payPick = uniq.find((p) => /^pay_[a-zA-Z0-9]+$/i.test(p));
+        const piPick = uniq.find((p) => /^pi_/i.test(p));
+        if (piPick) return piPick;
+        const payPick = uniq.find((p) => /^pay_/i.test(p));
         return payPick || uniq[0];
     }
     const half = Math.floor(s.length / 2);
     if (half > 10 && s.slice(0, half) === s.slice(half)) return s.slice(0, half);
     return s;
+};
+
+/** Receipt / order-success: show Stripe pi_ or PayMongo pay_, not internal TXN when session has PI. */
+const preferredReceiptPaymentRef = (details) => {
+    if (!details) return '';
+    const pi = details.paymentIntentId != null ? String(details.paymentIntentId).trim() : '';
+    if (/^pi_/i.test(pi)) return pi;
+    const txn = normalizeDisplayTransactionId(details.transactionId);
+    if (/^pi_/i.test(String(txn))) return String(txn);
+    if (/^pay_/i.test(String(txn))) return String(txn);
+    if (/^TXN/i.test(String(txn)) || /^txn/i.test(String(txn))) {
+        if (pi) return pi;
+        return '';
+    }
+    return txn || pi || '';
 };
 
 /** Line items for receipt UI from Stripe Checkout metadata (bulk: items JSON; regular: cart JSON). */
@@ -328,6 +346,7 @@ const OrderSuccessPage = () => {
     };
 
     useEffect(() => {
+        invalidateAvailableStockCache();
         const sessionIdFromUrl = searchParams.get('session_id');
         const provider = searchParams.get('provider');
         const paymongoSessionIdFromUrl = searchParams.get('paymongo_session_id');
@@ -775,14 +794,18 @@ const OrderSuccessPage = () => {
                                         <span className="order-detail-value status-success">{paymentDetails.paymentStatus}</span>
                                     </div>
                                 )}
-                                {(paymentDetails.transactionId || paymentDetails.paymentIntentId) && (
+                                {(() => {
+                                    const payRef = preferredReceiptPaymentRef(paymentDetails);
+                                    if (!payRef) return null;
+                                    return (
                                     <div className="order-detail-item">
                                         <span className="order-detail-label">Payment reference:</span>
                                         <span className="order-detail-value" style={{ fontFamily: 'monospace', fontSize: '0.9em', color: '#64748b' }}>
-                                            {normalizeDisplayTransactionId(paymentDetails.transactionId || paymentDetails.paymentIntentId)}
+                                            {payRef}
                                         </span>
                                     </div>
-                                )}
+                                    );
+                                })()}
                                 {(paymentDetails.deliveryType || paymentDetails.deliveryTypeName || paymentDetails.isBulkOrder) && (
                                     <div className="order-detail-item">
                                         <span className="order-detail-label">Service Type:</span>

@@ -117,6 +117,134 @@
         .logout-button:hover {
             background-color: #c82333;
         }
+        .rates-section {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 20px;
+        }
+        .rates-section h3 { margin: 0 0 8px; }
+        .rates-section .section-hint {
+            color: #6b7280;
+            font-size: 0.9em;
+            margin: 0 0 14px;
+        }
+        .rates-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .rates-toolbar .settings-inline {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .rates-toolbar input[type="number"] {
+            width: 72px;
+            padding: 6px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .btn-primary-rate {
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-primary-rate:hover { background: #1d4ed8; }
+        .btn-secondary-rate {
+            background: #6b7280;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-edit-rate {
+            background: #3b82f6;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-right: 4px;
+        }
+        .btn-delete-rate {
+            background: #dc2626;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .badge-default {
+            display: inline-block;
+            background: #fef3c7;
+            color: #92400e;
+            font-size: 0.75em;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 999px;
+        }
+        .rates-form-modal .modal-content {
+            text-align: left;
+            max-width: 480px;
+            width: 95%;
+            padding: 24px;
+        }
+        .rates-form-modal .form-group {
+            margin-bottom: 12px;
+        }
+        .rates-form-modal label {
+            display: block;
+            font-weight: 600;
+            font-size: 0.85em;
+            color: #374151;
+            margin-bottom: 4px;
+        }
+        .rates-form-modal input[type="text"],
+        .rates-form-modal input[type="number"],
+        .rates-form-modal textarea {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+        .rates-form-modal textarea { min-height: 64px; resize: vertical; }
+        .rates-form-modal .form-row-check {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .rates-form-modal .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .rates-form-modal .modal-actions button {
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+        }
+        .rates-form-modal .btn-save { background: #2563eb; color: #fff; }
+        .rates-form-modal .btn-cancel-modal { background: #e5e7eb; color: #374151; }
+        #extraCategoryRatesRows tr.inactive-row { opacity: 0.55; }
     </style>
 </head>
 <body>
@@ -195,11 +323,121 @@
                             </table>
                         </div>
                     </div>
+
+                </div>
+
+                <div class="rates-section" id="extra-delivery-section">
+                    <h3>Extra Delivery Fees (High Quantity)</h3>
+                    <p class="section-hint">
+                        Per-item fee when cart total exceeds the threshold and a line item exceeds its category minimum (checkout bulk delivery).
+                    </p>
+                    <div class="rates-toolbar">
+                        <div class="settings-inline">
+                            <label for="minCartQty"><strong>Min cart qty:</strong></label>
+                            <input type="number" id="minCartQty" min="0" step="1" value="4" title="Total cart quantity must exceed this before any extra fee applies">
+                            <button type="button" id="saveMinCartQty" class="btn-secondary-rate">Save threshold</button>
+                        </div>
+                        <button type="button" id="openAddExtraCategoryBtn" class="btn-primary-rate">
+                            <i class="fas fa-plus"></i> Add category rate
+                        </button>
+                    </div>
+                    <div style="overflow:auto;max-height:420px;">
+                        <table style="width:100%;border-collapse:collapse;">
+                            <thead style="position:sticky;top:0;background:#f9fafb;">
+                                <tr style="border-bottom:2px solid #e5e7eb;">
+                                    <th style="text-align:left;padding:10px;">Category</th>
+                                    <th style="text-align:right;padding:10px;">Fee / item</th>
+                                    <th style="text-align:center;padding:10px;">Min item qty</th>
+                                    <th style="text-align:left;padding:10px;">Description</th>
+                                    <th style="text-align:center;padding:10px;">Type</th>
+                                    <th style="text-align:center;padding:10px;">Active</th>
+                                    <th style="text-align:center;padding:10px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="extraCategoryRatesRows">
+                                <tr><td colspan="7" style="padding:12px;color:#666;text-align:center;">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
             </div>
         </div>
     </div>
+    <div id="addExtraCategoryModal" class="modal-overlay rates-form-modal">
+        <div class="modal-content">
+            <h3>Add Category Rate</h3>
+            <form id="addExtraCategoryForm">
+                <div class="form-group">
+                    <label for="addCatName">Category name <span style="color:red;">*</span></label>
+                    <input type="text" id="addCatName" required placeholder="e.g. Chairs, Cabinet">
+                </div>
+                <div class="form-group">
+                    <label for="addCatFee">Fee per item (₱) <span style="color:red;">*</span></label>
+                    <input type="number" id="addCatFee" step="0.01" min="0" required placeholder="100.00">
+                </div>
+                <div class="form-group">
+                    <label for="addCatMinQty">Min item quantity (fee if qty &gt;)</label>
+                    <input type="number" id="addCatMinQty" min="0" step="1" value="4">
+                </div>
+                <div class="form-group">
+                    <label for="addCatDesc">Description</label>
+                    <textarea id="addCatDesc" placeholder="Optional notes"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="addCatSort">Sort order</label>
+                    <input type="number" id="addCatSort" value="0" step="1">
+                </div>
+                <div class="form-row-check">
+                    <label><input type="checkbox" id="addCatDefault"> Default fallback</label>
+                    <label><input type="checkbox" id="addCatActive" checked> Active</label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel-modal" data-close-modal="addExtraCategoryModal">Cancel</button>
+                    <button type="submit" class="btn-save">Add rate</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="editExtraCategoryModal" class="modal-overlay rates-form-modal">
+        <div class="modal-content">
+            <h3>Edit Category Rate</h3>
+            <form id="editExtraCategoryForm">
+                <input type="hidden" id="editCatId">
+                <div class="form-group">
+                    <label for="editCatName">Category name <span style="color:red;">*</span></label>
+                    <input type="text" id="editCatName" required>
+                </div>
+                <div class="form-group">
+                    <label for="editCatFee">Fee per item (₱) <span style="color:red;">*</span></label>
+                    <input type="number" id="editCatFee" step="0.01" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="editCatMinQty">Min item quantity (fee if qty &gt;)</label>
+                    <input type="number" id="editCatMinQty" min="0" step="1" value="4">
+                </div>
+                <div class="form-group">
+                    <label for="editCatDesc">Description</label>
+                    <textarea id="editCatDesc"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="editCatSort">Sort order</label>
+                    <input type="number" id="editCatSort" value="0" step="1">
+                </div>
+                <div class="form-row-check">
+                    <label><input type="checkbox" id="editCatDefault"> Default fallback</label>
+                    <label><input type="checkbox" id="editCatActive"> Active</label>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel-modal" data-close-modal="editExtraCategoryModal">Cancel</button>
+                    <button type="submit" class="btn-save">Save changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
     <script>
     // Popup helper
     let popup = document.getElementById('ratesPopup');
@@ -412,7 +650,168 @@
 
     // Load region rates on page load
     loadRegionRates();
+    // ===== EXTRA DELIVERY CATEGORY RATES =====
+    const extraCategoryRatesRows = document.getElementById('extraCategoryRatesRows');
+    const minCartQtyInput = document.getElementById('minCartQty');
+    const saveMinCartQtyBtn = document.getElementById('saveMinCartQty');
+    const openAddExtraCategoryBtn = document.getElementById('openAddExtraCategoryBtn');
+    const addExtraCategoryModal = document.getElementById('addExtraCategoryModal');
+    const editExtraCategoryModal = document.getElementById('editExtraCategoryModal');
+    let allExtraCategoryRates = [];
+
+    function openRatesModal(el){ if(el) el.classList.add('show'); }
+    function closeRatesModal(el){ if(el) el.classList.remove('show'); }
+
+    document.querySelectorAll('[data-close-modal]').forEach(btn => {
+        btn.addEventListener('click', () => closeRatesModal(document.getElementById(btn.getAttribute('data-close-modal'))));
+    });
+    [addExtraCategoryModal, editExtraCategoryModal].forEach(m => {
+        if(m) m.addEventListener('click', e => { if(e.target === m) closeRatesModal(m); });
+    });
+
+    function escapeHtml(s){
+        return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    async function loadExtraCategoryRates(){
+        if(!extraCategoryRatesRows) return;
+        extraCategoryRatesRows.innerHTML = '<tr><td colspan="7" style="padding:12px;color:#666;text-align:center;">Loading...</td></tr>';
+        try {
+            const r = await fetch('/api/admin/extra-delivery-category-rates');
+            const j = await r.json();
+            if(!j.success){
+                extraCategoryRatesRows.innerHTML = '<tr><td colspan="7" style="padding:12px;color:#c00;text-align:center;">' + (j.message||'Failed') + '</td></tr>';
+                return;
+            }
+            allExtraCategoryRates = j.rates || [];
+            if(minCartQtyInput && j.minCartQuantity != null) minCartQtyInput.value = j.minCartQuantity;
+            displayExtraCategoryRates(allExtraCategoryRates);
+        } catch(e) {
+            extraCategoryRatesRows.innerHTML = '<tr><td colspan="7" style="padding:12px;color:#c00;text-align:center;">Error loading</td></tr>';
+        }
+    }
+
+    function displayExtraCategoryRates(rates){
+        if(!rates.length){
+            extraCategoryRatesRows.innerHTML = '<tr><td colspan="7" style="padding:12px;color:#666;text-align:center;">No category rates. Add one above.</td></tr>';
+            return;
+        }
+        extraCategoryRatesRows.innerHTML = rates.map(rt => {
+            const inactive = !rt.IsActive ? 'inactive-row' : '';
+            const typeBadge = rt.IsDefault ? '<span class="badge-default">Default</span>' : 'Category';
+            return '<tr class="' + inactive + '" data-id="' + rt.CategoryRateID + '">' +
+                '<td style="padding:10px;font-weight:600;">' + escapeHtml(rt.CategoryName) + '</td>' +
+                '<td style="padding:10px;text-align:right;">' + fmt(rt.FeePerItem) + '</td>' +
+                '<td style="padding:10px;text-align:center;">&gt; ' + rt.MinItemQuantity + '</td>' +
+                '<td style="padding:10px;color:#6b7280;font-size:0.9em;">' + escapeHtml(rt.Description||'—') + '</td>' +
+                '<td style="padding:10px;text-align:center;">' + typeBadge + '</td>' +
+                '<td style="padding:10px;text-align:center;">' + (rt.IsActive ? 'Yes' : 'No') + '</td>' +
+                '<td style="padding:10px;text-align:center;white-space:nowrap;">' +
+                '<button type="button" class="btn-edit-rate edit-extra-cat" data-id="' + rt.CategoryRateID + '">Edit</button> ' +
+                (rt.IsDefault ? '' : '<button type="button" class="btn-delete-rate delete-extra-cat" data-id="' + rt.CategoryRateID + '">Delete</button>') +
+                '</td></tr>';
+        }).join('');
+    }
+
+    if(openAddExtraCategoryBtn){
+        openAddExtraCategoryBtn.addEventListener('click', () => {
+            document.getElementById('addExtraCategoryForm').reset();
+            document.getElementById('addCatMinQty').value = 4;
+            document.getElementById('addCatActive').checked = true;
+            openRatesModal(addExtraCategoryModal);
+        });
+    }
+
+    if(saveMinCartQtyBtn){
+        saveMinCartQtyBtn.addEventListener('click', async () => {
+            try {
+                const res = await fetch('/api/admin/extra-delivery-settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ minCartQuantity: parseInt(minCartQtyInput.value, 10) })
+                });
+                const j = await res.json();
+                showPopup(j.success ? 'Cart quantity threshold saved' : (j.message || 'Failed'), !j.success);
+            } catch(e) { showPopup('Failed to save', true); }
+        });
+    }
+
+    document.getElementById('addExtraCategoryForm')?.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const payload = {
+            categoryName: document.getElementById('addCatName').value.trim(),
+            feePerItem: document.getElementById('addCatFee').value,
+            minItemQuantity: document.getElementById('addCatMinQty').value,
+            description: document.getElementById('addCatDesc').value.trim() || null,
+            sortOrder: document.getElementById('addCatSort').value,
+            isDefault: document.getElementById('addCatDefault').checked,
+            isActive: document.getElementById('addCatActive').checked
+        };
+        try {
+            const res = await fetch('/api/admin/extra-delivery-category-rates', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+            const j = await res.json();
+            if(j.success){ closeRatesModal(addExtraCategoryModal); showPopup('Category rate added'); loadExtraCategoryRates(); }
+            else showPopup(j.message || 'Failed', true);
+        } catch(e) { showPopup('Failed to add', true); }
+    });
+
+    document.getElementById('editExtraCategoryForm')?.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const id = document.getElementById('editCatId').value;
+        const payload = {
+            categoryName: document.getElementById('editCatName').value.trim(),
+            feePerItem: document.getElementById('editCatFee').value,
+            minItemQuantity: document.getElementById('editCatMinQty').value,
+            description: document.getElementById('editCatDesc').value.trim() || null,
+            sortOrder: document.getElementById('editCatSort').value,
+            isDefault: document.getElementById('editCatDefault').checked,
+            isActive: document.getElementById('editCatActive').checked
+        };
+        try {
+            const res = await fetch('/api/admin/extra-delivery-category-rates/' + id, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+            const j = await res.json();
+            if(j.success){ closeRatesModal(editExtraCategoryModal); showPopup('Category rate updated'); loadExtraCategoryRates(); }
+            else showPopup(j.message || 'Failed', true);
+        } catch(e) { showPopup('Failed to update', true); }
+    });
+
+    extraCategoryRatesRows?.addEventListener('click', async (e) => {
+        const editBtn = e.target.closest('.edit-extra-cat');
+        const delBtn = e.target.closest('.delete-extra-cat');
+        if(editBtn){
+            const id = parseInt(editBtn.getAttribute('data-id'), 10);
+            const rt = allExtraCategoryRates.find(r => r.CategoryRateID === id);
+            if(!rt) return;
+            document.getElementById('editCatId').value = id;
+            document.getElementById('editCatName').value = rt.CategoryName || '';
+            document.getElementById('editCatFee').value = Number(rt.FeePerItem).toFixed(2);
+            document.getElementById('editCatMinQty').value = rt.MinItemQuantity ?? 4;
+            document.getElementById('editCatDesc').value = rt.Description || '';
+            document.getElementById('editCatSort').value = rt.SortOrder ?? 0;
+            document.getElementById('editCatDefault').checked = !!rt.IsDefault;
+            document.getElementById('editCatActive').checked = !!rt.IsActive;
+            openRatesModal(editExtraCategoryModal);
+        }
+        if(delBtn){
+            const id = delBtn.getAttribute('data-id');
+            if(!confirm('Delete this category rate?')) return;
+            try {
+                const res = await fetch('/api/admin/extra-delivery-category-rates/' + id, { method: 'DELETE' });
+                const j = await res.json();
+                if(j.success){ showPopup('Deleted'); loadExtraCategoryRates(); }
+                else showPopup(j.message || 'Delete failed', true);
+            } catch(err) { showPopup('Delete failed', true); }
+        }
+    });
+
+    loadExtraCategoryRates();
+
     </script>
+
 
     <!-- Custom Confirmation Modal -->
     <div id="logoutConfirmModal" class="modal-overlay">

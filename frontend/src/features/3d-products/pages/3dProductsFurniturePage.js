@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import ThreeDProductsFurnitureCard from '../components/3dProductsFurnitureCard';
 import ProductFilter from '../../products/components/ProductFilter';
@@ -6,6 +6,7 @@ import PageHeader from '../../../shared/components/layout/PageHeader';
 import { getAllProducts, getCategories } from '../../products/services/productService';
 import AudioLoader from '../../../shared/components/ui/AudioLoader';
 import apiClient from '../../../shared/services/api/apiClient';
+import { usePrimeAvailableStockBatch } from '../../../shared/hooks/useAvailableStock';
 import '../../../app/pages.css';
 
 const ThreeDProductsFurniture = () => {
@@ -27,6 +28,12 @@ const ThreeDProductsFurniture = () => {
     });
     const [filteredProducts, setFilteredProducts] = useState([]);
     const [selectedCategoryName, setSelectedCategoryName] = useState('');
+
+    const productIdsForStock = useMemo(
+        () => products.map((p) => p.id).filter(Boolean),
+        [products]
+    );
+    usePrimeAvailableStockBatch(productIdsForStock);
 
     const has3DModel = (product) => {
         if (!product) return false;
@@ -135,10 +142,14 @@ const ThreeDProductsFurniture = () => {
                 });
             };
             
-            // Filter products to only include those with 3D models (check Has3DModel field)
-            const customFurnitureProducts = await hydrateMaterials(productsData.filter(has3DModel));
-            
             const categoriesData = categoriesResponse.categories || [];
+            const with3d = productsData.filter(has3DModel);
+            setProducts(with3d);
+            hydrateMaterials(with3d)
+                .then((hydrated) => setProducts(hydrated))
+                .catch(() => {});
+
+            const customFurnitureProducts = with3d;
             
             // Filter categories to only include those that have products with 3D models
             // Handle both string and object formats from API
@@ -149,7 +160,6 @@ const ThreeDProductsFurniture = () => {
                 );
             });
             
-            setProducts(customFurnitureProducts);
             setCategories([
                 { id: '', name: 'All 3D Products Furniture', count: customFurnitureProducts.length },
                 ...customFurnitureCategories.map(cat => {

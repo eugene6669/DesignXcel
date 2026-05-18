@@ -36,6 +36,13 @@ const {
 const { isCommonPassword } = require('./utils/passwordValidator');
 const { dedupeDoubledTransactionId, paymentMethodDisplayForOrder, isStripeCheckoutSessionId } = require('./utils/orderDisplayHelpers');
 const { processGatewayRefund } = require('./utils/processGatewayRefund');
+const {
+    getOrdersSchemaFlags,
+    attachOrderItemsBatch,
+    loadProductInventoryPageData
+} = require('./utils/adminQueryHelpers');
+const { invalidateAdminPageCache } = require('./utils/adminPageCache');
+const { resolveProductId } = require('./utils/productIdResolver');
 // All encryption removed - using plain text storage
 
 module.exports = function (sql, pool, getStripe = null) {
@@ -1505,6 +1512,53 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     }
 
+    async function assertSufficientRawMaterialsForConsumption(transaction, materials, stockUnits) {
+        const units = Math.max(0, parseInt(stockUnits, 10) || 0);
+        if (!materials || materials.length === 0 || units <= 0) {
+            return;
+        }
+
+        for (const material of materials) {
+            const materialId = parseInt(material.materialId || material.materialID || material.MaterialID, 10);
+            const quantityRequired = parseInt(material.quantityRequired || material.QuantityRequired, 10) || 1;
+            const needed = quantityRequired * units;
+            if (!materialId || isNaN(materialId) || needed <= 0) {
+                continue;
+            }
+
+            const stockRow = await transaction.request()
+                .input('materialId', sql.Int, materialId)
+                .query(`
+                    SELECT Name, QuantityAvailable
+                    FROM RawMaterials
+                    WHERE MaterialID = @materialId AND IsActive = 1
+                `);
+
+            if (!stockRow.recordset.length) {
+                throw new Error(`Raw material ID ${materialId} is missing or inactive.`);
+            }
+
+            const matName = stockRow.recordset[0].Name || 'Material';
+            const available = stockRow.recordset[0].QuantityAvailable ?? 0;
+
+            if (available < 0) {
+                throw new Error(
+                    `Cannot add stock: "${matName}" has negative stock (${available}). Restock raw materials on the Raw Materials tab first.`
+                );
+            }
+            if (available === 0) {
+                throw new Error(
+                    `Cannot add stock: "${matName}" is out of stock. Add quantity on the Raw Materials tab first.`
+                );
+            }
+            if (available < needed) {
+                throw new Error(
+                    `Cannot add stock: insufficient "${matName}" (need ${needed}, available ${available}).`
+                );
+            }
+        }
+    }
+
     // Decrease or restore raw materials when inventory stock changes (restock, edit qty, create with stock)
     async function applyMaterialsDeltaForInventoryProduct(transaction, inventoryProductId, stockDelta) {
         const delta = parseInt(stockDelta, 10) || 0;
@@ -1521,6 +1575,7 @@ module.exports = function (sql, pool, getStripe = null) {
         const qty = Math.abs(delta);
         console.log(`[MATERIALS] Applying delta ${delta} (${qty} units) for inventory product ${inventoryProductId}, ${materials.length} material(s)`);
         if (delta > 0) {
+            await assertSufficientRawMaterialsForConsumption(transaction, materials, qty);
             await decreaseMaterialsForProduct(transaction, inventoryProductId, qty, materials);
         } else {
             await restoreMaterialsForProduct(transaction, inventoryProductId, qty, materials);
@@ -2862,61 +2917,36 @@ module.exports = function (sql, pool, getStripe = null) {
         try {
             await pool.connect();
 
-            // Fetch recent pending orders (last 5)
-            const recentOrdersResult = await pool.request()
-                .query(`
-                    SELECT TOP 5
-                        o.OrderID,
-                        o.ReferenceNumber,
-                        o.OrderDate,
-                        o.TotalAmount,
-                        o.Status,
-                        FORMAT(o.OrderDate, 'MMM dd, yyyy hh:mm tt') AS FormattedOrderDate,
-                        c.FullName AS CustomerName,
-                        c.Email AS CustomerEmail
-                    FROM Orders o
-                    INNER JOIN Customers c ON o.CustomerID = c.CustomerID
-                    WHERE o.Status = 'Pending'
-                    ORDER BY o.OrderDate DESC
-                `);
+            const [recentOrdersResult, pendingOrdersCountResult, canceledOrdersResult, canceledOrdersCountResult] =
+                await Promise.all([
+                    pool.request().query(`
+                        SELECT TOP 5
+                            o.OrderID, o.ReferenceNumber, o.OrderDate, o.TotalAmount, o.Status,
+                            FORMAT(o.OrderDate, 'MMM dd, yyyy hh:mm tt') AS FormattedOrderDate,
+                            c.FullName AS CustomerName, c.Email AS CustomerEmail
+                        FROM Orders o
+                        INNER JOIN Customers c ON o.CustomerID = c.CustomerID
+                        WHERE o.Status = N'Pending'
+                        ORDER BY o.OrderDate DESC
+                    `),
+                    pool.request().query(`SELECT COUNT(*) as count FROM Orders WHERE Status = N'Pending'`),
+                    pool.request().query(`
+                        SELECT TOP 5
+                            o.OrderID, o.ReferenceNumber, o.OrderDate, o.TotalAmount, o.Status,
+                            FORMAT(o.OrderDate, 'MMM dd, yyyy hh:mm tt') AS FormattedOrderDate,
+                            c.FullName AS CustomerName, c.Email AS CustomerEmail
+                        FROM Orders o
+                        INNER JOIN Customers c ON o.CustomerID = c.CustomerID
+                        WHERE o.Status = N'Cancelled'
+                        ORDER BY o.OrderDate DESC
+                    `),
+                    pool.request().query(`SELECT COUNT(*) as count FROM Orders WHERE Status = N'Cancelled'`)
+                ]);
 
             recentOrders = recentOrdersResult.recordset || [];
-
-            // Get total count of pending orders
-            const pendingOrdersCountResult = await pool.request()
-                .query(`SELECT COUNT(*) as count FROM Orders WHERE Status = 'Pending'`);
-
-            if (pendingOrdersCountResult && pendingOrdersCountResult.recordset && pendingOrdersCountResult.recordset.length > 0) {
-                pendingOrdersCount = parseInt(pendingOrdersCountResult.recordset[0].count) || 0;
-            }
-
-            // Fetch recent canceled orders (last 5)
-            const canceledOrdersResult = await pool.request()
-                .query(`
-                    SELECT TOP 5
-                        o.OrderID,
-                        o.ReferenceNumber,
-                        o.OrderDate,
-                        o.TotalAmount,
-                        o.Status,
-                        FORMAT(o.OrderDate, 'MMM dd, yyyy hh:mm tt') AS FormattedOrderDate,
-                        c.FullName AS CustomerName,
-                        c.Email AS CustomerEmail
-                    FROM Orders o
-                    INNER JOIN Customers c ON o.CustomerID = c.CustomerID
-                    WHERE o.Status = 'Cancelled'
-                    ORDER BY o.OrderDate DESC
-                `);
-
+            pendingOrdersCount = parseInt(pendingOrdersCountResult.recordset[0]?.count, 10) || 0;
             canceledOrders = canceledOrdersResult.recordset || [];
-
-            // Get total count of canceled orders
-            const canceledOrdersCountResult = await pool.request()
-                .query(`SELECT COUNT(*) as count FROM Orders WHERE Status = 'Cancelled'`);
-
-            if (canceledOrdersCountResult && canceledOrdersCountResult.recordset && canceledOrdersCountResult.recordset.length > 0) {
-                canceledOrdersCount = parseInt(canceledOrdersCountResult.recordset[0].count) || 0;
-            }
+            canceledOrdersCount = parseInt(canceledOrdersCountResult.recordset[0]?.count, 10) || 0;
 
         } catch (err) {
             console.error('Error fetching recent orders for dashboard:', err);
@@ -10734,6 +10764,327 @@ module.exports = function (sql, pool, getStripe = null) {
         } catch (err) {
             console.error('Error deleting region delivery rate:', err);
             res.status(500).json({ success: false, message: 'Failed to delete region delivery rate', error: err.message });
+        }
+    });
+
+    // =============================================================================
+    // EXTRA DELIVERY FEES BY PRODUCT CATEGORY (qty > threshold)
+    // =============================================================================
+
+    async function ensureExtraDeliveryCategoryRatesTable() {
+        await pool.request().query(`
+            IF OBJECT_ID('dbo.ExtraDeliveryCategoryRates','U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.ExtraDeliveryCategoryRates (
+                    CategoryRateID INT IDENTITY(1,1) PRIMARY KEY,
+                    CategoryName NVARCHAR(100) NOT NULL,
+                    FeePerItem DECIMAL(18,2) NOT NULL,
+                    MinItemQuantity INT NOT NULL CONSTRAINT DF_ExtraDelCat_MinItemQty DEFAULT (4),
+                    Description NVARCHAR(500) NULL,
+                    SortOrder INT NOT NULL CONSTRAINT DF_ExtraDelCat_SortOrder DEFAULT (0),
+                    IsDefault BIT NOT NULL CONSTRAINT DF_ExtraDelCat_IsDefault DEFAULT (0),
+                    IsActive BIT NOT NULL CONSTRAINT DF_ExtraDelCat_IsActive DEFAULT (1),
+                    CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_ExtraDelCat_CreatedAt DEFAULT (SYSUTCDATETIME()),
+                    UpdatedAt DATETIME2(0) NULL,
+                    CreatedByUserID INT NULL,
+                    CreatedByUsername NVARCHAR(150) NULL,
+                    UpdatedByUserID INT NULL,
+                    UpdatedByUsername NVARCHAR(150) NULL
+                );
+                CREATE UNIQUE INDEX UX_ExtraDeliveryCategoryRates_Category_Active
+                    ON dbo.ExtraDeliveryCategoryRates (CategoryName)
+                    WHERE IsActive = 1 AND IsDefault = 0;
+            END
+        `);
+
+        const countResult = await pool.request().query(`
+            SELECT COUNT(*) AS cnt FROM ExtraDeliveryCategoryRates
+        `);
+        if ((countResult.recordset[0]?.cnt || 0) === 0) {
+            await pool.request().query(`
+                INSERT INTO ExtraDeliveryCategoryRates (CategoryName, FeePerItem, MinItemQuantity, Description, SortOrder, IsDefault, IsActive)
+                VALUES
+                    (N'Cabinet', 150.00, 4, N'Heavy storage / cabinet items', 10, 0, 1),
+                    (N'Chairs', 80.00, 4, N'Chair category', 20, 0, 1),
+                    (N'Table', 100.00, 4, N'Table category', 30, 0, 1),
+                    (N'Default', 100.00, 4, N'Fallback for other categories', 999, 1, 1)
+            `);
+        }
+
+        await pool.request().query(`
+            IF OBJECT_ID('dbo.SystemSettings','U') IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM SystemSettings WHERE SettingKey = 'EXTRA_DELIVERY_MIN_CART_QTY')
+            BEGIN
+                INSERT INTO SystemSettings (SettingKey, SettingValue, Description, UpdatedBy)
+                VALUES ('EXTRA_DELIVERY_MIN_CART_QTY', '4', 'Minimum total cart quantity before extra delivery fees apply', 'System');
+            END
+        `);
+    }
+
+    async function getExtraDeliveryMinCartQty() {
+        try {
+            const r = await pool.request().query(`
+                SELECT SettingValue FROM SystemSettings WHERE SettingKey = 'EXTRA_DELIVERY_MIN_CART_QTY'
+            `);
+            const n = parseInt(r.recordset[0]?.SettingValue, 10);
+            return Number.isFinite(n) && n >= 0 ? n : 4;
+        } catch {
+            return 4;
+        }
+    }
+
+    router.get('/api/extra-delivery-category-rates', async (req, res) => {
+        try {
+            await pool.connect();
+            await ensureExtraDeliveryCategoryRatesTable();
+            const minCartQty = await getExtraDeliveryMinCartQty();
+            const result = await pool.request().query(`
+                SELECT CategoryRateID, CategoryName, FeePerItem, MinItemQuantity, Description, SortOrder, IsDefault, IsActive
+                FROM ExtraDeliveryCategoryRates
+                WHERE IsActive = 1
+                ORDER BY SortOrder, CategoryName
+            `);
+            res.json({
+                success: true,
+                minCartQuantity: minCartQty,
+                rates: result.recordset
+            });
+        } catch (err) {
+            console.error('Error fetching extra delivery category rates:', err);
+            res.status(500).json({ success: false, message: 'Failed to fetch extra delivery rates', error: err.message });
+        }
+    });
+
+    router.get('/api/admin/extra-delivery-category-rates', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            await ensureExtraDeliveryCategoryRatesTable();
+            const minCartQty = await getExtraDeliveryMinCartQty();
+            const result = await pool.request().query(`
+                SELECT
+                    CategoryRateID, CategoryName, FeePerItem, MinItemQuantity, Description,
+                    SortOrder, IsDefault, IsActive, CreatedAt, UpdatedAt,
+                    CreatedByUsername, UpdatedByUsername
+                FROM ExtraDeliveryCategoryRates
+                ORDER BY SortOrder, CategoryName
+            `);
+            res.json({
+                success: true,
+                minCartQuantity: minCartQty,
+                rates: result.recordset
+            });
+        } catch (err) {
+            console.error('Error fetching admin extra delivery rates:', err);
+            res.status(500).json({ success: false, message: 'Failed to fetch extra delivery rates', error: err.message });
+        }
+    });
+
+    router.put('/api/admin/extra-delivery-settings', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const { minCartQuantity } = req.body;
+            const qty = parseInt(minCartQuantity, 10);
+            if (!Number.isFinite(qty) || qty < 0) {
+                return res.json({ success: false, message: 'Invalid minimum cart quantity' });
+            }
+            await pool.request()
+                .input('val', sql.NVarChar(20), String(qty))
+                .query(`
+                    IF EXISTS (SELECT 1 FROM SystemSettings WHERE SettingKey = 'EXTRA_DELIVERY_MIN_CART_QTY')
+                        UPDATE SystemSettings SET SettingValue = @val, UpdatedAt = GETDATE()
+                        WHERE SettingKey = 'EXTRA_DELIVERY_MIN_CART_QTY'
+                    ELSE
+                        INSERT INTO SystemSettings (SettingKey, SettingValue, Description, UpdatedBy)
+                        VALUES ('EXTRA_DELIVERY_MIN_CART_QTY', @val, 'Minimum total cart quantity before extra delivery fees apply', 'Admin')
+                `);
+            res.json({ success: true, minCartQuantity: qty });
+        } catch (err) {
+            console.error('Error updating extra delivery settings:', err);
+            res.status(500).json({ success: false, message: 'Failed to update settings', error: err.message });
+        }
+    });
+
+    router.post('/api/admin/extra-delivery-category-rates', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            await ensureExtraDeliveryCategoryRatesTable();
+            const user = req.session.user || {};
+            const {
+                categoryName, feePerItem, minItemQuantity, description, sortOrder, isDefault, isActive
+            } = req.body;
+
+            if (!categoryName || !String(categoryName).trim()) {
+                return res.json({ success: false, message: 'Category name is required' });
+            }
+            if (feePerItem === undefined || feePerItem === null || Number(feePerItem) < 0) {
+                return res.json({ success: false, message: 'Valid fee per item is required' });
+            }
+
+            const isDef = Boolean(isDefault);
+            const name = String(categoryName).trim();
+
+            if (isDef) {
+                await pool.request().query(`
+                    UPDATE ExtraDeliveryCategoryRates SET IsDefault = 0 WHERE IsDefault = 1
+                `);
+            }
+
+            const result = await pool.request()
+                .input('CategoryName', sql.NVarChar(100), name)
+                .input('FeePerItem', sql.Decimal(18, 2), Number(feePerItem))
+                .input('MinItemQuantity', sql.Int, parseInt(minItemQuantity, 10) || 4)
+                .input('Description', sql.NVarChar(500), description || null)
+                .input('SortOrder', sql.Int, parseInt(sortOrder, 10) || 0)
+                .input('IsDefault', sql.Bit, isDef ? 1 : 0)
+                .input('IsActive', sql.Bit, isActive === false ? 0 : 1)
+                .input('CreatedByUserID', sql.Int, user.id || null)
+                .input('CreatedByUsername', sql.NVarChar(150), user.username || null)
+                .query(`
+                    IF EXISTS (
+                        SELECT 1 FROM ExtraDeliveryCategoryRates
+                        WHERE CategoryName = @CategoryName AND IsActive = 1 AND IsDefault = @IsDefault
+                    )
+                    BEGIN
+                        SELECT 0 AS success, 'This category already exists' AS message;
+                        RETURN;
+                    END
+                    INSERT INTO ExtraDeliveryCategoryRates
+                        (CategoryName, FeePerItem, MinItemQuantity, Description, SortOrder, IsDefault, IsActive, CreatedByUserID, CreatedByUsername)
+                    VALUES
+                        (@CategoryName, @FeePerItem, @MinItemQuantity, @Description, @SortOrder, @IsDefault, @IsActive, @CreatedByUserID, @CreatedByUsername);
+                    SELECT 1 AS success, SCOPE_IDENTITY() AS CategoryRateID;
+                `);
+
+            if (!result.recordset[0]?.success) {
+                return res.json({ success: false, message: result.recordset[0]?.message || 'Failed to add' });
+            }
+
+            await logActivity(
+                user.id,
+                'INSERT',
+                'ExtraDeliveryCategoryRates',
+                String(result.recordset[0].CategoryRateID),
+                `Added extra delivery rate: ${name} - ₱${feePerItem}/item`
+            );
+
+            res.json({ success: true, categoryRateId: result.recordset[0].CategoryRateID });
+        } catch (err) {
+            console.error('Error adding extra delivery category rate:', err);
+            res.status(500).json({ success: false, message: 'Failed to add category rate', error: err.message });
+        }
+    });
+
+    router.put('/api/admin/extra-delivery-category-rates/:id', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const categoryRateId = parseInt(req.params.id, 10);
+            const user = req.session.user || {};
+            if (!categoryRateId) {
+                return res.json({ success: false, message: 'Invalid category rate ID' });
+            }
+
+            const {
+                categoryName, feePerItem, minItemQuantity, description, sortOrder, isDefault, isActive
+            } = req.body;
+
+            const request = pool.request()
+                .input('CategoryRateID', sql.Int, categoryRateId)
+                .input('UpdatedByUserID', sql.Int, user.id || null)
+                .input('UpdatedByUsername', sql.NVarChar(150), user.username || null);
+
+            const setClauses = ['UpdatedAt = SYSUTCDATETIME()', 'UpdatedByUserID = @UpdatedByUserID', 'UpdatedByUsername = @UpdatedByUsername'];
+
+            if (categoryName !== undefined) {
+                request.input('CategoryName', sql.NVarChar(100), String(categoryName).trim());
+                setClauses.push('CategoryName = @CategoryName');
+            }
+            if (feePerItem !== undefined) {
+                request.input('FeePerItem', sql.Decimal(18, 2), Number(feePerItem));
+                setClauses.push('FeePerItem = @FeePerItem');
+            }
+            if (minItemQuantity !== undefined) {
+                request.input('MinItemQuantity', sql.Int, parseInt(minItemQuantity, 10) || 4);
+                setClauses.push('MinItemQuantity = @MinItemQuantity');
+            }
+            if (description !== undefined) {
+                request.input('Description', sql.NVarChar(500), description || null);
+                setClauses.push('Description = @Description');
+            }
+            if (sortOrder !== undefined) {
+                request.input('SortOrder', sql.Int, parseInt(sortOrder, 10) || 0);
+                setClauses.push('SortOrder = @SortOrder');
+            }
+            if (isActive !== undefined) {
+                request.input('IsActive', sql.Bit, Boolean(isActive) ? 1 : 0);
+                setClauses.push('IsActive = @IsActive');
+            }
+            if (isDefault !== undefined) {
+                const isDef = Boolean(isDefault);
+                if (isDef) {
+                    await pool.request().query(`UPDATE ExtraDeliveryCategoryRates SET IsDefault = 0 WHERE IsDefault = 1`);
+                }
+                request.input('IsDefault', sql.Bit, isDef ? 1 : 0);
+                setClauses.push('IsDefault = @IsDefault');
+            }
+
+            if (setClauses.length === 3) {
+                return res.json({ success: false, message: 'No fields to update' });
+            }
+
+            await request.query(`
+                UPDATE ExtraDeliveryCategoryRates SET ${setClauses.join(', ')} WHERE CategoryRateID = @CategoryRateID
+            `);
+
+            await logActivity(
+                user.id,
+                'UPDATE',
+                'ExtraDeliveryCategoryRates',
+                String(categoryRateId),
+                `Updated extra delivery category rate ID ${categoryRateId}`
+            );
+
+            res.json({ success: true });
+        } catch (err) {
+            console.error('Error updating extra delivery category rate:', err);
+            res.status(500).json({ success: false, message: 'Failed to update category rate', error: err.message });
+        }
+    });
+
+    router.delete('/api/admin/extra-delivery-category-rates/:id', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const categoryRateId = parseInt(req.params.id, 10);
+            if (!categoryRateId) {
+                return res.json({ success: false, message: 'Invalid category rate ID' });
+            }
+
+            const existing = await pool.request()
+                .input('CategoryRateID', sql.Int, categoryRateId)
+                .query(`SELECT CategoryName, IsDefault FROM ExtraDeliveryCategoryRates WHERE CategoryRateID = @CategoryRateID`);
+
+            if (!existing.recordset.length) {
+                return res.json({ success: false, message: 'Rate not found' });
+            }
+            if (existing.recordset[0].IsDefault) {
+                return res.json({ success: false, message: 'Cannot delete the default fallback rate. Edit it instead.' });
+            }
+
+            await pool.request()
+                .input('CategoryRateID', sql.Int, categoryRateId)
+                .query(`DELETE FROM ExtraDeliveryCategoryRates WHERE CategoryRateID = @CategoryRateID`);
+
+            await logActivity(
+                req.session.user.id,
+                'DELETE',
+                'ExtraDeliveryCategoryRates',
+                String(categoryRateId),
+                `Deleted extra delivery rate: ${existing.recordset[0].CategoryName}`
+            );
+
+            res.json({ success: true });
+        } catch (err) {
+            console.error('Error deleting extra delivery category rate:', err);
+            res.status(500).json({ success: false, message: 'Failed to delete category rate', error: err.message });
         }
     });
 
@@ -22081,13 +22432,8 @@ module.exports = function (sql, pool, getStripe = null) {
                 ordersRequest.input('limit', sql.Int, limit);
                 ordersRequest.input('offset', sql.Int, offset);
 
-                // Check if ReturnItems column exists in Orders table
-                const columnCheckResult = await pool.request().query(`
-                    SELECT COUNT(*) as columnExists 
-                    FROM sys.columns 
-                    WHERE object_id = OBJECT_ID('Orders') AND name = 'ReturnItems'
-                `);
-                const hasReturnItemsColumn = columnCheckResult.recordset[0].columnExists > 0;
+                const ordersSchema = await getOrdersSchemaFlags(pool);
+                const hasReturnItemsColumn = ordersSchema.hasReturnItems;
 
                 // For sales report, we need to include Completed, Returned, and Refunded orders
                 // Refunded orders should be included to calculate net sales properly
@@ -22101,13 +22447,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 // Build SELECT query conditionally based on column existence
                 const returnItemsColumn = hasReturnItemsColumn ? ', o.ReturnItems' : ', NULL AS ReturnItems';
 
-                // Check if RefundAmount column exists
-                const refundAmountCheck = await pool.request().query(`
-                    SELECT COUNT(*) as columnExists 
-                    FROM sys.columns 
-                    WHERE object_id = OBJECT_ID('Orders') AND name = 'RefundAmount'
-                `);
-                const hasRefundAmountColumn = refundAmountCheck.recordset[0].columnExists > 0;
+                const hasRefundAmountColumn = ordersSchema.hasRefundAmount;
                 const refundAmountColumn = hasRefundAmountColumn ? ', ISNULL(o.RefundAmount, 0) AS RefundAmount' : ', 0 AS RefundAmount';
 
                 const ordersResult = await ordersRequest.query(`
@@ -22161,6 +22501,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     `);
 
                 const orders = ordersResult.recordset;
+                await attachOrderItemsBatch(pool, orders);
 
                 // Decrypt customer and address data for each order
                 for (let order of orders) {
@@ -22190,31 +22531,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     order.PostalCode = addressData.PostalCode;
                     order.Country = addressData.Country;
 
-                    // Fetch items for each order - deduplicate by ProductID and VariationID
-                    // This handles cases where duplicates exist in the database
-                    const itemsResult = await pool.request()
-                        .input('orderId', sql.Int, order.OrderID)
-                        .query(`
-                            SELECT 
-                                oi.ProductID,
-                                oi.VariationID,
-                                SUM(oi.Quantity) AS Quantity,
-                                AVG(oi.PriceAtPurchase) AS PriceAtPurchase,
-                                MAX(oi.OrderItemID) AS OrderItemID,
-                                COALESCE(MAX(p.Name), MAX(oi.Name)) AS Name,
-                                MAX(p.ImageURL) AS ImageURL,
-                                MAX(pv.VariationName) AS VariationName,
-                                MAX(pv.Color) AS Color,
-                                MAX(pv.VariationImageURL) AS VariationImageURL
-                            FROM OrderItems oi
-                            LEFT JOIN Products p ON oi.ProductID = p.ProductID
-                            LEFT JOIN ProductVariations pv ON oi.VariationID = pv.VariationID
-                            WHERE oi.OrderID = @orderId
-                            GROUP BY oi.ProductID, oi.VariationID
-                            ORDER BY MAX(oi.OrderItemID)
-                        `);
-                    // Always set items as an array (empty if no items found)
-                    let allItems = itemsResult.recordset || [];
+                    let allItems = order.items || [];
 
                     // Check if this is a partial return (has ReturnItems field)
                     let returnedItems = [];
@@ -23235,102 +23552,63 @@ module.exports = function (sql, pool, getStripe = null) {
         try {
             await pool.connect();
 
-            // Fetch archived products
-            const productsResult = await pool.request().query(`
-                SELECT 
-                    ProductID,
-                    Name,
-                    Description,
-                    Price,
-                    StockQuantity,
-                    Category,
-                    DateAdded,
-                    IsActive
-                FROM Products
-                WHERE IsActive = 0
-                ORDER BY DateAdded DESC
-            `);
-
-            // Fetch archived raw materials
-            const materialsResult = await pool.request().query(`
-                SELECT 
-                    MaterialID,
-                    Name,
-                    QuantityAvailable,
-                    Unit,
-                    LastUpdated,
-                    IsActive
-                FROM RawMaterials
-                WHERE IsActive = 0
-                ORDER BY LastUpdated DESC
-            `);
-
-            // Fetch archived inventory products (from InventoryProducts table)
-            const inventoryProductsResult = await pool.request().query(`
-                SELECT 
-                    InventoryProductID,
-                    Name,
-                    Description,
-                    Price,
-                    Category,
-                    SKU,
-                    ImageURL,
-                    DateAdded,
-                    IsActive
-                FROM InventoryProducts
-                WHERE IsActive = 0
-                ORDER BY DateAdded DESC
-            `);
-
-            // Fetch archived product variations
-            const variationsResult = await pool.request().query(`
-                SELECT 
-                    v.VariationID,
-                    v.InventoryProductID,
-                    v.ProductID,
-                    v.VariationName,
-                    v.Color,
-                    v.Quantity,
-                    COALESCE(v.AvailableQuantity, v.Quantity, 0) as AvailableQuantity,
-                    COALESCE(v.DamagedQuantity, 0) as DamagedQuantity,
-                    COALESCE(v.ReturnedQuantity, 0) as ReturnedQuantity,
-                    COALESCE(v.RepairedQuantity, 0) as RepairedQuantity,
-                    COALESCE(v.DisposedQuantity, 0) as DisposedQuantity,
-                    v.Price,
-                    v.VariationImageURL,
-                    v.IsActive,
-                    v.CreatedAt,
-                    v.UpdatedAt,
-                    ip.Name as ProductName
-                FROM InventoryProductVariations v
-                LEFT JOIN InventoryProducts ip ON v.InventoryProductID = ip.InventoryProductID
-                WHERE v.IsActive = 0
-                ORDER BY v.UpdatedAt DESC, v.CreatedAt DESC
-            `);
-
-            // Categories are stored as a column in Products table, not a separate table
-            const categoriesResult = { recordset: [] };
-
-            const archivedItems = {
-                products: productsResult.recordset,
-                materials: materialsResult.recordset,
-                categories: categoriesResult.recordset,
-                inventoryProducts: inventoryProductsResult.recordset,
-                variations: variationsResult.recordset
-            };
-
-            console.log('Archived items found:');
-            console.log('Products:', productsResult.recordset.length);
-            console.log('Materials:', materialsResult.recordset.length);
-            console.log('Categories:', categoriesResult.recordset.length);
-            console.log('Inventory Products:', inventoryProductsResult.recordset.length);
-            console.log('Product Variations:', variationsResult.recordset.length);
+            const [productsResult, materialsResult, inventoryProductsResult, variationsResult] = await Promise.all([
+                pool.request().query(`
+                    SELECT ProductID, Name, Description, Price, StockQuantity, Category, DateAdded, IsActive
+                    FROM Products WHERE IsActive = 0 ORDER BY DateAdded DESC
+                `),
+                pool.request().query(`
+                    SELECT MaterialID, Name, QuantityAvailable, Unit, LastUpdated, IsActive
+                    FROM RawMaterials WHERE IsActive = 0 ORDER BY LastUpdated DESC
+                `),
+                pool.request().query(`
+                    SELECT
+                        ip.InventoryProductID, ip.Name, ip.Category, ip.Price, ip.SKU,
+                        COALESCE(vimg.VariationImageURL, NULLIF(ip.ImageURL, '')) as ImageURL,
+                        ip.DateAdded,
+                        (COALESCE(ip.AvailableQuantity, 0) + COALESCE(ip.DamagedQuantity, 0)) as TotalQuantity,
+                        COALESCE(ip.AvailableQuantity, 0) as AvailableQuantity,
+                        CASE
+                            WHEN COALESCE(ip.AvailableQuantity, 0) > 0 THEN 'available'
+                            WHEN COALESCE(ip.RepairedQuantity, 0) > 0 THEN 'repaired'
+                            WHEN COALESCE(ip.DamagedQuantity, 0) > 0 THEN 'damaged'
+                            WHEN COALESCE(ip.ReturnedQuantity, 0) > 0 THEN 'returned'
+                            WHEN COALESCE(ip.DisposedQuantity, 0) > 0 THEN 'disposed'
+                            ELSE COALESCE(ip.InventoryStatus, 'no_stock')
+                        END as InventoryStatus,
+                        ip.IsActive
+                    FROM InventoryProducts ip
+                    OUTER APPLY (
+                        SELECT TOP 1 ipv.VariationImageURL
+                        FROM InventoryProductVariations ipv
+                        WHERE ipv.InventoryProductID = ip.InventoryProductID
+                        ORDER BY ipv.VariationID
+                    ) vimg
+                    WHERE ip.IsActive = 0
+                    ORDER BY ip.DateAdded DESC
+                `),
+                pool.request().query(`
+                    SELECT
+                        v.VariationID, v.InventoryProductID, v.VariationName, v.SKU, v.Color, v.Quantity,
+                        COALESCE(v.AvailableQuantity, v.Quantity, 0) as AvailableQuantity,
+                        COALESCE(v.DamagedQuantity, 0) as DamagedQuantity,
+                        COALESCE(v.ReturnedQuantity, 0) as ReturnedQuantity,
+                        COALESCE(v.RepairedQuantity, 0) as RepairedQuantity,
+                        COALESCE(v.DisposedQuantity, 0) as DisposedQuantity,
+                        v.Price, v.VariationImageURL, v.CreatedAt, v.UpdatedAt,
+                        ip.Name as ProductName
+                    FROM InventoryProductVariations v
+                    LEFT JOIN InventoryProducts ip ON v.InventoryProductID = ip.InventoryProductID
+                    WHERE v.IsActive = 0
+                    ORDER BY v.UpdatedAt DESC, v.CreatedAt DESC
+                `)
+            ]);
 
             res.render('Employee/Admin/AdminArchived', {
                 user: req.session.user,
                 archivedProducts: productsResult.recordset,
                 archivedMaterials: materialsResult.recordset,
-                archivedCategories: categoriesResult.recordset,
+                archivedCategories: [],
                 archivedInventoryProducts: inventoryProductsResult.recordset,
                 archivedVariations: variationsResult.recordset
             });
@@ -24062,7 +24340,13 @@ module.exports = function (sql, pool, getStripe = null) {
             });
         } else if (route === 'Materials') {
             // Special handling for Materials route - needs to fetch raw materials data
-            router.get(`/Employee/Admin/RawMaterials`, isAuthenticated, async (req, res) => {
+            router.get(`/Employee/Admin/RawMaterials`, isAuthenticated, (req, res) => {
+                const q = new URLSearchParams(req.query);
+                q.set('tab', 'raw-materials');
+                return res.redirect('/Employee/Admin/ProductInventory?' + q.toString());
+            });
+
+            router.get(`/Employee/Admin/RawMaterials/_legacy`, isAuthenticated, async (req, res) => {
                 let materials = [];
                 let units = [];
 
@@ -24148,6 +24432,12 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             });
 
+            const redirectProductInventoryTab = (req, res, flashType, message) => {
+                if (flashType && message) req.flash(flashType, message);
+                const tab = req.body?.redirectTab || req.query?.tab || 'raw-materials';
+                return res.redirect('/Employee/Admin/ProductInventory?tab=' + encodeURIComponent(tab));
+            };
+
             // Admin - Add Raw Material
             router.post('/Employee/Admin/RawMaterials/Add', isAuthenticated, async (req, res) => {
                 try {
@@ -24163,12 +24453,11 @@ module.exports = function (sql, pool, getStripe = null) {
                             VALUES (@name, @quantity, @unit, GETDATE(), 1)
                         `);
 
-                    req.flash('success', 'Raw material added successfully!');
-                    res.redirect('/Employee/Admin/RawMaterials');
+                    invalidateAdminPageCache('admin:');
+                    return redirectProductInventoryTab(req, res, 'success', 'Raw material added successfully!');
                 } catch (err) {
                     console.error('Error adding raw material:', err);
-                    req.flash('error', 'Failed to add raw material: ' + err.message);
-                    res.redirect('/Employee/Admin/RawMaterials');
+                    return redirectProductInventoryTab(req, res, 'error', 'Failed to add raw material: ' + err.message);
                 }
             });
 
@@ -24189,12 +24478,11 @@ module.exports = function (sql, pool, getStripe = null) {
                             WHERE MaterialID = @materialId
                         `);
 
-                    req.flash('success', 'Raw material updated successfully!');
-                    res.redirect('/Employee/Admin/RawMaterials');
+                    invalidateAdminPageCache('admin:');
+                    return redirectProductInventoryTab(req, res, 'success', 'Raw material updated successfully!');
                 } catch (err) {
                     console.error('Error updating raw material:', err);
-                    req.flash('error', 'Failed to update raw material: ' + err.message);
-                    res.redirect('/Employee/Admin/RawMaterials');
+                    return redirectProductInventoryTab(req, res, 'error', 'Failed to update raw material: ' + err.message);
                 }
             });
 
@@ -24293,144 +24581,43 @@ module.exports = function (sql, pool, getStripe = null) {
 
             // Admin - Get Product Inventory Page (CREATE PRODUCTS)
             router.get('/Employee/Admin/ProductInventory', isAuthenticated, async (req, res) => {
-                let inventoryItems = [];
-                let products = []; // For dropdown when adding inventory items
-                let categories = [];
-                let allInventoryProducts = []; // All products from InventoryProducts table
-
                 try {
                     await pool.connect();
                     await ensureVariationMediaColumns(pool);
 
-                    // Fetch all products from InventoryProducts table with inventory data
-                    try {
-                        const allProductsResult = await pool.request().query(`
-                            SELECT 
-                                ip.InventoryProductID,
-                                ip.Name as InventoryProductName,
-                                ip.SKU as InventoryProductSKU,
-                                ip.Category as InventoryProductCategory,
-                                ip.Price as InventoryProductPrice,
-                                COALESCE(
-                                    (SELECT TOP 1 ipv.VariationImageURL
-                                     FROM InventoryProductVariations ipv
-                                     WHERE ipv.InventoryProductID = ip.InventoryProductID AND ipv.IsActive = 1
-                                     ORDER BY ipv.VariationID),
-                                    NULLIF(JSON_VALUE(
-                                        (SELECT TOP 1 ipv2.ThumbnailURLs
-                                         FROM InventoryProductVariations ipv2
-                                         WHERE ipv2.InventoryProductID = ip.InventoryProductID AND ipv2.IsActive = 1
-                                         ORDER BY ipv2.VariationID), '$[0]'), ''),
-                                    NULLIF(pLinked.ImageURL, ''),
-                                    NULLIF(pById.ImageURL, ''),
-                                    NULLIF(pBySku.ImageURL, ''),
-                                    NULLIF(JSON_VALUE(pLinked.ThumbnailURLs, '$[0]'), ''),
-                                    NULLIF(ip.ImageURL, '')
-                                ) as InventoryProductImageURL,
-                                ip.DateAdded,
-                                -- Total quantity (Available + Damaged) - repaired items are included in Available
-                                (COALESCE(ip.AvailableQuantity, 0) + COALESCE(ip.DamagedQuantity, 0)) as TotalQuantity,
-                                -- Status quantities from columns
-                                COALESCE(ip.AvailableQuantity, 0) as AvailableQuantity,
-                                COALESCE(ip.DamagedQuantity, 0) as DamagedQuantity,
-                                COALESCE(ip.ReturnedQuantity, 0) as ReturnedQuantity,
-                                COALESCE(ip.RepairedQuantity, 0) as RepairedQuantity,
-                                COALESCE(ip.DisposedQuantity, 0) as DisposedQuantity,
-                                -- Primary/Overall Status (prioritize available > repaired > others)
-                                CASE 
-                                    WHEN COALESCE(ip.AvailableQuantity, 0) > 0 THEN 'available'
-                                    WHEN COALESCE(ip.RepairedQuantity, 0) > 0 THEN 'repaired'
-                                    WHEN COALESCE(ip.DamagedQuantity, 0) > 0 THEN 'damaged'
-                                    WHEN COALESCE(ip.ReturnedQuantity, 0) > 0 THEN 'returned'
-                                    WHEN COALESCE(ip.DisposedQuantity, 0) > 0 THEN 'disposed'
-                                    ELSE COALESCE(ip.InventoryStatus, 'available')
-                                END as InventoryStatus,
-                                -- Other fields
-                                ip.Dimensions,
-                                ip.InventoryNotes as Notes,
-                                ip.DateUpdated
-                            FROM InventoryProducts ip
-                            LEFT JOIN Products pLinked ON pLinked.ProductID = ip.ProductID AND pLinked.IsActive = 1
-                            LEFT JOIN Products pById ON pById.ProductID = ip.InventoryProductID AND pById.IsActive = 1
-                            LEFT JOIN Products pBySku 
-                                ON UPPER(LTRIM(RTRIM(pBySku.SKU))) = UPPER(LTRIM(RTRIM(ip.SKU))) 
-                                AND pBySku.IsActive = 1
-                            WHERE ip.IsActive = 1
-                            ORDER BY ip.DateAdded DESC
-                        `);
-                        allInventoryProducts = allProductsResult.recordset || [];
-                        inventoryItems = allInventoryProducts; // Use the same data for inventoryItems
-                    } catch (allProductsErr) {
-                        console.error('Error fetching all inventory products:', allProductsErr);
-                        allInventoryProducts = [];
-                        inventoryItems = [];
-                    }
+                    const listOptions = {
+                        page: parseInt(req.query.page, 10) || 1,
+                        search: String(req.query.search || '').trim(),
+                        category: String(req.query.category || '').trim(),
+                        inventoryProductId: req.query.inventoryProductId
+                    };
 
-                    // Fetch products for dropdown (products that can have inventory items)
-                    // Get products from both Products and InventoryProducts tables
-                    try {
-                        const productsFromProducts = await pool.request().query(`
-                            SELECT 
-                                ProductID as ID,
-                                Name,
-                                SKU,
-                                Category,
-                                Price,
-                                'Products' as SourceTable
-                            FROM Products
-                            WHERE IsActive = 1
-                        `);
+                    const pageData = await loadProductInventoryPageData(pool, listOptions);
 
-                        const productsFromInventory = await pool.request().query(`
-                            SELECT 
-                                InventoryProductID as ID,
-                                Name,
-                                SKU,
-                                Category,
-                                Price,
-                                'InventoryProducts' as SourceTable
-                            FROM InventoryProducts
-                            WHERE IsActive = 1
-                        `);
-
-                        products = [
-                            ...productsFromProducts.recordset.map(p => ({ ...p, SourceTable: 'Products' })),
-                            ...productsFromInventory.recordset.map(p => ({ ...p, SourceTable: 'InventoryProducts' }))
-                        ];
-                    } catch (productsErr) {
-                        console.error('Error fetching products for dropdown:', productsErr);
-                        products = [];
-                    }
-
-                    // Fetch categories for dropdown (from both Products and InventoryProducts)
-                    try {
-                        const categoriesFromProducts = await pool.request().query(`
-                            SELECT DISTINCT Category 
-                            FROM Products 
-                            WHERE IsActive = 1 AND Category IS NOT NULL
-                        `);
-
-                        const categoriesFromInventory = await pool.request().query(`
-                            SELECT DISTINCT Category 
-                            FROM InventoryProducts 
-                            WHERE IsActive = 1 AND Category IS NOT NULL
-                        `);
-
-                        const allCategories = new Set();
-                        categoriesFromProducts.recordset.forEach(r => allCategories.add(r.Category));
-                        categoriesFromInventory.recordset.forEach(r => allCategories.add(r.Category));
-                        categories = Array.from(allCategories).sort();
-                    } catch (categoriesErr) {
-                        console.error('Error fetching categories:', categoriesErr);
-                        categories = [];
+                    if (pageData.redirectToPage) {
+                        const q = new URLSearchParams();
+                        if (req.query.tab) q.set('tab', req.query.tab);
+                        q.set('page', String(pageData.redirectToPage));
+                        if (listOptions.search) q.set('search', listOptions.search);
+                        if (listOptions.category) q.set('category', listOptions.category);
+                        if (listOptions.inventoryProductId) {
+                            q.set('inventoryProductId', listOptions.inventoryProductId);
+                        }
+                        return res.redirect('/Employee/Admin/ProductInventory?' + q.toString());
                     }
 
                     res.render('Employee/Admin/AdminProductInventory', {
                         user: req.session.user,
-                        inventoryItems: inventoryItems,
-                        products: products,
-                        categories: categories,
-                        allInventoryProducts: allInventoryProducts
+                        inventoryItems: pageData.inventoryItems,
+                        products: pageData.products,
+                        categories: pageData.categories,
+                        allInventoryProducts: pageData.allInventoryProducts,
+                        materials: pageData.materials,
+                        units: pageData.units,
+                        pagination: pageData.pagination,
+                        listFilters: pageData.listFilters,
+                        inventoryProductIdFocus: pageData.inventoryProductIdFocus,
+                        activeTab: req.query.tab === 'raw-materials' ? 'raw-materials' : 'products'
                     });
                 } catch (err) {
                     console.error('Error in ProductInventory route:', err);
@@ -24439,7 +24626,14 @@ module.exports = function (sql, pool, getStripe = null) {
                         user: req.session.user,
                         inventoryItems: [],
                         products: [],
-                        categories: []
+                        categories: [],
+                        allInventoryProducts: [],
+                        materials: [],
+                        units: [],
+                        pagination: { page: 1, limit: 25, totalCount: 0, totalPages: 1 },
+                        listFilters: { search: '', category: '' },
+                        inventoryProductIdFocus: null,
+                        activeTab: req.query.tab === 'raw-materials' ? 'raw-materials' : 'products'
                     });
                 }
             });
@@ -24459,6 +24653,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     return res.redirect('/Employee/Admin/ProductInventory');
                 };
                 const respondSuccess = (inventoryProductId) => {
+                    invalidateAdminPageCache('admin:');
                     if (wantsJson) {
                         return res.json({
                             success: true,
@@ -24467,7 +24662,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         });
                     }
                     req.flash('success', 'Product created successfully in inventory!');
-                    return res.redirect(`/Employee/Admin/ProductInventory?inventoryProductId=${inventoryProductId}&tab=variations`);
+                    return res.redirect(`/Employee/Admin/ProductInventory?inventoryProductId=${inventoryProductId}`);
                 };
 
                 try {
@@ -24688,6 +24883,26 @@ module.exports = function (sql, pool, getStripe = null) {
 
                         const stockToConsume = productAvailableQty;
                         if (stockToConsume > 0 && materialsCollected.length > 0) {
+                            for (const recipeMat of materialsCollected) {
+                                const materialId = parseInt(recipeMat.materialId || recipeMat.MaterialID, 10);
+                                const qtyPerUnit = parseInt(recipeMat.quantityRequired || recipeMat.QuantityRequired, 10) || 1;
+                                const needed = qtyPerUnit * stockToConsume;
+                                if (!materialId || needed <= 0) continue;
+                                const stockRow = await transaction.request()
+                                    .input('materialId', sql.Int, materialId)
+                                    .query('SELECT Name, QuantityAvailable FROM RawMaterials WHERE MaterialID = @materialId AND IsActive = 1');
+                                if (!stockRow.recordset.length) {
+                                    throw new Error(`Raw material ID ${materialId} is missing or inactive.`);
+                                }
+                                const matName = stockRow.recordset[0].Name || 'Material';
+                                const available = stockRow.recordset[0].QuantityAvailable || 0;
+                                if (available <= 0) {
+                                    throw new Error(`"${matName}" has no stock. Add stock on the Raw Materials tab before creating this product.`);
+                                }
+                                if (available < needed) {
+                                    throw new Error(`Insufficient stock for "${matName}": need ${needed}, available ${available}.`);
+                                }
+                            }
                             await decreaseMaterialsForProduct(transaction, inventoryProductId, stockToConsume, materialsCollected);
                         }
 
@@ -32176,7 +32391,8 @@ module.exports = function (sql, pool, getStripe = null) {
 
             if (checkResult.recordset.length === 0) {
                 req.flash('error', 'Raw material not found.');
-                return res.redirect('/Employee/Admin/RawMaterials');
+                const tab = req.body?.redirectTab || 'raw-materials';
+                return res.redirect('/Employee/Admin/ProductInventory?tab=' + encodeURIComponent(tab));
             }
 
             const materialName = checkResult.recordset[0].Name;
@@ -32197,11 +32413,13 @@ module.exports = function (sql, pool, getStripe = null) {
             );
 
             req.flash('success', `Raw material "${materialName}" has been archived. You can restore it from the Archived page.`);
-            res.redirect('/Employee/Admin/RawMaterials');
+            const tab = req.body?.redirectTab || 'raw-materials';
+            res.redirect('/Employee/Admin/ProductInventory?tab=' + encodeURIComponent(tab));
         } catch (err) {
             console.error('Error archiving raw material:', err);
             req.flash('error', 'Failed to archive raw material. Please try again.');
-            res.redirect('/Employee/Admin/RawMaterials');
+            const tab = req.body?.redirectTab || 'raw-materials';
+            res.redirect('/Employee/Admin/ProductInventory?tab=' + encodeURIComponent(tab));
         }
     });
 
@@ -33206,10 +33424,13 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/api/products/:id/materials', async (req, res) => {
         try {
             await pool.connect();
-            const { id } = req.params;
+            const productId = await resolveProductId(pool, req.params.id);
+            if (!productId) {
+                return res.json({ success: true, materials: [] });
+            }
 
             const result = await pool.request()
-                .input('productId', sql.Int, id)
+                .input('productId', sql.Int, productId)
                 .query(`
                     SELECT 
                         pm.ProductMaterialID,
@@ -33242,7 +33463,10 @@ module.exports = function (sql, pool, getStripe = null) {
     router.post('/api/products/:id/materials', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
-            const { id } = req.params;
+            const productId = await resolveProductId(pool, req.params.id);
+            if (!productId) {
+                return res.status(404).json({ success: false, message: 'Product not found.' });
+            }
             const { materials } = req.body; // Array of { materialId, quantityRequired }
 
             // Start transaction
@@ -33252,14 +33476,14 @@ module.exports = function (sql, pool, getStripe = null) {
             try {
                 // Delete existing materials for this product
                 await transaction.request()
-                    .input('productId', sql.Int, id)
+                    .input('productId', sql.Int, productId)
                     .query('DELETE FROM ProductMaterials WHERE ProductID = @productId');
 
                 // Insert new materials
                 for (const material of materials) {
                     if (material.materialId && material.quantityRequired > 0) {
                         await transaction.request()
-                            .input('productId', sql.Int, id)
+                            .input('productId', sql.Int, productId)
                             .input('materialId', sql.Int, material.materialId)
                             .input('quantityRequired', sql.Int, material.quantityRequired)
                             .query(`
