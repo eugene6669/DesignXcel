@@ -1,0 +1,121 @@
+.return-refund-policy-page {
+  min-height: 100vh;
+  background-color: #f9fafb;
+}
+
+.policy-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+
+.policy-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 3rem;
+  line-height: 1.8;
+}
+
+.policy-section {
+  margin-bottom: 3rem;
+}
+
+.policy-section:last-child {
+  margin-bottom: 0;
+}
+
+.policy-section h2 {
+  color: #1f2937;
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.policy-section h3 {
+  color: #374151;
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.policy-section p {
+  color: #4b5563;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+}
+
+.policy-list {
+  color: #4b5563;
+  font-size: 1rem;
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.policy-list li {
+  margin-bottom: 0.75rem;
+  line-height: 1.7;
+}
+
+.policy-list li strong {
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.policy-highlight {
+  background: #f0f9ff;
+  border-left: 4px solid #3b82f6;
+  padding: 1rem 1.5rem;
+  margin: 1.5rem 0;
+  border-radius: 4px;
+}
+
+.policy-highlight p {
+  margin: 0;
+  color: #1e40af;
+  font-weight: 500;
+}
+
+.contact-info {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.contact-info p {
+  margin: 0.5rem 0;
+  color: #374151;
+}
+
+.contact-info strong {
+  color: #1f2937;
+  font-weight: 600;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .policy-container {
+    padding: 2rem 1rem;
+  }
+
+  .policy-content {
+    padding: 2rem 1.5rem;
+  }
+
+  .policy-section h2 {
+    font-size: 1.5rem;
+  }
+
+  .policy-section h3 {
+    font-size: 1.25rem;
+  }
+
+  .policy-list {
+    padding-left: 1.25rem;
+  }
+}
+

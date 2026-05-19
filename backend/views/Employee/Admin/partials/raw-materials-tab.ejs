@@ -1,0 +1,167 @@
+<div id="rawMaterialsTab" class="tab-content">
+    <div class="content-area">
+        <div class="rm-toolbar">
+            <button type="button" id="rmAddMaterialBtn" class="add-material-btn">+ Add Material</button>
+            <button type="button" id="rmQuickAddBtn" class="add-material-btn" style="background:#28a745;color:#fff;">Quick Add Common</button>
+            <button type="button" id="rmManageUnitsBtn" class="add-material-btn" style="background:#17a2b8;color:#fff;">Manage Units</button>
+        </div>
+        <div class="stock-legend rm-legend">
+            <span><i style="background:#DC3545;"></i> Out of stock (0)</span>
+            <span><i style="background:#FF9800;"></i> Critical (1–10)</span>
+            <span><i style="background:#d4af37;"></i> Low (11–20)</span>
+        </div>
+
+        <% if (materials && materials.length > 0) { %>
+            <table id="rawMaterialsTable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th class="qty-col">Qty</th>
+                        <th>Unit</th>
+                        <th>Updated</th>
+                        <th style="width:90px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% materials.forEach(material => {
+                        const qty = material.QuantityAvailable;
+                        const n = Number(qty) || 0;
+                        let qtyClass = 'stock-qty-normal';
+                        if (n < 0) qtyClass = 'stock-qty-negative';
+                        else if (n === 0) qtyClass = 'stock-qty-out';
+                        else if (n <= 10) qtyClass = 'stock-qty-critical';
+                        else if (n <= 20) qtyClass = 'stock-qty-low';
+                    %>
+                        <tr data-material-id="<%= material.MaterialID %>">
+                            <td><%= material.Name %></td>
+                            <td class="qty-col"><span class="stock-qty <%= qtyClass %>"><%= qty %></span></td>
+                            <td><%= material.Unit %></td>
+                            <td><%= material.LastUpdated ? new Date(material.LastUpdated).toLocaleDateString() : '—' %></td>
+                            <td class="rm-actions-cell">
+                                <button type="button" class="edit-material-btn" title="Edit"
+                                    data-id="<%= material.MaterialID %>"
+                                    data-name="<%= material.Name %>"
+                                    data-quantity="<%= material.QuantityAvailable %>"
+                                    data-unit="<%= material.Unit %>">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 20h9"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 3.5a2.121 2.121 0 113 3L7 19.5 3 21l1.5-4L16.5 3.5z"/></svg>
+                                </button>
+                                <form action="/Employee/Admin/RawMaterials/Delete/<%= material.MaterialID %>" method="POST" style="display:inline;">
+                                    <input type="hidden" name="redirectTab" value="raw-materials">
+                                    <button type="submit" class="delete-material-btn" title="Archive">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        <% } else { %>
+            <p style="color:#666;font-size:0.9em;">No raw materials yet. Use <strong>Quick Add Common</strong> or <strong>Add Material</strong>.</p>
+        <% } %>
+    </div>
+</div>
+
+<div id="rmAddMaterialModal" class="modal rm-modal-compact">
+    <div class="modal-content">
+        <span class="close-button" id="rmCloseAddMaterial">&times;</span>
+        <h3>Add Raw Material</h3>
+        <form action="/Employee/Admin/RawMaterials/Add" method="POST">
+            <input type="hidden" name="redirectTab" value="raw-materials">
+            <div class="rm-form-grid">
+                <div class="rm-full">
+                    <label for="rmAddName">Name</label>
+                    <input type="text" id="rmAddName" name="name" required placeholder="Material name">
+                </div>
+                <div>
+                    <label for="rmAddQuantity">Quantity</label>
+                    <input type="number" id="rmAddQuantity" name="quantity" min="0" value="0" required>
+                </div>
+                <div>
+                    <label for="rmAddUnit">Unit</label>
+                    <select id="rmAddUnit" name="unit" required>
+                        <% if (units && units.length > 0) { %>
+                            <% units.forEach(unit => { %>
+                                <option value="<%= unit.UnitName %>"><%= unit.UnitName %></option>
+                            <% }); %>
+                        <% } else { %>
+                            <option value="pcs">pcs</option>
+                            <option value="kg">kg</option>
+                            <option value="sheet">sheet</option>
+                        <% } %>
+                    </select>
+                </div>
+            </div>
+            <div class="rm-form-actions">
+                <button type="button" class="rm-btn rm-btn-secondary" id="rmCancelAddMaterial">Cancel</button>
+                <button type="submit" class="rm-btn rm-btn-primary">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="rmEditMaterialModal" class="modal rm-modal-compact">
+    <div class="modal-content">
+        <span class="close-button" id="rmCloseEditMaterial">&times;</span>
+        <h3>Edit Raw Material</h3>
+        <form id="rmEditMaterialForm" action="/Employee/Admin/RawMaterials/Edit" method="POST">
+            <input type="hidden" name="redirectTab" value="raw-materials">
+            <input type="hidden" id="rmEditMaterialID" name="materialid">
+            <div class="rm-form-grid">
+                <div class="rm-full">
+                    <label for="rmEditMaterialName">Name</label>
+                    <input type="text" id="rmEditMaterialName" name="name" required>
+                </div>
+                <div>
+                    <label for="rmEditQuantity">Quantity</label>
+                    <input type="number" id="rmEditQuantity" name="quantity" min="0" required>
+                </div>
+                <div>
+                    <label for="rmEditUnit">Unit</label>
+                    <select id="rmEditUnit" name="unit" required>
+                        <% if (units && units.length > 0) { %>
+                            <% units.forEach(unit => { %>
+                                <option value="<%= unit.UnitName %>"><%= unit.UnitName %></option>
+                            <% }); %>
+                        <% } else { %>
+                            <option value="pcs">pcs</option>
+                        <% } %>
+                    </select>
+                </div>
+            </div>
+            <div class="rm-form-actions">
+                <button type="button" class="rm-btn rm-btn-secondary" id="rmCancelEditMaterial">Cancel</button>
+                <button type="submit" class="rm-btn rm-btn-primary">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="rmQuickAddModal" class="modal rm-modal-compact rm-modal-wide">
+    <div class="modal-content">
+        <span class="close-button" id="rmCloseQuickAdd">&times;</span>
+        <h3>Quick Add — Office Furniture Materials</h3>
+        <p style="margin:0 0 10px;font-size:0.82em;color:#666;">Select items to add (qty starts at 0). Existing names are skipped.</p>
+        <div id="rmCommonMaterialsList" class="rm-quick-grid"></div>
+        <div class="rm-form-actions">
+            <button type="button" class="rm-btn rm-btn-secondary" id="rmCancelQuickAdd">Cancel</button>
+            <button type="button" class="rm-btn rm-btn-primary" id="rmSubmitQuickAdd">Add Selected</button>
+        </div>
+    </div>
+</div>
+
+<div id="rmManageUnitsModal" class="modal rm-modal-compact rm-modal-wide">
+    <div class="modal-content">
+        <span class="close-button" id="rmCloseManageUnits">&times;</span>
+        <h3>Manage Units</h3>
+        <div class="rm-add-unit-row">
+            <input type="text" id="rmNewUnitName" placeholder="New unit name (e.g. box, roll)">
+            <button type="button" class="rm-btn rm-btn-primary" id="rmAddUnitBtn">Add</button>
+        </div>
+        <h4>Existing units</h4>
+        <div id="rmUnitsList" class="rm-units-list"><em style="color:#888;">Loading…</em></div>
+        <div class="rm-form-actions">
+            <button type="button" class="rm-btn rm-btn-secondary" id="rmCloseManageUnitsBtn">Close</button>
+        </div>
+    </div>
+</div>

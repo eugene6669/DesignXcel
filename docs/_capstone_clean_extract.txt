@@ -1,0 +1,760 @@
+DesignXcel: A Web-Based E-Commerce and Inventory Management with Content Management System for Design Excellence Home and Office System Company
+A Capstone Project
+Presented to the Faculty of the
+Information and Communications Technology Program
+STI College Novaliches
+In Partial Fulfilment
+of the Requirements for the Degree
+Bachelor of Science in Information Technology
+Jefferson A. Abit
+Andrei D. Jumawan
+Eugenio P. Pantua III
+Isiah Sebastian M. Solano
+May 23, 2026
+APPROVAL SHEET
+This capstone project titled: DesignXcel: A Web-Based E-Commerce and Inventory Management with Content Management System for Design Excellence Home and Office System Company prepared and submitted by Jefferson A. Abit, Andrei D. Jumawan, Eugenio P. Pantua III, Isiah Sebastian M. Solano, and, in partial fulfillment of the requirements for the degree of Bachelor of Science in Information Technology, has been examined and is recommended for acceptance and approval.
+Michael Charls W. Gaid
+Capstone Project Adviser
+Accepted and approved by the Capstone Project Review Panel in partial fulfillment of the requirements for the degree of Bachelor of Science in Information Technology
+Ace Jonas V. Inovero
+Prof. Mary Rose C. Columbres
+Panel Member
+Panel Member
+Noriel C. Domondon
+Lead Panelist
+Noted:
+Karen Cristy Angeles
+Noriel C. Domondon
+Capstone Project Coordinator
+Program Head
+October 26, 2025
+ENDORSEMENT FORM FOR ORAL DEFENSE
+TITLE OF RESEARCH:
+DesignXcel: A Web-Based E-Commerce and Inventory Management with Content Management System for Design Excellence Home and Office System Company
+NAME OF PROPONENTS:
+Jefferson A. Abit
+Andrei D. Jumawan
+Eugenio P. Pantua
+Isiah Sebastian M. Solano
+In Partial Fulfilment of the Requirements for the degree Bachelor of Science in Information Technology has been examined and is recommended for Oral Defense
+ENDORSED BY:
+Mr. Michael Charls W. Gaid
+Capstone Project Adviser
+APPROVED FOR ORAL DEFENSE:
+Ms. Karen Cristy Angeles
+Capstone Project Coordinator
+NOTED BY:
+Mr. Noriel C. Domondon
+Program Head
+October 26, 2025
+ABSTRACT
+Title of research:DesignXcel: A Web-Based E-Commerce and Inventory Management with Content Management System for Design Excellence Home and Office System Company
+Researchers:Jefferson A. AbitAndrei D. Jumawan
+Eugenio P. Pantua III
+Isiah Sebastian M. Solano
+Degree:Bachelor of Science in Information Technology
+Date of Completion:<Month year of graduation>
+Key words: Furniture manufacturer, Furniture business, E-commerce website, Automated Inventory, CMS
+The "DesignXcel" project addresses the challenges faced by Design Excellence Home and Office System Company, a furniture manufacturing business, in e-commerce website and inventory through a manual inventory system as well as the absence of an e-commerce website. This traditional approach is prone to errors, slow processing, and limited customer convenience, often leading to dissatisfaction and operational inefficiencies. The proposed solution is a web-based e-commerce and inventory management with content management system designed to streamline the entire purchasing process, enhance inventorying, and offer customers a better experience.
+A key feature of the platform is its user-friendly interface and content management system. Customers benefit from an intuitive user-friendly experience, while administrators gain access to an accessible platform with the ability to change the visual of the website. Additional modules for content management, live chat, billing, and inventory tracking to enhance the platform's functionality
+ACKNOWLEDGEMENTS
+The researchers would like to thank the following:
+Families of each member of this research who supported the proponents through this research. The researchers would like to thank everyone, for the understanding and efforts needed by the researchers to finish this research.
+Capstone Project Adviser, Mr. Michael Charls W. Gaid, the Proponents would like to thank him for his never-ending support and guidance which helps to improve this research as well as the presentation in every defense.
+Capstone Project Coordinator, Ms. Karen Cristy Cifra for her non-stop support and for doing her best to update the proponents in all the submissions that needs to be submitted and by helping each group to do their tasks and making sure that all the thesis group will do their tasks and comply on time.
+The researchers would like to thank all the friends and inspirations of each researcher who gave inspiration and undying support. For being the support system of each researcher.
+TABLE OF CONTENTS
+Page
+Title page
+i
+Approval Sheet
+ii
+Endorsement page
+iii
+Abstract
+iv
+Acknowledge
+v
+Table of Contents
+vi-vii
+List of Figures
+viii
+List of Tables
+ix
+Introduction
+1-6
+Project Context
+1-2
+Purpose and Description of the Project
+3
+Objectives of the study
+4
+Scope and limitations of the study
+5-6
+Review of related literature/system
+7-25
+Review of Related Literature Local
+7-12
+Review of Related Literature Foreign
+12-16
+Review of Related System Local
+17-20
+Review of Related System Foreign
+20-24
+Synthesis
+25
+Methodology
+26-36
+Technical Background
+26-31
+Requirement Analysis
+31
+Requirement Documentation
+32-33
+Design of Software, System, Product, and/or Processes
+33
+Development
+36
+Result and discussion
+37-42
+Testing
+37-38
+Description of Prototype
+38
+Implementation Plan
+38
+Implementation Results
+39-42
+Conclusion
+43-44
+References
+Appendices
+Resource Person
+Relevant Source Code
+Evaluation Tool/Test Documents
+Sample Input/Output/Reports
+User’s Guide
+Personal Technical Vitae
+LIST OF FIGURES
+Figure 1. Data flow diagram
+34
+Figure 2. Work Breakdown Structure (WBS)
+35
+LIST OF TABLES
+Table 1. Functional Requirements Table
+26
+Table 2. Hardware Requirements
+27
+Table 3. Software Requirements
+27
+Table 4. Gantt Chart
+30
+Table 5. Test Case Sample
+36-37
+Table 6. Functionality Survey Results
+38
+Table 7. Functionality Survey
+38
+Table 8. Availability Survey Results
+39
+Table 9. Availability Survey
+39
+Table 10. Accessibility Survey Results
+40
+Table 11. Accessibility Survey
+40
+Table 12. Satisfaction Survey Results
+41
+Table 13. Satisfaction Survey
+41
+INTRODUCTION
+Project Context
+Businesses are switching to digital solutions to increase productivity, improve customer experience, and obtain a competitive edge, which has resulted in substantial changes in the furniture sector. Businesses who don't follow the newest trends in this fast-paced industry run the danger of losing clients to rivals that provide smooth web-based experiences. A number of obstacles impede the expansion and operational effectiveness of Design Excellence, a home and office furniture firm.
+One of the most significant issues encountered by Design Excellence Home & Office System Co. is its outdated website. The current website was built using Wix, a accessible website-building but does not fully meet the company’s specific needs. The website lacks a well-organized and user-friendly layout, especially when accessed on smartphones, making it less accessible and unusable for potential customers. Additionally, the company is paying for the platform but has limited control over editing and updating its content, leading to outdated product descriptions and inaccurate information. This lack of control negatively impacts customer trust and the company’s credibility.
+The company's inventory management is another significant problem. At the moment, Design Excellence uses Microsoft Excel to manage supply, keep an eye on stock levels, and manage the procurement process. This manual method is ineffective for real-time tracking, sluggish, and prone to mistakes. The lack of an automated system leads to order fulfilment bottlenecks, which raises the possibility of raw material mishandling, delays, and stock shortages. Productivity and customer satisfaction are directly impacted by these operational inefficiencies.
+The proponents will be creating DesignXcel, an integrated web-based solution made to specifically fulfill the requirements of Design Excellence, in order to overcome these issues. In addition to improving the company's online visibility, this system will combine essential business functions to optimize operations. All users will have the best possible experience thanks to the new platform's CMS (Content Management System). Consumers will find it easy to choose from a variety of furniture selections, color selections, and make quotations.
+DesignXcel will also include an innovative inventory management system that will automate stock tracking and allow for real-time monitoring. Order fulfilment and procurement procedures will be enhanced and mistakes will be decreased as a result. A committed staff member will be on hand to answer questions in real time, guaranteeing seamless communication and increased client involvement in order to improve customer service. To make it simpler for companies to buy office furniture in bulk.
+An Order Tracker that lets users track their purchases and see projected delivery times will be included in DesignXcel for more transparency. In order to provide flexibility, the platform will accept a number of payment options, such as cash on-delivery, e-wallets, and bank transfers.
+In addition to overcoming its current obstacles, Design Excellence will enhance customer happiness, operational effectiveness, and business expansion by putting DesignXcel into practice. By using contemporary digital technologies, the business will be positioned to compete in the office furniture sector, guaranteeing its viability and success in the changing market.
+Purpose and Description of the Project
+The goal of this project is to develop DesignXcel, a web-based system designed to enhance the online presence and operational efficiency of Design Excellence. This system will improve website functionality, simplify inventory management, and enhance customer service by providing real-time communication and order tracking.
+What makes this project unique is its combination of an interactive content management system and an automated inventory management system. Additionally, the inclusion of a dedicated support feature ensures that customer inquiries are addressed promptly, leading to a smoother and more satisfying shopping experience.
+Objectives of the Study
+General Objective
+The objective of this study is to design and develop DesignXcel, a fully functional web-based system aimed at enhancing the digital presence of Design Excellence. The system seeks to provide a user-friendly, mobile-responsive, and efficient online platform that improves product visibility, customer engagement, as well as automate the inventory management, make a CMS feature to make website editing easier without prior technical expertise and overall business operations.
+Specific Objective
+Specifically, this study aims to:
+Develop a user-friendly and mobile-responsive e-commerce website that provides accurate and up-to-date product listings to ensure a seamless browsing and shopping experience for customers.
+Implement an automated inventory management system that enables real-time stock monitoring, minimizes errors, and streamlines procurement and order fulfillment processes.
+Include a content management system to the system for managing product listings, updating descriptions, and adjusting prices. An easy-to-use interface for modifying website content without needing technical expertise.
+Integrate real-time communication features that allow customers to interact directly with customer service representatives and receive transparent updates on order progress.
+Scope and Limitations of the Study
+Scope of the project:
+The purpose of this study is to design and develop DesignXcel, a web-based system to enhance the digital presence and operational efficiency of Design Excellence. The target users of the system are Design Excellence employees, individual customers looking to purchase office furniture, and business customers seeking bulk orders. The study will focus on the period from development to deployment, testing, and evaluation of the system's impact on business operations.
+The features of the proposed system include:
+E-commerce website
+Product variant and color selections showcase: The ability of the system to view the in-depth details and select product variants and colors.
+Customer Inquiry and Real-Time Support: A real-time communication feature for customer support, allowing customers to interact with a dedicated representative.
+Payment Options: The system only accepts e-wallets as of now.
+Bulk Orders: Allows customers to purchase large quantities of products in a single transaction.
+Inventory Management
+Content Management System (CMS): Admin dashboard for updating product details and uploading visuals through an easy-to-use interface.
+Automated Inventory Management System: An automated inventory management system to enable real-time tracking of stock levels and order fulfilment.
+User Role Management: Access control for different system users (e.g., inventory manager, transaction manager, user manager).
+Activity logs: Ability to check user activities like changes in the inventory and who changed the inventory.
+Sales report: Summarizes transactions and sales performance over specific periods to help the company track trends and revenue.
+Limitations:
+Internet-dependent platform: The system requires continuous and stable internet connectivity for users and administrators to access product listings, place orders, manage inventory, or update the CMS. Any interruption in connection prevents system usage.
+Mobile application not supported: DesignXcel is a responsive web application and does not include a native mobile app; functionality and layout may vary by browser and device.
+Manual verification of newly added content: Uploaded products, images, and promotional content must still be manually reviewed and approved by an administrator before going live, which may delay publishing.
+Single-language interface: All system text, product information, and interface elements are presented only in English. Support for additional languages or localization is not available.
+Single-currency payment processing: The platform only supports Philippine Peso (PHP) for product purchases. Users from other regions cannot view or pay using alternative currencies.
+Site-visit project handling: Large or custom orders that necessitate on-site measurements and formal contracts fall outside the scope of the online system and must be managed offline.
+External payment gateway dependency: Payment processing relies on third-party digital wallet providers. Any downtime, delays, or issues from these providers directly affect the system's checkout process.
+REVIEW OF RELATED LITERATURE/SYSTEMS
+Review of Related Literature
+Local Literature
+According to RichestPH (2023), the digital transformation journey in the Philippines showcases a progressive trend across various industries, highlighting both challenges and success stories. Companies such as Globe Telecom, Ayala Corporation, Jollibee, BPI, and San Miguel Corporation serve as prime examples of how integrating technology can enhance efficiency and improve customer experiences. These enterprises have demonstrated that innovation, collaboration, and continuous learning are essential for staying competitive in a rapidly evolving digital landscape. As more businesses in the Philippines acknowledge the necessity of digital adaptation, their ability to navigate and implement technological advancements will determine their resilience and long-term success in an increasingly digital economy.
+According to STOFLY (2024), technology has significantly influenced various aspects of life, including the custom furniture industry in the Philippines. Traditionally, Filipino furniture craftsmanship has been deeply rooted in artistry, patience, and a strong connection to nature. However, with the integration of modern digital tools, the industry is undergoing a transformation that blends old-world elegance with modern innovation. The adoption of technology in custom furniture design has allowed businesses to enhance precision, streamline production, and cater to a more dynamic market. This shift not only preserves traditional craftsmanship but also ensures that Filipino furniture makers remain competitive in an increasingly digital world.
+According to RichestPH (2022), the COVID-19 pandemic accelerated digital transformation among Filipino businesses, pushing them to adopt new technologies and operational models to mitigate the effects of restrictions. Companies rapidly transitioned to online commerce, integrated collaboration tools, and enhanced customer engagement strategies to maintain business continuity. This shift not only helped businesses survive during the crisis but also prepared them for long-term resilience in an increasingly digital economy. The adoption of digital solutions has become a crucial factor in staying competitive, especially in industries such as retail and manufacturing, where customer experience and operational efficiency are key to sustaining growth.
+According to Apilado et al. (2022), the furniture industry in Gulod, Labac, Batangas City faced various challenges during the pandemic era, including supply chain disruptions, late deliveries, and material shortages. Through interviews with a local factory owner, the study highlighted the difficulties in sourcing high-quality wood such as Nara and the importance of workforce allocation in furniture production. The study utilized a descriptive research design, incorporating case studies and observations to analyze operational processes in the furniture and sash manufacturing sector. Findings revealed that local manufacturers rely on a mix of imported and locally sourced materials, with varying degrees of availability. The study emphasized the importance of efficient inventory and resource management in maintaining production flow and meeting customer demands.
+According to UNIVIO (2024), effective product base organization and system integration are crucial for scaling product offerings and launching an online marketplace. The study highlights the role of Pimcore’s integration with Baselinker in enabling direct sales in foreign markets, allowing businesses to expand efficiently. Additionally, the Unilinker integration platform provided enhanced performance and flexibility, ensuring seamless data management across different sales channels. The study emphasizes the importance of selecting appropriate technological solutions to optimize digital transformation efforts. With the support of the Univio team, businesses were able to implement these technologies successfully, demonstrating the significance of strategic digital system adoption in modern e-commerce and inventory management.
+According to Yambao et. al. (2022), the adoption of augmented reality (AR) technology in the furniture industry significantly enhances customer experience by providing real-time status updates and interactive product previews. Their study evaluated a mobile application using the ISO 25010 standards, where it was deemed highly acceptable. The research further emphasized that AR technology allows customers to visualize made-to-order furniture within their intended space, improving decision-making, and purchase satisfaction. Additionally, the study suggested that integrating emerging technologies like mixed reality could further refine customer experience and extend applicability to other industries requiring product visualization.
+According to Richtek (2025), computerized inventory systems play a crucial role in automating the inventory management process for businesses in the Philippines. These systems provide essential features such as inventory control, management, tracking, and optimization, which significantly enhance operational efficiency. The integration of such digital solutions enables businesses to streamline their processes, minimize errors, and ensure real-time monitoring of stock levels. By utilizing computerized inventory systems, businesses can effectively respond to market demands, reduce operational bottlenecks, and maintain accurate records of stock movements. The study highlights that adopting automated inventory management solutions is vital for achieving a competitive advantage, as it allows businesses to swiftly adapt to market fluctuations and improve overall productivity.
+According to DynamIQ (2024), Running a business requires hard work, but as operations grow, managing inventory can become complex. Fortunately, technology offers a solution through Inventory Management Systems (IMS), like SAP Business One from DynamIQ, a Gold Partner in the Philippines. This software streamlines inventory processes, can save time and reduce errors for businesses of all sizes by centralizing stock, orders, and deliveries. Key benefits include real-time inventory tracking, which enhances visibility and prevents stockouts; reduced human error through automation; streamlined order fulfilment for faster processing; and data-driven decision-making that identifies trends and optimizes purchasing.
+According to DynamIQ (2024), managing inventory becomes increasingly complex as a business grows, making technological solutions essential. The study highlights the role of Inventory Management Systems (IMS), such as SAP Business One, in streamlining inventory processes for businesses in the Philippines. As a Gold Partner of SAP, DynamIQ emphasizes how this system centralizes stock, orders, and deliveries, improving overall efficiency. The key advantages of IMS include real-time inventory tracking, which enhances visibility and prevents stock shortages, as well as automation features that minimize human errors. Additionally, the system facilitates streamlined order fulfilment, leading to faster processing and improved customer satisfaction. Through data-driven decision-making, businesses can analyze trends and optimize procurement, ensuring operational effectiveness. The study underscores the importance of digital transformation in inventory management, aligning with the need for businesses to adopt modern solutions to stay competitive in the evolving market.
+According to Nugrahani (2025), inventory management software is a comprehensive system designed to track, organize, and oversee inventory in real time. It automates processes such as monitoring stock levels, orders, sales, and deliveries, reducing human errors and ensuring operational efficiency. Poor inventory management can lead to significant financial losses, as evidenced by the $132 billion lost in retail shrink due to theft, errors, and fraud in 2025. By integrating inventory management software, businesses can avoid common issues like stockouts, overstocking, and manual inaccuracies, allowing them to streamline their operations effectively.
+Furthermore, inventory management software enhances supply chain efficiency by providing real-time visibility into stock levels and enabling data-driven decision-making. Businesses utilizing this technology experience increased productivity, improved space utilization, and optimized stock efficiency. Studies show that integrating order processing within inventory management software can lead to a 25% rise in productivity, a 20% enhancement in space usage, and a 30% increase in stock accuracy. The two main types of inventory systems, periodic and perpetual, play essential roles in stock management, with perpetual systems offering real-time tracking to optimize supply chain processes. By adopting such solutions, companies can significantly improve operational effectiveness, reduce costs, and maintain better control over their inventory.
+According to Arrafi (2024), effective inventory management is essential for business success, particularly in the dynamic Philippine market. Ensuring that businesses maintain the right stock levels helps prevent lost sales and reduces the risk of overstocking, which can lead to increased storage costs and potential product wastage. Proper inventory management enhances profitability by optimizing operational efficiency, freeing up capital for reinvestment in key areas such as marketing, product development, and business expansion. Additionally, maintaining an organized inventory system fosters customer trust, leading to improved satisfaction and loyalty. When businesses consistently have products available, customers are more likely to return and recommend their services. Implementing an efficient inventory management system not only strengthens overall business performance but also contributes to long-term sustainability in competitive industries.
+According to Zosa (2024), the Cebu furniture industry has a long history of globalization, dating back to the 1950s when it became a dominant exporter of rattan furniture. By partnering with international buyers, Cebu was able to establish a strong presence in the global market. However, beginning in the 1980s, the industry experienced a steady decline as countries such as Malaysia, China, and Vietnam emerged as key players, displacing Cebu’s market share. Despite this decline, the Cebu furniture industry remains a vital part of the local economy, continuing to be one of the province’s top export earners. The industry's ability to adapt and sustain itself highlights the importance of innovation and modernization in maintaining competitiveness in the global furniture market. Implementing digital transformation strategies, such as automated inventory management and e-commerce integration, could further enhance Cebu’s furniture sector by improving efficiency and expanding market reach.
+Foreign Literature
+According to Harper (2023), IKEA’s digital transformation, led by Barbara Martin Coppola, aimed to modernize the company while preserving its core values, resulting in significant operational and cultural changes. Within three years, IKEA tripled its e-commerce sales and transformed its physical stores into fulfilment centers, requiring a complete overhaul of its supply chain, store layouts, and logistics. The shift to online retail also meant adapting to a dual-speed operation, as physical stores had fixed hours while online platforms operated 24/7. By leveraging algorithms, IKEA optimized its logistics to ensure cost-effective deliveries from either distribution centers or retail stores. This transformation highlights the crucial role of digitalization in enhancing customer experience, improving supply chain efficiency, and maintaining competitiveness in the evolving furniture industry.
+According to Hsiao (2024), one of the key factors influencing furniture product sales is physical store experience. However, with the recent surge in online shopping, furniture companies have been compelled to develop integration strategies that bridge both physical and online channels. The study employed both qualitative and quantitative methods, analyzing well-known furniture retailers such as IKEA, NITORI, Test Rite Retail, Mr. Living, and YKS. Data collection was conducted through field surveys, company reports, online research, interviews, and customer questionnaires. The findings highlight the importance of omnichannel strategies in enhancing customer engagement and ensuring seamless shopping experiences across digital and physical platforms.
+According to Uppalapati and Ponnana (2022), digital transformation in the supply chain has gained significant traction due to evolving customer behaviors and changing retail market trends. The COVID-19 pandemic accelerated the need for organizations to adopt digital transformation strategies to address operational challenges and improve business continuity. Their study focused on IKEA’s supply chain, analyzing how digital transformation helped the company navigate disruptions during the pandemic while also preparing for future uncertainties. By integrating technology-driven solutions, businesses like IKEA have enhanced supply chain efficiency, optimized inventory management, and ensured seamless customer experiences in an increasingly digital marketplace.
+According to DigitalDefynd (2025), various companies have undergone significant digital transformation, demonstrating the critical role of innovation in achieving market leadership. The study highlights how businesses leverage digital technology to adapt to evolving consumer demands, enhance operational efficiency, and maintain a competitive edge. It emphasizes that while digital transformation is challenging, it presents numerous opportunities for growth and reinvention. The study further underscores that embracing digital change is not merely an option but a necessity for survival in today's digital era. These insights align with the growing need for companies, including those in the furniture industry, to adopt modern digital solutions to remain competitive and sustainable in the evolving marketplace.
+According to Jackson (2024), IKEA has consistently embraced technological innovations to maintain its position as a global leader in the furniture industry. Originally a small mail-order company in Sweden, IKEA rapidly expanded into a multinational enterprise known for its affordable and space-efficient flat-pack furniture. With approximately 700 million customer visits annually, the company has implemented advanced digital strategies to enhance customer engagement and streamline internal operations. These initiatives include integrating disruptive technologies to optimize its supply chain, improve user experience, and increase operational efficiency. By adopting modern digital solutions, IKEA ensures that it remains competitive in the ever-evolving furniture market while continuously enhancing its customers' shopping experience.
+According to Beren (2025), digital transformation has emerged as one of the most significant developments affecting businesses globally. Companies that fail to adopt technological advancements risk losing their competitive edge in an increasingly digital marketplace. The ability to differentiate from competitors has become crucial, as the modern business environment demands constant innovation and adaptation. Businesses that successfully implement digital transformation strategies have not only sustained operations but have also increased profitability and expanded during economically challenging periods. This highlights the necessity of embracing digital tools and technologies to ensure long-term success and resilience in a rapidly evolving industry.
+According to Zeihar et al, (2023), numerous studies have examined and substantiated the impact of digital transformation, demonstrating its ability to create new value propositions across various industries. While meta-studies have developed classifications and frameworks to consolidate existing knowledge, there remains a gap in research that specifically integrates industry-focused insights, particularly in the furniture sector. In response to this, Zeihar et al. conducted a systematic literature search on digital transformation within the furniture industry, analyzing insights from 85 scholarly papers. Their study proposed a theory-driven framework with five key focal areas: sources of disruption, strategic responses, value creation transformation, technical applications, and obstacles to implementation. By structuring and synthesizing existing research using this framework, the study provided a comprehensive understanding of digital transformation in the furniture industry and identified potential directions for future research.
+Hence, digital transformation in the furniture industry has been significantly influenced by emerging technologies (Rame et al, 2023). The study conducted a systematic literature review using recent publications from ScienceDirect and Scopus databases to analyze various digital innovations adopted by furniture businesses to enhance efficiency, sustainability, and competitiveness. The research highlights the role of automation, robotics, augmented reality, and the Internet of Things (IoT) in optimizing furniture production processes, minimizing waste, and improving overall profitability. Additionally, it discusses sustainable and socially responsible approaches such as green supply chain management, life cycle assessment, and ergonomic design solutions. The findings emphasize the importance of developing a comprehensive digital transformation strategy that integrates advanced technologies, fosters innovative business models, and upholds sustainability and ethical standards within the industry.
+In aligned with this was the study from Mclaughlin (2024), IKEA has expanded its digital presence by introducing IKEA Preowned, an online peer-to-peer marketplace that allows users to buy and sell second-hand IKEA furniture. This initiative aligns with the company's commitment to sustainability, aiming to create a circular economy where products can be reused, refurbished, remanufactured, and eventually recycled by 2030. The platform enhances customer engagement by providing an accessible and structured resale system, improving the overall shopping experience while promoting environmental responsibility. By integrating digital solutions into its operations, IKEA demonstrates how furniture companies can leverage technology to enhance their market reach, sustainability goals, and customer interaction.
+Thus, Woo (2022), about the COVID-19 pandemic influenced IKEA to commit to a comprehensive digital transformation, reviewing its entire digital strategy, from back-office IT systems to consumer experience on smart devices. By utilizing real-time data visualization, IKEA shared insights across departments and markets, allowing for more proactive and adaptive decision-making. With the integration of AI-driven recommendations, the company achieved a 400% increase in relevant recommendations displayed on a page, leading to a 30% improvement in click-through rates and a 2% increase in average order value. This transformation allowed IKEA to offer more personalized shopping experiences, helping customers move beyond single-product purchases to complete home furnishing solutions.
+Review of Related Studies and/or Systems
+Local Systems
+The design of the proposed website should be inspired by established furniture manufacturing company websites such as Jecams Enterprises and Mandaue Foam Industries (Client, 2025). These websites offer a modern and visually appealing layout that enhances user experience and accessibility. The client emphasized that incorporating a sleek and professional design similar to these references would help improve the company's online presence, making it more competitive in the digital marketplace. By adopting a user-friendly interface, responsive design, and well-structured product display, the website aims to provide a seamless browsing experience for customers while maintaining a professional aesthetic.
+In connection from InoERP (2022), is a OneApp-based enterprise management system that utilizes a Go back-end and a Flutter front-end to support small to midsize businesses. The system includes essential modules for business operations, with features comparable to Oracle R12/Cloud Application and SAP ECC/Hana S/4. It employs a MySQL database and OneApp JavaScript APIs to develop business logic, providing a comprehensive and scalable solution for enterprises. Furthermore, all database and JavaScript codes are accessible on GitHub, allowing businesses to customize and integrate additional functionalities based on their needs. The adaptability and modular design of inoERP make it a viable solution for companies seeking efficient inventory management and operational control.
+According to HashMicro (2025) the integration of automated solutions in business operations significantly enhances productivity and efficiency. HashMicro, a leading ERP solution provider, emphasizes that businesses leveraging automation for recurring tasks can maximize their potential to compete in the global market. Recognizing this need, HashMicro launched a cloud-based system in 2015 designed to automate end-to-end business operations. This system streamlines inventory management, procurement, and customer relationship management, allowing enterprises to operate more effectively while reducing manual errors. The study highlights the importance of digital transformation in modern business practices, reinforcing the necessity for companies to adopt technology-driven solutions to remain competitive in their respective industries.
+According to Imonggo (2025), it provides a powerful inventory management system that integrates sales tracking and business analysis tools into a single, easy-to-use platform. The system does not require complex setups and is designed to help businesses streamline operations efficiently. In addition to inventory management, Imonggo offers additional features such as customer reward points, offline and mobile sales, and store and sales analysis. These functionalities allow businesses to enhance customer engagement while maintaining real-time oversight of their sales and stock levels. By incorporating these features, Imonggo assists enterprises in automating their inventory and sales processes, reducing errors, and improving operational efficiency.
+Richtek Solutions, an Integrated Multimedia Solutions company, is leading the way in the rapidly evolving IT, software development, and online marketing industries (Richtek, 2025). Their expertise spans various digital solutions, including software and system development, as well as web and social media application development. With their focus on state-of-the-art technologies, they effectively address the complex needs of businesses seeking to modernize their operations. In relation to inventory and business management systems, Richtek Solutions provides software solutions that help streamline processes, reduce inefficiencies, and enhance overall productivity. Their commitment to integrating advanced digital tools aligns with the growing need for automation and digital transformation, especially in industries like furniture retail, where online presence and operational efficiency are critical for business success.
+Businesses can streamline their operations and eliminate the inefficiencies of manual processes by utilizing SIA, an all-in-one simplified software designed to optimize business workflows. SIA aims to reduce the time and cost associated with complex business tasks by offering a fully customizable system tailored to meet the unique needs of different enterprises. By integrating automation into core operations, OpenZn ensures that businesses achieve improved efficiency, enhanced productivity, and greater satisfaction. This aligns with the need for digital transformation in various industries, including furniture retail, where outdated manual processes hinder growth and customer satisfaction. (OpenZn, 2025)
+According to DynamIQ (2025), SAP Business One is a comprehensive enterprise resource planning (ERP) application designed to facilitate seamless management of business operations. The system integrates multiple functional modules that cover key business areas, including financial management, sales and customer relations, purchasing and inventory control, production planning, and project management. One of its notable features is its analytics and reporting capabilities, which allow businesses to make informed decisions based on real-time data. SAP Business One is particularly beneficial for small to mid-sized enterprises, as it offers a full-scale ERP solution tailored to their operational needs. By implementing this system, businesses can streamline their processes, improve inventory tracking, and enhance overall efficiency.
+According to Tanaman et al. (2023), a web-based inventory management system was developed for a small business enterprise in Pagadian City, Zamboanga del Sur, Philippines. The system aimed to assist the business owner in efficiently managing inventory through an online platform. By transitioning to a digital solution, the enterprise improved its overall business process, enabling more accurate inventory tracking and streamlined operations. The system provided convenience by allowing real-time monitoring of stock levels, minimizing the risk of human error, and optimizing business efficiency. This study highlights the importance of integrating web-based inventory systems for businesses struggling with manual inventory tracking, aligning with the objectives of DesignXcel to enhance inventory management for Design Excellence.
+According to Anade et al. (2023), business success in today's dynamic marketplace depends on effective supply inventory management. In this technologically advanced age, conventional manual methods are no longer sufficient. To improve accuracy, efficiency, and decision-making abilities, this study investigates the significance of technology adoption for efficient inventory management. It concludes several research studies and emphasizes the difficulties Small and Medium Enterprises (SMEs) in the Philippines face and their distinctive inventory management procedures. The supply office at Leyte Normal University is the focus of the proposed study, which aims to create an effective system for managing inventories.
+According to fifo.ph (2025), businesses can efficiently manage their inventory using a cloud-based system that provides real-time access from any location through web-enabled devices. This online inventory management system offers chart-based reporting tools, allowing users to monitor inventory status at a glance. FIFO enables companies to record purchase orders, track stocks received and released, and maintain accurate inventory balances, including reorder points. By providing 24/7 accessibility via the internet, this system helps streamline business processes, reduce manual workload, and improve operational efficiency. The study highlights the importance of automated inventory tracking in enhancing business productivity and ensuring that stock management is optimized.
+Foreign Systems
+Businesses transitioning to cloud-based enterprise resource planning (ERP) solutions must ensure that their in-house applications are fully compatible with the new multi-tenant cloud environment (Fortude, 2025). As part of this transition, system integrations undergo a phased migration, initially interfacing with the existing framework before fully adapting to the newly implemented platform. The study highlights the importance of organizational change management to facilitate smooth adoption, with detailed strategies and roll-out plans forming a crucial aspect of the implementation process. This strategic migration aligns with the growing trend of businesses adopting cloud-based solutions to enhance operational efficiency, streamline processes, and improve scalability.
+Followed by the study of Tang (2024), the modern retail environment demands digital adaptability, yet many furniture businesses struggle due to outdated IT infrastructure and ineffective digital marketing strategies. This lack of modernization leaves businesses vulnerable to competitors with stronger digital capabilities, resulting in declining sales and market share. To address these challenges, a boutique furniture retailer embarked on a digital transformation initiative, leading to remarkable improvements in online sales, customer engagement, and satisfaction. The implementation of a user-friendly e-commerce platform and a robust digital marketing strategy, guided by the Diffusion of Innovations Theory and the Consumer Decision Journey framework, contributed significantly to these achievements. As a result, the company saw a 25% increase in online sales and a 40% rise in customer engagement metrics, highlighting the effectiveness of adopting digital strategies to regain market position and drive revenue growth.
+Inventory management plays a crucial role in the furniture industry, particularly for small and medium enterprises (SMEs). Inefficient inventory tracking can lead to missed sales opportunities, as customers may encounter stock shortages when trying to purchase desired items. Due to the industry's unique challenges, including bulky products, long lead times, and seasonal demand fluctuations, businesses must adopt data-driven strategies and optimize operations to enhance efficiency. By leveraging strong supplier relationships and implementing advanced inventory management solutions, companies can turn inventory management from a challenge into a strategic advantage. (Mohammad, Ali., 2024)
+Enterprise Resource Planning (ERP) software was implemented to streamline operations and address the pressing challenges faced by the world’s largest furniture retailer. The system enabled real-time tracking of inventory levels, providing accurate data to prevent stockouts and overstock situations. By integrating ERP, the retailer enhanced its operational efficiency, ensuring smoother procurement processes and better decision-making. The implementation of this system allowed the company to scale effectively while maintaining inventory accuracy, improving overall business performance, and customer satisfaction. (NineHertz, 2023)
+Businesses seeking to modernize their operations often integrate various web applications and microservices to enhance the overall user experience. By transforming their existing systems with modern technology, including data engineering, full-stack development, quality assurance, and DevSecOps, companies can streamline their processes, accelerate development and deployment, and reduce manual dependency. This integration ensures greater efficiency and scalability, allowing businesses to adapt to evolving customer demands and technological advancements. (Successive, 2024)
+Shopify introduced a generative AI feature called the "AI Store Builder" that enables merchants to create online stores simply by inputting descriptive keywords. This tool automatically generates three different store layouts complete with images and text, significantly minimizing the time and effort needed to design an e-commerce site. Although Shopify previously supported various AI tools and third-party integrations, this marks the first built-in feature that fully automates the store's setup process, enhancing convenience and efficiency for online sellers. (Reuters, 2025)
+Magento is widely regarded as a leading e-commerce platform for online furniture businesses, particularly for small to medium enterprises. Known for its high level of customization and modern features, Magento supports advanced visual tools such as 3D animations, 360-degree views, and detailed product renders to enhance customer engagement. Trusted by major global brands like Nike and Procter & Gamble, the platform offers scalability and adaptability to meet diverse business needs. However, building a site on Magento may require technical expertise or professional assistance due to its complexity. Despite this, its large user community provides extensive support and a wide array of development resources. (CGIFURNITURE, 2020)
+Moreover. WooCommerce powers over 30% of all online stores due to its accessibility and user-friendly features. It is especially appealing to users who already manage a WordPress site, as the plugin is free and integrates seamlessly. WooCommerce provides access to various free themes as well as premium extensions and integrations, offering flexibility in design and functionality. Its intuitive interface makes it suitable for users with prior experience in WordPress, while detailed online resources and tutorials support first-time users in setting up their store. Although it lacks direct phone or email support, the extensive community and wealth of online documentation often compensate for this limitation. Overall, WooCommerce is an ideal solution for small businesses or startups operating on a limited budget.
+BigCommerce is a competitive eCommerce solution designed to support businesses in building and maintaining their online stores with ease. It provides a wide array of tools, secure infrastructure, strong performance, and access to developer resources, making it a reliable platform for digital retail. With its flexible pricing plans and user-friendly features, BigCommerce empowers businesses to manage operations efficiently while ensuring scalability and a secure shopping experience. (Scandiweb, 2024)
+Thus, Blueport provides an e-commerce platform specifically tailored for furniture retailers, addressing the unique challenges of the furniture industry. Their offerings include a platform with native furniture-specific features, vendor catalog integration, ERP integration, and tools for optimizing store traffic. They cater to various business sizes with solutions like "Essentials" for small to mid-sized retailers and "Enterprise" for larger operations, both designed to establish and enhance a strong online presence and drive sales. Blueport emphasizes combining performance, scalability, and specialized furniture features, supported by 24/7 uptime and performance monitoring. Their value proposition centers on empowering retailers to capitalize on online opportunities, foster growth, and exceed customer expectations. (Blueport, 2023)
+Synthesis
+The increasing shift toward digital transformation across industries underscores its vital role in enhancing efficiency and maintaining competitiveness. In the Philippines, businesses ranging from large corporations to small enterprises have leveraged technology to streamline processes, improve customer interactions, and stay responsive to market trends. Likewise, the furniture sector has embraced digital innovations to balance traditional craftsmanship with modern production methods. The adoption of inventory management systems, cloud-based platforms, and automation has enabled businesses to minimize errors, monitor stock levels in real time, and make data-driven decisions, ensuring long-term success in an evolving digital landscape.
+Globally, companies like IKEA have demonstrated how digital transformation can revolutionize operations by optimizing logistics, integrating online and offline retail, and utilizing data analytics to enhance customer experiences. Research in the furniture industry highlights the significance of omnichannel strategies, automation, and efficient inventory management in staying competitive. The use of ERP systems, AI-powered solutions, and digital marketplaces has transformed business operations, allowing companies to expand and adapt efficiently. These insights reinforce that adopting digital solutions is no longer a choice but a critical factor in achieving sustainability and growth in today’s dynamic global market
+METHODOLOGY
+Technical Background
+Overview of Current Technologies to be Used in the System
+Below are the identified functional requirements information, hardware, software specification for the proponent’s system/project.
+Functional Requirements
+DesignXcel: A Web-Based E-Commerce and Inventory Management with Content Management System for Design Excellence Home and Office System Company
+Purpose
+Responsive Website for better viewing and browsing of furniture products of Design Excellence
+Efficient Inventory System
+Real-time Inquiry
+Showcasing works and accomplishments
+Product Management
+Activity or History log
+Multiple Payment Options
+Role-based access control
+Customer’s Information
+Username
+First Name
+Last Name
+Email
+Contact Number
+Address
+Password
+Admin Information
+First Name
+Last Name
+Email
+Password
+Role/Position
+Table 1. Functional Requirements
+Hardware Requirements
+DesignXcel: A Web-Based E-Commerce and Inventory Management with Content Management System for Design Excellence Home and Office System Company
+Developer’s Hardware requirements
+User’s Hardware Requirements
+Intel core i3-1005G1 CPU
+Windows 10/11
+8gb RAM
+Internet Connection
+Integrated graphics card
+Intel core i3-1005G1 CPU
+Windows 10/11
+8gb RAM
+Internet Connection
+Integrated graphics card
+Table 2. Hardware Requirements
+Software Requirements
+DesignXcel: A Web-Based E-Commerce and Inventory Management with Content Management System for Design Excellence Home and Office System Company
+Software used in developing the system
+Software Use
+Visual Studio Code
+VS code was used to develop the system. Using EJS, JavaScript, and lastly CSS.
+Microsoft SQL
+This software was used to test the code locally
+ReactJS
+The main JavaScript framework for building the user interface
+Three.JS
+This was used to create website’s CMS elements
+Table 3. Software Requirements
+Calendar of Activities
+Activities commenced after the orientation for capstone 1 was conducted on January 30, 2025, which is referred to as week 1. Followed by group creations and the assignment of a thesis adviser on February 7, 2025.
+Brainstorming
+The proponents had a meeting to figure out the areas to improve the whole construction of the system. It helps to generate a wide range of creative ideas and opportunities to make the platform successful.
+Proposal Approval
+Presenting a thoroughly thought-out and polished project idea to the faculty for assessment was a step in the proposal approval procedure. The group made sure the initiative complied with industry and academic standards by outlining its goals, parameters, and possible effects. The proposals were presented, leading to the panel approving DesignXcel as the capstone project
+Data Gathering
+By implementing a comprehensive data gathering strategy, DesignXcel can continually improve its platform, empower Furniture Manufacturing business, and improve market visibility by using the proponents created website/project.
+Interview
+The proponents conducted multiple interviews with the client to figure out the existing problem of the company and had an agreement on how the researchers would fix the said problems.
+Planning
+The proponents had a meeting to plan the establishment for DesignXcel's functionalities. This ensures everyone on the research team is on the same page, avoiding any wasted effort. It allows to build DesignXcel efficiently, effectively, and with a clear vision in mind, ultimately delivering a valuable and impactful system.
+Designing
+After gathering information from Design Excellence, a proposal for design of the system is created that includes the vital parts of the system for the client to have an idea on how the outcome will look like.
+System Development
+The proponents focused on system development by setting up the development environment, designing the database, and implementing both front-end and back-end components. Key modules such as user management, product listings, and core functionalities were developed and integrated. Internal testing was conducted to ensure basic functionality and system stability, with regular coordination among group members and the thesis adviser to align progress with project goals. By the end of this phase, a working prototype with most core features was completed.
+Gantt Chart of Activities
+Legend: Yellow = Ongoing, Blue = Complete, Red = Incomplete
+MONTH
+February
+March
+April
+May
+June
+July
+August
+September
+October
+November
+December
+ACTIVITIES
+Project Planning
+Data Gathering
+Interview w/ Client
+System Development
+Front end Development
+Back-end Development
+Database Creation
+Unit Testing
+Deployment
+Table 4. Gantt Chart
+Hardware
+Laptop – A personal laptop, equipped with a Intel core i3-1005G1 CPU, and 8gb of RAM, was used to develop the project.
+Software
+Database Management – The developers used Node.js to connect our Microsoft SQL or MSSQL database so that we may access and save some of the data we need in our system. Our database will house the data administrators, users, and products.
+Visual Studio Code – Visual Studio Code was used to develop the system. For creating the features. Using EJS, JavaScript, and lastly CSS.
+Requirements Analysis
+To create an inventory management system along with a website for Design Excellence Home and Office System Company, it is important to focus on the needs of both the staff and customers. The company staff will use the system as the main tool for organizing their inventory, while customers will be able to use the website to view the furniture gallery, access detailed product information, use customer chat support, and make inquiries—making the process quicker and more convenient.
+The versatility of the website will be increased as the administrator will be able to choose which furniture is shown. Customizing the website won't require technical expertise thanks to the CMS functionality. This include maintaining product listings, revising product descriptions, and modifying product costs. In the end, the system will enhance overall service quality and simplify inventory management.
+Requirements Documentation
+Design Excellence home and office system company has expressed agreement with the proposed system's flow and functionalities. The requirements will be divided into two categories, functional and non-functional requirements.
+Functional Requirements
+Registration
+R1. The customer will receive an OTP on their email after registration
+Catalog
+R1. The products’ details should be displayed.
+R2. The products’ quantity must be visible to customers.
+R3. The customer should be able to view the image of the products.
+R4. The customer should be able to see the prices of the products.
+R5. The admin should be able to edit product details and images.
+R6. The admin should be able to archive products whenever.
+Gallery
+R1. The customer should be able to see the company’s projects and achievements.
+Billing
+R1. The customer should be able to choose the payment method.
+R2. The customer should be able to choose if the checkout products should be delivered or picked up.
+Live chat
+R1. The customer will be able to inquire or ask questions through live chat.
+R2. Automated messages must be available for FAQs.
+Dashboard
+R1. Must display the featured products.
+Inventory
+R1. The admin should be able to store products and their information.
+R2. The admin should be able to store raw materials.
+R3. Must alert the admin if a product or material is low in quantity.
+R4. Must be able to store walk-in and online orders.
+R5. The admin should be able to monitor changes in the system.
+About
+R1. The company’s detail and history must be displayed.
+Non-Functional Requirements
+A device is required to run the system.
+An internet connection is required to access the system.
+Design of Software, System, Product, and/or Processes
+The design of the web-based event management system for Design Excellence Home and Office System Company will follow a structured development process, ensuring the solution is user-friendly, and adheres to industry standards. This section outlines the critical components of the system design, detailing how the platform will operate, and the methodologies applied to achieve the project goals.
+The website’s system design is made for an e-commerce website and inventory management. React.JS, EJS, JavaScript, CSS, and MSSQL are one of the important tools used to build this website. The event management system improves inventorying by using an automatic inventory system, removing the use for multiple digital organizers for their inventory like quickbooks and excel.
+The website also has a domain for easy user access and accessibility.
+Figure 1. Data flow diagram
+The Data Flow Diagram (DFD) illustrates how data moves between customers, administrative employees, and various processes within the system. Customers can browse products freely but must log in or register before placing an order. The system manages user credentials and profile data through the Account Management process and provides real-time assistance via Chat Support with automated FAQs. Once logged in, customers can add products to their cart, proceed to checkout, and update personal information. Completed orders are stored in the Order Management process, where customers can track, cancel, or confirm receipt of orders and later submit product reviews or ratings.
+On the administrative side, employees handle Product and Inventory Management, including adding, editing, and deactivating products, managing raw materials, and ensuring stock levels reflect customer activity. The Order Management process allows administrators to monitor and update order statuses, while the Content Management System (CMS) enables customization of website design, automated responses, and review moderation. All actions performed by employees are recorded in the Activity Logs, ensuring transparency and accountability within the system’s operations.
+Figure 2. Work Breakdown Structure (WBS)
+This work breakdown structure (WBS) outlines the core components of DesignXcel, a web-based e-commerce and inventory management system integrated with a content management system for Design Excellence Home and Office System Company. The system is divided into four main modules: Chat Support, which enables automated responses and real-time messaging; Customer Interface, which manages user access, product browsing, inquiries, project galleries, shopping cart, and policies; Admin Interface, which provides administrative tools for dashboard monitoring, sales reporting, inventory control, transaction management, user administration, content management, and activity logs; and Ordering, which handles customer details and purchase histories. Together, these components ensure efficient customer interaction, streamlined operations, and effective content and inventory management.
+Development
+The development of DesignXcel utilized the Waterfall Model as its software development methodology. This approach was chosen because it follows a structured and sequential process where each phase of the project is completed before moving on to the next. Through this model, the team was able to maintain clear documentation, defined goals, and an organized flow of work throughout the development process. It was found to be appropriate for the DesignXcel project since the system requirements were already well defined at the start, and only minimal changes were anticipated during implementation. The Waterfall method allowed the researchers to concentrate on creating a stable and fully functional platform that combines e-commerce features, automated inventory management, and a content management system. This ensured that all project objectives were achieved with accuracy, efficiency, and consistency.
+For the design of the software system for Design Excellence Home and Office System Company, the approach must follow the standard practices to ensure a robust, scalable, and user-friendly e-commerce website and inventory management system. The development phase is divided into three core activities:
+Database Creation & Population – The team designs the database structure, sets relationships, and fills it with test data to ensure efficient and reliable storage.
+Back-End Coding/Programming – Server-side logic, APIs, and integrations are coded with proper security and validation to ensure smooth system performance.
+Front-End Development – The user interface is designed and built for responsiveness, interactivity, and accessibility across devices.
+RESULTS AND DISCUSSION
+Testing
+The proponents evaluated the system based on software development standards to ensure it met the required functionality, availability, accessibility, and user satisfaction. Test cases were used to verify system integrity and confirm that each feature performed as intended. A four-point Likert scale survey was also conducted to gather user feedback on the system’s performance, with results analyzed through mean and standard deviation to assess overall effectiveness and user acceptance.
+This is a sample of how the proponents conducted the test cases. The example shown, “TestCase_ChatSupport,” demonstrates how the chat support feature was tested to ensure its functions and design worked as intended.
+Test Case ID
+Description
+Test Procedure
+Expected Results
+Status
+TC- 001
+Chat support
+Open the Chat Support page.
+The page should open without errors.
+Passed
+TC-002
+Chat support layout
+Verify the design and layout of the page.
+The page should have proper design and layout.
+Passed
+TC- 003
+Unread message indicator
+Verify if there is an indicator that will appear on an unread message.
+There is an indicator of how many unread messages there is.
+Passed
+TC- 004
+Search function
+Enter keywords to verify if the search bar is working properly.
+The messages should filter depending on the entered keywords.
+Passed
+TC- 005
+Users
+Verify if it properly displays all of the users that chatted.
+It should completely display all the users that chatted.
+Passed
+TC- 006
+Chat interface
+Verify if the chat interface or chat box is layout properly and is easy to use and understand.
+The chat interface should be layout properly and is easy to understand.
+Passed
+TC- 007
+User chat
+Verify if it displays the complete message of the customer.
+The messages are completely displayed.
+Passed
+TC- 008
+Reply
+Type a keyword on the reply field and sent it to verify if it will be received by the target recipient.
+When a keyword is entered, the messages will be automatically arranged.
+Passed
+TC- 009
+Reload
+Click reload.
+When clicked, it will manually reload the chats.
+Passed
+TC- 010
+Sidebar
+Click all the menus on the sidebar.
+When the menus are clicked, it should redirect to selected pages properly without error.
+Passed
+Table 5. Text Case Sample
+Description of Prototype
+To run the prototype system, the system must have at least a minimum of 4GB of RAM. The design for the e-commerce website consists of products, galleries, testimonials, chat support, product carts, and contacts. For the inventory system, it consists of products listing, raw materials listing, transactions/orders section, manage users, chat support, logs, and content management system (CMS). The testing protocol has been carefully drafted, and any mistakes or changes that are needed must be made. The assessment procedure is well-written, and any mistakes or adjustments that are needed will be noted.
+Implementation Plan
+The implementation of the system will involve deploying a web-based platform to replace the multiple inventory system for ordering and managing products and materials. Key tasks include testing to ensure smooth functionality. Necessary resources, such as servers, web hosting, and software tools will be allocated. The system will be deployed starting with internal testing and then launching for customer use.
+Implementation Results
+The survey was conducted to 5 employees and 25 customers with a total of 30 to evaluate the functionallity, availability, accessibility, and satisfaction regarding the DesignXcel platform. Results were analyzed using the mean and standard deviation to determine the level of agreement among respondents.  Here are the results.
+Strongly Disagree
+Disagree
+Agree
+Strongly Agree
+F
+%
+F
+%
+F
+%
+F
+%
+0
+0%
+0
+0%
+16
+53%
+14
+47%
+0
+0%
+0
+0%
+13
+43%
+17
+57%
+0
+0%
+0
+0%
+19
+63%
+11
+37%
+Table 6. Functionality Survey Results
+Functionality
+Mean
+SD
+Interpretation
+The features of DesignXcel are easy to use.
+3.5
+0.5
+Agreement but with slightly better perceptions.
+The tools in DesignXcel are reliable.
+3.6
+0.50
+Strong agreement with consistent responses.
+The platform provides all the functions I need.
+3.4
+0.48
+Agreement but with consistent responses.
+Table 7. Functionality Survey
+The assessment of the system’s functionality revealed a strong overall agreement among respondents, with mean scores ranging from 3.4 to 3.6. The statement “The tools in DesignXcel are reliable” received the highest mean score (M = 3.6, SD = 0.50), indicating that users found the system dependable and effective in performing its intended tasks.
+Likewise, “The features of DesignXcel are easy to use” earned a high rating (M = 3.5, SD = 0.49), reflecting user satisfaction with the platform’s usability and interface. Meanwhile, “The platform provides all the functions I need” had the lowest mean score (M = 3.4, SD = 0.48), suggesting that while users generally agree on its completeness, some perceive room for improvement in feature coverage. Overall, the findings demonstrate that DesignXcel’s functional aspects meet user expectations, with only minor refinements needed to enhance overall user experience.
+Strongly Disagree
+Disagree
+Agree
+Strongly Agree
+F
+%
+F
+%
+F
+%
+F
+%
+0
+0%
+0
+0%
+21
+70%
+9
+30%
+0
+0%
+0
+0%
+17
+57%
+13
+43%
+0
+0%
+0
+0%
+21
+70%
+9
+30%
+Table 8. Availability Survey Results
+Availability
+Mean
+SD
+Interpretation
+DesignXcel is available whenever I need it.
+3.3
+0.46
+Agreement but with consistent responses.
+The platform rarely experiences downtime or errors.
+3.4
+0.51
+Agreement but with slightly better perceptions.
+The system responds quickly when I use it.
+3.3
+0.46
+Agreement but with consistent responses.
+Table 9. Availability
+The evaluation of the system’s availability showed an overall agreement among respondents, with mean scores ranging from 3.3 to 3.4. The statement “The platform rarely experiences downtime or errors” received the highest mean score (M = 3.4, SD = 0.47), suggesting that users generally find DesignXcel reliable and consistently accessible.
+Meanwhile, both “DesignXcel is available whenever I need it” and “The system responds quickly when I use it” obtained similar ratings (M = 3.3, SD = 0.46), reflecting agreement that the platform performs well but with slightly varied perceptions of responsiveness and accessibility. Overall, the results indicate that the system provides stable availability, ensuring users can rely on it for continuous access with only minimal opportunities for enhancement.
+Strongly Disagree
+Disagree
+Agree
+Strongly Agree
+F
+%
+F
+%
+F
+%
+F
+%
+0
+0%
+0
+0%
+13
+43%
+17
+57%
+0
+0%
+0
+0%
+24
+80%
+6
+20%
+0
+0%
+0
+0%
+15
+50%
+15
+50%
+Table 10. Accessibility Survey Results
+Accessibility
+Mean
+SD
+Interpretation
+The user interface is simple and easy to navigate.
+3.6
+0.50
+Strong agreement with slightly different responses.
+The platform design is inclusive and accessible.
+3.2
+0.41
+Agreement but with consistent responses.
+The text, layout, and visuals are clear and easy to understand.
+3.5
+0.51
+Balance on both agree and strongly agree responses.
+Table 11. Accessibility
+The assessment of the system’s accessibility showed generally positive feedback from respondents, with mean scores ranging from 3.2 to 3.6. The statement “The user interface is simple and easy to navigate” received the highest mean score (M = 3.6, SD = 0.49), indicating that users found the system intuitive and user-friendly. Similarly, “The text, layout, and visuals are clear and easy to understand” earned a strong rating (M = 3.5, SD = 0.50), reflecting user satisfaction with the platform’s clarity and visual organization.
+However, “The platform design is inclusive and accessible” obtained the lowest mean score (M = 3.2, SD = 0.40), suggesting that while users generally agreed on its accessibility, some believed there is room for improvement in ensuring inclusivity. Overall, the results indicate that DesignXcel performs well in accessibility, providing a clear and easy-to-navigate experience, with potential enhancements to make the system more inclusive for all users.
+Strongly Disagree
+Disagree
+Agree
+Strongly Agree
+F
+%
+F
+%
+F
+%
+F
+%
+0
+0%
+0
+0%
+11
+37%
+19
+63%
+Table 12. Satisfaction Survey Results
+Satisfaction
+Mean
+SD
+Interpretation
+I am satisfied with my overall experience with DesignXcel.
+3.6
+0.50
+Strong agreement with slightly Different responses.
+Table 13. Satisfaction
+The assessment of user satisfaction revealed a strong overall agreement among respondents (M = 3.6, SD = 0.50). The majority of users expressed that they were satisfied with their overall experience using DesignXcel, reflecting a high level of approval toward the system’s performance and usability. Although there were slightly varied responses, the results indicate that users generally had a positive experience with the platform. Overall, the findings suggest that DesignXcel successfully meets user expectations and delivers a satisfying experience.
+CONCLUSION
+The development of DesignXcel successfully addressed the operational challenges faced by Design Excellence Home and Office System Company through the integration of a responsive e-commerce website, an automated inventory management system, and a dynamic content management system (CMS). The project achieved its objectives of enhancing the company’s digital presence, improving inventory accuracy, and streamlining customer interactions. By consolidating key business functions into a single web-based platform, the system improved efficiency, minimized manual errors, and provided a more seamless experience for both customers and administrators.
+Evaluation results demonstrated that the system performed effectively in terms of functionality, availability, accessibility, and user satisfaction. Users expressed a high level of agreement that DesignXcel was reliable, responsive, and easy to navigate. The automated inventory feature ensured accurate, real-time stock monitoring, while the e-commerce component simplified product browsing and purchasing processes. Additionally, the CMS empowered administrators to manage and update content efficiently without requiring technical expertise, resulting in a platform that adapts quickly to business needs and market changes.
+The implementation of DesignXcel represents a meaningful step toward digital transformation within the company. By integrating automation, user-centered design, and responsive technology, the system redefined how the business manages its operations and interacts with customers. This transformation reflects a broader shift from manual processes to intelligent, data-driven solutions, creating a more efficient and customer-focused environment. The system’s coherence between design and functionality not only enhances operational productivity but also reinforces brand credibility and customer trust through improved accessibility and reliability.
+To sustain and enhance the platform’s performance, several improvements are recommended. Future development may include expanding payment integrations to support multiple currencies and digital wallets, implementing analytics dashboards to track business performance, and optimizing mobile responsiveness for wider device compatibility. Additionally, incorporating adaptive content features and marketing automation can further strengthen user engagement and administrative flexibility.
+In conclusion, DesignXcel proved to be an effective and innovative solution that streamlined Design Excellence’s business processes, elevated customer experience, and modernized its overall operations. By merging technology, functionality, and usability into a unified platform, the system not only fulfilled its objectives but also positioned the company for long-term growth in the digital marketplace. With continuous enhancement and integration of advanced features, DesignXcel holds strong potential to serve as a sustainable and scalable model for digital transformation in the furniture and retail industries.
+REFERENCE
+RichestPH. (n.d.). Digital transformation in Philippine enterprises: Case studies and success stories. RichestPH. Retrieved from https://richestph.com/digital-transformation-in-philippine-enterprises-case-studies-and-success-stories/
+Your Custom Furniture. (n.d.). Integrating technology into custom furniture: The Filipino perspective. Your Custom Furniture. Retrieved from https://your-customfurniture.com/integrating-technology-into-custom-furniture-the-filipino-perspective
+RichestPH. (2022, November 28). Digital transformation: How Filipino businesses adapted during the pandemic. RichestPH. Retrieved from https://richestph.com/digital-transformation-how-filipino-businesses-adapted-during-the-pandemic/
+Tan, E. S. (2022). Digital transformation in the Philippines: Status, challenges, and opportunities. SSRN. Retrieved from https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4025641
+Univio. (n.d.). Digital transformation in furniture industry. Univio. Retrieved from https://www.univio.com/industries/digital-transformation-in-furniture-industry/
+Abarquez, R. A., & Trinidad, J. P. (2021). Digital transformation in furniture industry: A case study. International Journal of Computer Science and Research, 9(1), 1–7. Retrieved from https://stepacademic.net/ijcsr/article/view/335
+Richtek Solutions. (n.d.). Computerized inventory system in the Philippines. Richtek Solutions. Retrieved from https://richteksolutions.com/computerized-inventory-system-in-the-philippines/
+Hashmicro. (n.d.). Inventory management software Philippines. Hashmicro. Retrieved from https://www.hashmicro.com/ph/blog/inventory-management-software-philippines/
+Hashmicro. (n.d.). Inventory management techniques Philippines. Hashmicro. Retrieved from https://www.hashmicro.com/ph/blog/inventory-management-techniques-philippines/
+Zosa, M. A. (2016). The impact of ICT on the furniture industry in Cebu. De La Salle University. Retrieved from https://www.dlsu.edu.ph/wp-content/uploads/pdf/vcri/aki/_concludedProjects/_volumeI/Zosa.pdf
+The HR Digest. (Year, Month Day). IKEA's digital transformation: How the Swedish furniture giant is adapting to the new retail landscape. The HR Digest. Retrieved from https://www.thehrdigest.com/ikeas-digital-transformation-how-the-swedish-furniture-giant-is-adapting-to-the-new-retail-landscape/
+Xiao-Yun, H. (2024). The impact of digital transformation on corporate performance: A case study of IKEA [Master's thesis, Wenzao Ursuline University of Languages]. Wenzao Ursuline University of Languages Institutional Repository. Retrieved from https://c030.wzu.edu.tw/datas/upload/files/2024%E7%95%A2%E6%A5%AD%E8%AB%96%E6%96%87/1110209024_%E8%95%AD%E6%B8%9D%E6%A6%95.pdf
+Karlsson, M., & Åberg, J. (2022). Navigating the digital landscape: A qualitative study of IKEA's digital transformation [Bachelor's thesis, University of Borås]. DIVA. Retrieved from https://www.diva-portal.org/smash/get/diva2%3A1673117/FULLTEXT02
+DigitalDefynd. (Year, Month Day). Top digital transformation case studies: Learn from industry leaders. DigitalDefynd. Retrieved from https://digitaldefynd.com/IQ/digital-transformation-case-studies/
+Technology Magazine. (Year, Month Day). How IKEA has committed to global digital transformation. Technology Magazine. Retrieved from https://technologymagazine.com/digital-transformation/how-ikea-has-committed-to-global-digital-transformation
+iSixSigma. (Year, Month Day). Case studies: Companies that thrived through digital transformation. iSixSigma. Retrieved from https://www.isixsigma.com/case-studies/case-studies-companies-that-thrived-through-digital-transformation/
+Zhang, Y., & Lundgren, H. (2023). Digital transformation in a traditional retail company: A case study of IKEA. In ECIS 2023 Research Papers (Vol. 317). AIS Electronic Library (AISeL). Retrieved from https://aisel.aisnet.org/ecis2023_rp/317/
+Putra, R. S., & Astuti, R. T. (2023). The effect of digital transformation on supply chain performance: A case study of IKEA. Jurnal Riset Teknik dan Perencanaan, 8(3), 311-320. Retrieved from https://jrtppi.id/index.php/jrtppi/article/view/178
+Conti, S. (2020, November 16). IKEA pre-owned: Everything you need to know. Architectural Digest. Retrieved from https://www.architecturaldigest.com/story/ikea-preowned-everything-you-need-to-know
+D3 Platform. (Year). IKEA's leap forward with data and AI. Harvard Business School Digital Initiative. Retrieved from https://d3.harvard.edu/platform-digit/submission/ikeas-leap-forward-with-data-and-ai%EF%BF%BC/
+JECAMS.com.ph. (n.d.). Retrieved April 23, 2025, from https://www.jecams.com.ph/ and Mandaue Foam. (n.d.). Retrieved April 23, 2025, from https://mandauefoam.ph/
+inoERP. (n.d.). Introduction to inoERP. Retrieved April 23, 2025, from https://docs.inoerp.com/docs/intro
+HashMicro. (n.d.). About Us. Retrieved April 23, 2025, from https://www.hashmicro.com/ph/about
+Imonggo. (n.d.). About Us. Retrieved April 23, 2025, from https://imonggo.com/about-us/
+Richtek Solutions. (n.d.). About Richtek. Retrieved April 23, 2025, from https://richteksolutions.com/about/
+Systemsia. (n.d.). About Systemsia Philippines. Retrieved April 23, 2025, from https://systemsia.com/philippines/software/business-management/about
+Dynamiqes. (n.d.). About Us. Retrieved April 23, 2025, from https://dynamiqes.com/about-us/
+Srivastava, R., & Kumar, A. (2023). International Journal of Scientific and Applied Information Technology, 2(12), 520–526. Retrieved from https://www.warse.org/IJSAIT/static/pdf/file/ijsait021252023.pdf
+Sharma, A., & Verma, R. (2023). Role of Information Technology in Business Management. International Journal of Innovative Science and Research Technology, 8(10), 388–391. Retrieved from https://ijisrt.com/assets/upload/files/IJISRT23OCT411.pdf
+FIFO.ph. (n.d.). About FIFO. Retrieved April 23, 2025, from https://www.fifo.ph/#about-fifo
+Fortude. (n.d.). Refurnishing the digital future of a leading furniture retailer. Retrieved from https://fortude.co/refurnishing-the-digital-future-of-a-leading-furniture-retailer/
+Flevy. (n.d.). Case: Digital transformation strategy: Boutique furniture retailer. Retrieved from https://flevy.com/topic/competitive-assessment/case-digital-transformation-strategy-boutique-furniture-retailer
+Cashflow Inventory. (n.d.). Inventory management in the furniture industry. Retrieved from https://cashflowinventory.com/blog/inventory-management-in-the-furniture-industry/
+Theninehertz. (n.d.). ERP solution for furniture retailer. Retrieved from https://theninehertz.com/case-studies/erp-solution-for-furniture-retailer
+Successive Technologies. (n.d.). Digital transformation for furniture service provider. Retrieved from https://successive.tech/case-studies/digital-transformation-for-furniture-service-provider/
+Aglowid IT Solutions. (n.d.). Inventory management solution for furniture marketplace. Retrieved from https://aglowiditsolutions.com/case-studies/inventory-management-solution-for-furniture-marketplace/
+Zbeanz Tech. (n.d.). ERP for the furniture industry: Simplifying processes and maximizing profitability. Retrieved from https://www.zbeanztech.com/blog/case-studies-9/erp-for-the-furniture-industry-simplifying-processes-and-maximizing-profitability-129
+Succeed. (n.d.). Furniture store digital marketing. Retrieved from https://www.succeedodm.com/furniture-store-digital-marketing
+Flevy. (n.d.). Case: Digital transformation strategy: Mid-sized furniture retailer. Retrieved from https://flevy.com/topic/design-thinking/case-digital-transformation-strategy-mid-sized-furniture-retailer
+Swanky Agency. (n.d.). Furniture store on Shopify: Swan ERP integration case study - Fishpools. Retrieved from https://swankyagency.com/furniture-store-on-shopify-swan-erp-integration-case-study-fishpools/
+Reuters. (2025, May 21). Shopify launches AI tool that builds complete online stores from keywords. https://www.reuters.com/business/shopify-launches-ai-tool-that-builds-complete-online-stores-keywords-2025-05-21/
+CGI Furniture. (n.d.). Best eCommerce for furniture: Top 10 platforms. Retrieved May 27, 2025, from https://cgifurniture.com/blog/best-ecommerce-for-furniture-top-10-platforms/
+CGI Furniture. (n.d.). Best eCommerce for furniture: Top 10 platforms. Retrieved May 27, 2025, from https://cgifurniture.com/blog/best-ecommerce-for-furniture-top-10-platforms/
+Scandiweb. (n.d.). What is BigCommerce? Retrieved May 27, 2025, from https://scandiweb.com/blog/what-is-bigcommerce/
+Blueport. (n.d.). Blueport. Retrieved May 27, 2025, from https://www.blueport.com/
+APPENDICES
+Appendix A. Resource person
+Letter of Acceptance – Capstone 1
+Letter of Acceptance – Capstone 2
+Picture w/ Client 1 & 2
+Appendix B. Relevant Source Code
+Appendix C. Evaluation Tool/Test Documents
+Survey Results
+Survey Questions Results
+Answers to question #1 “Functionality”
+Answers to question #2 “Functionality”
+Answers to question #3 “Functionality”
+Answers to question #1 “Availability”
+Answers to question #2 “Availability”
+Answers to question #3 “Availability”
+Answers to question #1 “Accessibility”
+Answers to question #2 “Accessibility”
+Answers to question #3 “Accessibility”
+Answers to question #1 “Satisfaction”
+Appendix D. Sample Input/Output Reports
+Appendix E. User’s Guide
+Appendix F. Personal Technical Vitae

@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Archived Items</title>
+    <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Custom Confirmation Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            visibility: hidden;
+            opacity: 0;
+            transition: visibility 0s, opacity 0.3s ease;
+        }
+        .modal-overlay.show {
+            visibility: visible;
+            opacity: 1;
+        }
+        .modal-content {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.show .modal-content {
+            transform: scale(1);
+        }
+        .modal-content h3 {
+            margin-top: 0;
+            color: #333;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+        .modal-content p {
+            color: #555;
+            font-size: 1.1em;
+            margin-bottom: 30px;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+        .modal-button {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .modal-button.confirm {
+            background-color: #dc3545;
+            color: white;
+        }
+        .modal-button.confirm:hover {
+            background-color: #c82333;
+        }
+        .modal-button.cancel {
+            background-color: #f0f0f0;
+            color: #555;
+            border: 1px solid #ccc;
+        }
+        .modal-button.cancel:hover {
+            background-color: #e0e0e0;
+        }
+        .delete-btn {
+            padding: 8px 16px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+        .reactivate-btn {
+            padding: 8px 16px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .reactivate-btn:hover {
+            background-color: #218838;
+        }
+        .delete-cancel-btn {
+            padding: 10px 20px;
+            background-color: #f0f0f0;
+            color: #555;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .delete-cancel-btn:hover {
+            background-color: #e0e0e0;
+        }
+        .delete-confirm-btn {
+            padding: 10px 20px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .delete-confirm-btn:hover {
+            background-color: #c82333;
+        }
+        .delete-confirm-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .sidebar-menu {
+            flex-grow: 1;
+        }
+        .logout-section {
+            padding: 40px;
+            border-top: 1px solid #ddd;
+            margin-top: auto;
+            text-align: center;
+        }
+        .logout-button {
+            display: inline-block;
+            width: auto;
+            padding: 12px 25px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .logout-button:hover {
+            background-color: #c82333;
+        }
+        .archived-section { margin-bottom: 28px; }
+        .archived-section h3 { margin: 0 0 12px; font-size: 1.1em; color: #333; }
+        .archived-section table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        .archived-section th, .archived-section td { border: 1px solid #dee2e6; padding: 10px; text-align: left; }
+        .archived-section th { background: #f2f2f2; font-weight: 600; }
+        .archived-section tr:nth-child(even) { background: #f9f9f9; }
+        .status-badge { padding: 4px 10px; border-radius: 12px; font-size: 0.85em; font-weight: 500; display: inline-block; }
+        .status-available { background: #28a745; color: #fff; }
+        .status-damaged { background: #dc3545; color: #fff; }
+        .status-returned { background: #ffc107; color: #333; }
+        .status-repaired { background: #17a2b8; color: #fff; }
+        .status-disposed { background: #6c757d; color: #fff; }
+        .stock-qty { font-weight: 700; font-size: 1.05em; display: inline-block; min-width: 2em; text-align: center; }
+        .stock-qty-negative { color: #b02a37; }
+        .stock-qty-out { color: #DC3545; }
+        .stock-qty-critical { color: #e65100; }
+        .stock-qty-low { color: #d4af37; }
+        .stock-qty-normal { color: #28a745; }
+        .stock-qty-available { color: #28a745; }
+        .qty-col { text-align: center !important; }
+        .archived-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+        .archived-variations-wrap { overflow-x: auto; }
+        .empty-table-message { text-align: center; color: #888; padding: 16px; }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="sidebar">
+            <%- include('partials/sidebar', { activePage: 'archived' }) %>
+        </div>
+        <div class="main-content">
+            <div class="header">
+                <h2>Archived Items</h2>
+            </div>
+            <div class="content-area">
+                <% if (error) { %>
+                    <div class="error-message"><%= error %></div>
+                <% } %>
+                <%
+                function archivedStockQtyClass(qty) {
+                    const n = Number(qty) || 0;
+                    if (n < 0) return 'stock-qty-negative';
+                    if (n === 0) return 'stock-qty-out';
+                    if (n <= 10) return 'stock-qty-critical';
+                    if (n <= 20) return 'stock-qty-low';
+                    return 'stock-qty-normal';
+                }
+                %>
+                <div class="archived-section">
+                    <h3>Archived Raw Materials</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="qty-col">Qty</th>
+                                <th>Unit</th>
+                                <th>Last Updated</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (archivedMaterials && archivedMaterials.length > 0) { %>
+                                <% archivedMaterials.forEach(material => { %>
+                                    <tr>
+                                        <td><%= material.Name %></td>
+                                        <td class="qty-col"><span class="stock-qty <%= archivedStockQtyClass(material.QuantityAvailable) %>"><%= material.QuantityAvailable %></span></td>
+                                        <td><%= material.Unit %></td>
+                                        <td><%= material.LastUpdated ? new Date(material.LastUpdated).toLocaleDateString() : 'N/A' %></td>
+                                        <td>
+                                            <div style="display: flex; gap: 8px; align-items: center;">
+                                                <form action="/Employee/Admin/Archived/ReactivateMaterial/<%= material.MaterialID %>" method="POST" style="display:inline;">
+                                                    <button type="submit" class="reactivate-btn">Reactivate</button>
+                                                </form>
+                                                <button type="button" class="delete-btn" data-id="<%= material.MaterialID %>" data-type="material" data-name="<%= material.Name %>">Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <% }); %>
+                            <% } else { %>
+                                <tr><td colspan="5" class="empty-table-message">No archived raw materials found.</td></tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="archived-section">
+                    <h3>Archived Product Inventory</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Product Name</th>
+                                <th>Category</th>
+                                <th>Status</th>
+                                <th class="qty-col">Total Qty</th>
+                                <th class="qty-col">Available</th>
+                                <th>Image</th>
+                                <th>Last Added</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (archivedInventoryProducts && archivedInventoryProducts.length > 0) { %>
+                                <% archivedInventoryProducts.forEach(product => {
+                                    const totalQ = product.TotalQuantity || 0;
+                                    const availQ = product.AvailableQuantity || 0;
+                                    const invStatus = product.InventoryStatus || 'no_stock';
+                                    const statusClass = invStatus === 'available' ? 'status-available' :
+                                        invStatus === 'damaged' ? 'status-damaged' :
+                                        invStatus === 'returned' ? 'status-returned' :
+                                        invStatus === 'repaired' ? 'status-repaired' : 'status-disposed';
+                                    const imgUrl = product.ImageURL ? String(product.ImageURL).trim() : '';
+                                %>
+                                    <tr>
+                                        <td><strong><%= product.Name %></strong></td>
+                                        <td><%= product.Category || 'N/A' %></td>
+                                        <td><span class="status-badge <%= statusClass %>"><%= invStatus === 'no_stock' ? 'No Stock' : invStatus.charAt(0).toUpperCase() + invStatus.slice(1) %></span></td>
+                                        <td class="qty-col"><span class="stock-qty <%= archivedStockQtyClass(totalQ) %>"><%= totalQ %></span></td>
+                                        <td class="qty-col"><span class="stock-qty stock-qty-available"><%= availQ %></span></td>
+                                        <td>
+                                            <% if (imgUrl) { %>
+                                                <img src="<%= imgUrl.startsWith('/') || imgUrl.startsWith('http') ? imgUrl : '/' + imgUrl %>" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" onerror="this.onerror=null;this.src='/images/placeholder-no-image.svg'">
+                                            <% } else { %>
+                                                <span style="color:#999;">No image</span>
+                                            <% } %>
+                                        </td>
+                                        <td><%= product.DateAdded ? new Date(product.DateAdded).toLocaleDateString() : 'N/A' %></td>
+                                        <td>
+                                            <div class="archived-actions">
+                                                <form action="/Employee/Admin/Archived/ReactivateInventoryProduct/<%= product.InventoryProductID %>" method="POST" style="display:inline;">
+                                                    <button type="submit" class="reactivate-btn">Reactivate</button>
+                                                </form>
+                                                <button type="button" class="delete-btn" data-id="<%= product.InventoryProductID %>" data-type="inventory-product" data-name="<%= product.Name %>">Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <% }); %>
+                            <% } else { %>
+                                <tr><td colspan="8" class="empty-table-message">No archived product inventory found.</td></tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="archived-section">
+                    <h3>Archived Product Variations Inventory</h3>
+                    <div class="archived-variations-wrap">
+                    <table class="archived-variations-table">
+                        <thead>
+                            <tr>
+                                <th>Variation Name</th>
+                                <th>Product</th>
+                                <th>SKU</th>
+                                <th>Color</th>
+                                <th class="qty-col">Qty</th>
+                                <th class="qty-col">Available</th>
+                                <th class="qty-col">Damaged</th>
+                                <th class="qty-col">Returned</th>
+                                <th class="qty-col">Repaired</th>
+                                <th class="qty-col">Disposed</th>
+                                <th>Price</th>
+                                <th>Image</th>
+                                <th>Archived</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (archivedVariations && archivedVariations.length > 0) { %>
+                                <% archivedVariations.forEach(variation => { %>
+                                    <% 
+                                      const availQ = Number(variation.AvailableQuantity) || 0;
+                                      const dmgQ = Number(variation.DamagedQuantity) || 0;
+                                      const retQ = Number(variation.ReturnedQuantity) || 0;
+                                      const repQ = Number(variation.RepairedQuantity) || 0;
+                                      const dispQ = Number(variation.DisposedQuantity) || 0;
+                                      const totalQ = availQ + dmgQ;
+                                    %>
+                                    <tr>
+                                        <td><strong><%= variation.VariationName || 'N/A' %></strong></td>
+                                        <td><%= variation.ProductName || 'N/A' %></td>
+                                        <td><code style="font-size:0.85em;"><%= variation.SKU || '—' %></code></td>
+                                        <td><%= variation.Color || 'N/A' %></td>
+                                        <td class="qty-col"><span class="stock-qty <%= archivedStockQtyClass(totalQ) %>"><%= totalQ %></span></td>
+                                        <td class="qty-col"><span class="stock-qty stock-qty-available"><%= availQ %></span></td>
+                                        <td>
+                                            <% if (dmgQ > 0) { %>
+                                                <span class="status-badge status-damaged"><%= dmgQ %></span>
+                                            <% } else { %>
+                                                <span style="color: #999;">0</span>
+                                            <% } %>
+                                        </td>
+                                        <td>
+                                            <% if (retQ > 0) { %>
+                                                <span class="status-badge status-returned"><%= retQ %></span>
+                                            <% } else { %>
+                                                <span style="color: #999;">0</span>
+                                            <% } %>
+                                        </td>
+                                        <td>
+                                            <% if (repQ > 0) { %>
+                                                <span class="status-badge" style="background-color: #17a2b8; color: white;"><%= repQ %></span>
+                                            <% } else { %>
+                                                <span style="color: #999;">0</span>
+                                            <% } %>
+                                        </td>
+                                        <td>
+                                            <% if (dispQ > 0) { %>
+                                                <span class="status-badge" style="background-color: #6c757d; color: white;"><%= dispQ %></span>
+                                            <% } else { %>
+                                                <span style="color: #999;">0</span>
+                                            <% } %>
+                                        </td>
+                                        <td>₱<%= variation.Price ? parseFloat(variation.Price).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '0.00' %></td>
+                                        <td>
+                                            <% if (variation.VariationImageURL) { %>
+                                                <img src="<%= variation.VariationImageURL %>" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" onerror="this.onerror=null;this.src='/images/placeholder-no-image.svg'">
+                                            <% } else { %>
+                                                <span style="color: #999;font-size:0.7rem;">—</span>
+                                            <% } %>
+                                        </td>
+                                        <td><%= variation.UpdatedAt ? new Date(variation.UpdatedAt).toLocaleDateString() : (variation.CreatedAt ? new Date(variation.CreatedAt).toLocaleDateString() : 'N/A') %></td>
+                                        <td>
+                                            <div class="archived-variations-actions">
+                                                <form method="POST" action="/Employee/Admin/Archived/ReactivateVariation/<%= variation.VariationID %>" style="margin: 0;">
+                                                    <button type="submit" class="reactivate-btn">Reactivate</button>
+                                                </form>
+                                                <button type="button" class="delete-btn" data-id="<%= variation.VariationID %>" data-type="variation" data-name="<%= variation.VariationName || 'Variation' %>">Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <% }); %>
+                            <% } else { %>
+                                <tr><td colspan="14" class="empty-table-message">No archived inventory variations found.</td></tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Reactivate Confirmation Popup -->
+    <div id="reactivateConfirmModal" class="modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.4);z-index:3000;justify-content:center;align-items:center;">
+        <div class="delete-confirmation-content" style="background:#fff;padding:25px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);width:90%;max-width:400px;text-align:center;animation:fadeIn 0.3s ease-out;">
+            <h3 style="color:#333;margin-top:0;margin-bottom:15px;font-size:1.5em;">Reactivate Item</h3>
+            <p style="color:#666;margin-bottom:20px;font-size:1.1em;" id="reactivateConfirmText">Are you sure you want to reactivate this item?</p>
+            <div style="display:flex;justify-content:center;gap:15px;">
+                <button id="cancelReactivateBtn" class="delete-cancel-btn">Cancel</button>
+                <button id="confirmReactivateBtn" class="delete-confirm-btn" style="background-color:#28a745;">Reactivate</button>
+            </div>
+        </div>
+    </div>
+    <!-- Delete Confirmation Popup -->
+    <div id="deleteConfirmModal" class="modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.4);z-index:3000;justify-content:center;align-items:center;">
+        <div class="delete-confirmation-content" style="background:#fff;padding:25px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);width:90%;max-width:400px;text-align:center;animation:fadeIn 0.3s ease-out;">
+            <h3 style="color:#333;margin-top:0;margin-bottom:15px;font-size:1.5em;">Delete Item Permanently</h3>
+            <p style="color:#666;margin-bottom:20px;font-size:1.1em;" id="deleteConfirmText">Are you sure you want to permanently delete this item? This action cannot be undone.</p>
+            <div style="display:flex;justify-content:center;gap:15px;">
+                <button id="cancelDeleteBtn" class="delete-cancel-btn">Cancel</button>
+                <button id="confirmDeleteBtn" class="delete-confirm-btn">Delete</button>
+            </div>
+        </div>
+    </div>
+    <!-- Success Popup -->
+    <div id="successPopup" class="custom-popup" style="display:none;position:fixed;top:20px;right:20px;background-color:#43e97b;color:white;padding:15px 25px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:4000;max-width:300px;">
+        <div class="custom-popup-content">
+            <span class="custom-popup-icon">✓</span>
+            <span class="custom-popup-message" id="successPopupMsg"></span>
+        </div>
+    </div>
+    <script>
+    // Reactivate confirmation logic
+    let reactivateForm = null;
+    let reactivateType = null;
+    document.querySelectorAll('.reactivate-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            reactivateForm = btn.closest('form');
+            const action = btn.closest('form').action;
+            if (action.includes('ReactivateInventoryProduct')) {
+                reactivateType = 'inventory product';
+            } else if (action.includes('ReactivateVariation')) {
+                reactivateType = 'variation';
+            } else if (action.includes('ReactivateProduct')) {
+                reactivateType = 'product';
+            } else if (action.includes('ReactivateMaterial')) {
+                reactivateType = 'material';
+            } else {
+                reactivateType = 'item';
+            }
+            document.getElementById('reactivateConfirmText').textContent = `Are you sure you want to reactivate this ${reactivateType}?`;
+            document.getElementById('reactivateConfirmModal').style.display = 'flex';
+        });
+    });
+    document.getElementById('cancelReactivateBtn').onclick = function() {
+        document.getElementById('reactivateConfirmModal').style.display = 'none';
+        reactivateForm = null;
+    };
+    document.getElementById('confirmReactivateBtn').onclick = function() {
+        if (reactivateForm) {
+            reactivateForm.submit();
+        }
+        document.getElementById('reactivateConfirmModal').style.display = 'none';
+    };
+    // Success popup logic
+    function showSuccessPopup(message) {
+        const popup = document.getElementById('successPopup');
+        document.getElementById('successPopupMsg').textContent = message;
+        popup.style.display = 'block';
+        setTimeout(() => {
+            popup.style.display = 'none';
+        }, 2500);
+    }
+    // Show popup if redirected with ?reactivated=1
+    if (window.location.search.includes('reactivated=1')) {
+        showSuccessPopup('Item reactivated successfully!');
+    }
+    
+    // Delete confirmation logic
+    let deleteItemId = null;
+    let deleteItemType = null;
+    let deleteItemName = null;
+    
+    document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            deleteItemId = btn.getAttribute('data-id');
+            deleteItemType = btn.getAttribute('data-type');
+            deleteItemName = btn.getAttribute('data-name');
+            document.getElementById('deleteConfirmText').textContent = `Are you sure you want to permanently delete "${deleteItemName}"? This action cannot be undone.`;
+            document.getElementById('deleteConfirmModal').style.display = 'flex';
+        });
+    });
+    
+    document.getElementById('cancelDeleteBtn').onclick = function() {
+        document.getElementById('deleteConfirmModal').style.display = 'none';
+        deleteItemId = null;
+        deleteItemType = null;
+        deleteItemName = null;
+    };
+    
+    document.getElementById('confirmDeleteBtn').onclick = async function() {
+        if (!deleteItemId || !deleteItemType) return;
+        
+        const deleteModal = document.getElementById('deleteConfirmModal');
+        const confirmBtn = document.getElementById('confirmDeleteBtn');
+        const cancelBtn = document.getElementById('cancelDeleteBtn');
+        
+        // Disable buttons during deletion
+        confirmBtn.disabled = true;
+        cancelBtn.disabled = true;
+        confirmBtn.textContent = 'Deleting...';
+        
+        try {
+            let endpoint = '';
+            if (deleteItemType === 'inventory-product') {
+                endpoint = `/api/admin/archived/inventory-products/${deleteItemId}/permanent`;
+            } else if (deleteItemType === 'variation') {
+                endpoint = `/api/admin/inventory-product-variations/delete-permanent/${deleteItemId}`;
+            } else {
+                endpoint = `/api/admin/archived/${deleteItemType}s/${deleteItemId}/permanent`;
+            }
+            
+            const response = await fetch(endpoint, {
+                method: deleteItemType === 'variation' ? 'POST' : 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'Failed to delete item' }));
+                throw new Error(errorData.message || 'Failed to delete item');
+            }
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                deleteModal.style.display = 'none';
+                const itemTypeName = deleteItemType === 'product' ? 'Product' : 
+                                    deleteItemType === 'material' ? 'Material' : 
+                                    deleteItemType === 'inventory-product' ? 'Product Inventory' : 'Item';
+                showSuccessPopup(`${itemTypeName} deleted successfully!`);
+                
+                // Reload page after a short delay
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                throw new Error(result.message || 'Failed to delete item');
+            }
+        } catch (error) {
+            console.error('Error deleting item:', error);
+            const itemTypeName = deleteItemType === 'inventory-product' ? 'inventory product' : deleteItemType;
+            alert(`Failed to delete ${itemTypeName}: ${error.message}`);
+            confirmBtn.disabled = false;
+            cancelBtn.disabled = false;
+            confirmBtn.textContent = 'Delete';
+        } finally {
+            deleteItemId = null;
+            deleteItemType = null;
+            deleteItemName = null;
+        }
+    };
+    
+    // Close delete modal when clicking outside
+    document.getElementById('deleteConfirmModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            this.style.display = 'none';
+            deleteItemId = null;
+            deleteItemType = null;
+            deleteItemName = null;
+        }
+    });
+    </script>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="logoutConfirmModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Confirm Logout</h3>
+            <p>Are you sure you want to log out?</p>
+            <div class="modal-buttons">
+                <button class="modal-button confirm" id="confirmLogoutBtn">Logout</button>
+                <button class="modal-button cancel" id="cancelLogoutBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Custom Logout Modal Logic
+        const logoutConfirmModal = document.getElementById('logoutConfirmModal');
+        const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
+        const cancelLogoutBtn = document.getElementById('cancelLogoutBtn');
+
+        async function handleLogout(event) {
+            event.preventDefault();
+            logoutConfirmModal.classList.add('show');
+        }
+
+        confirmLogoutBtn.addEventListener('click', async () => {
+            logoutConfirmModal.classList.remove('show');
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                } else {
+                    console.error('Logout failed');
+                    alert('Failed to logout. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error during logout:', error);
+                alert('An error occurred during logout. Please try again.');
+            }
+        });
+
+        cancelLogoutBtn.addEventListener('click', () => {
+            logoutConfirmModal.classList.remove('show');
+        });
+
+        // Close modal if clicked outside content
+        logoutConfirmModal.addEventListener('click', (event) => {
+            if (event.target === logoutConfirmModal) {
+                logoutConfirmModal.classList.remove('show');
+            }
+        });
+    </script>
+
+</body>
+</html> 

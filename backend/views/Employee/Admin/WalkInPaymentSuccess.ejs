@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment received — Walk-in</title>
+    <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: Inter, system-ui, sans-serif; background: #f1f5f9; margin: 0; padding: 2rem; }
+        .receipt-card {
+            max-width: 520px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 12px;
+            padding: 1.75rem;
+            box-shadow: 0 10px 40px rgba(15, 23, 42, 0.08);
+            border: 1px solid #e2e8f0;
+        }
+        .receipt-card h1 { margin: 0 0 0.5rem; font-size: 1.35rem; color: #0f172a; }
+        .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: #ecfdf5; color: #047857; margin-bottom: 1rem; }
+        .row { display: flex; justify-content: space-between; gap: 12px; padding: 0.45rem 0; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
+        .row:last-of-type { border-bottom: none; }
+        .muted { color: #64748b; }
+        .mono { font-family: ui-monospace, monospace; font-size: 0.82rem; word-break: break-all; text-align: right; max-width: 62%; }
+        .actions { margin-top: 1.5rem; display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn { display: inline-block; padding: 10px 16px; border-radius: 8px; font-weight: 600; text-decoration: none; border: none; cursor: pointer; font-size: 0.9rem; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-secondary { background: #e2e8f0; color: #1e293b; }
+        .err { color: #b91c1c; font-size: 0.9rem; margin-top: 0.75rem; }
+    </style>
+</head>
+<body>
+    <div class="receipt-card">
+        <% if (receipt && receipt.ok) { %>
+            <span class="badge">Payment received</span>
+            <h1><%= receipt.provider %> checkout</h1>
+            <p class="muted" style="margin:0 0 1rem;font-size:0.9rem;">Your gateway payment completed. The payment ID below is saved on the matching walk-in / linked order when the checkout session ID matches.</p>
+
+            <% if (receipt.amountDisplay) { %>
+            <div class="row"><span class="muted">Amount</span><strong>₱<%= receipt.amountDisplay %> <%= receipt.currency || 'PHP' %></strong></div>
+            <% } %>
+            <% if (receipt.status) { %>
+            <div class="row"><span class="muted">Status</span><strong><%= receipt.status %></strong></div>
+            <% } %>
+            <% if (receipt.customerEmail) { %>
+            <div class="row"><span class="muted">Email</span><span><%= receipt.customerEmail %></span></div>
+            <% } %>
+            <div class="row"><span class="muted">Checkout session</span><span class="mono"><%= receipt.checkoutSessionId || '—' %></span></div>
+            <div class="row"><span class="muted">Payment ID</span><span class="mono"><%= receipt.paymentId || '—' %></span></div>
+        <% } else { %>
+            <h1>Payment receipt</h1>
+            <p class="err"><%= (receipt && receipt.message) ? receipt.message : 'Unable to load payment details.' %></p>
+        <% } %>
+
+        <div class="actions">
+            <a class="btn btn-primary" href="/Employee/Admin/WalkIn">Back to Walk-in</a>
+        </div>
+    </div>
+</body>
+</html>

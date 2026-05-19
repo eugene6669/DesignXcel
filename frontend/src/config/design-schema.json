@@ -1,0 +1,720 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Design Excellence Frontend Website Design Schema",
+  "description": "Complete design system schema for Office Ecommerce Platform",
+  "version": "1.0.0",
+  "designTokens": {
+    "colors": {
+      "primary": {
+        "main": "#F0B21B",
+        "hover": "#e6a017",
+        "dark": "#d69e16",
+        "light": "#f6b221",
+        "rgba": "rgba(240, 178, 27, 0.2)"
+      },
+      "secondary": {
+        "main": "#6c757d",
+        "light": "#aaaaaa",
+        "dark": "#495057"
+      },
+      "background": {
+        "primary": "#ffffff",
+        "secondary": "#f8f9fa",
+        "tertiary": "#f3f4f6",
+        "dark": "#111827"
+      },
+      "text": {
+        "primary": "#111827",
+        "secondary": "#6b7280",
+        "tertiary": "#9ca3af",
+        "light": "#ffffff",
+        "accent": "#333333"
+      },
+      "border": {
+        "default": "#e5e7eb",
+        "light": "#d1d5db",
+        "dark": "#9ca3af",
+        "focus": "#F0B21B"
+      },
+      "status": {
+        "success": "#10b981",
+        "successLight": "#d1fae5",
+        "successDark": "#065f46",
+        "warning": "#f59e0b",
+        "warningLight": "#fef3c7",
+        "warningDark": "#92400e",
+        "error": "#ef4444",
+        "errorLight": "#fee2e2",
+        "errorDark": "#991b1b",
+        "info": "#3b82f6",
+        "infoLight": "#dbeafe",
+        "infoDark": "#1e40af"
+      },
+      "gradients": {
+        "primary": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        "success": "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+        "warning": "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+        "info": "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)"
+      }
+    },
+    "typography": {
+      "fontFamilies": {
+        "primary": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif",
+        "secondary": "'Neue Helvetica', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+        "monospace": "Monaco, 'Courier New', monospace"
+      },
+      "fontSizes": {
+        "xs": "0.6rem",
+        "sm": "0.8rem",
+        "base": "1rem",
+        "lg": "1.2rem",
+        "xl": "1.5rem",
+        "2xl": "1.8rem",
+        "3xl": "2rem",
+        "4xl": "2.5rem",
+        "5xl": "3rem"
+      },
+      "fontWeights": {
+        "normal": 400,
+        "medium": 500,
+        "semibold": 600,
+        "bold": 700
+      },
+      "lineHeights": {
+        "tight": 1.25,
+        "normal": 1.5,
+        "relaxed": 1.75
+      },
+      "letterSpacing": {
+        "tight": "-0.02em",
+        "normal": "0",
+        "wide": "1px"
+      }
+    },
+    "spacing": {
+      "scale": [0, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24],
+      "unit": "rem"
+    },
+    "borderRadius": {
+      "none": "0",
+      "sm": "4px",
+      "md": "6px",
+      "lg": "8px",
+      "xl": "12px",
+      "full": "9999px"
+    },
+    "shadows": {
+      "sm": "0 1px 2px rgba(0, 0, 0, 0.05)",
+      "md": "0 4px 6px rgba(0, 0, 0, 0.05)",
+      "lg": "0 8px 25px rgba(0, 0, 0, 0.1)",
+      "xl": "0 12px 24px rgba(0, 0, 0, 0.15)",
+      "primary": "0 2px 4px rgba(240, 178, 27, 0.2)",
+      "primaryHover": "0 4px 12px rgba(240, 178, 27, 0.3)"
+    },
+    "breakpoints": {
+      "xs": "0px",
+      "sm": "640px",
+      "md": "768px",
+      "lg": "1024px",
+      "xl": "1280px",
+      "2xl": "1536px"
+    },
+    "transitions": {
+      "fast": "0.15s ease",
+      "normal": "0.3s ease",
+      "slow": "0.5s ease"
+    },
+    "zIndex": {
+      "dropdown": 1000,
+      "sticky": 100,
+      "fixed": 101,
+      "modal": 1050,
+      "popover": 1060,
+      "tooltip": 1070
+    }
+  },
+  "themes": {
+    "default": {
+      "name": "Default Theme",
+      "description": "Light theme with gold accent",
+      "class": "",
+      "colors": {
+        "primary": "#F0B21B",
+        "background": "#ffffff",
+        "text": "#111827"
+      }
+    },
+    "dark": {
+      "name": "Dark Theme",
+      "description": "Dark mode theme",
+      "class": "theme-dark",
+      "colors": {
+        "primary": "#F0B21B",
+        "background": "#111827",
+        "text": "#ffffff"
+      }
+    },
+    "christmas": {
+      "name": "Christmas Theme",
+      "description": "Holiday theme with snowfall effect",
+      "class": "theme-christmas",
+      "colors": {
+        "primary": "#dc2626",
+        "background": "#ffffff",
+        "text": "#111827"
+      },
+      "effects": {
+        "snowfall": true
+      }
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": {
+        "backgroundColor": "#F0B21B",
+        "color": "#ffffff",
+        "padding": "clamp(0.625rem, 1.5vw, 1rem) clamp(1rem, 2.5vw, 2rem)",
+        "borderRadius": "clamp(6px, 1vw, 8px)",
+        "fontSize": "clamp(0.8rem, 1.8vw, 1rem)",
+        "fontWeight": 600,
+        "boxShadow": "0 2px 4px rgba(240, 178, 27, 0.2)",
+        "hover": {
+          "backgroundColor": "#e6a017",
+          "transform": "translateY(-1px)",
+          "boxShadow": "0 4px 12px rgba(240, 178, 27, 0.3)"
+        }
+      },
+      "secondary": {
+        "backgroundColor": "#ffffff",
+        "color": "#aaaaaa",
+        "border": "1px solid #cccccc",
+        "padding": "clamp(0.625rem, 1.5vw, 1rem) clamp(1rem, 2.5vw, 2rem)",
+        "borderRadius": "clamp(6px, 1vw, 8px)",
+        "fontSize": "clamp(0.8rem, 1.8vw, 1rem)",
+        "fontWeight": 600,
+        "hover": {
+          "borderColor": "#F0B21B",
+          "color": "#F0B21B"
+        }
+      },
+      "danger": {
+        "backgroundColor": "#ef4444",
+        "color": "#ffffff",
+        "hover": {
+          "backgroundColor": "#dc2626"
+        }
+      }
+    },
+    "inputs": {
+      "default": {
+        "padding": "12px 16px",
+        "border": "1px solid #e5e7eb",
+        "borderRadius": "8px",
+        "fontSize": "16px",
+        "transition": "all 0.3s ease",
+        "focus": {
+          "outline": "none",
+          "borderColor": "#F0B21B"
+        }
+      }
+    },
+    "cards": {
+      "default": {
+        "backgroundColor": "#ffffff",
+        "border": "1px solid #e5e7eb",
+        "borderRadius": "8px",
+        "padding": "20px",
+        "boxShadow": "0 1px 3px rgba(0, 0, 0, 0.1)",
+        "hover": {
+          "boxShadow": "0 8px 25px rgba(0, 0, 0, 0.1)"
+        }
+      },
+      "summary": {
+        "gradient": true,
+        "variants": ["primary", "success", "warning", "info"]
+      }
+    },
+    "badges": {
+      "status": {
+        "padding": "4px 12px",
+        "borderRadius": "12px",
+        "fontSize": "12px",
+        "fontWeight": 500,
+        "variants": {
+          "completed": {
+            "background": "#d1fae5",
+            "color": "#065f46"
+          },
+          "pending": {
+            "background": "#fef3c7",
+            "color": "#92400e"
+          },
+          "cancelled": {
+            "background": "#fee2e2",
+            "color": "#991b1b"
+          },
+          "processing": {
+            "background": "#dbeafe",
+            "color": "#1e40af"
+          }
+        }
+      }
+    }
+  },
+  "layout": {
+    "header": {
+      "height": "auto",
+      "sticky": true,
+      "zIndex": 101,
+      "background": "#ffffff",
+      "boxShadow": "0 2px 8px rgba(0,0,0,0.04)",
+      "sections": {
+        "offerBar": {
+          "background": "#f6b221",
+          "color": "#ffffff",
+          "fontSize": "1rem",
+          "fontWeight": 500,
+          "padding": "0.5rem 1.5rem"
+        },
+        "mainRow": {
+          "padding": "0.1rem 1.5vw",
+          "minHeight": "8px",
+          "background": "#ffffff",
+          "sticky": true
+        },
+        "navigation": {
+          "background": "#F0B21B",
+          "textColor": "#333333",
+          "hoverColor": "#d69e16",
+          "fontSize": "clamp(0.8rem, 1.5vw, 1rem)"
+        }
+      },
+      "logo": {
+        "height": "40px",
+        "maxWidth": "200px"
+      },
+      "contactInfo": {
+        "fontSize": "0.6rem",
+        "color": "#6c757d",
+        "iconColor": "#F0B21B",
+        "spacing": "0.8rem"
+      }
+    },
+    "footer": {
+      "background": "#111827",
+      "color": "#ffffff",
+      "padding": "3rem 1.5rem 1.5rem"
+    }
+  },
+  "pages": {
+    "home": {
+      "route": "/",
+      "component": "app/Home.js",
+      "layout": "fullWidth"
+    },
+    "products": {
+      "catalog": {
+        "route": "/products",
+        "component": "features/products/pages/ProductCatalogPage.js",
+        "filters": ["category", "price", "search"]
+      },
+      "detail": {
+        "route": "/products/:id",
+        "component": "features/products/pages/ProductDetailPage.js",
+        "sections": ["gallery", "info", "reviews", "related"]
+      },
+      "3d": {
+        "route": "/3d-products",
+        "component": "features/3d-products/pages/ThreeDProductsPage.js"
+      }
+    },
+    "cart": {
+      "route": "/cart",
+      "component": "features/cart/pages/CartPage.js"
+    },
+    "checkout": {
+      "route": "/checkout",
+      "component": "features/checkout/pages/CheckoutPage.js",
+      "steps": ["cart", "shipping", "payment", "confirmation"]
+    },
+    "auth": {
+      "login": {
+        "route": "/login",
+        "component": "features/auth/pages/LoginPage.js",
+        "layout": "splitView"
+      },
+      "register": {
+        "route": "/register",
+        "component": "features/auth/pages/LoginPage.js",
+        "mode": "register"
+      },
+      "forgotPassword": {
+        "route": "/forgot-password",
+        "component": "features/auth/pages/ForgotPasswordPage.js"
+      },
+      "resetPassword": {
+        "route": "/reset-password",
+        "component": "features/auth/pages/ResetPasswordPage.js"
+      }
+    },
+    "account": {
+      "route": "/account",
+      "component": "features/account/pages/AccountPage.js",
+      "sections": ["profile", "addresses", "orders", "preferences", "security"]
+    },
+    "orders": {
+      "route": "/orders",
+      "component": "features/orders/pages/OrdersPage.js"
+    },
+    "wishlist": {
+      "route": "/wishlist",
+      "component": "features/wishlist/pages/WishlistPage.js"
+    },
+    "about": {
+      "route": "/about",
+      "component": "app/About.js"
+    },
+    "contact": {
+      "route": "/contact",
+      "component": "app/Contact.js"
+    },
+    "projects": {
+      "route": "/projects",
+      "component": "app/Projects.js"
+    },
+    "admin": {
+      "dashboard": {
+        "route": "/admin/dashboard",
+        "component": "features/admin/pages/AdminDashboardPage.js",
+        "protected": true,
+        "role": "admin"
+      },
+      "orders": {
+        "route": "/admin/orders",
+        "component": "features/admin/pages/AdminOrdersPage.js",
+        "protected": true,
+        "role": "admin"
+      }
+    }
+  },
+  "features": {
+    "3d-products": {
+      "path": "features/3d-products",
+      "components": ["3dProductsFurnitureCard", "ARViewer", "QRCodeModal"],
+      "pages": ["ThreeDProductsPage", "3dProductsFurniturePage"],
+      "config": {
+        "modelViewer": true,
+        "arSupport": true
+      }
+    },
+    "account": {
+      "path": "features/account",
+      "components": [
+        "ProfileManagement",
+        "AddressManagement",
+        "OrderHistory",
+        "AccountPreferences",
+        "SecuritySettings",
+        "PaymentMethod",
+        "DeleteAccountModal"
+      ],
+      "pages": ["AccountPage"]
+    },
+    "auth": {
+      "path": "features/auth",
+      "components": [
+        "ProtectedRoute",
+        "AdminRoute",
+        "RoleBasedRoute",
+        "PasswordStrengthIndicator",
+        "Captcha",
+        "TermsModal",
+        "SignupSuccessModal"
+      ],
+      "pages": ["LoginPage", "ForgotPasswordPage", "ResetPasswordPage"],
+      "hooks": ["useAuth"]
+    },
+    "cart": {
+      "path": "features/cart",
+      "components": ["CartItem", "CheckoutModal"],
+      "pages": ["CartPage"],
+      "context": "CartContext"
+    },
+    "checkout": {
+      "path": "features/checkout",
+      "components": [],
+      "pages": ["CheckoutPage", "PaymentPage", "OrderSuccessPage"],
+      "services": ["paymentService", "stripeService", "codService"]
+    },
+    "orders": {
+      "path": "features/orders",
+      "components": [],
+      "pages": ["OrdersPage"]
+    },
+    "products": {
+      "path": "features/products",
+      "components": ["ProductCard", "ProductFilter", "ProductReviews"],
+      "pages": ["ProductCatalogPage", "ProductDetailPage"],
+      "hooks": ["useProductSearch"],
+      "services": ["productService"]
+    },
+    "reviews": {
+      "path": "features/reviews",
+      "components": [
+        "ReviewForm",
+        "ReviewList",
+        "ReviewSection",
+        "ReviewStats"
+      ],
+      "services": ["reviewService"]
+    },
+    "wishlist": {
+      "path": "features/wishlist",
+      "pages": ["WishlistPage"],
+      "context": "WishlistContext"
+    }
+  },
+  "shared": {
+    "components": {
+      "layout": [
+        "Header",
+        "Footer",
+        "Navigation",
+        "MobileMenu",
+        "SearchBar"
+      ],
+      "ui": [
+        "Button",
+        "Input",
+        "Card",
+        "Modal",
+        "LoadingSpinner",
+        "Toast",
+        "Badge",
+        "Tabs",
+        "Accordion"
+      ],
+      "feedback": [
+        "SuccessMessage",
+        "ErrorMessage",
+        "WarningMessage",
+        "InfoMessage"
+      ],
+      "theme": [
+        "ThemeSwitcher",
+        "ModernThemeSwitcher"
+      ],
+      "effects": [
+        "ChristmasSnowfall",
+        "ChristmasDecorations"
+      ]
+    },
+    "contexts": {
+      "CartContext": {
+        "path": "shared/contexts/CartContext.js",
+        "state": ["items", "total", "itemCount"]
+      },
+      "WishlistContext": {
+        "path": "shared/contexts/WishlistContext.js",
+        "state": ["items", "count"]
+      },
+      "CurrencyContext": {
+        "path": "shared/contexts/CurrencyContext.js",
+        "state": ["currency", "exchangeRate"]
+      },
+      "LanguageContext": {
+        "path": "shared/contexts/LanguageContext.js",
+        "state": ["language", "translations"]
+      }
+    },
+    "hooks": [
+      "useAuth",
+      "usePrice",
+      "useWebSocket"
+    ],
+    "services": {
+      "api": {
+        "baseUrl": "process.env.REACT_APP_API_URL || 'http://localhost:5000'",
+        "endpoints": {
+          "products": "/api/products",
+          "cart": "/api/cart",
+          "orders": "/api/orders",
+          "auth": "/api/auth",
+          "reviews": "/api/reviews",
+          "wishlist": "/api/wishlist",
+          "admin": "/api/admin",
+          "theme": "/api/theme/public"
+        }
+      },
+      "websocket": {
+        "path": "shared/services/websocketService.js",
+        "reconnect": true
+      }
+    }
+  },
+  "productCategories": {
+    "office": {
+      "Chairs": {
+        "name": "Chairs",
+        "icon": "🪑",
+        "description": "Office and ergonomic chairs"
+      },
+      "Tables": {
+        "name": "Tables",
+        "icon": "🪑",
+        "description": "Desks and tables for office spaces"
+      },
+      "Storage": {
+        "name": "Storage",
+        "icon": "📦",
+        "description": "Storage solutions and cabinets"
+      },
+      "Partitions": {
+        "name": "Partitions",
+        "icon": "🚧",
+        "description": "Office partitions and dividers"
+      },
+      "Others": {
+        "name": "Others",
+        "icon": "📋",
+        "description": "Other office furniture and accessories"
+      }
+    }
+  },
+  "paymentMethods": {
+    "eWallet": {
+      "name": "E-Wallet",
+      "enabled": true
+    },
+    "bankTransfer": {
+      "name": "Bank Transfer",
+      "enabled": false
+    },
+    "cashOnDelivery": {
+      "name": "Cash on Delivery",
+      "enabled": false
+    }
+  },
+  "deliveryTypes": {
+    "delivery": {
+      "name": "Delivery",
+      "enabled": true
+    },
+    "pickup": {
+      "name": "Store Pickup",
+      "enabled": true
+    }
+  },
+  "orderStatuses": {
+    "pending": {
+      "name": "Pending",
+      "color": "#f59e0b",
+      "icon": "⏳"
+    },
+    "processing": {
+      "name": "Processing",
+      "color": "#3b82f6",
+      "icon": "🔄"
+    },
+    "shipping": {
+      "name": "Shipping",
+      "color": "#8b5cf6",
+      "icon": "🚚"
+    },
+    "delivery": {
+      "name": "Delivery",
+      "color": "#14b8a6",
+      "icon": "📦"
+    },
+    "received": {
+      "name": "Received",
+      "color": "#06b6d4",
+      "icon": "✅"
+    },
+    "completed": {
+      "name": "Completed",
+      "color": "#10b981",
+      "icon": "✓"
+    },
+    "cancelled": {
+      "name": "Cancelled",
+      "color": "#ef4444",
+      "icon": "✕"
+    }
+  },
+  "validation": {
+    "email": {
+      "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+      "required": true
+    },
+    "password": {
+      "minLength": 8,
+      "requirements": [
+        "at least 8 characters",
+        "one uppercase letter",
+        "one lowercase letter",
+        "one number",
+        "one special character"
+      ]
+    },
+    "phone": {
+      "pattern": "^[0-9]{10,11}$",
+      "format": "Philippine phone number"
+    }
+  },
+  "animations": {
+    "fadeIn": {
+      "duration": "0.3s",
+      "easing": "ease-in-out"
+    },
+    "slideUp": {
+      "duration": "0.3s",
+      "easing": "ease-out"
+    },
+    "scale": {
+      "duration": "0.2s",
+      "easing": "ease-in-out"
+    }
+  },
+  "accessibility": {
+    "ariaLabels": {
+      "required": true
+    },
+    "keyboardNavigation": {
+      "enabled": true
+    },
+    "focusManagement": {
+      "visible": true,
+      "color": "#F0B21B"
+    },
+    "screenReader": {
+      "support": true
+    }
+  },
+  "performance": {
+    "lazyLoading": {
+      "enabled": true,
+      "components": ["3d-models", "images", "charts"]
+    },
+    "codeSplitting": {
+      "enabled": true,
+      "routes": true
+    },
+    "imageOptimization": {
+      "enabled": true,
+      "formats": ["webp", "jpg", "png"]
+    }
+  },
+  "seo": {
+    "metaTags": {
+      "title": "Design Excellence - Office Furniture & Ecommerce",
+      "description": "Premium office furniture and design solutions",
+      "keywords": ["office furniture", "ecommerce", "design excellence"]
+    },
+    "structuredData": {
+      "enabled": true,
+      "types": ["Product", "Organization", "BreadcrumbList"]
+    }
+  }
+}
+

@@ -1,0 +1,3179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Returned Orders - Admin</title>
+    <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        /* Header Section */
+        .orders-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .orders-header h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin: 0;
+            letter-spacing: -0.02em;
+            font-family: var(--font-display);
+        }
+
+        .orders-count-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(240, 178, 27, 0.15);
+            color: var(--primary-dark);
+            padding: 0.5rem 1rem;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .orders-count-badge .icon svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: inherit;
+        }
+
+        .icon svg {
+            width: 1em;
+            height: 1em;
+            stroke: currentColor;
+            fill: none;
+        }
+
+        /* Filters Section */
+        .filters-section {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .filter-group label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-light);
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 0.625rem 0.875rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            background: #ffffff;
+            color: var(--text-dark);
+        }
+
+        .filter-group input:focus,
+        .filter-group select:focus {
+            outline: none;
+            border-color: #F0B21B;
+            box-shadow: 0 0 0 3px rgba(240, 178, 27, 0.1);
+        }
+
+        .filter-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+        }
+
+        .btn-filter {
+            padding: 0.625rem 1.25rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-filter-primary {
+            background: #F0B21B;
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(240, 178, 27, 0.2);
+        }
+
+        .btn-filter-primary:hover {
+            background: #e6a017;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(240, 178, 27, 0.3);
+        }
+
+        .btn-filter-secondary {
+            background: #ffffff;
+            color: #6b7280;
+            border: 1px solid #e5e7eb;
+        }
+
+        .btn-filter-secondary:hover {
+            border-color: #F0B21B;
+            color: #F0B21B;
+        }
+
+        /* Custom Confirmation Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            visibility: hidden;
+            opacity: 0;
+            transition: visibility 0s, opacity 0.3s ease;
+        }
+        .modal-overlay.show {
+            visibility: visible;
+            opacity: 1;
+        }
+        .modal-content {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.show .modal-content {
+            transform: scale(1);
+        }
+        .modal-content h3 {
+            margin-top: 0;
+            color: #333;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+        .modal-content p {
+            color: #555;
+            font-size: 1.1em;
+            margin-bottom: 30px;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+        .modal-button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 120px;
+            justify-content: center;
+        }
+        .modal-button.confirm {
+            background-color: #F0B21B;
+            color: white;
+            box-shadow: 0 2px 4px rgba(240, 178, 27, 0.2);
+        }
+        .modal-button.confirm:hover {
+            background-color: #d69e16;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(240, 178, 27, 0.3);
+        }
+        .modal-button.confirm.approve-btn {
+            background-color: #10b981;
+            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+        }
+        .modal-button.confirm.approve-btn:hover {
+            background-color: #059669;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+        .modal-button.confirm.decline-btn {
+            background-color: #ef4444;
+            box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+        }
+        .modal-button.confirm.decline-btn:hover {
+            background-color: #dc2626;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+        .modal-button.cancel {
+            background-color: #f8f9fa;
+            color: #374151;
+            border: 1px solid #e5e7eb;
+        }
+        .modal-button.cancel:hover {
+            background-color: #e9ecef;
+            border-color: #d1d5db;
+        }
+        .modal-button svg {
+            width: 18px;
+            height: 18px;
+        }
+        .modal-content .modal-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+        }
+        .modal-content .modal-icon.approve {
+            background: #d1fae5;
+            color: #10b981;
+        }
+        .modal-content .modal-icon.decline {
+            background: #fee2e2;
+            color: #ef4444;
+        }
+        .modal-content .modal-icon.refund {
+            background: #fef3c7;
+            color: #f59e0b;
+        }
+        .modal-content .modal-icon svg {
+            width: 24px;
+            height: 24px;
+        }
+        .modal-content h3 {
+            margin-top: 0;
+            color: #1f2937;
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        .modal-content p {
+            color: #6b7280;
+            font-size: 1rem;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+        .modal-overlay {
+            backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            padding: 32px;
+            max-width: 450px;
+        }
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .sidebar-menu {
+            flex-grow: 1;
+        }
+        .logout-section {
+            padding: 40px;
+            border-top: 1px solid #ddd;
+            margin-top: auto;
+            text-align: center;
+        }
+        .logout-button {
+            display: inline-block;
+            width: auto;
+            padding: 12px 25px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .logout-button:hover {
+            background-color: #c82333;
+        }
+
+        .orders-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 24px;
+        }
+
+        .order-card {
+            background: #ffffff;
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 8px 24px rgba(148, 163, 184, 0.16);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .order-card {
+            position: relative;
+        }
+
+        .order-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 32px rgba(100, 116, 139, 0.2);
+        }
+
+        .order-card.has-bulk-badge .order-card-summary {
+            padding-top: 48px;
+        }
+
+        .bulk-order-badge {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            background: linear-gradient(135deg, #f0b21b 0%, #d4a017 100%);
+            color: #ffffff;
+            padding: 5px 11px;
+            border-radius: 14px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            box-shadow: 0 2px 6px rgba(240, 178, 27, 0.35);
+            white-space: nowrap;
+            line-height: 1;
+            z-index: 10;
+            pointer-events: none;
+            max-width: 70px;
+        }
+
+        .bulk-order-badge-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 15px;
+            height: 15px;
+            flex-shrink: 0;
+            margin-top: -1px;
+        }
+
+        .bulk-order-badge-icon svg {
+            width: 100%;
+            height: 100%;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2.2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            display: block;
+        }
+
+        .bulk-order-badge span:not(.bulk-order-badge-icon) {
+            display: inline-block;
+            line-height: 1.2;
+            vertical-align: middle;
+        }
+
+        .order-card-summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 20px 20px 0 20px;
+        }
+
+        .order-card-summary-main {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            flex: 1 1 auto;
+        }
+
+        .order-card-title {
+            font-weight: 700;
+            font-size: 1.05rem;
+            color: #0f172a;
+            letter-spacing: 0.01em;
+        }
+
+        .order-card-meta {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+
+        .order-card-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 4px 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .status-cancelled {
+            background: rgba(239, 68, 68, 0.18);
+            color: #b91c1c;
+        }
+
+        .status-returned {
+            background: rgba(251, 191, 36, 0.18);
+            color: #d97706;
+        }
+
+        .status-refunded {
+            background: rgba(16, 185, 129, 0.18);
+            color: #059669;
+        }
+
+        .status-declined {
+            background: rgba(239, 68, 68, 0.18);
+            color: #dc2626;
+        }
+
+        .status-processing {
+            background: rgba(59, 130, 246, 0.18);
+            color: #2563eb;
+        }
+
+        .order-card-summary-secondary {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+            min-width: 120px;
+        }
+
+        .order-card-total-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .order-card-total-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .order-card-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+        }
+
+        .order-card-toggle {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 999px;
+            padding: 8px 16px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #475569;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .order-card-toggle:hover {
+            background: #e2e8f0;
+            border-color: #cbd5f5;
+            color: #1f2937;
+            transform: translateY(-1px);
+        }
+
+        .order-card-toggle .toggle-icon {
+            font-size: 0.95rem;
+            transition: transform 0.2s ease;
+        }
+
+        .order-card:not(.collapsed) .order-card-toggle .toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        .order-card-details {
+            padding: 0 20px 20px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .order-card.collapsed .order-card-details {
+            display: none;
+        }
+
+        .order-section {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .order-section-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #475569;
+            letter-spacing: 0.05em;
+        }
+
+        .order-section-body {
+            font-size: 0.9rem;
+            color: #475569;
+            line-height: 1.5;
+        }
+
+        .order-products {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .order-product-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 10px 12px;
+        }
+
+        .order-product-image {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #e2e8f0;
+            flex-shrink: 0;
+        }
+
+        .order-product-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .order-product-details {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1 1 auto;
+        }
+
+        .order-product-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #0f172a;
+        }
+
+        .order-product-meta {
+            font-size: 0.78rem;
+            color: #64748b;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .order-product-price {
+            font-weight: 700;
+            color: #0f172a;
+            font-size: 0.95rem;
+        }
+
+        /* Action Buttons with Icons */
+        .btn-action {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+        .btn-action:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .btn-action:active {
+            transform: translateY(0);
+        }
+        .btn-action svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .btn-approve {
+            background: #10b981;
+            color: white;
+        }
+        .btn-approve:hover {
+            background: #059669;
+        }
+        .btn-decline {
+            background: #ef4444;
+            color: white;
+        }
+        .btn-decline:hover {
+            background: #dc2626;
+        }
+        .btn-refund {
+            background: #f59e0b;
+            color: white;
+        }
+        .btn-refund:hover {
+            background: #d97706;
+        }
+        .btn-replacement {
+            background: #3b82f6;
+            color: white;
+        }
+        .btn-replacement:hover {
+            background: #2563eb;
+        }
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #374151;
+            border: 1px solid #e5e7eb;
+        }
+        .btn-secondary:hover {
+            background: #e9ecef;
+            border-color: #d1d5db;
+        }
+        .table-action-buttons {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+        }
+        .table-action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.8125rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-width: auto;
+        }
+        .table-action-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+        @media (max-width: 640px) {
+            .order-card-summary {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .order-card-summary-secondary {
+                align-items: flex-start;
+            }
+            .order-card-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .order-card-toggle {
+                width: 100%;
+                justify-content: center;
+            }
+            .table-action-buttons {
+                flex-direction: column;
+            }
+            .table-action-btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-light);
+        }
+
+        .empty-state-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            opacity: 0.6;
+        }
+
+        .empty-state-icon svg {
+            width: 56px;
+            height: 56px;
+        }
+
+        .empty-state-text {
+            font-size: 1.125rem;
+            font-weight: 500;
+        }
+
+        /* Payment Modal Styles */
+        .payment-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            visibility: hidden;
+            opacity: 0;
+            transition: visibility 0s, opacity 0.3s ease;
+        }
+
+        .payment-modal-overlay.show {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .payment-modal-content {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+
+        .payment-modal-overlay.show .payment-modal-content {
+            transform: scale(1);
+        }
+
+        .payment-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .payment-modal-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .payment-modal-close {
+            background: none;
+            border: none;
+            font-size: 2rem;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .payment-modal-close:hover {
+            background: #f3f4f6;
+            color: #111827;
+        }
+
+        .payment-modal-body {
+            padding: 1.5rem;
+        }
+
+        .payment-modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            padding: 1.5rem;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .payment-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .payment-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .payment-section-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .payment-info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .payment-info-row:last-child {
+            border-bottom: none;
+        }
+
+        .payment-info-label {
+            font-size: 0.875rem;
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .payment-info-value {
+            font-size: 0.875rem;
+            color: #0f172a;
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .payment-info-value.amount {
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .payment-info-value.status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .payment-info-value.status.paid {
+            background: rgba(34, 197, 94, 0.15);
+            color: #16a34a;
+        }
+
+        .payment-info-value.status.pending {
+            background: rgba(251, 191, 36, 0.15);
+            color: #d97706;
+        }
+
+        .payment-info-value.status.failed {
+            background: rgba(239, 68, 68, 0.15);
+            color: #dc2626;
+        }
+
+        .stripe-details-section {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Return Media Modal Styles */
+        .return-media-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+            visibility: hidden;
+            opacity: 0;
+            transition: visibility 0s, opacity 0.3s ease;
+        }
+
+        .return-media-modal-overlay.show {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .return-media-modal-content {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow: auto;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+            position: relative;
+        }
+
+        .return-media-modal-overlay.show .return-media-modal-content {
+            transform: scale(1);
+        }
+
+        .return-media-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .return-media-modal-header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .return-media-modal-close {
+            background: none;
+            border: none;
+            font-size: 2rem;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .return-media-modal-close:hover {
+            background: #f3f4f6;
+            color: #111827;
+        }
+
+        .return-media-modal-body {
+            padding: 1.5rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .return-media-modal-body img {
+            max-width: 100%;
+            max-height: 70vh;
+            border-radius: 8px;
+        }
+
+        .return-media-modal-body video {
+            max-width: 100%;
+            max-height: 70vh;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="sidebar">
+            <%- include('partials/sidebar', { activePage: 'orders-returned' }) %>
+        </div>
+        <div class="main-content">
+            <div class="header orders-header">
+                <div>
+                    <h2>Returned Orders</h2>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                        <div class="orders-count-badge">
+                            <span class="icon icon-box" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                    <polyline points="3.27 6.96 12 12 20.73 6.96"></polyline>
+                                    <line x1="12" y1="22" x2="12" y2="12"></line>
+                                </svg>
+                            </span>
+                            <span id="ordersCount"><%= orders ? orders.length : 0 %> Orders</span>
+                        </div>
+                        <div class="orders-count-badge" style="background: rgba(139, 92, 246, 0.15); color: #7c3aed;">
+                            <span class="icon icon-box" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                </svg>
+                            </span>
+                            <span id="bulkOrdersCount">
+                                <% 
+                                    const bulkCount = orders ? orders.filter(o => o.IsBulkOrder).length : 0;
+                                %>
+                                <%= bulkCount %> Bulk Orders
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="content-area">
+                <!-- Filters Section -->
+                <div class="filters-section">
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label for="searchFilter">Search</label>
+                            <input type="text" id="searchFilter" placeholder="Order ID, Customer, Email, Phone, Address, Products...">
+                        </div>
+                        <div class="filter-group">
+                            <label for="startDateFilter">Start Date</label>
+                            <input type="date" id="startDateFilter">
+                        </div>
+                        <div class="filter-group">
+                            <label for="endDateFilter">End Date</label>
+                            <input type="date" id="endDateFilter">
+                        </div>
+                        <div class="filter-group">
+                            <label for="paymentFilter">Payment Method</label>
+                            <select id="paymentFilter">
+                                <option value="">All Methods</option>
+                                <option value="e-wallet">E-Wallet</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="amountFilter">Amount Range</label>
+                            <select id="amountFilter">
+                                <option value="">All Amounts</option>
+                                <option value="0-1000">₱0 - ₱1,000</option>
+                                <option value="1000-5000">₱1,000 - ₱5,000</option>
+                                <option value="5000-10000">₱5,000 - ₱10,000</option>
+                                <option value="10000+">₱10,000+</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="deliveryTypeFilter">Delivery Type</label>
+                            <select id="deliveryTypeFilter">
+                                <option value="">All Types</option>
+                                <option value="pickup">Pick up</option>
+                                <option value="delivery">Delivery</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="btn-filter btn-filter-secondary" onclick="clearFilters()">Clear Filters</button>
+                        <button class="btn-filter btn-filter-primary" onclick="applyFilters()">Apply Filters</button>
+                    </div>
+                </div>
+
+                <!-- View Toggle and Pagination Info -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">View:</span>
+                        <div style="display: flex; background: #f3f4f6; border-radius: 8px; padding: 2px;">
+                            <button id="viewCardsBtn" class="view-toggle-btn active" onclick="switchView('cards')" style="padding: 0.5rem 1rem; border: none; background: #F0B21B; color: white; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;">
+                                Cards
+                            </button>
+                            <button id="viewTableBtn" class="view-toggle-btn" onclick="switchView('table')" style="padding: 0.5rem 1rem; border: none; background: transparent; color: #6b7280; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;">
+                                Table
+                            </button>
+                        </div>
+                    </div>
+                    <% if (pagination && pagination.totalOrders > 0) { %>
+                        <div style="font-size: 0.875rem; color: #6b7280;">
+                            Showing <%= pagination.offset + 1 %>-<%= Math.min(pagination.offset + pagination.limit, pagination.totalOrders) %> of <%= pagination.totalOrders %> orders
+                        </div>
+                    <% } %>
+                </div>
+
+                <!-- Loading Spinner -->
+                <div id="orders-loading-spinner" class="admin-loading-spinner hidden">
+                    <div class="admin-loading-spinner__container">
+                        <div class="admin-loading-spinner__spinner"></div>
+                        <div class="admin-loading-spinner__text">Loading orders...</div>
+                    </div>
+                </div>
+
+                <% if (orders && orders.length > 0) { %>
+                    <div class="orders-grid" id="ordersGrid">
+                        <% orders.forEach(function(order) { %>
+                            <div class="order-card collapsed <%= order.IsBulkOrder ? 'has-bulk-badge' : '' %>" 
+                                 data-order-id="<%= order.OrderID %>"
+                                 data-reference-number="<%= (order.ReferenceNumber || '').toLowerCase() %>"
+                                 data-customer="<%= (order.CustomerName || '').toLowerCase() %>"
+                                 data-email="<%= (order.CustomerEmail || '').toLowerCase() %>"
+                                 data-phone="<%= (order.CustomerPhone || '').toLowerCase().replace(/\s+/g, '') %>"
+                                 data-address="<%= [
+                                    order.AddressLabel || '',
+                                    order.HouseNumber || '',
+                                    order.Street || '',
+                                    order.Barangay || '',
+                                    order.City || '',
+                                    order.Province || '',
+                                    order.PostalCode || '',
+                                    order.Country || ''
+                                 ].filter(Boolean).join(' ').toLowerCase() %>"
+                                 data-products="<%= order.items ? order.items.map(item => (item.ProductName || item.Name || '').toLowerCase()).join(' ') : '' %>"
+                                 data-status="<%= (order.Status || '').toLowerCase() %>"
+                                 data-payment="<%= (order.PaymentMethod || '').toLowerCase() %>"
+                                 data-amount="<%= order.TotalAmount || 0 %>"
+                                 data-date="<%= new Date(order.OrderDate).toISOString().split('T')[0] %>"
+                                 data-delivery-type="<%= (order.DeliveryType === 'pickup' || order.DeliveryTypeName === 'Pick up') ? 'pickup' : 'delivery' %>"
+                                 data-bulk-order="<%= order.IsBulkOrder ? 'yes' : 'no' %>"
+                                 data-notes="<%= (order.Notes || order.SpecialInstructions || '').toLowerCase() %>">
+                                <% if (order.IsBulkOrder) { %>
+                                    <span class="bulk-order-badge">
+                                        <span class="bulk-order-badge-icon">
+                                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                            </svg>
+                                        </span>
+                                        <span>Bulk</span>
+                                    </span>
+                                <% } %>
+                                <div class="order-card-summary">
+                                    <div class="order-card-summary-main">
+                                        <div class="order-card-title"><%= order.ReferenceNumber ? `Order ${order.ReferenceNumber}` : 'Order' %></div>
+                                        <div class="order-card-meta">
+                                            <span class="order-card-status <%= 
+                                                order.Status === 'Refunded' ? 'status-refunded' : 
+                                                order.Status === 'Declined' ? 'status-declined' : 
+                                                (order.Status === 'Processing' || order.Status === 'Processing (Pickup)') ? 'status-processing' : 
+                                                'status-returned' 
+                                            %>">
+                                                <%= order.Status === 'Refunded' ? 'Refunded' : 
+                                                    order.Status === 'Declined' ? 'Declined' : 
+                                                    (order.Status === 'Processing' || order.Status === 'Processing (Pickup)') ? 'Processing (Pickup)' : 
+                                                    'Returned' 
+                                                %>
+                                            </span>
+                                            <span>Placed: <%= order.FormattedOrderDate || new Date(order.OrderDate).toLocaleString('en-US') %></span>
+                                        </div>
+                                    </div>
+                                    <div class="order-card-summary-secondary">
+                                        <span class="order-card-total-label">Total</span>
+                                        <span class="order-card-total-value">₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></span>
+                                    </div>
+                                </div>
+
+                                <div class="order-card-controls">
+                                    <button
+                                        class="order-card-toggle"
+                                        type="button"
+                                        data-toggle-target="<%= order.OrderID %>"
+                                        aria-expanded="false"
+                                    >
+                                        <span class="toggle-icon">⌄</span>
+                                        <span class="toggle-label">View Details</span>
+                                    </button>
+                                </div>
+
+                                <div class="order-card-details" id="order-details-<%= order.OrderID %>">
+                                    <div class="order-section">
+                                        <span class="order-section-title">Customer</span>
+                                        <div class="order-section-body">
+                                            <strong><%= order.CustomerName %></strong><br/>
+                                            <%= order.CustomerEmail %><br/>
+                                            Phone: <%= order.CustomerPhone %>
+                                        </div>
+                                    </div>
+
+                                    <% if (order.DeliveryType !== 'pickup' && order.DeliveryTypeName !== 'Pick up') { %>
+                                    <div class="order-section">
+                                        <span class="order-section-title">Shipping Address</span>
+                                        <div class="order-section-body">
+                                            <%= order.AddressLabel ? order.AddressLabel + ': ' : '' %>
+                                            <%= [order.HouseNumber, order.Street, order.Barangay, order.City, order.Province, order.Region, order.PostalCode, order.Country].filter(Boolean).join(', ') %>
+                                        </div>
+                                    </div>
+                                    <% } %>
+
+                                    <div class="order-section">
+                                        <span class="order-section-title">
+                                            Products 
+                                            <% if (order.isPartialReturn) { %>
+                                                <span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; margin-left: 8px; font-weight: 600;">
+                                                    PARTIAL RETURN
+                                                </span>
+                                            <% } %>
+                                            (<%= order.items ? order.items.length : 0 %>)
+                                        </span>
+                                        <div class="order-products">
+                                            <% if (order.items && order.items.length > 0) { %>
+                                                <% order.items.forEach(function(item) { %>
+                                                    <div class="order-product-item">
+                                                        <div class="order-product-image">
+                                                            <% if (item.ImageURL) { %>
+                                                                <img src="<%= item.ImageURL %>" alt="<%= item.Name %>">
+                                                            <% } else { %>
+                                                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem;">🖼️</div>
+                                                            <% } %>
+                                                        </div>
+                                                        <div class="order-product-details">
+                                                            <span class="order-product-name"><%= item.Name %></span>
+                                                            <div class="order-product-meta">
+                                                                <% 
+                                                                    // Always show "Returning: X of Y" format for returned orders with OriginalQuantity
+                                                                    // This helps distinguish returned quantities from ordered quantities
+                                                                    const showReturningFormat = item.OriginalQuantity && 
+                                                                                                (item.OriginalQuantity !== item.Quantity || item.IsReturned);
+                                                                %>
+                                                                <% if (showReturningFormat) { %>
+                                                                    <span>Returning: <strong style="color: #ef4444;"><%= item.Quantity %></strong> of <strong><%= item.OriginalQuantity %></strong> ordered</span>
+                                                                <% } else { %>
+                                                                    <span>Qty: <%= item.Quantity %></span>
+                                                                <% } %>
+                                                                <% if (item.VariationName) { %>
+                                                                    <span>• <%= item.VariationName %><% if (item.Color) { %> (<%= item.Color %>)<% } %></span>
+                                                                <% } %>
+                                                            </div>
+                                                        </div>
+                                                        <div class="order-product-price">₱<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
+                                                    </div>
+                                                <% }); %>
+                                            <% } else { %>
+                                                <span class="order-section-body">No products found.</span>
+                                            <% } %>
+                                        </div>
+                                    </div>
+
+                                    <div class="order-section">
+                                        <span class="order-section-title">Payment & Delivery</span>
+                                        <div class="order-section-body" style="display:flex;flex-direction:column;gap:0.5rem;">
+                                            <div>
+                                                Payment Method:
+                                                <strong><%= order.PaymentMethod || 'N/A' %></strong>
+                                                <% if (order.StripeSessionID || order.TransactionID || String((order.PaymentMethodDisplay||order.PaymentMethod||'')).toLowerCase().includes('cash')) { %>
+                                                    <button
+                                                        type="button"
+                                                        class="btn-filter btn-filter-primary js-check-payment"
+                                                        style="padding:0.35rem 0.65rem;font-size:0.7rem;margin-left:0.5rem;"
+                                                        data-order-id="<%= order.OrderID %>"
+                                                    >
+                                                        Check Payment
+                                                    </button>
+                                                <% } %>
+                                            </div>
+                                            <% if (order.TransactionID) { %>
+                                            <div>Payment ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                            <% } %>
+                                            <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
+                                            <div>Delivery Cost: <strong>₱<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
+                                            <% 
+                                                const extraFee = typeof order.ExtraDeliveryFee !== 'undefined' && order.ExtraDeliveryFee !== null 
+                                                    ? Number(order.ExtraDeliveryFee) 
+                                                    : 0;
+                                            %>
+                                            <% if (extraFee > 0) { %>
+                                            <div>Extra Delivery Fee (Qty &gt; 4): <strong>₱<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
+                                            <% } %>
+                                        </div>
+                                    </div>
+
+                                    <div class="order-section">
+                                        <span class="order-section-title">Order Total</span>
+                                        <div class="order-section-body"><strong>₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
+                                    </div>
+
+                                    <% 
+                                        const returnReason = order.ReturnReason || order.ReturnDescription;
+                                        const actionType = order.ActionType;
+                                        const returnType = order.ReturnType;
+                                    %>
+                                    <% if (actionType) { %>
+                                        <div class="order-section">
+                                            <span class="order-section-title">Action Type</span>
+                                            <div class="order-section-body">
+                                                <div style="display: flex; align-items: center; gap: 8px;">
+                                                    <% if (actionType === 'refund') { %>
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px; color: #f59e0b;">
+                                                            <line x1="12" y1="1" x2="12" y2="23"></line>
+                                                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                                        </svg>
+                                                        <strong style="color: #f59e0b;">Refund</strong>
+                                                    <% } else if (actionType === 'replacement') { %>
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px; color: #10b981;">
+                                                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                                        </svg>
+                                                        <strong style="color: #10b981;">Replacement</strong>
+                                                    <% } else { %>
+                                                        <strong><%= actionType %></strong>
+                                                    <% } %>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    <% } %>
+                                    <% if (returnType) { %>
+                                        <div class="order-section">
+                                            <span class="order-section-title">Return Reason Type</span>
+                                            <div class="order-section-body"><strong><%= returnType === 'damage' ? 'Damaged Item' : 'Other Reason' %></strong></div>
+                                        </div>
+                                    <% } %>
+                                    <% if (returnReason) { %>
+                                        <div class="order-section">
+                                            <span class="order-section-title">Return Reason Details</span>
+                                            <div class="order-section-body"><%= returnReason %></div>
+                                        </div>
+                                    <% } %>
+                                    
+                                    <% 
+                                        const isDeclined = returnReason && returnReason.startsWith('DECLINED:');
+                                        const declineReason = isDeclined ? returnReason.replace('DECLINED:', '').trim() : null;
+                                    %>
+                                    
+                                    <% if (isDeclined) { %>
+                                        <div class="order-section" style="margin-bottom: 1rem; padding: 1rem; background: #fef2f2; border: 1px solid #ef4444; border-radius: 8px;">
+                                            <span class="order-section-title" style="color: #dc2626; font-weight: 700;">Return Request Declined</span>
+                                            <div class="order-section-body" style="color: #991b1b; margin-top: 0.5rem;">
+                                                <strong>Reason:</strong> <%= declineReason %>
+                                            </div>
+                                        </div>
+                                    <% } %>
+                                    
+                                    <!-- Return Conditions Checklist -->
+                                    <div class="order-section" style="border-top: 2px solid #e5e7eb; margin-top: 1rem; padding-top: 1rem;">
+                                        <span class="order-section-title" style="font-size: 1rem; font-weight: 700; color: #111827; margin-bottom: 1rem;">Return Conditions Checklist</span>
+                                        <div class="order-section-body" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 6px; background: <%= order.OriginalPackaging ? '#f0fdf4' : '#fef2f2' %>; border: 1px solid <%= order.OriginalPackaging ? '#10b981' : '#ef4444' %>;">
+                                                <span style="font-size: 1.2rem;"><%= order.OriginalPackaging ? '✅' : '❌' %></span>
+                                                <span style="flex: 1; color: <%= order.OriginalPackaging ? '#059669' : '#dc2626' %>; font-weight: <%= order.OriginalPackaging ? '500' : '600' %>;">
+                                                    Item is in original, undamaged packaging
+                                                </span>
+                                                <% if (!order.OriginalPackaging && isDeclined) { %>
+                                                <span style="font-size: 0.75rem; color: #dc2626; font-style: italic;">(Not met - Packaging was damaged)</span>
+                                                <% } %>
+                                            </div>
+                                            
+                                            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 6px; background: <%= order.AllParts ? '#f0fdf4' : '#fef2f2' %>; border: 1px solid <%= order.AllParts ? '#10b981' : '#ef4444' %>;">
+                                                <span style="font-size: 1.2rem;"><%= order.AllParts ? '✅' : '❌' %></span>
+                                                <span style="flex: 1; color: <%= order.AllParts ? '#059669' : '#dc2626' %>; font-weight: <%= order.AllParts ? '500' : '600' %>;">
+                                                    All parts, accessories, and documentation are included
+                                                </span>
+                                                <% if (!order.AllParts && isDeclined) { %>
+                                                <span style="font-size: 0.75rem; color: #dc2626; font-style: italic;">(Not met)</span>
+                                                <% } %>
+                                            </div>
+                                            
+                                            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 6px; background: <%= order.Unused ? '#f0fdf4' : '#fef2f2' %>; border: 1px solid <%= order.Unused ? '#10b981' : '#ef4444' %>;">
+                                                <span style="font-size: 1.2rem;"><%= order.Unused ? '✅' : '❌' %></span>
+                                                <span style="flex: 1; color: <%= order.Unused ? '#059669' : '#dc2626' %>; font-weight: <%= order.Unused ? '500' : '600' %>;">
+                                                    Item is unused and unmodified
+                                                </span>
+                                                <% if (!order.Unused && isDeclined) { %>
+                                                <span style="font-size: 0.75rem; color: #dc2626; font-style: italic;">(Not met)</span>
+                                                <% } %>
+                                            </div>
+                                            
+                                            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 6px; background: <%= order.ProofOfPurchase ? '#f0fdf4' : '#fef2f2' %>; border: 1px solid <%= order.ProofOfPurchase ? '#10b981' : '#ef4444' %>;">
+                                                <span style="font-size: 1.2rem;"><%= order.ProofOfPurchase ? '✅' : '❌' %></span>
+                                                <span style="flex: 1; color: <%= order.ProofOfPurchase ? '#059669' : '#dc2626' %>; font-weight: <%= order.ProofOfPurchase ? '500' : '600' %>;">
+                                                    I have proof of purchase (Order #<%= order.ReferenceNumber || order.OrderID %>)
+                                                </span>
+                                                <% if (!order.ProofOfPurchase && isDeclined) { %>
+                                                <span style="font-size: 0.75rem; color: #dc2626; font-style: italic;">(Not met)</span>
+                                                <% } %>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <% if (order.ProofOfPurchaseImageURL) { %>
+                                        <div class="order-section" style="margin-bottom: 0.75rem;">
+                                            <span class="order-section-title">Proof of Purchase Image</span>
+                                            <div class="order-section-body">
+                                                <img src="<%= order.ProofOfPurchaseImageURL %>" 
+                                                     alt="Proof of Purchase" 
+                                                     style="max-width: 100%; max-height: 300px; border-radius: 8px; border: 1px solid #e5e7eb; cursor: pointer;"
+                                                     onclick="window.open('<%= order.ProofOfPurchaseImageURL %>', '_blank')">
+                                            </div>
+                                        </div>
+                                    <% } %>
+                                    
+                                    <% if (order.ReturnImageURL || order.ReturnVideoURL) { %>
+                                        <div class="order-section">
+                                            <span class="order-section-title">Return Evidence</span>
+                                            <div class="order-section-body" style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                                <% if (order.ReturnImageURL) { %>
+                                                    <button 
+                                                        type="button"
+                                                        onclick="openReturnMediaModal(<%= order.OrderID %>, 'image', '<%= order.ReturnImageURL %>')"
+                                                        class="btn-action"
+                                                        style="background: #3b82f6; color: white;"
+                                                    >
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;">
+                                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                                            <polyline points="21 15 16 10 5 21"></polyline>
+                                                        </svg>
+                                                        View Image
+                                                    </button>
+                                                <% } %>
+                                                <% if (order.ReturnVideoURL) { %>
+                                                    <button 
+                                                        type="button"
+                                                        onclick="openReturnMediaModal(<%= order.OrderID %>, 'video', '<%= order.ReturnVideoURL %>')"
+                                                        class="btn-action"
+                                                        style="background: #8b5cf6; color: white;"
+                                                    >
+                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;">
+                                                            <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                                                            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                                                        </svg>
+                                                        View Video
+                                                    </button>
+                                                <% } %>
+                                            </div>
+                                        </div>
+                                    <% } %>
+                                    
+                                    <% if (order.Status === 'Returned') { %>
+                                        <div class="order-section">
+                                            <span class="order-section-title">Review Actions</span>
+                                            <div class="order-section-body" style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                                <button 
+                                                    type="button"
+                                                    onclick="openApproveModal(<%= order.OrderID %>)"
+                                                    class="btn-action btn-approve"
+                                                >
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                                    </svg>
+                                                    Approve Return
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    onclick="openDeclineModal(<%= order.OrderID %>)"
+                                                    class="btn-action btn-decline"
+                                                >
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                    </svg>
+                                                    Decline Return
+                                                </button>
+                                            </div>
+                                        </div>
+                                    <% } else if ((order.Status === 'Processing' || order.Status === 'Processing (Pickup)') && actionType === 'refund') { %>
+                                        <div class="order-section">
+                                            <span class="order-section-title">Refund Actions</span>
+                                            <div class="order-section-body" style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                                <p style="margin: 0; color: #6b7280; font-size: 14px;">
+                                                    Order approved. Waiting for pickup. After pickup, process refund below.
+                                                </p>
+                                                <button 
+                                                    type="button"
+                                                    onclick="openRefundModal(<%= order.OrderID %>)"
+                                                    class="btn-action btn-refund"
+                                                >
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                                                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                                    </svg>
+                                                    Process Refund (After Pickup)
+                                                </button>
+                                            </div>
+                                        </div>
+                                    <% } else if ((order.Status === 'Processing' || order.Status === 'Processing (Pickup)') && actionType === 'replacement') { %>
+                                        <div class="order-section">
+                                            <span class="order-section-title">Replacement Actions</span>
+                                            <div class="order-section-body" style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                                <p style="margin: 0; color: #6b7280; font-size: 14px;">
+                                                    Order approved. Waiting for pickup. After pickup, proceed to processing replacement below.
+                                                </p>
+                                                <button 
+                                                    type="button"
+                                                    onclick="openReplacementModal(<%= order.OrderID %>)"
+                                                    class="btn-action btn-replacement"
+                                                >
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                                    </svg>
+                                                    Proceed to Processing Replacement
+                                                </button>
+                                            </div>
+                                        </div>
+                                    <% } else if (order.Status === 'Refunded') { %>
+                                        <div class="order-section">
+                                            <span class="order-section-title">Refund Status</span>
+                                            <div class="order-section-body" style="padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
+                                                <p style="margin: 0; color: #059669; font-weight: 600; font-size: 14px;">
+                                                    ✅ Order has been refunded. Payment refunded in Stripe Dashboard.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    <% } else if (order.Status === 'Declined') { %>
+                                        <div class="order-section">
+                                            <span class="order-section-title">Return Status</span>
+                                            <div class="order-section-body" style="padding: 12px; background: #fef2f2; border: 1px solid #ef4444; border-radius: 6px;">
+                                                <p style="margin: 0; color: #dc2626; font-weight: 600; font-size: 14px;">
+                                                    ❌ Return request has been declined.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    <% } %>
+                                </div>
+                            </div>
+
+                        <% }); %>
+                    </div>
+
+                    <!-- Modals (Outside grid for table view access) -->
+                    <% orders.forEach(function(order) { %>
+                        <!-- Payment Modal -->
+                        <div id="payment-modal-<%= order.OrderID %>" class="payment-modal-overlay">
+                            <div class="payment-modal-content">
+                                <div class="payment-modal-header">
+                                    <h3>Payment Details</h3>
+                                    <button class="payment-modal-close" onclick="closePaymentModal(<%= order.OrderID %>)">×</button>
+                                </div>
+                                <div class="payment-modal-body" id="payment-modal-body-<%= order.OrderID %>">
+                                    <div style="text-align: center; padding: 2rem;">
+                                        <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #F0B21B; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                                        <p style="margin-top: 1rem; color: #6b7280;">Loading payment details...</p>
+                                    </div>
+                                </div>
+                                <div class="payment-modal-footer">
+                                    <button class="btn-filter btn-filter-secondary" onclick="closePaymentModal(<%= order.OrderID %>)">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    <% }); %>
+
+                    <!-- Return Media Modals -->
+                    <% orders.forEach(function(order) { %>
+                        <% if (order.ReturnImageURL || order.ReturnVideoURL) { %>
+                            <div id="return-media-modal-<%= order.OrderID %>" class="return-media-modal-overlay">
+                                <div class="return-media-modal-content">
+                                    <div class="return-media-modal-header">
+                                        <h3>Return Evidence</h3>
+                                        <button class="return-media-modal-close" onclick="closeReturnMediaModal(<%= order.OrderID %>)">×</button>
+                                    </div>
+                                    <div class="return-media-modal-body" id="return-media-body-<%= order.OrderID %>">
+                                        <!-- Content will be loaded dynamically -->
+                                    </div>
+                                </div>
+                            </div>
+                        <% } %>
+                    <% }); %>
+
+                    <!-- Replacement Confirmation Modal -->
+                    <div id="replacementConfirmModal" class="modal-overlay">
+                        <div class="modal-content">
+                            <div class="modal-icon approve" style="background: #d1fae5; color: #10b981;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                </svg>
+                            </div>
+                            <h3>Proceed to Processing Replacement</h3>
+                            <p>Are you sure you want to proceed with processing the replacement? The damaged items will be added to inventory and the order will be moved to processing for replacement delivery.</p>
+                            <div class="modal-buttons">
+                                <button class="modal-button cancel" onclick="closeReplacementModal()">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    Cancel
+                                </button>
+                                <button class="modal-button confirm" onclick="confirmReplacement()" id="confirmReplacementBtn" style="background: #10b981;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                    </svg>
+                                    Proceed to Processing
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Refund Confirmation Modal -->
+                    <div id="refundConfirmModal" class="modal-overlay">
+                        <div class="modal-content">
+                            <div class="modal-icon approve" style="background: #fef3c7; color: #f59e0b;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                </svg>
+                            </div>
+                            <h3>Process Refund</h3>
+                            <p>Are you sure you want to process a refund for this order? The money will be refunded to the customer via Stripe. A refund receipt email will be sent to the customer.</p>
+                            <div class="modal-buttons">
+                                <button class="modal-button cancel" onclick="closeRefundModal()">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    Cancel
+                                </button>
+                                <button class="modal-button confirm" onclick="confirmRefund()" id="confirmRefundBtn" style="background: #f59e0b;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                    </svg>
+                                    Process Refund
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Approve Return Confirmation Modal -->
+                    <div id="approveReturnModal" class="modal-overlay">
+                        <div class="modal-content">
+                            <div class="modal-icon approve">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </div>
+                            <h3>Approve Return Request</h3>
+                            <p>Are you sure you want to approve this return request? An approval email will be sent to the customer.</p>
+                            <div class="modal-buttons">
+                                <button class="modal-button cancel" onclick="closeApproveModal()">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    Cancel
+                                </button>
+                                <button class="modal-button confirm approve-btn" onclick="confirmApproveReturn()" id="confirmApproveBtn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    Approve Return
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Decline Return Modal -->
+                    <div id="declineReturnModal" class="modal-overlay">
+                        <div class="modal-content" style="max-width: 600px;">
+                            <div class="modal-icon decline">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </div>
+                            <h3>Decline Return Request</h3>
+                            <p style="color: #6b7280; margin-bottom: 20px;">Please check which conditions were NOT met and provide additional details:</p>
+                            
+                            <!-- Return Conditions Checklist -->
+                            <div style="margin-bottom: 20px; padding: 16px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb;">
+                                <label style="display: block; font-weight: 600; color: #111827; margin-bottom: 12px; font-size: 14px;">
+                                    Conditions NOT Met (Check all that apply):
+                                </label>
+                                <div style="display: flex; flex-direction: column; gap: 10px;">
+                                    <label id="labelOriginalPackaging" style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; border: 1px solid #e5e7eb; border-radius: 6px; background: #ffffff; transition: all 0.2s;" onmouseover="this.style.borderColor='#ef4444'; this.style.background='#fef2f2';" onmouseout="if(!document.getElementById('declineConditionOriginalPackaging').checked) { this.style.borderColor='#e5e7eb'; this.style.background='#ffffff'; }">
+                                        <input
+                                            type="checkbox"
+                                            id="declineConditionOriginalPackaging"
+                                            value="originalPackaging"
+                                            style="width: 18px; height: 18px; cursor: pointer;"
+                                            onchange="const label = document.getElementById('labelOriginalPackaging'); if(this.checked) { label.style.borderColor='#ef4444'; label.style.background='#fef2f2'; } else { label.style.borderColor='#e5e7eb'; label.style.background='#ffffff'; }"
+                                        />
+                                        <span style="font-size: 14px; color: #111827;">Item is NOT in original, undamaged packaging</span>
+                                    </label>
+                                    
+                                    <label id="labelAllParts" style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; border: 1px solid #e5e7eb; border-radius: 6px; background: #ffffff; transition: all 0.2s;" onmouseover="this.style.borderColor='#ef4444'; this.style.background='#fef2f2';" onmouseout="if(!document.getElementById('declineConditionAllParts').checked) { this.style.borderColor='#e5e7eb'; this.style.background='#ffffff'; }">
+                                        <input
+                                            type="checkbox"
+                                            id="declineConditionAllParts"
+                                            value="allParts"
+                                            style="width: 18px; height: 18px; cursor: pointer;"
+                                            onchange="const label = document.getElementById('labelAllParts'); if(this.checked) { label.style.borderColor='#ef4444'; label.style.background='#fef2f2'; } else { label.style.borderColor='#e5e7eb'; label.style.background='#ffffff'; }"
+                                        />
+                                        <span style="font-size: 14px; color: #111827;">All parts, accessories, and documentation are NOT included</span>
+                                    </label>
+                                    
+                                    <label id="labelUnused" style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; border: 1px solid #e5e7eb; border-radius: 6px; background: #ffffff; transition: all 0.2s;" onmouseover="this.style.borderColor='#ef4444'; this.style.background='#fef2f2';" onmouseout="if(!document.getElementById('declineConditionUnused').checked) { this.style.borderColor='#e5e7eb'; this.style.background='#ffffff'; }">
+                                        <input
+                                            type="checkbox"
+                                            id="declineConditionUnused"
+                                            value="unused"
+                                            style="width: 18px; height: 18px; cursor: pointer;"
+                                            onchange="const label = document.getElementById('labelUnused'); if(this.checked) { label.style.borderColor='#ef4444'; label.style.background='#fef2f2'; } else { label.style.borderColor='#e5e7eb'; label.style.background='#ffffff'; }"
+                                        />
+                                        <span style="font-size: 14px; color: #111827;">Item has been used or modified</span>
+                                    </label>
+                                    
+                                    <label id="labelProofOfPurchase" style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px; border: 1px solid #e5e7eb; border-radius: 6px; background: #ffffff; transition: all 0.2s;" onmouseover="this.style.borderColor='#ef4444'; this.style.background='#fef2f2';" onmouseout="if(!document.getElementById('declineConditionProofOfPurchase').checked) { this.style.borderColor='#e5e7eb'; this.style.background='#ffffff'; }">
+                                        <input
+                                            type="checkbox"
+                                            id="declineConditionProofOfPurchase"
+                                            value="proofOfPurchase"
+                                            style="width: 18px; height: 18px; cursor: pointer;"
+                                            onchange="const label = document.getElementById('labelProofOfPurchase'); if(this.checked) { label.style.borderColor='#ef4444'; label.style.background='#fef2f2'; } else { label.style.borderColor='#e5e7eb'; label.style.background='#ffffff'; }"
+                                        />
+                                        <span style="font-size: 14px; color: #111827;">No proof of purchase provided</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <label style="display: block; font-weight: 600; color: #111827; margin-bottom: 8px; font-size: 14px;">
+                                Additional Reason (Optional):
+                            </label>
+                            <textarea 
+                                id="declineReasonInput" 
+                                placeholder="e.g., Outside return window, item does not match description, etc."
+                                style="width: 100%; min-height: 100px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; margin-bottom: 20px;"
+                            ></textarea>
+                            <div class="modal-buttons" style="margin-top: 20px;">
+                                <button class="modal-button cancel" onclick="closeDeclineModal()">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    Cancel
+                                </button>
+                                <button class="modal-button confirm decline-btn" onclick="handleDeclineReturn()" id="confirmDeclineBtn">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                    Decline Return
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Orders Table (Hidden by default) -->
+                    <div id="ordersTable" style="display: none; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead style="background: #f8f9fa; border-bottom: 2px solid #e5e7eb;">
+                                <tr>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Order #</th>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Customer</th>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Date</th>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Status</th>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Payment</th>
+                                    <th style="padding: 1rem; text-align: right; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Total</th>
+                                    <th style="padding: 1rem; text-align: center; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% orders.forEach(function(order) { %>
+                                    <tr class="table-order-row" 
+                                        data-order-id="<%= order.OrderID %>"
+                                        data-reference-number="<%= (order.ReferenceNumber || '').toLowerCase() %>"
+                                        data-customer="<%= (order.CustomerName || '').toLowerCase() %>"
+                                        data-email="<%= (order.CustomerEmail || '').toLowerCase() %>"
+                                        data-phone="<%= (order.CustomerPhone || '').toLowerCase().replace(/\s+/g, '') %>"
+                                        data-address="<%= [
+                                            order.AddressLabel || '',
+                                            order.HouseNumber || '',
+                                            order.Street || '',
+                                            order.Barangay || '',
+                                            order.City || '',
+                                            order.Province || '',
+                                            order.PostalCode || '',
+                                            order.Country || ''
+                                         ].filter(Boolean).join(' ').toLowerCase() %>"
+                                        data-products="<%= order.items ? order.items.map(item => (item.ProductName || item.Name || '').toLowerCase()).join(' ') : '' %>"
+                                        data-status="<%= (order.Status || '').toLowerCase() %>"
+                                        data-payment="<%= (order.PaymentMethod || '').toLowerCase() %>"
+                                        data-amount="<%= order.TotalAmount || 0 %>"
+                                        data-date="<%= new Date(order.OrderDate).toISOString().split('T')[0] %>"
+                                        data-delivery-type="<%= (order.DeliveryType === 'pickup' || order.DeliveryTypeName === 'Pick up') ? 'pickup' : 'delivery' %>"
+                                        data-bulk-order="<%= order.IsBulkOrder ? 'yes' : 'no' %>"
+                                        data-notes="<%= (order.Notes || order.SpecialInstructions || '').toLowerCase() %>"
+                                        style="border-bottom: 1px solid #e5e7eb; transition: background 0.2s;" 
+                                        onmouseover="this.style.background='#f9fafb'" 
+                                        onmouseout="this.style.background='#ffffff'">
+                                        <td style="padding: 1rem; font-weight: 600; color: #111827;">
+                                            <%= order.ReferenceNumber || '#' + order.OrderID %>
+                                            <% if (order.IsBulkOrder) { %>
+                                                <span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 0.5rem; background: linear-gradient(135deg, #f0b21b 0%, #d4a017 100%); color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.65rem; font-weight: 700; text-transform: uppercase;">Bulk</span>
+                                            <% } %>
+                                        </td>
+                                        <td style="padding: 1rem;">
+                                            <div style="font-weight: 600; color: #111827; margin-bottom: 0.25rem;"><%= order.CustomerName || 'N/A' %></div>
+                                            <div style="font-size: 0.875rem; color: #6b7280;"><%= order.CustomerEmail || '' %></div>
+                                        </td>
+                                        <td style="padding: 1rem; font-size: 0.875rem; color: #6b7280;">
+                                            <%= order.FormattedOrderDate || new Date(order.OrderDate).toLocaleString('en-US') %>
+                                        </td>
+                                        <td style="padding: 1rem;">
+                                            <% 
+                                                const status = (order.Status || 'Returned').toString().toLowerCase();
+                                                const statusClass = status === 'pending' ? 'status-pending' : 
+                                                                    status === 'processing' || status === 'processing (pickup)' ? 'status-processing' :
+                                                                    status === 'shipping' ? 'status-shipping' :
+                                                                    status === 'delivery' ? 'status-delivery' :
+                                                                    status === 'received' || status === 'receive' ? 'status-receive' :
+                                                                    status === 'completed' ? 'status-completed' :
+                                                                    status === 'cancelled' ? 'status-cancelled' :
+                                                                    status === 'returned' ? 'status-returned' : 'status-returned';
+                                                const statusDisplay = (order.Status === 'Processing (Pickup)' || order.Status === 'Processing') && order.ActionType === 'refund' 
+                                                    ? 'Processing (Pickup)' 
+                                                    : (order.Status || 'Returned');
+                                            %>
+                                            <span class="order-card-status <%= statusClass %>" style="display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;"><%= statusDisplay %></span>
+                                        </td>
+                                        <td style="padding: 1rem; font-size: 0.875rem; color: #6b7280;">
+                                            <%= order.PaymentMethod || 'N/A' %>
+                                        </td>
+                                        <td style="padding: 1rem; text-align: right; font-weight: 700; color: #111827;">
+                                            ₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
+                                        </td>
+                                        <td style="padding: 1rem; text-align: center;">
+                                            <button class="order-card-toggle" type="button" data-toggle-target="<%= order.OrderID %>" style="background: #F0B21B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem;" onclick="toggleOrderDetails(<%= order.OrderID %>)">View</button>
+                                        </td>
+                                    </tr>
+                                    <!-- Order Details Row (Hidden by default) -->
+                                    <tr id="table-details-<%= order.OrderID %>" style="display: none; background: #f9fafb;">
+                                        <td colspan="7" style="padding: 1.5rem;">
+                                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+                                                <!-- Customer Section -->
+                                                <div>
+                                                    <h4 style="font-size: 0.875rem; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 0.75rem; letter-spacing: 0.05em;">Customer</h4>
+                                                    <div style="font-size: 0.875rem; color: #111827; line-height: 1.6;">
+                                                        <div><strong><%= order.CustomerName %></strong></div>
+                                                        <div style="margin-top: 0.25rem;"><%= order.CustomerEmail %></div>
+                                                        <div style="margin-top: 0.25rem;">Phone: <%= order.CustomerPhone %></div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Shipping Address Section -->
+                                                <% if (order.DeliveryType !== 'pickup' && order.DeliveryTypeName !== 'Pick up') { %>
+                                                <div>
+                                                    <h4 style="font-size: 0.875rem; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 0.75rem; letter-spacing: 0.05em;">Shipping Address</h4>
+                                                    <div style="font-size: 0.875rem; color: #111827; line-height: 1.6;">
+                                                        <%= order.AddressLabel ? order.AddressLabel + ': ' : '' %>
+                                                        <%= [order.HouseNumber, order.Street, order.Barangay, order.City, order.Province, order.PostalCode, order.Country].filter(Boolean).join(', ') %>
+                                                    </div>
+                                                </div>
+                                                <% } %>
+
+                                                <!-- Products Section -->
+                                                <div style="grid-column: 1 / -1;">
+                                                    <h4 style="font-size: 0.875rem; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 0.75rem; letter-spacing: 0.05em; display: flex; align-items: center; gap: 8px;">
+                                                        Products (<%= order.items ? order.items.length : 0 %>)
+                                                        <% if (order.isPartialReturn) { %>
+                                                            <span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem; font-weight: 600;">
+                                                                PARTIAL RETURN
+                                                            </span>
+                                                        <% } %>
+                                                    </h4>
+                                                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                                        <% if (order.items && order.items.length > 0) { %>
+                                                            <% order.items.forEach(function(item) { %>
+                                                                <div style="display: flex; align-items: center; gap: 1rem; padding: 0.75rem; background: #ffffff; border-radius: 8px; border: 1px solid #e5e7eb;">
+                                                                    <div style="width: 60px; height: 60px; flex-shrink: 0; border-radius: 6px; overflow: hidden; background: #f3f4f6; display: flex; align-items: center; justify-content: center;">
+                                                                        <% if (item.VariationImageURL) { %>
+                                                                            <img src="<%= item.VariationImageURL %>" alt="<%= item.VariationName || item.Name %>" style="width: 100%; height: 100%; object-fit: cover;">
+                                                                        <% } else if (item.ImageURL) { %>
+                                                                            <img src="<%= item.ImageURL %>" alt="<%= item.Name %>" style="width: 100%; height: 100%; object-fit: cover;">
+                                                                        <% } else { %>
+                                                                            <div style="color: #94a3b8; font-size: 1.5rem;">🖼️</div>
+                                                                        <% } %>
+                                                                    </div>
+                                                                    <div style="flex: 1; min-width: 0;">
+                                                                        <div style="font-weight: 600; color: #111827; margin-bottom: 0.25rem;"><%= item.Name %></div>
+                                                                        <div style="display: flex; flex-wrap: gap: 0.5rem; font-size: 0.8rem; color: #6b7280;">
+                                                                            <% if (item.VariationName) { %>
+                                                                                <span>Variation: <%= item.VariationName %></span>
+                                                                            <% } %>
+                                                                            <% if (item.Color) { %>
+                                                                                <span>Color: <%= item.Color %></span>
+                                                                            <% } %>
+                                                                            <% 
+                                                                                // Always show "Returning: X of Y" format for returned orders with OriginalQuantity
+                                                                                const showReturningFormat = item.OriginalQuantity && 
+                                                                                                            (item.OriginalQuantity !== item.Quantity || item.IsReturned);
+                                                                            %>
+                                                                            <% if (showReturningFormat) { %>
+                                                                                <span>Returning: <strong style="color: #ef4444;"><%= item.Quantity %></strong> of <strong><%= item.OriginalQuantity %></strong> ordered</span>
+                                                                            <% } else { %>
+                                                                                <span>Qty: <%= item.Quantity %></span>
+                                                                            <% } %>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div style="font-weight: 700; color: #111827; font-size: 0.9rem;">
+                                                                        ₱<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
+                                                                    </div>
+                                                                </div>
+                                                            <% }); %>
+                                                        <% } else { %>
+                                                            <div style="padding: 1rem; text-align: center; color: #6b7280;">No products found.</div>
+                                                        <% } %>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Payment & Delivery Section -->
+                                                <div>
+                                                    <h4 style="font-size: 0.875rem; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 0.75rem; letter-spacing: 0.05em;">Payment & Delivery</h4>
+                                                    <div style="font-size: 0.875rem; color: #111827; line-height: 1.6; display: flex; flex-direction: column; gap: 0.5rem;">
+                                                        <div>
+                                                            Payment Method: <strong><%= order.PaymentMethod || 'N/A' %></strong>
+                                                            <% if (order.StripeSessionID || order.TransactionID || String((order.PaymentMethodDisplay||order.PaymentMethod||'')).toLowerCase().includes('cash')) { %>
+                                                                <button type="button" class="btn-filter btn-filter-primary js-check-payment" style="padding:0.35rem 0.65rem;font-size:0.7rem;margin-left:0.5rem;" data-order-id="<%= order.OrderID %>">Check Payment</button>
+                                                            <% } %>
+                                                        </div>
+                                                        <% if (order.TransactionID) { %>
+                                                        <div>Payment ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                                        <% } %>
+                                                        <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
+                                                        <% if ((order.DeliveryTypeName === 'Pick up' || order.DeliveryType === 'pickup') && order.PickupDate) { %>
+                                                        <div>
+                                                            Pickup Date: <strong><%= new Date(order.PickupDate).toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) %></strong>
+                                                        </div>
+                                                        <% } %>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Order Summary Section -->
+                                                <div>
+                                                    <h4 style="font-size: 0.875rem; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 0.75rem; letter-spacing: 0.05em;">Order Summary</h4>
+                                                    <div style="font-size: 0.875rem; color: #111827; display: flex; flex-direction: column; gap: 0.5rem;">
+                                                        <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
+                                                            <span>Subtotal:</span>
+                                                            <strong>₱<%= Number(order.Subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                        </div>
+                                                        <% if (!order.IsBulkOrder) { %>
+                                                        <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
+                                                            <span>Shipping Fee:</span>
+                                                            <strong>₱<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                        </div>
+                                                        <% } %>
+                                                        <% 
+                                                            let extraFee = 0;
+                                                            if (order.ExtraDeliveryFee !== undefined && order.ExtraDeliveryFee !== null) {
+                                                                extraFee = parseFloat(order.ExtraDeliveryFee) || 0;
+                                                            }
+                                                            if (extraFee === 0 || isNaN(extraFee)) {
+                                                                const subtotal = parseFloat(order.Subtotal || 0);
+                                                                const shipping = parseFloat(order.DeliveryCost || 0);
+                                                                const total = parseFloat(order.TotalAmount || 0);
+                                                                const calculatedSum = subtotal + shipping;
+                                                                const difference = total - calculatedSum;
+                                                                if (difference > 1) {
+                                                                    extraFee = difference;
+                                                                }
+                                                            }
+                                                        %>
+                                                        <% if (extraFee > 0) { %>
+                                                        <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
+                                                            <span>Extra Delivery Fee (Qty &gt; 4):</span>
+                                                            <strong>₱<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                        </div>
+                                                        <% } %>
+                                                        <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; margin-top: 0.5rem; border-top: 2px solid #0f172a;">
+                                                            <span style="font-weight: 700; font-size: 1.05rem;">Total:</span>
+                                                            <strong style="font-weight: 700; font-size: 1.05rem; color: #0f172a;">₱<%= Number(order.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <% }); %>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination Controls -->
+                    <% if (pagination && pagination.totalPages > 1) { %>
+                        <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 2rem; flex-wrap: wrap;">
+                            <button onclick="goToPage(<%= pagination.currentPage - 1 %>)" 
+                                    <%= pagination.currentPage === 1 ? 'disabled' : '' %>
+                                    style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= pagination.currentPage === 1 ? '#f3f4f6' : '#ffffff' %>; color: <%= pagination.currentPage === 1 ? '#9ca3af' : '#374151' %>; border-radius: 6px; cursor: <%= pagination.currentPage === 1 ? 'not-allowed' : 'pointer' %>; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;"
+                                    <%= pagination.currentPage === 1 ? 'onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'#f3f4f6\'"' : 'onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'#ffffff\'"' %>>
+                                Previous
+                            </button>
+                            
+                            <% for (let i = Math.max(1, pagination.currentPage - 2); i <= Math.min(pagination.totalPages, pagination.currentPage + 2); i++) { %>
+                                <button onclick="goToPage(<%= i %>)" 
+                                        style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= i === pagination.currentPage ? '#F0B21B' : '#ffffff' %>; color: <%= i === pagination.currentPage ? '#ffffff' : '#374151' %>; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: all 0.2s; min-width: 40px;"
+                                        onmouseover="<%= i === pagination.currentPage ? '' : 'this.style.background=\'#f9fafb\'' %>"
+                                        onmouseout="<%= i === pagination.currentPage ? '' : 'this.style.background=\'#ffffff\'' %>">
+                                    <%= i %>
+                                </button>
+                            <% } %>
+                            
+                            <button onclick="goToPage(<%= pagination.currentPage + 1 %>)" 
+                                    <%= pagination.currentPage === pagination.totalPages ? 'disabled' : '' %>
+                                    style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= pagination.currentPage === pagination.totalPages ? '#f3f4f6' : '#ffffff' %>; color: <%= pagination.currentPage === pagination.totalPages ? '#9ca3af' : '#374151' %>; border-radius: 6px; cursor: <%= pagination.currentPage === pagination.totalPages ? 'not-allowed' : 'pointer' %>; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;"
+                                    <%= pagination.currentPage === pagination.totalPages ? 'onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'#f3f4f6\'"' : 'onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'#ffffff\'"' %>>
+                                Next
+                            </button>
+                        </div>
+                    <% } %>
+                <% } else { %>
+                    <div class="empty-state">
+                        <div class="empty-state-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                <polyline points="3.27 6.96 12 12 20.73 6.96"></polyline>
+                                <line x1="12" y1="22" x2="12" y2="12"></line>
+                            </svg>
+                        </div>
+                        <div class="empty-state-text">No returned orders found.</div>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+    <div id="order-success-popup"></div>
+
+    <!-- Loading Spinner Utility -->
+    <script src="/js/Employee/TransactionManager/admin-loading-spinner.js"></script>
+    
+    <script>
+        // Loading Spinner Helper (if utility not loaded)
+        if (typeof showLoadingSpinner === 'undefined') {
+            function showLoadingSpinner(spinnerId = 'orders-loading-spinner', text = 'Loading...') {
+                const spinner = document.getElementById(spinnerId);
+                if (spinner) {
+                    const textElement = spinner.querySelector('.admin-loading-spinner__text');
+                    if (textElement && text) textElement.textContent = text;
+                    spinner.classList.remove('hidden');
+                    spinner.style.display = 'flex';
+                }
+            }
+            function hideLoadingSpinner(spinnerId = 'orders-loading-spinner') {
+                const spinner = document.getElementById(spinnerId);
+                if (spinner) {
+                    spinner.classList.add('hidden');
+                    spinner.style.display = 'none';
+                }
+            }
+        }
+        
+        // View Toggle Functions
+        let currentView = 'cards';
+        
+        function switchView(view) {
+            currentView = view;
+            const cardsView = document.getElementById('ordersGrid');
+            const tableView = document.getElementById('ordersTable');
+            const cardsBtn = document.getElementById('viewCardsBtn');
+            const tableBtn = document.getElementById('viewTableBtn');
+            
+            if (view === 'cards') {
+                if (cardsView) cardsView.style.display = 'grid';
+                if (tableView) tableView.style.display = 'none';
+                if (cardsBtn) {
+                    cardsBtn.style.background = '#F0B21B';
+                    cardsBtn.style.color = 'white';
+                }
+                if (tableBtn) {
+                    tableBtn.style.background = 'transparent';
+                    tableBtn.style.color = '#6b7280';
+                }
+            } else {
+                if (cardsView) cardsView.style.display = 'none';
+                if (tableView) tableView.style.display = 'block';
+                if (cardsBtn) {
+                    cardsBtn.style.background = 'transparent';
+                    cardsBtn.style.color = '#6b7280';
+                }
+                if (tableBtn) {
+                    tableBtn.style.background = '#F0B21B';
+                    tableBtn.style.color = 'white';
+                }
+            }
+        }
+        
+        // Pagination Function
+        function goToPage(page) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('page', page);
+            window.location.href = url.toString();
+        }
+        
+        // Toggle Order Details in Table View
+        function toggleOrderDetails(orderId) {
+            const detailsRow = document.getElementById(`table-details-${orderId}`);
+            if (detailsRow) {
+                detailsRow.style.display = detailsRow.style.display === 'none' ? 'table-row' : 'none';
+            }
+        }
+        
+        document.querySelectorAll('.order-card-toggle').forEach(toggle => {
+            toggle.addEventListener('click', () => {
+                const card = toggle.closest('.order-card');
+                if (!card) return;
+
+                const collapsed = card.classList.toggle('collapsed');
+                toggle.setAttribute('aria-expanded', (!collapsed).toString());
+
+                const label = toggle.querySelector('.toggle-label');
+                if (label) {
+                    label.textContent = collapsed ? 'View Details' : 'Hide Details';
+                }
+            });
+        });
+    </script>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="logoutConfirmModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Confirm Logout</h3>
+            <p>Are you sure you want to log out?</p>
+            <div class="modal-buttons">
+                <button class="modal-button confirm" id="confirmLogoutBtn">Logout</button>
+                <button class="modal-button cancel" id="cancelLogoutBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Custom Logout Modal Logic
+        const logoutConfirmModal = document.getElementById('logoutConfirmModal');
+        const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
+        const cancelLogoutBtn = document.getElementById('cancelLogoutBtn');
+
+        async function handleLogout(event) {
+            event.preventDefault();
+            logoutConfirmModal.classList.add('show');
+        }
+
+        confirmLogoutBtn.addEventListener('click', async () => {
+            logoutConfirmModal.classList.remove('show');
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                } else {
+                    console.error('Logout failed');
+                    alert('Failed to logout. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error during logout:', error);
+                alert('An error occurred during logout. Please try again.');
+            }
+        });
+
+        cancelLogoutBtn.addEventListener('click', () => {
+            logoutConfirmModal.classList.remove('show');
+        });
+
+        // Close modal if clicked outside content
+        logoutConfirmModal.addEventListener('click', (event) => {
+            if (event.target === logoutConfirmModal) {
+                logoutConfirmModal.classList.remove('show');
+            }
+        });
+
+        // Filter functions
+        function applyFilters() {
+            const searchTerm = document.getElementById('searchFilter').value.toLowerCase();
+            const startDateFilter = document.getElementById('startDateFilter').value;
+            const endDateFilter = document.getElementById('endDateFilter').value;
+            const paymentFilter = document.getElementById('paymentFilter').value.toLowerCase();
+            const amountFilter = document.getElementById('amountFilter').value;
+            const deliveryTypeFilter = document.getElementById('deliveryTypeFilter').value;
+
+            const orderCards = document.querySelectorAll('.order-card');
+            let visibleCount = 0;
+
+            orderCards.forEach(card => {
+                const orderId = card.getAttribute('data-order-id');
+                const customer = card.getAttribute('data-customer') || '';
+                const email = card.getAttribute('data-email') || '';
+                const payment = (card.getAttribute('data-payment') || '').toLowerCase();
+                const amount = parseFloat(card.getAttribute('data-amount') || 0);
+                const date = card.getAttribute('data-date') || '';
+                const deliveryType = card.getAttribute('data-delivery-type') || '';
+
+                let shouldShow = true;
+
+                // Comprehensive search filter
+                if (searchTerm) {
+                    const referenceNumber = (card.getAttribute('data-reference-number') || '').toLowerCase();
+                    const phone = (card.getAttribute('data-phone') || '');
+                    const address = (card.getAttribute('data-address') || '');
+                    const products = (card.getAttribute('data-products') || '');
+                    const status = (card.getAttribute('data-status') || '');
+                    const notes = (card.getAttribute('data-notes') || '');
+                    const bulkOrder = (card.getAttribute('data-bulk-order') || '');
+                    
+                    shouldShow = shouldShow && (
+                        orderId.includes(searchTerm) ||
+                        referenceNumber.includes(searchTerm) ||
+                        customer.includes(searchTerm) ||
+                        email.includes(searchTerm) ||
+                        phone.includes(searchTerm) ||
+                        address.includes(searchTerm) ||
+                        products.includes(searchTerm) ||
+                        status.includes(searchTerm) ||
+                        notes.includes(searchTerm) ||
+                        (searchTerm === 'bulk' && bulkOrder === 'yes') ||
+                        (searchTerm === 'bulk order' && bulkOrder === 'yes')
+                    );
+                }
+
+                // Date range filter
+                if (startDateFilter || endDateFilter) {
+                    const orderDate = new Date(date);
+                    if (startDateFilter) {
+                        const startDate = new Date(startDateFilter);
+                        startDate.setHours(0, 0, 0, 0);
+                        if (orderDate < startDate) {
+                            shouldShow = false;
+                        }
+                    }
+                    if (endDateFilter) {
+                        const endDate = new Date(endDateFilter);
+                        endDate.setHours(23, 59, 59, 999);
+                        if (orderDate > endDate) {
+                            shouldShow = false;
+                        }
+                    }
+                }
+
+                // Payment filter (case-insensitive, supports e-wallet variations)
+                if (paymentFilter) {
+                    const paymentLower = payment;
+                    const matchesEwallet = paymentFilter === 'e-wallet' && (
+                        paymentLower.includes('e-wallet') ||
+                        paymentLower.includes('ewallet') ||
+                        paymentLower.includes('e wallet') ||
+                        paymentLower === 'wallet'
+                    );
+                    const matchesOther = paymentFilter !== 'e-wallet' && paymentLower.includes(paymentFilter);
+                    
+                    if (!matchesEwallet && !matchesOther) {
+                        shouldShow = false;
+                    }
+                }
+
+                // Amount filter
+                if (amountFilter) {
+                    const [min, max] = amountFilter === '10000+' 
+                        ? [10000, Infinity]
+                        : amountFilter.split('-').map(v => v.replace(/[₱,]/g, ''));
+                    if (amount < parseFloat(min) || (max !== 'Infinity' && amount > parseFloat(max))) {
+                        shouldShow = false;
+                    }
+                }
+
+                // Delivery type filter
+                if (deliveryTypeFilter && deliveryType !== deliveryTypeFilter) {
+                    shouldShow = false;
+                }
+
+                card.style.display = shouldShow ? 'flex' : 'none';
+                if (shouldShow) visibleCount++;
+            });
+
+            // Filter table rows
+            const tableRows = document.querySelectorAll('.table-order-row');
+            let tableVisibleCount = 0;
+
+            tableRows.forEach(row => {
+                const orderId = row.getAttribute('data-order-id');
+                const customer = row.getAttribute('data-customer');
+                const email = row.getAttribute('data-email');
+                const payment = (row.getAttribute('data-payment') || '').toLowerCase();
+                const amount = parseFloat(row.getAttribute('data-amount'));
+                const date = row.getAttribute('data-date');
+                const deliveryType = row.getAttribute('data-delivery-type');
+
+                let shouldShow = true;
+
+                // Comprehensive search filter
+                if (searchTerm) {
+                    const referenceNumber = (row.getAttribute('data-reference-number') || '').toLowerCase();
+                    const phone = (row.getAttribute('data-phone') || '');
+                    const address = (row.getAttribute('data-address') || '');
+                    const products = (row.getAttribute('data-products') || '');
+                    const status = (row.getAttribute('data-status') || '');
+                    const notes = (row.getAttribute('data-notes') || '');
+                    const bulkOrder = (row.getAttribute('data-bulk-order') || '');
+                    
+                    shouldShow = shouldShow && (
+                        orderId.includes(searchTerm) ||
+                        referenceNumber.includes(searchTerm) ||
+                        customer.includes(searchTerm) ||
+                        email.includes(searchTerm) ||
+                        phone.includes(searchTerm) ||
+                        address.includes(searchTerm) ||
+                        products.includes(searchTerm) ||
+                        status.includes(searchTerm) ||
+                        notes.includes(searchTerm) ||
+                        (searchTerm === 'bulk' && bulkOrder === 'yes') ||
+                        (searchTerm === 'bulk order' && bulkOrder === 'yes')
+                    );
+                }
+
+                // Date range filter
+                if (startDateFilter || endDateFilter) {
+                    const orderDate = new Date(date);
+                    if (startDateFilter) {
+                        const startDate = new Date(startDateFilter);
+                        startDate.setHours(0, 0, 0, 0);
+                        if (orderDate < startDate) {
+                            shouldShow = false;
+                        }
+                    }
+                    if (endDateFilter) {
+                        const endDate = new Date(endDateFilter);
+                        endDate.setHours(23, 59, 59, 999);
+                        if (orderDate > endDate) {
+                            shouldShow = false;
+                        }
+                    }
+                }
+
+                // Payment filter (case-insensitive, supports e-wallet variations)
+                if (paymentFilter) {
+                    const paymentLower = payment;
+                    const matchesEwallet = paymentFilter === 'e-wallet' && (
+                        paymentLower.includes('e-wallet') ||
+                        paymentLower.includes('ewallet') ||
+                        paymentLower.includes('e wallet') ||
+                        paymentLower === 'wallet'
+                    );
+                    const matchesOther = paymentFilter !== 'e-wallet' && paymentLower.includes(paymentFilter);
+                    
+                    if (!matchesEwallet && !matchesOther) {
+                        shouldShow = false;
+                    }
+                }
+
+                // Amount filter
+                if (amountFilter) {
+                    const [min, max] = amountFilter === '10000+' 
+                        ? [10000, Infinity]
+                        : amountFilter.split('-').map(v => v.replace(/[₱,]/g, ''));
+                    if (amount < parseFloat(min) || (max !== 'Infinity' && amount > parseFloat(max))) {
+                        shouldShow = false;
+                    }
+                }
+
+                // Delivery type filter
+                if (deliveryTypeFilter && deliveryType !== deliveryTypeFilter) {
+                    shouldShow = false;
+                }
+
+                row.style.display = shouldShow ? '' : 'none';
+                // Also hide the details row if the main row is hidden
+                const detailsRow = document.getElementById(`table-details-${orderId}`);
+                if (detailsRow) {
+                    detailsRow.style.display = shouldShow ? detailsRow.style.display : 'none';
+                }
+                if (shouldShow) tableVisibleCount++;
+            });
+
+            // Update count based on current view
+            const cardsView = document.getElementById('ordersGrid');
+            const currentView = cardsView && cardsView.style.display !== 'none' ? 'cards' : 'table';
+            if (currentView === 'cards') {
+                document.getElementById('ordersCount').textContent = `${visibleCount} Orders`;
+            } else {
+                document.getElementById('ordersCount').textContent = `${tableVisibleCount} Orders`;
+            }
+            
+            // Update bulk orders count
+            const visibleBulkCount = Array.from(orderCards).filter(card => {
+                return card.style.display !== 'none' && card.getAttribute('data-bulk-order') === 'yes';
+            }).length;
+            const bulkCountElement = document.getElementById('bulkOrdersCount');
+            if (bulkCountElement) {
+                bulkCountElement.textContent = `${visibleBulkCount} Bulk Orders`;
+            }
+        }
+
+        function clearFilters() {
+            document.getElementById('searchFilter').value = '';
+            document.getElementById('startDateFilter').value = '';
+            document.getElementById('endDateFilter').value = '';
+            document.getElementById('paymentFilter').value = '';
+            document.getElementById('amountFilter').value = '';
+            document.getElementById('deliveryTypeFilter').value = '';
+            
+            const orderCards = document.querySelectorAll('.order-card');
+            orderCards.forEach(card => card.style.display = 'flex');
+            document.getElementById('ordersCount').textContent = '<%= orders ? orders.length : 0 %> Orders';
+            
+            // Reset bulk orders count
+            const bulkCountElement = document.getElementById('bulkOrdersCount');
+            if (bulkCountElement) {
+                const allCards = document.querySelectorAll('.order-card');
+                const bulkCount = Array.from(allCards).filter(card => card.getAttribute('data-bulk-order') === 'yes').length;
+                bulkCountElement.textContent = `${bulkCount} Bulk Orders`;
+            }
+        }
+
+        // Date validation: Set minimum date for end date based on start date
+        document.getElementById('startDateFilter').addEventListener('change', function() {
+            const startDate = this.value;
+            const endDateInput = document.getElementById('endDateFilter');
+            if (startDate) {
+                endDateInput.setAttribute('min', startDate);
+                // If end date is before start date, clear it
+                if (endDateInput.value && endDateInput.value < startDate) {
+                    endDateInput.value = '';
+                    endDateInput.setCustomValidity('');
+                }
+            } else {
+                endDateInput.removeAttribute('min');
+            }
+            applyFilters();
+        });
+
+        document.getElementById('endDateFilter').addEventListener('change', function() {
+            const startDate = document.getElementById('startDateFilter').value;
+            const endDate = this.value;
+            if (startDate && endDate && endDate < startDate) {
+                this.setCustomValidity('End date cannot be before start date');
+                this.reportValidity();
+                this.value = '';
+            } else {
+                this.setCustomValidity('');
+                applyFilters();
+            }
+        });
+
+        // Search on input
+        document.getElementById('searchFilter').addEventListener('input', applyFilters);
+        document.getElementById('paymentFilter').addEventListener('change', applyFilters);
+        document.getElementById('amountFilter').addEventListener('change', applyFilters);
+        document.getElementById('deliveryTypeFilter').addEventListener('change', applyFilters);
+
+        // Payment Status Check
+        async function checkPaymentStatus(orderId) {
+            const modal = document.getElementById(`payment-modal-${orderId}`);
+            const modalBody = document.getElementById(`payment-modal-body-${orderId}`);
+            
+            if (!modal || !modalBody) {
+                console.error('Payment modal not found for order:', orderId);
+                return;
+            }
+            
+            // Show modal with loading state
+            modal.classList.add('show');
+            modalBody.innerHTML = `
+                <div style="text-align: center; padding: 2rem;">
+                    <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #F0B21B; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <p style="margin-top: 1rem; color: #6b7280;">Loading payment details...</p>
+                </div>
+            `;
+            
+            try {
+                const response = await fetch(`/api/admin/payment-status/${orderId}`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const details = result.paymentDetails;
+                    const paymentStatus = (details.PaymentStatus || 'Unknown').toLowerCase();
+                    const statusClass = paymentStatus === 'paid' || paymentStatus === 'completed' ? 'paid' : 
+                                      paymentStatus === 'pending' ? 'pending' : 'failed';
+                    
+                    let html = `
+                        <div class="payment-section">
+                            <div class="payment-section-title">Payment Information</div>
+                            <div class="payment-info-row">
+                                <span class="payment-info-label">Payment Method</span>
+                                <span class="payment-info-value">${details.PaymentMethod || 'N/A'}</span>
+                            </div>
+                            <div class="payment-info-row">
+                                <span class="payment-info-label">Payment Status</span>
+                                <span class="payment-info-value status ${statusClass}">${details.PaymentStatus || 'Unknown'}</span>
+                            </div>
+                            <div class="payment-info-row">
+                                <span class="payment-info-label">Total Amount</span>
+                                <span class="payment-info-value amount">₱${Number(details.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div class="payment-info-row">
+                                <span class="payment-info-label">Order Date</span>
+                                <span class="payment-info-value">${new Date(details.OrderDate).toLocaleString('en-US', { 
+                                    year: 'numeric', 
+                                    month: 'long', 
+                                    day: 'numeric', 
+                                    hour: '2-digit', 
+                                    minute: '2-digit' 
+                                })}</span>
+                            </div>
+                    `;
+                    
+                    const paymentIdentifier = details.PaymentIdentifier || details.StripeSessionID || details.TransactionID;
+                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment / transaction ID';
+                    if (paymentIdentifier) {
+                        html += `
+                            <div class="payment-info-row">
+                                <span class="payment-info-label">${paymentIdentifierLabel}</span>
+                                <span class="payment-info-value" style="font-size: 0.75rem; word-break: break-all;">${paymentIdentifier}</span>
+                            </div>
+                        `;
+                    }
+                    if (details.CheckoutSessionValue && details.CheckoutSessionLabel) {
+                        html += `
+                            <div class="payment-info-row">
+                                <span class="payment-info-label">${details.CheckoutSessionLabel}</span>
+                                <span class="payment-info-value" style="font-size: 0.75rem; word-break: break-all;">${details.CheckoutSessionValue}</span>
+                            </div>
+                        `;
+                    }
+                    
+                    html += `</div>`;
+                    
+                    if (details.stripeDetails) {
+                        const gw = details.stripeDetails || {};
+                        const stripeStatusRaw = gw.payment_status || details.PaymentStatus || 'unknown';
+                        const stripeStatus = String(stripeStatusRaw).toLowerCase();
+                        const stripeStatusClass = stripeStatus === 'paid' || stripeStatus === 'complete' ? 'paid' : 
+                                                  stripeStatus === 'pending' || stripeStatus === 'unpaid' ? 'pending' : 'failed';
+                        const cents = Number(gw.amount_total);
+                        const orderTotalNum = Number(details.TotalAmount || 0);
+                        const amountPhp = (Number.isFinite(cents) && cents > 0) ? (cents / 100) : orderTotalNum;
+                        const pmLabel = (details.DisplayPaymentMethod || details.PaymentMethod || '').toString();
+                        const gwTitle = pmLabel.toLowerCase().includes('stripe') ? 'Stripe Details' : pmLabel.toLowerCase().includes('paymongo') ? 'PayMongo Details' : 'Gateway Details';
+                        const custEmail = gw.customer_email || details.CustomerEmail || 'N/A';
+                        
+                        html += `
+                            <div class="payment-section">
+                                <div class="payment-section-title">${gwTitle}</div>
+                                <div class="stripe-details-section">
+                                    <div class="payment-info-row">
+                                        <span class="payment-info-label">Payment Status</span>
+                                        <span class="payment-info-value status ${stripeStatusClass}">${gw.payment_status || details.PaymentStatus || 'Unknown'}</span>
+                                    </div>
+                                    <div class="payment-info-row">
+                                        <span class="payment-info-label">Amount Paid</span>
+                                        <span class="payment-info-value amount">₱${amountPhp.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div class="payment-info-row">
+                                        <span class="payment-info-label">Currency</span>
+                                        <span class="payment-info-value">${(gw.currency || 'php').toUpperCase()}</span>
+                                    </div>
+                                    <div class="payment-info-row">
+                                        <span class="payment-info-label">Customer Email</span>
+                                        <span class="payment-info-value">${custEmail}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    modalBody.innerHTML = html;
+                } else {
+                    modalBody.innerHTML = `
+                        <div style="text-align: center; padding: 2rem;">
+                            <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+                            <p style="color: #6b7280; font-size: 1rem;">${result.message || 'Failed to retrieve payment details'}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error checking payment status:', error);
+                modalBody.innerHTML = `
+                    <div style="text-align: center; padding: 2rem;">
+                        <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+                        <p style="color: #6b7280; font-size: 1rem;">Error checking payment status. Please try again.</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Close Payment Modal
+        function closePaymentModal(orderId) {
+            const modal = document.getElementById(`payment-modal-${orderId}`);
+            if (modal) {
+                modal.classList.remove('show');
+            }
+        }
+
+        // Close modal when clicking outside
+        document.addEventListener('click', function(event) {
+            if (event.target.classList.contains('payment-modal-overlay')) {
+                event.target.classList.remove('show');
+            }
+        });
+
+        // Event listener for payment button clicks
+        document.addEventListener('click', function(event) {
+            const paymentTrigger = event.target.closest('.js-check-payment');
+            if (paymentTrigger) {
+                const orderId = paymentTrigger.getAttribute('data-order-id');
+                if (orderId) {
+                    checkPaymentStatus(orderId);
+                }
+            }
+        });
+
+        // Return Media Modal Functions
+        function openReturnMediaModal(orderId, type, url) {
+            const modal = document.getElementById(`return-media-modal-${orderId}`);
+            const modalBody = document.getElementById(`return-media-body-${orderId}`);
+            
+            if (!modal || !modalBody) return;
+            
+            if (type === 'image') {
+                modalBody.innerHTML = `<img src="${url}" alt="Return Image">`;
+            } else if (type === 'video') {
+                modalBody.innerHTML = `<video src="${url}" controls></video>`;
+            }
+            
+            modal.classList.add('show');
+        }
+
+        function closeReturnMediaModal(orderId) {
+            const modal = document.getElementById(`return-media-modal-${orderId}`);
+            if (modal) {
+                modal.classList.remove('show');
+            }
+        }
+
+        // Close modal when clicking outside
+        document.addEventListener('click', function(event) {
+            if (event.target.classList.contains('return-media-modal-overlay')) {
+                event.target.classList.remove('show');
+            }
+        });
+
+        // Approve Return Handler
+        let currentApproveOrderId = null;
+        let currentDeclineOrderId = null;
+
+        function openApproveModal(orderId) {
+            currentApproveOrderId = orderId;
+            const modal = document.getElementById('approveReturnModal');
+            if (modal) {
+                modal.classList.add('show');
+            }
+        }
+
+        function closeApproveModal() {
+            const modal = document.getElementById('approveReturnModal');
+            if (modal) {
+                modal.classList.remove('show');
+            }
+            currentApproveOrderId = null;
+        }
+
+        async function confirmApproveReturn() {
+            if (!currentApproveOrderId) {
+                alert('No order selected for approval.');
+                return;
+            }
+
+            const confirmBtn = document.getElementById('confirmApproveBtn');
+            if (confirmBtn) {
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Processing...';
+            }
+
+            try {
+                const response = await fetch(`/api/admin/orders/${currentApproveOrderId}/return/approve`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    let message = 'Return request approved successfully. An approval email has been sent to the customer.';
+                    let detailsHtml = '';
+                    if (result.fees) {
+                        detailsHtml = '<div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">';
+                        if (result.fees.returnShippingFee > 0) {
+                            detailsHtml += `<p style="margin: 0 0 8px 0; color: #6b7280; font-size: 14px;">Return Shipping Fee: ₱${Number(result.fees.returnShippingFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>`;
+                        }
+                        if (result.fees.refundAmount > 0) {
+                            detailsHtml += `<p style="margin: 8px 0 0 0; color: #10b981; font-size: 16px; font-weight: 600;">Refund Amount: ₱${Number(result.fees.refundAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>`;
+                        }
+                        detailsHtml += '</div>';
+                    }
+                    showSuccessModal(message, detailsHtml);
+                    closeApproveModal();
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 3000);
+                } else {
+                    alert(result.message || 'Failed to approve return request.');
+                    if (confirmBtn) {
+                        confirmBtn.disabled = false;
+                        confirmBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Approve Return';
+                    }
+                }
+            } catch (error) {
+                console.error('Error approving return:', error);
+                alert('An error occurred while approving the return. Please try again.');
+                if (confirmBtn) {
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Approve Return';
+                }
+            }
+        }
+
+        async function handleApproveReturn(orderId) {
+            // Legacy function - redirects to modal
+            openApproveModal(orderId);
+
+            try {
+                const response = await fetch(`/api/admin/orders/${orderId}/return/approve`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    let message = 'Return request approved successfully. An approval email has been sent to the customer.';
+                    if (result.fees) {
+                        if (result.fees.returnShippingFee > 0) {
+                            message += `\nReturn Shipping Fee: ₱${Number(result.fees.returnShippingFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+                        }
+                        if (result.fees.refundAmount > 0) {
+                            message += `\nRefund Amount: ₱${Number(result.fees.refundAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+                        }
+                    }
+                    alert(message);
+                    window.location.reload();
+                } else {
+                    alert(result.message || 'Failed to approve return request.');
+                }
+            } catch (error) {
+                console.error('Error approving return:', error);
+                alert('An error occurred while approving the return. Please try again.');
+            }
+        }
+
+        // Decline Return Modal Functions
+        function openDeclineModal(orderId) {
+            currentDeclineOrderId = orderId;
+            const modal = document.getElementById('declineReturnModal');
+            const input = document.getElementById('declineReasonInput');
+            
+            // Reset all checkboxes
+            document.getElementById('declineConditionOriginalPackaging').checked = false;
+            document.getElementById('declineConditionAllParts').checked = false;
+            document.getElementById('declineConditionUnused').checked = false;
+            document.getElementById('declineConditionProofOfPurchase').checked = false;
+            
+            if (modal) {
+                modal.classList.add('show');
+                if (input) {
+                    input.value = '';
+                    input.focus();
+                }
+            }
+        }
+
+        function closeDeclineModal() {
+            const modal = document.getElementById('declineReturnModal');
+            if (modal) {
+                modal.classList.remove('show');
+            }
+            currentDeclineOrderId = null;
+            const input = document.getElementById('declineReasonInput');
+            if (input) {
+                input.value = '';
+            }
+            
+            // Reset all checkboxes
+            document.getElementById('declineConditionOriginalPackaging').checked = false;
+            document.getElementById('declineConditionAllParts').checked = false;
+            document.getElementById('declineConditionUnused').checked = false;
+            document.getElementById('declineConditionProofOfPurchase').checked = false;
+        }
+
+        async function handleDeclineReturn() {
+            if (!currentDeclineOrderId) {
+                alert('No order selected for decline.');
+                return;
+            }
+
+            // Get checked conditions (conditions NOT met)
+            const uncheckedConditions = [];
+            if (document.getElementById('declineConditionOriginalPackaging').checked) {
+                uncheckedConditions.push('Item is NOT in original, undamaged packaging');
+            }
+            if (document.getElementById('declineConditionAllParts').checked) {
+                uncheckedConditions.push('All parts, accessories, and documentation are NOT included');
+            }
+            if (document.getElementById('declineConditionUnused').checked) {
+                uncheckedConditions.push('Item has been used or modified');
+            }
+            if (document.getElementById('declineConditionProofOfPurchase').checked) {
+                uncheckedConditions.push('No proof of purchase provided');
+            }
+
+            const additionalReason = document.getElementById('declineReasonInput').value.trim();
+            
+            // Build decline reason
+            let declineReason = '';
+            if (uncheckedConditions.length > 0) {
+                declineReason = 'Conditions NOT met: ' + uncheckedConditions.join('; ');
+                if (additionalReason) {
+                    declineReason += '. Additional reason: ' + additionalReason;
+                }
+            } else if (additionalReason) {
+                declineReason = additionalReason;
+            } else {
+                alert('Please check at least one condition that was NOT met or provide an additional reason.');
+                return;
+            }
+
+            const confirmBtn = document.getElementById('confirmDeclineBtn');
+            if (confirmBtn) {
+                confirmBtn.disabled = true;
+                confirmBtn.textContent = 'Processing...';
+            }
+
+            try {
+                const response = await fetch(`/api/admin/orders/${currentDeclineOrderId}/return/decline`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({ 
+                        declineReason: declineReason,
+                        uncheckedConditions: uncheckedConditions
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showSuccessModal('Return request declined successfully. A decline email has been sent to the customer.', '', 'decline');
+                    closeDeclineModal();
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 3000);
+                } else {
+                    alert(result.message || 'Failed to decline return request.');
+                    if (confirmBtn) {
+                        confirmBtn.disabled = false;
+                        confirmBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Decline Return';
+                    }
+                }
+            } catch (error) {
+                console.error('Error declining return:', error);
+                alert('An error occurred while declining the return. Please try again.');
+                if (confirmBtn) {
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Decline Return';
+                }
+            }
+        }
+
+        // Success Modal Functions
+        function showSuccessModal(message, detailsHtml = '', type = 'approve') {
+            const modal = document.getElementById('successModal');
+            const modalIcon = document.getElementById('successModalIcon');
+            const modalMessage = document.getElementById('successModalMessage');
+            const modalDetails = document.getElementById('successModalDetails');
+            
+            if (!modal) {
+                // Create success modal if it doesn't exist
+                const modalHTML = `
+                    <div id="successModal" class="modal-overlay">
+                        <div class="modal-content">
+                            <div id="successModalIcon" class="modal-icon ${type}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </div>
+                            <h3>Success!</h3>
+                            <p id="successModalMessage" style="color: #6b7280; font-size: 1rem; line-height: 1.6; margin-bottom: 24px;"></p>
+                            <div id="successModalDetails"></div>
+                            <div class="modal-buttons">
+                                <button class="modal-button confirm" onclick="closeSuccessModal()" style="min-width: 120px;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    OK
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+            }
+            
+            const modalEl = document.getElementById('successModal');
+            const iconEl = document.getElementById('successModalIcon');
+            const messageEl = document.getElementById('successModalMessage');
+            const detailsEl = document.getElementById('successModalDetails');
+            
+            if (type === 'decline') {
+                iconEl.className = 'modal-icon decline';
+                iconEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+            } else if (type === 'refund') {
+                iconEl.className = 'modal-icon refund';
+                iconEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>';
+            } else if (type === 'replacement') {
+                iconEl.className = 'modal-icon approve';
+                iconEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>';
+            } else {
+                iconEl.className = 'modal-icon approve';
+                iconEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+            }
+            
+            messageEl.textContent = message;
+            if (detailsHtml) {
+                detailsEl.innerHTML = detailsHtml;
+                detailsEl.style.display = 'block';
+            } else {
+                detailsEl.style.display = 'none';
+            }
+            
+            modalEl.classList.add('show');
+        }
+
+        function closeSuccessModal() {
+            const modal = document.getElementById('successModal');
+            if (modal) {
+                modal.classList.remove('show');
+            }
+        }
+
+        // Close modals when clicking outside
+        document.addEventListener('click', function(event) {
+            const declineModal = document.getElementById('declineReturnModal');
+            const approveModal = document.getElementById('approveReturnModal');
+            const refundModal = document.getElementById('refundConfirmModal');
+            const replacementModal = document.getElementById('replacementConfirmModal');
+            const successModal = document.getElementById('successModal');
+            if (declineModal && event.target === declineModal) {
+                closeDeclineModal();
+            }
+            if (approveModal && event.target === approveModal) {
+                closeApproveModal();
+            }
+            if (refundModal && event.target === refundModal) {
+                closeRefundModal();
+            }
+            if (replacementModal && event.target === replacementModal) {
+                closeReplacementModal();
+            }
+            if (successModal && event.target === successModal) {
+                closeSuccessModal();
+            }
+        });
+
+        // Replacement Handler (for processing after approval)
+        let currentReplacementOrderId = null;
+
+        function openReplacementModal(orderId) {
+            currentReplacementOrderId = orderId;
+            const modal = document.getElementById('replacementConfirmModal');
+            if (modal) {
+                modal.classList.add('show');
+            }
+        }
+
+        function closeReplacementModal() {
+            const modal = document.getElementById('replacementConfirmModal');
+            if (modal) {
+                modal.classList.remove('show');
+            }
+            currentReplacementOrderId = null;
+        }
+
+        async function confirmReplacement() {
+            if (!currentReplacementOrderId) {
+                alert('No order selected for replacement processing.');
+                return;
+            }
+
+            const confirmBtn = document.getElementById('confirmReplacementBtn');
+            if (confirmBtn) {
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg> Processing...';
+            }
+
+            try {
+                const response = await fetch(`/api/admin/orders/${currentReplacementOrderId}/replacement`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showSuccessModal('Replacement processed successfully. The order has been moved to processing and damaged items have been added to inventory.', '', 'replacement');
+                    closeReplacementModal();
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 3000);
+                } else {
+                    alert(result.message || 'Failed to process replacement.');
+                    if (confirmBtn) {
+                        confirmBtn.disabled = false;
+                        confirmBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg> Proceed to Processing';
+                    }
+                }
+            } catch (error) {
+                console.error('Error processing replacement:', error);
+                alert('An error occurred while processing the replacement. Please try again.');
+                if (confirmBtn) {
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg> Proceed to Processing';
+                }
+            }
+        }
+
+        async function handleReplacement(orderId) {
+            // Legacy function - redirects to modal
+            openReplacementModal(orderId);
+        }
+
+        // Refund Handler (for processing after approval)
+        let currentRefundOrderId = null;
+
+        function openRefundModal(orderId) {
+            currentRefundOrderId = orderId;
+            const modal = document.getElementById('refundConfirmModal');
+            if (modal) {
+                modal.classList.add('show');
+            }
+        }
+
+        function closeRefundModal() {
+            const modal = document.getElementById('refundConfirmModal');
+            if (modal) {
+                modal.classList.remove('show');
+            }
+            currentRefundOrderId = null;
+        }
+
+        async function confirmRefund() {
+            if (!currentRefundOrderId) {
+                alert('No order selected for refund.');
+                return;
+            }
+
+            const confirmBtn = document.getElementById('confirmRefundBtn');
+            if (confirmBtn) {
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Processing...';
+            }
+
+            try {
+                const response = await fetch(`/api/admin/orders/${currentRefundOrderId}/refund`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    let message = 'Refund processed successfully. The money has been refunded to the customer.';
+                    if (result.refundAmount) {
+                        message += ` Refund Amount: ₱${Number(result.refundAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+                    }
+                    if (result.stripeRefundId) {
+                        message += ` Stripe Refund ID: ${result.stripeRefundId}`;
+                    }
+                    showSuccessModal(message, '', 'refund');
+                    closeRefundModal();
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 3000);
+                } else {
+                    alert(result.message || 'Failed to process refund.');
+                    if (confirmBtn) {
+                        confirmBtn.disabled = false;
+                        confirmBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Process Refund';
+                    }
+                }
+            } catch (error) {
+                console.error('Error processing refund:', error);
+                alert('An error occurred while processing the refund. Please try again.');
+                if (confirmBtn) {
+                    confirmBtn.disabled = false;
+                    confirmBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Process Refund';
+                }
+            }
+        }
+
+        async function handleRefund(orderId) {
+            // Legacy function - redirects to modal
+            openRefundModal(orderId);
+        }
+    </script>
+
+</body>
+</html> 

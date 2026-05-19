@@ -1,0 +1,591 @@
+/* ===================================================================
+   UNIFIED BUTTON STYLES - Customer Frontend
+   Brand Primary Color: #F0B21B (Yellow Mustard)
+   Secondary Color: #e6a632 (Darker yellow for hovers)
+   =================================================================== */
+
+/* ===================================================================
+   PRIMARY BUTTONS - Main actions (Add to cart, Checkout, Submit, etc)
+   =================================================================== */
+
+.btn-primary,
+.add-to-cart-btn,
+.checkout-btn,
+.place-order-btn,
+.confirm-payment-btn,
+.submit-btn,
+.auth-submit-btn,
+.contact-submit-btn,
+.save-address-btn,
+.update-profile-btn,
+.verify-btn,
+.confirm-btn,
+.apply-btn,
+.subscribe-btn {
+    background: linear-gradient(135deg, #F0B21B 0%, #e6a632 100%);
+    color: #ffffff;
+    border: none;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(240, 178, 27, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-primary:hover,
+.add-to-cart-btn:hover,
+.checkout-btn:hover,
+.place-order-btn:hover,
+.confirm-payment-btn:hover,
+.submit-btn:hover,
+.auth-submit-btn:hover,
+.contact-submit-btn:hover,
+.save-address-btn:hover,
+.update-profile-btn:hover,
+.verify-btn:hover,
+.confirm-btn:hover,
+.apply-btn:hover,
+.subscribe-btn:hover {
+    background: linear-gradient(135deg, #e6a632 0%, #d49a16 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(240, 178, 27, 0.4);
+}
+
+.btn-primary:active,
+.add-to-cart-btn:active,
+.checkout-btn:active,
+.place-order-btn:active,
+.confirm-payment-btn:active,
+.submit-btn:active,
+.auth-submit-btn:active,
+.contact-submit-btn:active,
+.save-address-btn:active,
+.update-profile-btn:active,
+.verify-btn:active,
+.confirm-btn:active,
+.apply-btn:active,
+.subscribe-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(240, 178, 27, 0.3);
+}
+
+.btn-primary:disabled,
+.add-to-cart-btn:disabled,
+.checkout-btn:disabled,
+.place-order-btn:disabled,
+.confirm-payment-btn:disabled,
+.submit-btn:disabled,
+.auth-submit-btn:disabled,
+.contact-submit-btn:disabled,
+.save-address-btn:disabled,
+.update-profile-btn:disabled,
+.verify-btn:disabled,
+.confirm-btn:disabled,
+.apply-btn:disabled,
+.subscribe-btn:disabled {
+    background: #d1d5db;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.6;
+}
+
+/* ===================================================================
+   SECONDARY BUTTONS - Secondary actions (Cancel, View Details, etc)
+   =================================================================== */
+
+.btn-secondary,
+.cancel-btn,
+.view-details-btn,
+.back-btn,
+.close-btn,
+.skip-btn,
+.clear-btn {
+    background: #ffffff;
+    color: #374151;
+    border: 2px solid #e5e7eb;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.btn-secondary:hover,
+.cancel-btn:hover,
+.view-details-btn:hover,
+.back-btn:hover,
+.close-btn:hover,
+.skip-btn:hover,
+.clear-btn:hover {
+    background: #ffffff;
+    color: #F0B21B;
+    border-color: #F0B21B;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(240, 178, 27, 0.2);
+}
+
+.btn-secondary:active,
+.cancel-btn:active,
+.view-details-btn:active,
+.back-btn:active,
+.close-btn:active,
+.skip-btn:active,
+.clear-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* ===================================================================
+   OUTLINE BUTTONS - Tertiary actions
+   =================================================================== */
+
+.btn-outline,
+.edit-btn,
+.remove-btn-outline,
+.view-order-btn,
+.track-order-btn,
+.reorder-btn {
+    background: transparent;
+    color: #F0B21B;
+    border: 2px solid #F0B21B;
+    padding: 10px 20px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-outline:hover,
+.edit-btn:hover,
+.remove-btn-outline:hover,
+.view-order-btn:hover,
+.track-order-btn:hover,
+.reorder-btn:hover {
+    background: #F0B21B;
+    color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(240, 178, 27, 0.3);
+}
+
+.btn-outline:active,
+.edit-btn:active,
+.remove-btn-outline:active,
+.view-order-btn:active,
+.track-order-btn:active,
+.reorder-btn:active {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+/* ===================================================================
+   DANGER BUTTONS - Delete, Remove actions
+   =================================================================== */
+
+.btn-danger,
+.delete-btn,
+.remove-btn,
+.clear-cart-btn,
+.delete-account-btn {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: #ffffff;
+    border: none;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.btn-danger:hover,
+.delete-btn:hover,
+.remove-btn:hover,
+.clear-cart-btn:hover,
+.delete-account-btn:hover {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4);
+}
+
+.btn-danger:active,
+.delete-btn:active,
+.remove-btn:active,
+.clear-cart-btn:active,
+.delete-account-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+/* ===================================================================
+   ICON BUTTONS - Small action buttons with icons
+   =================================================================== */
+
+.action-icon,
+.icon-btn,
+.wishlist-btn,
+.cart-icon-btn,
+.share-btn,
+.favorite-btn,
+.quick-view-btn {
+    background: #ffffff;
+    color: #6b7280;
+    border: 1px solid #e5e7eb;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.action-icon:hover,
+.icon-btn:hover,
+.wishlist-btn:hover,
+.cart-icon-btn:hover,
+.share-btn:hover,
+.favorite-btn:hover,
+.quick-view-btn:hover {
+    background: #F0B21B;
+    color: #ffffff;
+    border-color: #F0B21B;
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 4px 12px rgba(240, 178, 27, 0.3);
+}
+
+.action-icon:hover svg,
+.icon-btn:hover svg,
+.wishlist-btn:hover svg,
+.cart-icon-btn:hover svg,
+.share-btn:hover svg,
+.favorite-btn:hover svg,
+.quick-view-btn:hover svg {
+    stroke: #ffffff;
+    fill: #ffffff;
+}
+
+.action-icon:active,
+.icon-btn:active,
+.wishlist-btn:active,
+.cart-icon-btn:active,
+.share-btn:active,
+.favorite-btn:active,
+.quick-view-btn:active {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* ===================================================================
+   QUANTITY BUTTONS - Plus/Minus buttons in cart
+   =================================================================== */
+
+.quantity-btn,
+.qty-btn,
+.increment-btn,
+.decrement-btn {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #e5e7eb;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+}
+
+.quantity-btn:hover,
+.qty-btn:hover,
+.increment-btn:hover,
+.decrement-btn:hover {
+    background: #F0B21B;
+    color: #ffffff;
+    border-color: #F0B21B;
+    transform: scale(1.1);
+}
+
+.quantity-btn:active,
+.qty-btn:active,
+.increment-btn:active,
+.decrement-btn:active {
+    transform: scale(1);
+}
+
+.quantity-btn:disabled,
+.qty-btn:disabled,
+.increment-btn:disabled,
+.decrement-btn:disabled {
+    background: #f3f4f6;
+    color: #d1d5db;
+    cursor: not-allowed;
+    transform: none;
+    opacity: 0.5;
+}
+
+/* ===================================================================
+   LINK BUTTONS - Text-style buttons
+   =================================================================== */
+
+.btn-link,
+.link-btn,
+.forgot-password-link,
+.login-link,
+.signup-link {
+    background: transparent;
+    color: #F0B21B;
+    border: none;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+}
+
+.btn-link:hover,
+.link-btn:hover,
+.forgot-password-link:hover,
+.login-link:hover,
+.signup-link:hover {
+    color: #e6a632;
+    text-decoration: underline;
+}
+
+/* ===================================================================
+   SOCIAL BUTTONS - Google, Facebook login
+   =================================================================== */
+
+.btn-social,
+.google-btn,
+.facebook-btn {
+    background: #ffffff;
+    color: #374151;
+    border: 2px solid #e5e7eb;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.btn-social:hover,
+.google-btn:hover,
+.facebook-btn:hover {
+    background: #f9fafb;
+    border-color: #F0B21B;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(240, 178, 27, 0.2);
+}
+
+.btn-social:active,
+.google-btn:active,
+.facebook-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* ===================================================================
+   NAVIGATION BUTTONS - Arrows, pagination
+   =================================================================== */
+
+.nav-arrow,
+.carousel-btn,
+.slider-btn,
+.prev-btn,
+.next-btn {
+    background: #F0B21B;
+    color: #ffffff;
+    border: none;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(240, 178, 27, 0.3);
+}
+
+.nav-arrow:hover,
+.carousel-btn:hover,
+.slider-btn:hover,
+.prev-btn:hover,
+.next-btn:hover {
+    background: #e6a632;
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 4px 16px rgba(240, 178, 27, 0.4);
+}
+
+.nav-arrow:active,
+.carousel-btn:active,
+.slider-btn:active,
+.prev-btn:active,
+.next-btn:active {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 2px 8px rgba(240, 178, 27, 0.3);
+}
+
+.nav-arrow:disabled,
+.carousel-btn:disabled,
+.slider-btn:disabled,
+.prev-btn:disabled,
+.next-btn:disabled {
+    background: #d1d5db;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.5;
+}
+
+/* ===================================================================
+   FILTER BUTTONS - Category, sort, filter options
+   =================================================================== */
+
+.filter-btn,
+.category-btn,
+.sort-btn,
+.filter-option {
+    background: #ffffff;
+    color: #6b7280;
+    border: 2px solid #e5e7eb;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.filter-btn:hover,
+.category-btn:hover,
+.sort-btn:hover,
+.filter-option:hover {
+    background: #fff7e6;
+    color: #F0B21B;
+    border-color: #F0B21B;
+    transform: translateY(-1px);
+}
+
+.filter-btn.active,
+.category-btn.active,
+.sort-btn.active,
+.filter-option.active {
+    background: #F0B21B;
+    color: #ffffff;
+    border-color: #F0B21B;
+}
+
+.filter-btn.active:hover,
+.category-btn.active:hover,
+.sort-btn.active:hover,
+.filter-option.active:hover {
+    background: #e6a632;
+    border-color: #e6a632;
+}
+
+/* ===================================================================
+   MOBILE RESPONSIVE - Touch-friendly sizes
+   =================================================================== */
+
+@media (max-width: 768px) {
+    .btn-primary,
+    .btn-secondary,
+    .btn-outline,
+    .btn-danger,
+    .add-to-cart-btn,
+    .checkout-btn,
+    .submit-btn {
+        padding: 14px 24px;
+        font-size: 16px;
+        min-height: 48px;
+    }
+    
+    .action-icon,
+    .icon-btn,
+    .wishlist-btn,
+    .cart-icon-btn,
+    .share-btn,
+    .favorite-btn {
+        width: 44px;
+        height: 44px;
+    }
+    
+    .nav-arrow,
+    .carousel-btn,
+    .slider-btn {
+        width: 44px;
+        height: 44px;
+    }
+}
+
+/* ===================================================================
+   ACCESSIBILITY - Focus states
+   =================================================================== */
+
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-outline:focus-visible,
+.btn-danger:focus-visible,
+.action-icon:focus-visible,
+.icon-btn:focus-visible {
+    outline: 3px solid rgba(240, 178, 27, 0.5);
+    outline-offset: 2px;
+}
+
+/* ===================================================================
+   LOADING STATE - All buttons
+   =================================================================== */
+
+.btn-loading,
+.btn-primary.loading,
+.btn-secondary.loading,
+.submit-btn.loading {
+    position: relative;
+    color: transparent;
+    pointer-events: none;
+}
+
+.btn-loading::after,
+.btn-primary.loading::after,
+.btn-secondary.loading::after,
+.submit-btn.loading::after {
+    content: "";
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    top: 50%;
+    left: 50%;
+    margin-left: -10px;
+    margin-top: -10px;
+    border: 3px solid #ffffff;
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: button-spin 0.8s linear infinite;
+}
+
+@keyframes button-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+

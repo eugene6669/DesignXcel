@@ -1,0 +1,18 @@
+{
+  "activeTheme": "default",
+  "backgroundImage": null,
+  "backgroundImageFile": null,
+  "theme": {
+    "mainBgColor": "#ffffff",
+    "mainTextColor": "#333333",
+    "contactTextColor": "#6c757d",
+    "contactIconColor": "#f0b21b",
+    "navBgColor": "#343a40",
+    "navTextColor": "#ffffff",
+    "navHoverColor": "#007bff",
+    "searchBorderColor": "#ffc107",
+    "searchBtnColor": "#ffc107",
+    "iconColor": "#f0b21b"
+  },
+  "updatedAt": "2026-05-14T08:27:03.147Z"
+}

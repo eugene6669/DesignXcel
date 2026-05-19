@@ -1,0 +1,472 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../../shared/hooks/useAuth';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useCurrency } from '../../../shared/contexts/CurrencyContext';
+import AudioLoader from '../../../shared/components/ui/AudioLoader';
+import ProfileManagement from '../components/ProfileManagement';
+import AddressManagement from '../components/AddressManagement';
+import OrderHistory from '../components/OrderHistory';
+import PaymentMethod from '../components/PaymentMethod';
+import SecuritySettings from '../components/SecuritySettings';
+import DeleteAccountModal from '../components/DeleteAccountModal';
+import LogoutConfirmationModal from '../components/LogoutConfirmationModal';
+import ModernThemeSwitcher from '../../../shared/components/theme/ModernThemeSwitcher';
+import apiClient from '../../../shared/services/api/apiClient';
+import { 
+  DashboardIcon, 
+  UserIcon, 
+  PackageIcon, 
+  CreditCardIcon, 
+  LockIcon,
+  MenuIcon,
+  // OrdersIcon, // Unused
+  // DollarIcon, // Unused
+  ClockIcon,
+  CheckCircleIcon,
+  ShoppingBagIcon,
+  LogoutIcon,
+  TruckIcon
+} from '../../../shared/components/ui/SvgIcons';
+import '../components/account.css';
+
+const Account = () => {
+    const { user, isAuthenticated, logout, loading } = useAuth();
+    const { formatPrice } = useCurrency();
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const [activeTab, setActiveTab] = useState('dashboard');
+    const [accountStats, setAccountStats] = useState({
+        totalOrders: 0,
+        totalSpent: 0,
+        pendingOrders: 0,
+        completedOrders: 0
+    });
+    const [recentOrders, setRecentOrders] = useState([]);
+    const [statsLoading, setStatsLoading] = useState(true);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    
+    // Logout confirmation modal state
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+    // Get returnTo parameter for navigation back to checkout
+    const returnTo = searchParams.get('returnTo');
+
+    // Handle URL parameter changes for tab switching
+    useEffect(() => {
+        const tabParam = searchParams.get('tab');
+        if (tabParam && ['dashboard', 'profile', 'orders', 'addresses', 'payment', 'security'].includes(tabParam)) {
+            setActiveTab(tabParam);
+        }
+    }, [searchParams]);
+
+    // Redirect if not authenticated and fetch account statistics
+    useEffect(() => {
+        const fetchAccountData = async () => {
+            // Only redirect if auth check is complete and user is not authenticated
+            // Don't redirect while auth is still being checked
+            if (loading) {
+                return; // Wait for auth check to complete
+            }
+            
+            // Check both isAuthenticated and localStorage as fallback
+            // This prevents logout on temporary network issues
+            const savedUser = localStorage.getItem('userData');
+            const hasUserData = savedUser && savedUser !== 'null' && savedUser !== 'undefined';
+            
+            // Only redirect if truly not authenticated (no user in state AND no user in localStorage)
+            if (!isAuthenticated && !hasUserData) {
+                navigate('/login');
+                return;
+            }
+            
+            // If we have user data but not authenticated, try to verify with server
+            // but don't redirect - let them stay on the page
+            if (!isAuthenticated && hasUserData) {
+                // User might have valid session but auth check failed due to network
+                // Don't redirect - let them stay on the page
+                // The auth hook will handle re-authentication
+                return;
+            }
+            
+            // Only fetch data if authenticated
+            if (!isAuthenticated) {
+                return;
+            }
+                
+            try {
+                setStatsLoading(true);
+                const [ordersResponse] = await Promise.all([
+                    apiClient.get('/api/customer/orders-with-items'),
+                    apiClient.get('/api/customer/addresses')
+                ]);
+
+                if (ordersResponse.success && ordersResponse.orders) {
+                    const orders = ordersResponse.orders;
+                    // Include all orders (including cancelled) in total count
+                    const totalOrders = orders.length;
+                    
+                    // Exclude cancelled orders from total spent calculation only
+                    const activeOrders = orders.filter(order => order.Status !== 'Cancelled');
+                    const totalSpent = activeOrders.reduce((sum, order) => {
+                        const amount = parseFloat(order.TotalAmount) || 0;
+                        return sum + amount;
+                    }, 0);
+                    
+                    // Use correct field names for status filtering
+                    const pendingOrders = orders.filter(order => 
+                        order.Status === 'Pending' || order.Status === 'Processing'
+                    ).length;
+                    const completedOrders = orders.filter(order => 
+                        order.Status === 'Delivered' || order.Status === 'Completed'
+                    ).length;
+
+                    setAccountStats({
+                        totalOrders,
+                        totalSpent,
+                        pendingOrders,
+                        completedOrders
+                    });
+
+                    // Set recent orders (last 3) - sort by date descending using correct field name
+                    const sortedOrders = orders.sort((a, b) => new Date(b.OrderDate) - new Date(a.OrderDate));
+                    setRecentOrders(sortedOrders.slice(0, 3));
+                }
+            } catch (error) {
+                // Failed to fetch account stats - don't logout on this error
+                console.error('Failed to fetch account data:', error);
+                // Only logout if it's a 401 (unauthorized) error
+                if (error.response?.status === 401) {
+                    // This will be handled by the auth hook
+                }
+            } finally {
+                setStatsLoading(false);
+            }
+        };
+
+        fetchAccountData();
+    }, [isAuthenticated, loading, navigate]);
+
+    // Show loading while authentication is being checked
+    if (loading) {
+        return (
+            <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                minHeight: '50vh',
+                gap: '1rem'
+            }}>
+                <AudioLoader size="large" color="#F0B21B" />
+                <p>Loading your account...</p>
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) {
+        return null;
+    }
+
+    const handleLogoutClick = () => {
+        setShowLogoutModal(true);
+    };
+
+    const handleLogoutConfirm = () => {
+        setShowLogoutModal(false);
+        logout();
+        // logout() function already handles redirect to /login
+    };
+
+    const tabs = [
+        {
+            id: 'dashboard',
+            label: 'Dashboard',
+            icon: <DashboardIcon size={20} />,
+            component: () => <DashboardTab 
+                stats={accountStats} 
+                recentOrders={recentOrders} 
+                loading={statsLoading} 
+                formatPrice={formatPrice}
+                onLogout={handleLogoutClick}
+                user={user}
+                showDeleteModal={showDeleteModal}
+                setShowDeleteModal={setShowDeleteModal}
+            />
+        },
+        {
+            id: 'profile',
+            label: 'Personal Information',
+            icon: <UserIcon size={20} />,
+            component: ProfileManagement
+        },
+        {
+            id: 'orders',
+            label: 'My Orders',
+            icon: <PackageIcon size={20} />,
+            component: OrderHistory
+        },
+        {
+            id: 'addresses',
+            label: 'Addresses',
+            icon: <TruckIcon size={20} />,
+            component: () => <AddressManagement returnTo={returnTo} />
+        },
+        {
+            id: 'payment',
+            label: 'Payment Method',
+            icon: <CreditCardIcon size={20} />,
+            component: PaymentMethod
+        },
+        {
+            id: 'security',
+            label: 'Password Manager',
+            icon: <LockIcon size={20} />,
+            component: SecuritySettings
+        }
+    ];
+
+    const ActiveComponent = tabs.find(tab => tab.id === activeTab)?.component;
+
+    return (
+        <div className="account-page">
+            <div className="account-container">
+                {/* Header Section */}
+                <div className="account-header">
+                    <div className="welcome-section">
+                        <h1 className="welcome-title">
+                            Welcome back, {user?.firstName || (user?.fullName ? user.fullName.split(' ')[0] : null) || (user?.type === 'customer' ? 'Customer' : 'User')}!
+                        </h1>
+                        <p className="welcome-subtitle">
+                            Manage your account, track orders, and update your preferences
+                        </p>
+                    </div>
+                </div>
+
+                {/* Mobile Menu Toggle - Centered */}
+                <div className="mobile-menu-toggle-container">
+                    <button 
+                        className="mobile-menu-toggle"
+                        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                        aria-label="Toggle navigation menu"
+                    >
+                        <MenuIcon size={24} color="#374151" />
+                    </button>
+                </div>
+
+                <div className="account-layout">
+                    <div className={`account-sidebar ${isMobileMenuOpen ? 'mobile-menu-open' : ''}`}>
+                        {/* Mobile Close Button */}
+                        <div className="mobile-close-button">
+                            <button 
+                                className="close-btn"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                aria-label="Close menu"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <nav className="account-nav">
+                            {tabs.map(tab => (
+                                <button
+                                    key={tab.id}
+                                    className={`account-nav-item ${activeTab === tab.id ? 'active' : ''}`}
+                                    onClick={() => {
+                                        setActiveTab(tab.id);
+                                        navigate(`/account?tab=${tab.id}`);
+                                        setIsMobileMenuOpen(false); // Close mobile menu when item is selected
+                                    }}
+                                >
+                                    <span className="nav-icon">{tab.icon}</span>
+                                    <span className="nav-label">{tab.label}</span>
+                                </button>
+                            ))}
+                        </nav>
+                    </div>
+
+                    <div className="account-main">
+                        {/* Mobile Menu Overlay */}
+                        {isMobileMenuOpen && (
+                            <div 
+                                className="mobile-menu-overlay"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                            />
+                        )}
+                        <div className="account-content">
+                            {ActiveComponent && <ActiveComponent />}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Logout Confirmation Modal */}
+            <LogoutConfirmationModal
+                isOpen={showLogoutModal}
+                onClose={() => setShowLogoutModal(false)}
+                onConfirm={handleLogoutConfirm}
+            />
+        </div>
+    );
+};
+
+// Dashboard Tab Component
+const DashboardTab = ({ stats, recentOrders, loading, formatPrice, onLogout, user, showDeleteModal, setShowDeleteModal }) => {
+    const navigate = useNavigate();
+
+    if (loading) {
+        return (
+            <div className="dashboard-loading">
+                <AudioLoader size="medium" color="#F0B21B" />
+                <div className="loading-text">Loading dashboard...</div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="dashboard-container">
+            {/* Welcome Header */}
+            <div className="dashboard-header">
+                <div className="welcome-content">
+                    <div className="welcome-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="#F0B21B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <circle cx="12" cy="7" r="4" stroke="#F0B21B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                    </div>
+                    <div className="welcome-text">
+                        <h1 className="welcome-title">Welcome back, {user?.fullName || (user?.type === 'customer' ? 'Customer' : 'User')}!</h1>
+                        <p className="welcome-subtitle">Here's an overview of your account activity</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Statistics Cards */}
+            <div className="stats-grid">
+                <div className="stat-card">
+                    <div className="stat-icon">
+                        <PackageIcon size={24} />
+                    </div>
+                    <div className="stat-content">
+                        <div className="stat-value">{stats.totalOrders}</div>
+                        <div className="stat-label">Total Orders</div>
+                    </div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <text x="12" y="19" textAnchor="middle" fill="#F0B21B" fontSize="20" fontWeight="800" fontFamily="Inter, Arial, sans-serif">₱</text>
+                        </svg>
+                    </div>
+                    <div className="stat-content">
+                        <div className="stat-value">{formatPrice(stats.totalSpent || 0)}</div>
+                        <div className="stat-label">Total Spent</div>
+                    </div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon">
+                        <ClockIcon size={24} />
+                    </div>
+                    <div className="stat-content">
+                        <div className="stat-value">{stats.pendingOrders}</div>
+                        <div className="stat-label">Pending Orders</div>
+                    </div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon">
+                        <CheckCircleIcon size={24} />
+                    </div>
+                    <div className="stat-content">
+                        <div className="stat-value">{stats.completedOrders}</div>
+                        <div className="stat-label">Completed Orders</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="quick-actions-section">
+                <div className="section-header">
+                    <div className="section-title-wrapper">
+                        <div className="section-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" stroke="#F0B21B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                        </div>
+                        <h2 className="section-title">Quick Actions</h2>
+                    </div>
+                </div>
+                <div className="quick-actions-grid">
+                    <div className="quick-action-card quick-action-theme-card">
+                        <div className="action-icon">
+                            <DashboardIcon size={24} color="currentColor" />
+                        </div>
+                        <div className="action-content">
+                            <h3>Theme</h3>
+                            <p>Switch between light and dark mode</p>
+                        </div>
+                        <ModernThemeSwitcher className="account-theme-switcher-card" size="small" />
+                    </div>
+                    <button className="quick-action-card" onClick={() => navigate('/products')}>
+                        <div className="action-icon">
+                            <ShoppingBagIcon size={24} color="currentColor" />
+                        </div>
+                        <div className="action-content">
+                            <h3>Browse Products</h3>
+                            <p>Discover our latest collection</p>
+                        </div>
+                    </button>
+                    <button className="quick-action-card" onClick={() => navigate('/account?tab=profile')}>
+                        <div className="action-icon">
+                            <UserIcon size={24} color="currentColor" />
+                        </div>
+                        <div className="action-content">
+                            <h3>Update Profile</h3>
+                            <p>Manage your personal information</p>
+                        </div>
+                    </button>
+                    <button className="quick-action-card" onClick={() => navigate('/account?tab=addresses')}>
+                        <div className="action-icon">
+                            <TruckIcon size={24} color="currentColor" />
+                        </div>
+                        <div className="action-content">
+                            <h3>Manage Addresses</h3>
+                            <p>Add or update delivery addresses</p>
+                        </div>
+                    </button>
+                    <button className="quick-action-card" onClick={onLogout}>
+                        <div className="action-icon">
+                            <LogoutIcon size={24} color="currentColor" />
+                        </div>
+                        <div className="action-content">
+                            <h3>Logout</h3>
+                            <p>Sign out of your account</p>
+                        </div>
+                    </button>
+                    <button className="quick-action-card delete-account-card" onClick={() => setShowDeleteModal(true)}>
+                        <div className="action-icon delete-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M3 6H5H21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6H19Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M10 11V17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M14 11V17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                        </div>
+                        <div className="action-content">
+                            <h3>Delete Account</h3>
+                            <p>Permanently delete your account</p>
+                        </div>
+                    </button>
+                </div>
+            </div>
+            
+            {/* Delete Account Modal */}
+            <DeleteAccountModal 
+                isOpen={showDeleteModal}
+                onClose={() => setShowDeleteModal(false)}
+                user={user}
+            />
+        </div>
+    );
+};
+
+export default Account;

@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity Logs - Design Excellence</title>
+    <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
+
+    <style>
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-menu {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .logout-section {
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            margin-top: 20px;
+            text-align: center;
+            position: relative;
+        }
+        .logout-button {
+            display: inline-block;
+            width: auto;
+            padding: 12px 25px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .logout-button:hover {
+            background-color: #c82333;
+        }
+        * {
+            box-sizing: border-box;
+        }
+
+        /* Header Section */
+        .logs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .logs-header h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin: 0;
+            letter-spacing: -0.02em;
+            font-family: var(--font-display);
+        }
+
+        /* Filters Section */
+        .filters-section {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .filter-group label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-light);
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 0.625rem 0.875rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+            background: #ffffff;
+            color: var(--text-dark);
+        }
+
+        .filter-group input:focus,
+        .filter-group select:focus {
+            outline: none;
+            border-color: #F0B21B;
+            box-shadow: 0 0 0 3px rgba(240, 178, 27, 0.1);
+        }
+
+        .filter-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .btn-filter {
+            padding: 0.625rem 1.25rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-filter-primary {
+            background: #F0B21B;
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(240, 178, 27, 0.2);
+        }
+
+        .btn-filter-primary:hover {
+            background: #e6a017;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(240, 178, 27, 0.3);
+        }
+
+        .btn-filter-secondary {
+            background: #ffffff;
+            color: #6b7280;
+            border: 1px solid #e5e7eb;
+        }
+
+        .btn-filter-secondary:hover {
+            border-color: #F0B21B;
+            color: #F0B21B;
+        }
+
+        .btn-export {
+            background: #10b981;
+            color: #ffffff;
+            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+        }
+
+        .btn-export:hover {
+            background: #059669;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        /* Logs Table Section */
+        .logs-table-section {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
+            overflow-x: auto;
+        }
+
+        #activityLogsTable {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0;
+        }
+
+        #activityLogsTable th {
+            background: #f8f9fa;
+            color: var(--text-dark);
+            font-weight: 600;
+            font-size: 0.875rem;
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 2px solid #e5e7eb;
+            white-space: nowrap;
+        }
+
+        #activityLogsTable td {
+            padding: 1rem;
+            border-bottom: 1px solid #f1f2f4;
+            font-size: 0.875rem;
+            color: var(--text-dark);
+            vertical-align: top;
+        }
+
+        #activityLogsTable tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        #activityLogsTable tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Action Badges */
+        .action-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+
+        .action-insert { background-color: #d4edda; color: #155724; }
+        .action-update { background-color: #fff3cd; color: #856404; }
+        .action-delete { background-color: #f8d7da; color: #721c24; }
+        .action-status-change { background-color: #d1ecf1; color: #0c5460; }
+        .action-cancel { background-color: #f8d7da; color: #721c24; }
+        .action-complete { background-color: #d4edda; color: #155724; }
+        .action-login { background-color: #cce5ff; color: #004085; }
+        .action-logout { background-color: #e2e3e5; color: #383d41; }
+        .action-login-failed { background-color: #f8d7da; color: #721c24; }
+        .action-test { background-color: #e2e3e5; color: #383d41; }
+
+        /* Role Badge */
+        .role-badge {
+            background-color: #e9ecef;
+            color: #495057;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        /* Log Details */
+        .log-details {
+            font-size: 0.75rem;
+            color: #6b7280;
+            margin-top: 0.25rem;
+        }
+
+        .description {
+            font-weight: 500;
+            color: var(--text-dark);
+        }
+
+        .timestamp {
+            font-weight: 500;
+            color: var(--text-dark);
+        }
+
+        /* Changes Display */
+        .changes-display {
+            background-color: #f8f9fa;
+            border-left: 3px solid #F0B21B;
+            padding: 0.5rem;
+            margin-top: 0.25rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            border-radius: 4px;
+        }
+
+        .no-changes {
+            color: #6b7280;
+            font-style: italic;
+            font-size: 0.75rem;
+        }
+
+        .change-item {
+            margin-bottom: 0.25rem;
+        }
+
+        .change-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .old-value {
+            color: #dc3545;
+            text-decoration: line-through;
+        }
+
+        .new-value {
+            color: #28a745;
+            font-weight: 600;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+
+        .empty-state-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1.5rem;
+            color: #9ca3af;
+        }
+
+        .empty-state-icon svg {
+            width: 100%;
+            height: 100%;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 1.5;
+        }
+
+        .empty-state-text {
+            font-size: 1.125rem;
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        .error-message {
+            color: #dc3545;
+            padding: 1rem;
+            margin: 1rem 0;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .no-logs-message {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: #6b7280;
+            font-style: italic;
+            display: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .filters-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .filter-actions {
+                width: 100%;
+                justify-content: stretch;
+            }
+            
+            .btn-filter {
+                flex: 1;
+                justify-content: center;
+            }
+
+            #activityLogsTable {
+                font-size: 0.75rem;
+            }
+
+            #activityLogsTable th,
+            #activityLogsTable td {
+                padding: 0.75rem 0.5rem;
+            }
+        }
+
+        /* Custom Confirmation Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            visibility: hidden;
+            opacity: 0;
+            transition: visibility 0s, opacity 0.3s ease;
+        }
+        .modal-overlay.show {
+            visibility: visible;
+            opacity: 1;
+        }
+        .modal-content {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.show .modal-content {
+            transform: scale(1);
+        }
+        .modal-content h3 {
+            margin-top: 0;
+            color: #333;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+        .modal-content p {
+            color: #555;
+            font-size: 1.1em;
+            margin-bottom: 30px;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+        .modal-button {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .modal-button.confirm {
+            background-color: #dc3545;
+            color: white;
+        }
+        .modal-button.confirm:hover {
+            background-color: #c82333;
+        }
+        .modal-button.cancel {
+            background-color: #f0f0f0;
+            color: #555;
+            border: 1px solid #ccc;
+        }
+        .modal-button.cancel:hover {
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="sidebar">
+            <%- include('partials/sidebar', { activePage: 'logs' }) %>
+        </div>
+        <div class="main-content">
+            <div class="logs-header">
+                <h2>Activity Logs</h2>
+            </div>
+            <div class="content-area">
+                <!-- Filters Section -->
+                <div class="filters-section">
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label for="actionFilter">Action Type</label>
+                            <select id="actionFilter">
+                                <option value="">All Actions</option>
+                                <% if (typeof uniqueActions !== 'undefined' && uniqueActions.length > 0) { %>
+                                    <% uniqueActions.forEach(action => { %>
+                                        <option value="<%= action %>"><%= action %></option>
+                                    <% }); %>
+                                <% } %>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="tableFilter">Table Affected</label>
+                            <select id="tableFilter">
+                                <option value="">All Tables</option>
+                                <% if (typeof uniqueTables !== 'undefined' && uniqueTables.length > 0) { %>
+                                    <% uniqueTables.forEach(table => { %>
+                                        <option value="<%= table %>"><%= table %></option>
+                                    <% }); %>
+                                <% } %>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="userFilter">User Role</label>
+                            <select id="userFilter">
+                                <option value="">All Roles</option>
+                                <% if (typeof uniqueRoles !== 'undefined' && uniqueRoles.length > 0) { %>
+                                    <% uniqueRoles.forEach(role => { %>
+                                        <option value="<%= role %>"><%= role %></option>
+                                    <% }); %>
+                                <% } %>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="dateFromFilter">Date From</label>
+                            <input type="date" id="dateFromFilter">
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="dateToFilter">Date To</label>
+                            <input type="date" id="dateToFilter">
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="searchFilter">Search</label>
+                            <input type="text" id="searchFilter" placeholder="Search description, user, role...">
+                        </div>
+                    </div>
+                    
+                    <div class="filter-actions">
+                        <button class="btn-filter btn-filter-primary" onclick="applyFilters()">
+                            <i class="fa-solid fa-filter"></i>
+                            Apply Filters
+                        </button>
+                        <button class="btn-filter btn-filter-secondary" onclick="clearFilters()">
+                            <i class="fa-solid fa-xmark"></i>
+                            Clear
+                        </button>
+                        <button class="btn-filter btn-export" onclick="exportToCSV()">
+                            <i class="fa-solid fa-download"></i>
+                            Export to CSV
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Logs Table Section -->
+                <div class="logs-table-section">
+                    <div id="errorMessage" class="error-message"></div>
+                    <table id="activityLogsTable">
+                        <thead>
+                            <tr>
+                                <th>Log ID</th>
+                                <th>User</th>
+                                <th>Role</th>
+                                <th>Action</th>
+                                <th>Table</th>
+                                <th>Details</th>
+                                <th>Changes</th>
+                                <th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Activity logs will be loaded here by JavaScript -->
+                        </tbody>
+                    </table>
+                    <div id="noLogsMessage" class="empty-state" style="display: none;">
+                        <div class="empty-state-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                <polyline points="3.27 6.96 12 12 20.73 6.96"></polyline>
+                                <line x1="12" y1="22" x2="12" y2="12"></line>
+                            </svg>
+                        </div>
+                        <div class="empty-state-text">No activity logs found.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/Employee/Admin/AdminLogs.js"></script>
+    <script>
+        // Improved dropdown functionality for sidebar
+        document.querySelectorAll('.dropdown-toggle').forEach(item => {
+            item.addEventListener('click', event => {
+                event.preventDefault();
+                const dropdownMenu = item.nextElementSibling;
+                const isVisible = dropdownMenu.style.display === 'block';
+                
+                // Close all other dropdowns first
+                document.querySelectorAll('.dropdown-menu').forEach(menu => {
+                    menu.style.display = 'none';
+                });
+                
+                // Toggle the clicked dropdown
+                dropdownMenu.style.display = isVisible ? 'none' : 'block';
+            });
+        });
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function(event) {
+            const dropdowns = document.querySelectorAll('.dropdown');
+            dropdowns.forEach(dropdown => {
+                if (!dropdown.contains(event.target)) {
+                    const dropdownMenu = dropdown.querySelector('.dropdown-menu');
+                    if (dropdownMenu) {
+                        dropdownMenu.style.display = 'none';
+                    }
+                }
+            });
+        });
+    </script>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="logoutConfirmModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Confirm Logout</h3>
+            <p>Are you sure you want to log out?</p>
+            <div class="modal-buttons">
+                <button class="modal-button confirm" id="confirmLogoutBtn">Logout</button>
+                <button class="modal-button cancel" id="cancelLogoutBtn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Custom Logout Modal Logic
+        const logoutConfirmModal = document.getElementById('logoutConfirmModal');
+        const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
+        const cancelLogoutBtn = document.getElementById('cancelLogoutBtn');
+
+        async function handleLogout(event) {
+            event.preventDefault();
+            logoutConfirmModal.classList.add('show');
+        }
+
+        confirmLogoutBtn.addEventListener('click', async () => {
+            logoutConfirmModal.classList.remove('show');
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    window.location.href = '/login';
+                } else {
+                    console.error('Logout failed');
+                    alert('Failed to logout. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error during logout:', error);
+                alert('An error occurred during logout. Please try again.');
+            }
+        });
+
+        cancelLogoutBtn.addEventListener('click', () => {
+            logoutConfirmModal.classList.remove('show');
+        });
+
+        // Close modal if clicked outside content
+        logoutConfirmModal.addEventListener('click', (event) => {
+            if (event.target === logoutConfirmModal) {
+                logoutConfirmModal.classList.remove('show');
+            }
+        });
+    </script>
+
+</body>
+</html>
