@@ -1,10 +1,11 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Receive Orders - Admin</title>
+    <title>Orders - Admin</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="/css/Employee/Admin/admin-orders-compact.css?v=20260524a">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1070,12 +1071,12 @@
 <body>
     <div class="dashboard-container">
         <div class="sidebar">
-            <%- include('partials/sidebar', { activePage: 'orders-receive' }) %>
+            <%- include('partials/sidebar', { activePage: typeof activePage !== 'undefined' ? activePage : 'orders' }) %>
         </div>
         <div class="main-content">
             <div class="header orders-header">
                 <div>
-                <h2>Receive Orders</h2>
+                <h2>Orders</h2>
                     <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem;">
                         <div class="orders-count-badge">
                             <span class="icon icon-box" aria-hidden="true">
@@ -1105,6 +1106,9 @@
                     </div>
                 </div>
             </div>
+
+            <%- include('partials/admin-orders-tabs', { ordersTab: typeof ordersTab !== 'undefined' ? ordersTab : 'receive' }) %>
+
             <div class="content-area">
                 <!-- Filters Section -->
                 <div class="filters-section">
@@ -1132,10 +1136,10 @@
                             <label for="amountFilter">Amount Range</label>
                             <select id="amountFilter">
                                 <option value="">All Amounts</option>
-                                <option value="0-1000">₱0 - ₱1,000</option>
-                                <option value="1000-5000">₱1,000 - ₱5,000</option>
-                                <option value="5000-10000">₱5,000 - ₱10,000</option>
-                                <option value="10000+">₱10,000+</option>
+                                <option value="0-1000">?0 - ?1,000</option>
+                                <option value="1000-5000">?1,000 - ?5,000</option>
+                                <option value="5000-10000">?5,000 - ?10,000</option>
+                                <option value="10000+">?10,000+</option>
                             </select>
                         </div>
                         <div class="filter-group">
@@ -1154,7 +1158,7 @@
                 </div>
 
                 <!-- View Toggle and Pagination Info -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                <div class="orders-view-toggle-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
                         <span style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">View:</span>
                         <div style="display: flex; background: #f3f4f6; border-radius: 8px; padding: 2px;">
@@ -1182,7 +1186,7 @@
                 </div>
 
                 <% if (orders && orders.length > 0) { %>
-                    <div class="orders-grid" id="ordersGrid">
+                    <div class="orders-grid" id="ordersGrid" style="display: none;">
                         <% orders.forEach(function(order) { %>
                             <div class="order-card collapsed <%= order.IsBulkOrder ? 'has-bulk-badge' : '' %>" 
                                  data-order-id="<%= order.OrderID %>"
@@ -1243,7 +1247,7 @@
                                     </div>
                                     <div class="order-card-summary-secondary">
                                         <span class="order-card-total-label">Order Total</span>
-                                        <span class="order-card-total-value">₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></span>
+                                        <span class="order-card-total-value">?<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></span>
                                     </div>
                                 </div>
                                 <div class="order-card-controls">
@@ -1253,7 +1257,7 @@
                                         data-toggle-target="<%= order.OrderID %>"
                                         aria-expanded="false"
                                     >
-                                        <span class="toggle-icon">⌄</span>
+                                        <span class="toggle-icon">?</span>
                                         <span class="toggle-label">View Details</span>
                                     </button>
                                 </div>
@@ -1285,7 +1289,7 @@
                                                             <% } else if (item.ImageURL) { %>
                                                                 <img src="<%= item.ImageURL %>" alt="<%= item.Name %>">
                                                             <% } else { %>
-                                                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem;">ðŸ–¼ï¸</div>
+                                                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem;">🖼️</div>
                                                             <% } %>
                                                         </div>
                                                         <div class="order-product-details">
@@ -1300,7 +1304,7 @@
                                                                 <span>Qty: <%= item.Quantity %></span>
                                                             </div>
                                                         </div>
-                                                        <div class="order-product-price">₱<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
+                                                        <div class="order-product-price">?<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
                                                     </div>
                                                 <% }); %>
                                             <% } else { %>
@@ -1336,7 +1340,7 @@
                                     </div>
                                     <div class="order-section">
                                         <span class="order-section-title">Delivery Cost</span>
-                                        <div class="order-section-body">₱<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
+                                        <div class="order-section-body">?<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
                                     </div>
                                     <% 
                                         const extraFee = typeof order.ExtraDeliveryFee !== 'undefined' && order.ExtraDeliveryFee !== null 
@@ -1346,7 +1350,7 @@
                                     <% if (extraFee > 0) { %>
                                     <div class="order-section">
                                         <span class="order-section-title">Extra Delivery Fee (Qty &gt; 4)</span>
-                                        <div class="order-section-body">₱<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
+                                        <div class="order-section-body">?<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
                                     </div>
                                     <% } %>
 
@@ -1389,7 +1393,7 @@
                             <div class="payment-modal-content">
                                 <div class="payment-modal-header">
                                     <h3>Payment Details</h3>
-                                    <button class="payment-modal-close" onclick="closePaymentModal(<%= order.OrderID %>)">Ã—</button>
+                                    <button class="payment-modal-close" onclick="closePaymentModal(<%= order.OrderID %>)">×</button>
                                 </div>
                                 <div class="payment-modal-body" id="payment-modal-body-<%= order.OrderID %>">
                                     <div style="text-align: center; padding: 2rem;">
@@ -1409,7 +1413,7 @@
                             <div class="return-media-modal-content">
                                 <div class="return-media-modal-header">
                                     <h3><%= order.ReturnImageURL ? 'Return Image' : 'Return Video' %></h3>
-                                    <button class="return-media-modal-close" onclick="closeReturnMediaModal(<%= order.OrderID %>)">Ã—</button>
+                                    <button class="return-media-modal-close" onclick="closeReturnMediaModal(<%= order.OrderID %>)">×</button>
                                 </div>
                                 <div class="return-media-modal-body" id="return-media-body-<%= order.OrderID %>">
                                     <!-- Content will be loaded dynamically -->
@@ -1420,8 +1424,8 @@
                     <% }); %>
 
                     <!-- Orders Table (Hidden by default) -->
-                    <div id="ordersTable" style="display: none; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
-                        <table style="width: 100%; border-collapse: collapse;">
+                    <div id="ordersTable" style="display: block; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
+                        <table class="admin-orders-compact-table">
                             <thead style="background: #f8f9fa; border-bottom: 2px solid #e5e7eb;">
                                 <tr>
                                     <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Order #</th>
@@ -1493,7 +1497,7 @@
                                             <%= order.PaymentMethod || 'N/A' %>
                                         </td>
                                         <td style="padding: 1rem; text-align: right; font-weight: 700; color: #111827;">
-                                            ₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
+                                            ?<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
                                         </td>
                                         <td style="padding: 1rem; text-align: center;">
                                             <button class="order-card-toggle" type="button" data-toggle-target="<%= order.OrderID %>" style="background: #F0B21B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; margin-right: 0.5rem;" onclick="toggleOrderDetails(<%= order.OrderID %>)">View</button>
@@ -1538,7 +1542,7 @@
                                                                         <% } else if (item.ImageURL) { %>
                                                                             <img src="<%= item.ImageURL %>" alt="<%= item.Name %>" style="width: 100%; height: 100%; object-fit: cover;">
                                                                         <% } else { %>
-                                                                            <div style="color: #94a3b8; font-size: 1.5rem;">ðŸ–¼ï¸</div>
+                                                                            <div style="color: #94a3b8; font-size: 1.5rem;">🖼️</div>
                                                                         <% } %>
                                                                     </div>
                                                                     <div style="flex: 1; min-width: 0;">
@@ -1554,7 +1558,7 @@
                                                                         </div>
                                                                     </div>
                                                                     <div style="font-weight: 700; color: #111827; font-size: 0.9rem;">
-                                                                        ₱<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
+                                                                        ?<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
                                                                     </div>
                                                                 </div>
                                                             <% }); %>
@@ -1592,12 +1596,12 @@
                                                     <div style="font-size: 0.875rem; color: #111827; display: flex; flex-direction: column; gap: 0.5rem;">
                                                         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
                                                             <span>Subtotal:</span>
-                                                            <strong>₱<%= Number(order.Subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                            <strong>?<%= Number(order.Subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
                                                         </div>
                                                         <% if (!order.IsBulkOrder) { %>
                                                         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
                                                             <span>Shipping Fee:</span>
-                                                            <strong>₱<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                            <strong>?<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
                                                         </div>
                                                         <% } %>
                                                         <% 
@@ -1619,12 +1623,12 @@
                                                         <% if (extraFee > 0) { %>
                                                         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
                                                             <span>Extra Delivery Fee (Qty &gt; 4):</span>
-                                                            <strong>₱<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                            <strong>?<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
                                                         </div>
                                                         <% } %>
                                                         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; margin-top: 0.5rem; border-top: 2px solid #0f172a;">
                                                             <span style="font-weight: 700; font-size: 1.05rem;">Total:</span>
-                                                            <strong style="font-weight: 700; font-size: 1.05rem; color: #0f172a;">₱<%= Number(order.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                            <strong style="font-weight: 700; font-size: 1.05rem; color: #0f172a;">?<%= Number(order.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1682,6 +1686,7 @@
 
     <!-- Loading Spinner Utility -->
     <script src="/js/Employee/Admin/admin-loading-spinner.js"></script>
+    <script src="/js/Employee/Admin/admin-orders-compact.js?v=20260524a"></script>
     
     <script>
         // Loading Spinner Helper (if utility not loaded)
@@ -1841,7 +1846,7 @@
                 if (amountFilter) {
                     const [min, max] = amountFilter === '10000+' 
                         ? [10000, Infinity]
-                        : amountFilter.split('-').map(v => v.replace(/[₱,]/g, ''));
+                        : amountFilter.split('-').map(v => v.replace(/[?,]/g, ''));
                     if (amount < parseFloat(min) || (max !== 'Infinity' && amount > parseFloat(max))) {
                         shouldShow = false;
                     }
@@ -1935,7 +1940,7 @@
                 if (amountFilter) {
                     const [min, max] = amountFilter === '10000+' 
                         ? [10000, Infinity]
-                        : amountFilter.split('-').map(v => v.replace(/[₱,]/g, ''));
+                        : amountFilter.split('-').map(v => v.replace(/[?,]/g, ''));
                     if (amount < parseFloat(min) || (max !== 'Infinity' && amount > parseFloat(max))) {
                         shouldShow = false;
                     }
@@ -2154,7 +2159,7 @@
                             </div>
                             <div class="payment-info-row">
                                 <span class="payment-info-label">Total Amount</span>
-                                <span class="payment-info-value amount">₱${Number(details.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                <span class="payment-info-value amount">?${Number(details.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div class="payment-info-row">
                                 <span class="payment-info-label">Order Date</span>
@@ -2212,7 +2217,7 @@
                                     </div>
                                     <div class="payment-info-row">
                                         <span class="payment-info-label">Amount Paid</span>
-                                        <span class="payment-info-value amount">₱${amountPhp.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        <span class="payment-info-value amount">?${amountPhp.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
                                     <div class="payment-info-row">
                                         <span class="payment-info-label">Currency</span>
@@ -2231,7 +2236,7 @@
                 } else {
                     modalBody.innerHTML = `
                         <div style="text-align: center; padding: 2rem;">
-                            <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">âš ï¸</div>
+                            <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
                             <p style="color: #6b7280; font-size: 1rem;">${result.message || 'Failed to retrieve payment details'}</p>
                         </div>
                     `;
@@ -2240,7 +2245,7 @@
                 console.error('Error checking payment status:', error);
                 modalBody.innerHTML = `
                     <div style="text-align: center; padding: 2rem;">
-                        <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">âš ï¸</div>
+                        <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
                         <p style="color: #6b7280; font-size: 1rem;">Error checking payment status. Please try again.</p>
                     </div>
                 `;
@@ -2286,9 +2291,7 @@
                 .then(data => {
                     if (data.success) {
                         closeModal(orderId, action);
-                        const dest = (data.status === 'Completed Returned')
-                            ? '/Employee/Admin/CompletedReplacement'
-                            : '/Employee/Admin/CompletedOrders';
+                        const dest = '/Employee/Admin/Orders?tab=completed';
                         showOrderSuccess(data.status === 'Completed Returned'
                             ? 'Replacement order received and completed!'
                             : 'Order received and completed!');

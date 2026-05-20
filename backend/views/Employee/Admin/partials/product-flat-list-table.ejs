@@ -1,0 +1,116 @@
+<%#
+  locals:
+    listBaseUrl - e.g. '/Employee/Admin/Products'
+    showReturnColumns - boolean
+    showActions - boolean
+%>
+<% if (allProductsList && allProductsList.length > 0) { %>
+    <% if (!showReturnColumns) { %>
+    <div class="stock-legend">
+        <span><i style="background:#DC3545;"></i> Out of stock (0)</span>
+        <span><i style="background:#FF9800;"></i> Critical (1–10)</span>
+        <span><i style="background:#d4af37;"></i> Low (11–20)</span>
+    </div>
+    <% } %>
+    <table id="productsFlatTable" class="products-flat-table">
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Name</th>
+                <th>Category / SKU</th>
+                <th class="qty-col">Total Qty</th>
+                <th class="qty-col">Available</th>
+                <% if (showReturnColumns) { %>
+                <th class="qty-col">Damaged</th>
+                <th class="qty-col">Returned</th>
+                <th class="qty-col">Repaired</th>
+                <th class="qty-col">Disposed</th>
+                <% } %>
+                <th>Image</th>
+                <% if (!showReturnColumns) { %><th>Last Added</th><% } %>
+                <% if (showActions) { %><th>Actions</th><% } %>
+            </tr>
+        </thead>
+        <tbody>
+            <% allProductsList.forEach(function(item) {
+                const productName = item.InventoryProductName || 'N/A';
+                const productCategory = item.InventoryProductCategory || 'N/A';
+                const productImageRaw = item.InventoryProductImageURL || null;
+                const productImageNormalized = productImageRaw ? String(productImageRaw).trim().replace(/\\/g, '/') : '';
+                const ensureLeadingSlash = (value) => {
+                    const v = String(value || '').trim();
+                    if (!v) return '';
+                    if (v.startsWith('http://') || v.startsWith('https://') || v.startsWith('data:')) return v;
+                    return v.startsWith('/') ? v : '/' + v;
+                };
+                const looksLikeFilename = (value) => /\.(png|jpe?g|gif|webp|svg)$/i.test(String(value || ''));
+                const normalizedForFilenameCheck = productImageNormalized.replace(/^\/+/, '');
+                let productImage = ensureLeadingSlash(productImageNormalized);
+                if (normalizedForFilenameCheck && looksLikeFilename(normalizedForFilenameCheck) && !normalizedForFilenameCheck.includes('/')) {
+                    productImage = '/uploads/products/images/' + normalizedForFilenameCheck;
+                }
+                let productImagePrimary = productImage || '';
+                let productImageFallback = '';
+                let productImageFallback2 = '';
+                if (productImage && productImage.startsWith('/uploads/products/') && !productImage.startsWith('/uploads/products/images/')) {
+                    productImagePrimary = productImage.replace('/uploads/products/', '/uploads/products/images/');
+                    productImageFallback = productImage;
+                } else if (productImage && productImage.startsWith('/uploads/products/images/')) {
+                    productImageFallback = productImage.replace('/uploads/products/images/', '/uploads/products/');
+                } else if (productImage && productImage.startsWith('/uploads/products/inventory/')) {
+                    productImageFallback = productImage.replace('/uploads/products/inventory/', '/uploads/products/images/');
+                    productImageFallback2 = productImage.replace('/uploads/products/inventory/', '/uploads/products/');
+                }
+                const totalQuantity = item.TotalQuantity || 0;
+                const availableQty = item.AvailableQuantity || 0;
+                const damagedQty = item.DamagedQuantity || 0;
+                const returnedQty = item.ReturnedQuantity || 0;
+                const repairedQty = item.RepairedQuantity || 0;
+                const disposedQty = item.DisposedQuantity || 0;
+                const productId = item.InventoryProductID;
+            %>
+            <tr class="product-flat-row" data-inventory-product-id="<%= productId %>" data-product-name="<%= productName.replace(/"/g, '&quot;') %>">
+                <td><span class="row-type-badge row-type-product">Product</span></td>
+                <td><strong><%= productName %></strong></td>
+                <td><%= productCategory %></td>
+                <td class="qty-col"><span class="stock-qty <%= stockQtyClass(totalQuantity) %>"><%= totalQuantity %></span></td>
+                <td class="qty-col"><span class="stock-qty stock-qty-available"><%= availableQty %></span></td>
+                <% if (showReturnColumns) { %>
+                <td class="qty-col"><%= damagedQty %></td>
+                <td class="qty-col"><%= returnedQty %></td>
+                <td class="qty-col"><%= repairedQty %></td>
+                <td class="qty-col"><%= disposedQty %></td>
+                <% } %>
+                <td>
+                    <% if (productImagePrimary) { %>
+                        <img src="<%= productImagePrimary %>" alt="" class="image-preview" style="width:48px;height:48px;object-fit:cover;border-radius:4px;"
+                            data-fallback-src="<%= productImageFallback %>"
+                            data-fallback-src2="<%= productImageFallback2 %>"
+                            onerror="if(this.dataset.fallbackSrc&&this.src.indexOf(this.dataset.fallbackSrc)===-1){this.src=this.dataset.fallbackSrc;}else if(this.dataset.fallbackSrc2&&this.src.indexOf(this.dataset.fallbackSrc2)===-1){this.src=this.dataset.fallbackSrc2;}else{this.onerror=null;this.src='/images/placeholder-no-image.svg';}">
+                    <% } else { %>
+                        <span style="color:#999;">—</span>
+                    <% } %>
+                </td>
+                <% if (!showReturnColumns) { %>
+                <td><%= item.LastDateAdded ? new Date(item.LastDateAdded).toLocaleDateString() : 'N/A' %></td>
+                <% } %>
+                <% if (showActions) { %>
+                <td>
+                    <button type="button" class="edit-product-return-status-btn pi-btn pi-btn-sm" style="background:#ffc107;color:#000;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;" data-inventory-product-id="<%= productId %>" title="Edit product stock status">Edit</button>
+                </td>
+                <% } %>
+            </tr>
+            <% }); %>
+        </tbody>
+    </table>
+<% } else { %>
+    <p class="inventory-list-empty">
+        <% if (invFilters.search || invFilters.category) { %>
+            No products match your filters.
+        <% } else if (showReturnColumns) { %>
+            No products with returned, damaged, repaired, or disposed stock.
+        <% } else { %>
+            No inventory items found. Add products in Product Inventory.
+        <% } %>
+    </p>
+<% } %>

@@ -96,15 +96,19 @@ const INVENTORY_PRODUCT_LIST_CORE = `
             NULLIF(ip.ImageURL, '')
         ) as InventoryProductImageURL,
         ip.DateAdded,
+        COALESCE(vlast.LastVariationAdded, ip.DateAdded) AS LastDateAdded,
         CASE WHEN vagg.HasActiveVariations = 1 THEN vagg.VariationTotalSum
             ELSE (COALESCE(ip.AvailableQuantity, 0) + COALESCE(ip.DamagedQuantity, 0)) END as TotalQuantity,
         CASE WHEN vagg.HasActiveVariations = 1 THEN vagg.VariationSellableSum
             ELSE COALESCE(ip.AvailableQuantity, 0) END as AvailableQuantity,
         CASE WHEN vagg.HasActiveVariations = 1 THEN vagg.VariationDamagedSum
             ELSE COALESCE(ip.DamagedQuantity, 0) END as DamagedQuantity,
-        COALESCE(ip.ReturnedQuantity, 0) as ReturnedQuantity,
-        COALESCE(ip.RepairedQuantity, 0) as RepairedQuantity,
-        COALESCE(ip.DisposedQuantity, 0) as DisposedQuantity,
+        CASE WHEN vagg.HasActiveVariations = 1 THEN vagg.VariationReturnedSum
+            ELSE COALESCE(ip.ReturnedQuantity, 0) END as ReturnedQuantity,
+        CASE WHEN vagg.HasActiveVariations = 1 THEN vagg.VariationRepairedSum
+            ELSE COALESCE(ip.RepairedQuantity, 0) END as RepairedQuantity,
+        CASE WHEN vagg.HasActiveVariations = 1 THEN vagg.VariationDisposedSum
+            ELSE COALESCE(ip.DisposedQuantity, 0) END as DisposedQuantity,
         CASE
             WHEN (CASE WHEN vagg.HasActiveVariations = 1 THEN vagg.VariationSellableSum ELSE COALESCE(ip.AvailableQuantity, 0) END) > 0 THEN 'available'
             WHEN COALESCE(ip.RepairedQuantity, 0) > 0 THEN 'repaired'
@@ -144,7 +148,22 @@ const INVENTORY_PRODUCT_LIST_CORE = `
                 SELECT SUM(COALESCE(iv3.DamagedQuantity, 0))
                 FROM InventoryProductVariations iv3
                 WHERE iv3.InventoryProductID = ip.InventoryProductID AND iv3.IsActive = 1
-            ), 0) AS VariationDamagedSum
+            ), 0) AS VariationDamagedSum,
+            ISNULL((
+                SELECT SUM(COALESCE(iv4.ReturnedQuantity, 0))
+                FROM InventoryProductVariations iv4
+                WHERE iv4.InventoryProductID = ip.InventoryProductID AND iv4.IsActive = 1
+            ), 0) AS VariationReturnedSum,
+            ISNULL((
+                SELECT SUM(COALESCE(iv5.RepairedQuantity, 0))
+                FROM InventoryProductVariations iv5
+                WHERE iv5.InventoryProductID = ip.InventoryProductID AND iv5.IsActive = 1
+            ), 0) AS VariationRepairedSum,
+            ISNULL((
+                SELECT SUM(COALESCE(iv6.DisposedQuantity, 0))
+                FROM InventoryProductVariations iv6
+                WHERE iv6.InventoryProductID = ip.InventoryProductID AND iv6.IsActive = 1
+            ), 0) AS VariationDisposedSum
     ) vagg
     OUTER APPLY (
         SELECT TOP 1
@@ -155,6 +174,11 @@ const INVENTORY_PRODUCT_LIST_CORE = `
         ORDER BY ipv.VariationID
     ) vimg
     LEFT JOIN Products pLinked ON pLinked.ProductID = ip.ProductID AND pLinked.IsActive = 1
+    OUTER APPLY (
+        SELECT MAX(iv.CreatedAt) AS LastVariationAdded
+        FROM InventoryProductVariations iv
+        WHERE iv.InventoryProductID = ip.InventoryProductID AND iv.IsActive = 1
+    ) vlast
 `;
 
 function applyInventoryListFilters(request, filters = {}) {
@@ -185,9 +209,27 @@ function applyInventoryListFilters(request, filters = {}) {
     return clause;
 }
 
-async function countInventoryProducts(pool, filters = {}) {
+/** Products with variation-level returned / damaged / repaired / disposed stock only. */
+function applyReturnsListFilters(request, filters = {}) {
+    let clause = applyInventoryListFilters(request, filters);
+    clause += ` AND EXISTS (
+            SELECT 1 FROM InventoryProductVariations iv
+            WHERE iv.InventoryProductID = ip.InventoryProductID AND iv.IsActive = 1
+            AND (
+                COALESCE(iv.ReturnedQuantity, 0) > 0
+                OR COALESCE(iv.DamagedQuantity, 0) > 0
+                OR COALESCE(iv.RepairedQuantity, 0) > 0
+                OR COALESCE(iv.DisposedQuantity, 0) > 0
+            )
+        )`;
+    return clause;
+}
+
+async function countInventoryProducts(pool, filters = {}, options = {}) {
     const request = pool.request();
-    const filterClause = applyInventoryListFilters(request, filters);
+    const filterClause = options.returnsOnly
+        ? applyReturnsListFilters(request, filters)
+        : applyInventoryListFilters(request, filters);
     const result = await request.query(`
         SELECT COUNT(*) as total
         FROM InventoryProducts ip
@@ -197,13 +239,15 @@ async function countInventoryProducts(pool, filters = {}) {
     return parseInt(result.recordset[0]?.total, 10) || 0;
 }
 
-async function fetchInventoryProductsPage(pool, filters = {}) {
+async function fetchInventoryProductsPage(pool, filters = {}, options = {}) {
     const limit = Math.min(Math.max(parseInt(filters.limit, 10) || INVENTORY_LIST_PAGE_SIZE, 5), 100);
     const page = Math.max(parseInt(filters.page, 10) || 1, 1);
     const offset = (page - 1) * limit;
 
     const request = pool.request();
-    const filterClause = applyInventoryListFilters(request, filters);
+    const filterClause = options.returnsOnly
+        ? applyReturnsListFilters(request, filters)
+        : applyInventoryListFilters(request, filters);
     request.input('offset', sql.Int, offset);
     request.input('limit', sql.Int, limit);
 
@@ -319,6 +363,43 @@ async function loadProductInventoryPageData(pool, options = {}) {
     };
 }
 
+async function loadProductReturnsPageData(pool, options = {}) {
+    const filters = {
+        search: options.search || '',
+        category: options.category || '',
+        limit: options.limit || INVENTORY_LIST_PAGE_SIZE,
+        page: options.page || 1
+    };
+    const returnsOpt = { returnsOnly: true };
+    const [categories, totalCount, pageResult] = await Promise.all([
+        pool.request().query(`
+            SELECT DISTINCT Category FROM (
+                SELECT Category FROM Products WHERE IsActive = 1 AND Category IS NOT NULL AND Category != ''
+                UNION
+                SELECT Category FROM InventoryProducts WHERE IsActive = 1 AND Category IS NOT NULL AND Category != ''
+            ) c ORDER BY Category
+        `).then((r) => (r.recordset || []).map((row) => row.Category)),
+        countInventoryProducts(pool, filters, returnsOpt),
+        fetchInventoryProductsPage(pool, filters, returnsOpt)
+    ]);
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageResult.limit));
+    const page = Math.min(pageResult.page, totalPages);
+    return {
+        categories,
+        allInventoryProducts: pageResult.rows,
+        pagination: {
+            page,
+            limit: pageResult.limit,
+            totalCount,
+            totalPages
+        },
+        listFilters: {
+            search: filters.search,
+            category: filters.category
+        }
+    };
+}
+
 async function fetchInventoryProductSummary(pool, inventoryProductId) {
     const id = parseInt(inventoryProductId, 10);
     if (!id || Number.isNaN(id)) return null;
@@ -336,6 +417,10 @@ async function fetchInventoryProductSummary(pool, inventoryProductId) {
         inventoryProductId: row.InventoryProductID,
         totalQuantity: Number(row.TotalQuantity) || 0,
         availableQuantity: Number(row.AvailableQuantity) || 0,
+        damagedQuantity: Number(row.DamagedQuantity) || 0,
+        returnedQuantity: Number(row.ReturnedQuantity) || 0,
+        repairedQuantity: Number(row.RepairedQuantity) || 0,
+        disposedQuantity: Number(row.DisposedQuantity) || 0,
         inventoryStatus: row.InventoryStatus || 'available'
     };
 }
@@ -356,6 +441,19 @@ async function fetchActiveRawMaterialsList(pool) {
     return result.recordset || [];
 }
 
+async function fetchProductCategoriesList(pool) {
+    const { getOrLoad: cacheLoad } = require('./adminPageCache');
+    return cacheLoad('admin:productCategories', () =>
+        pool.request().query(`
+            SELECT DISTINCT Category FROM (
+                SELECT Category FROM Products WHERE IsActive = 1 AND Category IS NOT NULL AND Category != ''
+                UNION
+                SELECT Category FROM InventoryProducts WHERE IsActive = 1 AND Category IS NOT NULL AND Category != ''
+            ) c ORDER BY Category
+        `).then((r) => (r.recordset || []).map((row) => row.Category).filter(Boolean))
+    );
+}
+
 async function buildInventoryStockRefreshPayload(pool, inventoryProductId) {
     const [summary, materials] = await Promise.all([
         fetchInventoryProductSummary(pool, inventoryProductId),
@@ -364,14 +462,113 @@ async function buildInventoryStockRefreshPayload(pool, inventoryProductId) {
     return { summary, materials };
 }
 
+/** Same sellable-qty expression as Product Inventory API and listing. */
+function variationSellableQtySql(alias = 'ipv') {
+    return `CASE WHEN ${alias}.AvailableQuantity IS NULL OR ${alias}.AvailableQuantity = 0
+        THEN COALESCE(${alias}.Quantity, 0) ELSE ${alias}.AvailableQuantity END`;
+}
+
+/** Mirrors product-inventory.js variation row stock display. */
+function mapVariationStockFields(row) {
+    const baseQuantity = Number(row.Quantity) || 0;
+    let availableQty = row.AvailableQuantity;
+    if ((availableQty === null || availableQty === undefined || Number(availableQty) === 0) && baseQuantity > 0) {
+        availableQty = baseQuantity;
+    } else {
+        availableQty = Number(availableQty) || 0;
+    }
+    const damagedQty = Number(row.DamagedQuantity) || 0;
+    const totalQty = (availableQty + damagedQty) > 0 ? (availableQty + damagedQty) : baseQuantity;
+    return { availableQty, totalQty, damagedQty, baseQuantity };
+}
+
+function mapVariationAlertRow(row) {
+    const parent = String(row.ParentProductName || '').trim();
+    const variation = String(row.VariationName || '').trim();
+    const sku = String(row.SKU || '').trim();
+    const color = String(row.Color || '').trim();
+    const { availableQty, totalQty, damagedQty } = mapVariationStockFields(row);
+    const displayName = parent && variation
+        ? `${parent} · ${variation}`
+        : (variation || parent || sku || 'Variation');
+
+    return {
+        VariationID: row.VariationID,
+        SKU: sku || null,
+        VariationName: variation || null,
+        Color: color || null,
+        ParentProductName: parent || null,
+        InventoryProductID: row.InventoryProductID,
+        ProductID: row.VariationID,
+        Name: displayName,
+        AvailableQuantity: availableQty,
+        TotalQuantity: totalQty,
+        DamagedQuantity: damagedQty,
+        StockQuantity: availableQty
+    };
+}
+
+/** Low-stock alerts at variation level (matches Product Inventory stock). */
+async function fetchLowStockVariationAlerts(pool, maxQuantity = 20) {
+    const sellable = variationSellableQtySql('ipv');
+    const result = await pool.request()
+        .input('maxQty', sql.Int, maxQuantity)
+        .query(`
+            SELECT
+                ipv.VariationID,
+                ipv.SKU,
+                ipv.VariationName,
+                ipv.Color,
+                ipv.Quantity,
+                ipv.AvailableQuantity,
+                ISNULL(ipv.DamagedQuantity, 0) AS DamagedQuantity,
+                ip.Name AS ParentProductName,
+                ip.InventoryProductID
+            FROM InventoryProductVariations ipv
+            INNER JOIN InventoryProducts ip ON ip.InventoryProductID = ipv.InventoryProductID
+            WHERE ipv.IsActive = 1 AND ip.IsActive = 1
+              AND (${sellable}) <= @maxQty
+            ORDER BY (${sellable}) ASC, ip.Name ASC, ipv.VariationName ASC
+        `);
+
+    return (result.recordset || []).map(mapVariationAlertRow);
+}
+
+async function fetchLowStockRawMaterials(pool, maxQuantity = 20) {
+    const result = await pool.request()
+        .input('maxQty', sql.Int, maxQuantity)
+        .query(`
+            SELECT MaterialID, Name, QuantityAvailable, Unit
+            FROM RawMaterials
+            WHERE IsActive = 1 AND QuantityAvailable <= @maxQty
+            ORDER BY QuantityAvailable ASC
+        `);
+    return result.recordset || [];
+}
+
+async function buildInventoryAlertsPayload(pool, maxQuantity = 20) {
+    const [products, rawMaterials] = await Promise.all([
+        fetchLowStockVariationAlerts(pool, maxQuantity),
+        fetchLowStockRawMaterials(pool, maxQuantity)
+    ]);
+    return { success: true, products, rawMaterials };
+}
+
 module.exports = {
     getOrdersSchemaFlags,
     attachOrderItemsBatch,
     loadProductInventoryPageData,
+    loadProductReturnsPageData,
     INVENTORY_LIST_PAGE_SIZE,
     countInventoryProducts,
     fetchInventoryProductsPage,
     fetchInventoryProductSummary,
     fetchActiveRawMaterialsList,
-    buildInventoryStockRefreshPayload
+    buildInventoryStockRefreshPayload,
+    fetchProductCategoriesList,
+    variationSellableQtySql,
+    mapVariationStockFields,
+    fetchLowStockVariationAlerts,
+    fetchLowStockRawMaterials,
+    buildInventoryAlertsPayload
 };

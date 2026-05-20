@@ -199,12 +199,28 @@
         }
         .rates-form-modal .modal-content {
             text-align: left;
-            max-width: 480px;
+            max-width: 420px;
             width: 95%;
-            padding: 24px;
+            padding: 16px 18px;
         }
+        .rates-form-modal h3 {
+            margin: 0 0 10px;
+            font-size: 1.05em;
+            text-align: left;
+        }
+        .rates-form-modal .rates-form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 12px;
+        }
+        .rates-form-modal .rates-span-2 { grid-column: 1 / -1; }
         .rates-form-modal .form-group {
-            margin-bottom: 12px;
+            margin-bottom: 0;
+        }
+        .rates-form-modal .rates-hint {
+            margin: 0 0 10px;
+            font-size: 0.78em;
+            color: #6b7280;
         }
         .rates-form-modal label {
             display: block;
@@ -215,29 +231,35 @@
         }
         .rates-form-modal input[type="text"],
         .rates-form-modal input[type="number"],
+        .rates-form-modal select,
         .rates-form-modal textarea {
             width: 100%;
-            padding: 8px 10px;
+            padding: 6px 8px;
+            font-size: 0.9em;
             border: 1px solid #d1d5db;
-            border-radius: 6px;
+            border-radius: 4px;
             box-sizing: border-box;
         }
-        .rates-form-modal textarea { min-height: 64px; resize: vertical; }
+        .rates-form-modal textarea { min-height: 52px; resize: vertical; }
         .rates-form-modal .form-row-check {
             display: flex;
-            gap: 16px;
+            gap: 14px;
             align-items: center;
-            margin-bottom: 12px;
+            flex-wrap: wrap;
+            font-size: 0.85em;
         }
         .rates-form-modal .modal-actions {
             display: flex;
             justify-content: flex-end;
-            gap: 10px;
-            margin-top: 16px;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
         }
         .rates-form-modal .modal-actions button {
-            padding: 10px 20px;
-            border-radius: 6px;
+            padding: 7px 14px;
+            font-size: 0.85em;
+            border-radius: 4px;
             font-weight: 600;
             cursor: pointer;
             border: none;
@@ -367,30 +389,33 @@
     <div id="addExtraCategoryModal" class="modal-overlay rates-form-modal">
         <div class="modal-content">
             <h3>Add Category Rate</h3>
+            <p class="rates-hint">Categories are loaded from Product Inventory.</p>
             <form id="addExtraCategoryForm">
-                <div class="form-group">
-                    <label for="addCatName">Category name <span style="color:red;">*</span></label>
-                    <input type="text" id="addCatName" required placeholder="e.g. Chairs, Cabinet">
+                <div class="rates-form-grid">
+                <div class="form-group rates-span-2">
+                    <label for="addCatName">Category <span style="color:red;">*</span></label>
+                    <select id="addCatName" required><option value="">Loading categories…</option></select>
                 </div>
                 <div class="form-group">
                     <label for="addCatFee">Fee per item (₱) <span style="color:red;">*</span></label>
                     <input type="number" id="addCatFee" step="0.01" min="0" required placeholder="100.00">
                 </div>
                 <div class="form-group">
-                    <label for="addCatMinQty">Min item quantity (fee if qty &gt;)</label>
+                    <label for="addCatMinQty">Min qty (fee if &gt;)</label>
                     <input type="number" id="addCatMinQty" min="0" step="1" value="4">
-                </div>
-                <div class="form-group">
-                    <label for="addCatDesc">Description</label>
-                    <textarea id="addCatDesc" placeholder="Optional notes"></textarea>
                 </div>
                 <div class="form-group">
                     <label for="addCatSort">Sort order</label>
                     <input type="number" id="addCatSort" value="0" step="1">
                 </div>
-                <div class="form-row-check">
+                <div class="form-group rates-span-2">
+                    <label for="addCatDesc">Description</label>
+                    <textarea id="addCatDesc" placeholder="Optional"></textarea>
+                </div>
+                <div class="form-row-check rates-span-2">
                     <label><input type="checkbox" id="addCatDefault"> Default fallback</label>
                     <label><input type="checkbox" id="addCatActive" checked> Active</label>
+                </div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel-modal" data-close-modal="addExtraCategoryModal">Cancel</button>
@@ -405,29 +430,31 @@
             <h3>Edit Category Rate</h3>
             <form id="editExtraCategoryForm">
                 <input type="hidden" id="editCatId">
-                <div class="form-group">
-                    <label for="editCatName">Category name <span style="color:red;">*</span></label>
-                    <input type="text" id="editCatName" required>
-                </div>
-                <div class="form-group">
-                    <label for="editCatFee">Fee per item (₱) <span style="color:red;">*</span></label>
-                    <input type="number" id="editCatFee" step="0.01" min="0" required>
-                </div>
-                <div class="form-group">
-                    <label for="editCatMinQty">Min item quantity (fee if qty &gt;)</label>
-                    <input type="number" id="editCatMinQty" min="0" step="1" value="4">
-                </div>
-                <div class="form-group">
-                    <label for="editCatDesc">Description</label>
-                    <textarea id="editCatDesc"></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="editCatSort">Sort order</label>
-                    <input type="number" id="editCatSort" value="0" step="1">
-                </div>
-                <div class="form-row-check">
-                    <label><input type="checkbox" id="editCatDefault"> Default fallback</label>
-                    <label><input type="checkbox" id="editCatActive"> Active</label>
+                <div class="rates-form-grid">
+                    <div class="form-group rates-span-2">
+                        <label for="editCatName">Category <span style="color:red;">*</span></label>
+                        <select id="editCatName" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editCatFee">Fee per item (₱) <span style="color:red;">*</span></label>
+                        <input type="number" id="editCatFee" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editCatMinQty">Min qty (fee if &gt;)</label>
+                        <input type="number" id="editCatMinQty" min="0" step="1" value="4">
+                    </div>
+                    <div class="form-group">
+                        <label for="editCatSort">Sort order</label>
+                        <input type="number" id="editCatSort" value="0" step="1">
+                    </div>
+                    <div class="form-group rates-span-2">
+                        <label for="editCatDesc">Description</label>
+                        <textarea id="editCatDesc"></textarea>
+                    </div>
+                    <div class="form-row-check rates-span-2">
+                        <label><input type="checkbox" id="editCatDefault"> Default fallback</label>
+                        <label><input type="checkbox" id="editCatActive"> Active</label>
+                    </div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-cancel-modal" data-close-modal="editExtraCategoryModal">Cancel</button>
@@ -658,6 +685,37 @@
     const addExtraCategoryModal = document.getElementById('addExtraCategoryModal');
     const editExtraCategoryModal = document.getElementById('editExtraCategoryModal');
     let allExtraCategoryRates = [];
+    let inventoryProductCategories = [];
+
+    async function loadInventoryProductCategories() {
+        try {
+            const r = await fetch('/api/admin/product-categories', { credentials: 'include' });
+            const j = await r.json();
+            inventoryProductCategories = (j.success && Array.isArray(j.categories)) ? j.categories : [];
+        } catch (e) {
+            inventoryProductCategories = [];
+        }
+        return inventoryProductCategories;
+    }
+
+    function fillCategorySelect(selectEl, selectedValue) {
+        if (!selectEl) return;
+        const cur = (selectedValue || '').trim();
+        selectEl.innerHTML = '<option value="">Select category…</option>';
+        inventoryProductCategories.forEach(function(cat) {
+            const opt = document.createElement('option');
+            opt.value = cat;
+            opt.textContent = cat;
+            selectEl.appendChild(opt);
+        });
+        if (cur && inventoryProductCategories.indexOf(cur) === -1) {
+            const extra = document.createElement('option');
+            extra.value = cur;
+            extra.textContent = cur + ' (current)';
+            selectEl.appendChild(extra);
+        }
+        if (cur) selectEl.value = cur;
+    }
 
     function openRatesModal(el){ if(el) el.classList.add('show'); }
     function closeRatesModal(el){ if(el) el.classList.remove('show'); }
@@ -714,10 +772,14 @@
     }
 
     if(openAddExtraCategoryBtn){
-        openAddExtraCategoryBtn.addEventListener('click', () => {
+        openAddExtraCategoryBtn.addEventListener('click', async () => {
             document.getElementById('addExtraCategoryForm').reset();
             document.getElementById('addCatMinQty').value = 4;
             document.getElementById('addCatActive').checked = true;
+            const addSel = document.getElementById('addCatName');
+            if (addSel) addSel.innerHTML = '<option value="">Loading categories…</option>';
+            await loadInventoryProductCategories();
+            fillCategorySelect(addSel, '');
             openRatesModal(addExtraCategoryModal);
         });
     }
@@ -739,7 +801,7 @@
     document.getElementById('addExtraCategoryForm')?.addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const payload = {
-            categoryName: document.getElementById('addCatName').value.trim(),
+            categoryName: (document.getElementById('addCatName').value || '').trim(),
             feePerItem: document.getElementById('addCatFee').value,
             minItemQuantity: document.getElementById('addCatMinQty').value,
             description: document.getElementById('addCatDesc').value.trim() || null,
@@ -761,7 +823,7 @@
         ev.preventDefault();
         const id = document.getElementById('editCatId').value;
         const payload = {
-            categoryName: document.getElementById('editCatName').value.trim(),
+            categoryName: (document.getElementById('editCatName').value || '').trim(),
             feePerItem: document.getElementById('editCatFee').value,
             minItemQuantity: document.getElementById('editCatMinQty').value,
             description: document.getElementById('editCatDesc').value.trim() || null,
@@ -787,7 +849,8 @@
             const rt = allExtraCategoryRates.find(r => r.CategoryRateID === id);
             if(!rt) return;
             document.getElementById('editCatId').value = id;
-            document.getElementById('editCatName').value = rt.CategoryName || '';
+            await loadInventoryProductCategories();
+            fillCategorySelect(document.getElementById('editCatName'), rt.CategoryName || '');
             document.getElementById('editCatFee').value = Number(rt.FeePerItem).toFixed(2);
             document.getElementById('editCatMinQty').value = rt.MinItemQuantity ?? 4;
             document.getElementById('editCatDesc').value = rt.Description || '';
@@ -809,6 +872,7 @@
     });
 
     loadExtraCategoryRates();
+    loadInventoryProductCategories();
 
     </script>
 

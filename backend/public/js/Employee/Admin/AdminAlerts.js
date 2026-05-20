@@ -62,11 +62,14 @@ function displayProductAlerts(products) {
     
     products.forEach(product => {
         const row = document.createElement('tr');
-        const status = getStockStatus(product.StockQuantity);
+        const avail = product.AvailableQuantity != null ? Number(product.AvailableQuantity) : Number(product.StockQuantity) || 0;
+        const total = product.TotalQuantity != null ? Number(product.TotalQuantity) : avail;
+        const status = getStockStatus(avail);
+        const stockLabel = total !== avail ? `${avail} avail. / ${total} total` : String(avail);
         
         row.innerHTML = `
-            <td>${product.Name}</td>
-            <td>${product.StockQuantity}</td>
+            <td>${product.Name}${product.SKU ? `<br><small>SKU: ${product.SKU}</small>` : ''}</td>
+            <td>${stockLabel}</td>
             <td><span class="${status.class}">${status.label}</span></td>
         `;
         
@@ -194,20 +197,23 @@ function checkCriticalAlerts() {
                 // Check products
                 if (data.products && data.products.length > 0) {
                     data.products.forEach(product => {
-                        if (product.StockQuantity === 0) {
+                        const avail = product.AvailableQuantity != null
+                            ? Number(product.AvailableQuantity)
+                            : Number(product.StockQuantity) || 0;
+                        if (avail === 0) {
                             criticalItems.push({
                                 type: 'product',
                                 name: product.Name,
-                                id: product.ProductID,
-                                quantity: product.StockQuantity,
+                                id: product.VariationID || product.ProductID,
+                                quantity: avail,
                                 status: 'out-of-stock'
                             });
-                        } else if (product.StockQuantity <= safetyStock) {
+                        } else if (avail <= safetyStock) {
                             criticalItems.push({
                                 type: 'product',
                                 name: product.Name,
-                                id: product.ProductID,
-                                quantity: product.StockQuantity,
+                                id: product.VariationID || product.ProductID,
+                                quantity: avail,
                                 status: 'critical'
                             });
                         }

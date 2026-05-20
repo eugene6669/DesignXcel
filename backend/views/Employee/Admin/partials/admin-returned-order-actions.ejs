@@ -1,0 +1,154 @@
+<%
+    const _conditionMet = typeof conditionMet === 'function'
+        ? conditionMet
+        : function (v) { return v === 1 || v === true || v === '1'; };
+    const _statusLabel = typeof returnedOrderStatusLabel === 'function'
+        ? returnedOrderStatusLabel(order)
+        : (order.Status || 'Returned');
+    const _statusClass = typeof returnedOrderStatusClass === 'function'
+        ? returnedOrderStatusClass(order)
+        : 'status-returned';
+    const _typeLabel = typeof returnedOrderTypeLabel === 'function'
+        ? returnedOrderTypeLabel(order)
+        : '—';
+    const _typeClass = typeof returnedOrderTypeClass === 'function'
+        ? returnedOrderTypeClass(order)
+        : '';
+    const returnReason = order.ReturnReason || order.ReturnDescription;
+    const actionType = order.ActionType;
+    const returnType = order.ReturnType;
+    const isDeclined = returnReason && String(returnReason).startsWith('DECLINED:');
+    const declineReason = isDeclined ? String(returnReason).replace('DECLINED:', '').trim() : null;
+    const statusLabel = _statusLabel;
+    const typeLabel = _typeLabel;
+    const typeClass = _typeClass;
+%>
+<div class="od-return-actions" style="grid-column: 1 / -1; margin-top: 0.5rem; padding-top: 0.75rem; border-top: 1px solid #e5e7eb;">
+    <div class="od-section" style="margin-bottom: 0.65rem;">
+        <div class="od-section-title">Return Type</div>
+        <div class="od-section-body">
+            <% if (typeLabel !== '—') { %>
+                <span class="return-type-label <%= typeClass %>"><%= typeLabel %></span>
+            <% } else { %>
+                <span style="color:#9ca3af;">Not set</span>
+            <% } %>
+        </div>
+    </div>
+    <div class="od-section" style="margin-bottom: 0.65rem;">
+        <div class="od-section-title">Status</div>
+        <div class="od-section-body">
+            <span class="order-card-status <%= _statusClass %>" style="display:inline-flex;padding:4px 12px;border-radius:999px;font-size:0.75rem;font-weight:700;text-transform:uppercase;"><%= statusLabel %></span>
+        </div>
+    </div>
+    <% if (returnType) { %>
+    <div class="od-section" style="margin-bottom: 0.65rem;">
+        <div class="od-section-title">Return Reason Type</div>
+        <div class="od-section-body"><strong><%= returnType === 'damage' ? 'Damaged Item' : 'Other Reason' %></strong></div>
+    </div>
+    <% } %>
+    <% if (returnReason && !isDeclined) { %>
+    <div class="od-section" style="margin-bottom: 0.65rem;">
+        <div class="od-section-title">Return Reason Details</div>
+        <div class="od-section-body"><%= returnReason %></div>
+    </div>
+    <% } %>
+    <% if (isDeclined) { %>
+    <div class="od-section" style="margin-bottom: 0.65rem; padding: 0.65rem; background: #fef2f2; border: 1px solid #ef4444; border-radius: 8px;">
+        <div class="od-section-title" style="color: #dc2626;">Return Request Declined</div>
+        <div class="od-section-body" style="color: #991b1b;"><strong>Reason:</strong> <%= declineReason %></div>
+    </div>
+    <% } %>
+    <% if ((actionType || '').toLowerCase() === 'refund') { 
+        const refundAmt = typeof computeRefundAmountForOrder === 'function' ? computeRefundAmountForOrder(order) : (parseFloat(order.RefundAmount) || 0);
+        const productSubtotal = parseFloat(order.Subtotal || 0);
+        const policyNote = typeof refundPolicySummary === 'function' ? refundPolicySummary(order) : '';
+        const unmetCount = typeof returnConditionsUnmetCount === 'function' ? returnConditionsUnmetCount(order) : 0;
+    %>
+    <div class="od-section" style="margin-bottom: 0.65rem; padding: 0.75rem; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px;">
+        <div class="od-section-title">Refund Amount</div>
+        <div class="od-section-body" style="font-size: 0.875rem; line-height: 1.5;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                <span>Product subtotal (returned items):</span>
+                <strong>₱<%= Number(productSubtotal).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                <span><%= order.Status === 'Refunded' ? 'Refunded amount' : 'Estimated refund' %>:</span>
+                <strong style="color:#b45309;font-size:1.05em;">₱<%= Number(refundAmt || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+            </div>
+            <p style="margin:8px 0 0;color:#6b7280;font-size:0.8em;"><%= policyNote %></p>
+            <p style="margin:4px 0 0;color:#9ca3af;font-size:0.75em;">Delivery fees are not included in the refund.</p>
+        </div>
+    </div>
+    <% } %>
+
+    <div class="od-section" style="margin-bottom: 0.65rem;">
+        <div class="od-section-title">Return Conditions Checklist</div>
+        <div class="od-section-body" style="display:flex;flex-direction:column;gap:6px;font-size:0.875rem;">
+            <div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px;background:<%= _conditionMet(order.OriginalPackaging) ? '#f0fdf4' : '#fef2f2' %>;border:1px solid <%= _conditionMet(order.OriginalPackaging) ? '#10b981' : '#ef4444' %>;">
+                <span><%= _conditionMet(order.OriginalPackaging) ? '✅' : '❌' %></span>
+                <span>Item is in original, undamaged packaging</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px;background:<%= _conditionMet(order.AllParts) ? '#f0fdf4' : '#fef2f2' %>;border:1px solid <%= _conditionMet(order.AllParts) ? '#10b981' : '#ef4444' %>;">
+                <span><%= _conditionMet(order.AllParts) ? '✅' : '❌' %></span>
+                <span>All parts, accessories, and documentation are included</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px;background:<%= _conditionMet(order.Unused) ? '#f0fdf4' : '#fef2f2' %>;border:1px solid <%= _conditionMet(order.Unused) ? '#10b981' : '#ef4444' %>;">
+                <span><%= _conditionMet(order.Unused) ? '✅' : '❌' %></span>
+                <span>Item is unused and unmodified</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:8px;border-radius:6px;background:<%= _conditionMet(order.ProofOfPurchase) ? '#f0fdf4' : '#fef2f2' %>;border:1px solid <%= _conditionMet(order.ProofOfPurchase) ? '#10b981' : '#ef4444' %>;">
+                <span><%= _conditionMet(order.ProofOfPurchase) ? '✅' : '❌' %></span>
+                <span>Proof of purchase (Order #<%= order.ReferenceNumber || order.OrderID %>)</span>
+            </div>
+            <% if (typeof returnConditionsUnmetCount === 'function' && returnConditionsUnmetCount(order) > 0) { %>
+            <p style="margin:6px 0 0;color:#92400e;font-size:0.8em;">
+                <%= returnConditionsUnmetCount(order) %> of 4 requirement<%= returnConditionsUnmetCount(order) === 1 ? '' : 's' %> not met.
+                <% if (returnConditionsUnmetCount(order) <= 2 && (actionType || '').toLowerCase() === 'refund') { %> — 50% product price deduction applies.<% } %>
+            </p>
+            <% } %>
+        </div>
+    </div>
+    <% if (order.ProofOfPurchaseImageURL) { %>
+    <div class="od-section" style="margin-bottom: 0.65rem;">
+        <div class="od-section-title">Proof of Purchase</div>
+        <div class="od-section-body">
+            <img src="<%= order.ProofOfPurchaseImageURL %>" alt="Proof of purchase" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid #e5e7eb;cursor:pointer;" onclick="window.open('<%= order.ProofOfPurchaseImageURL %>', '_blank')">
+        </div>
+    </div>
+    <% } %>
+
+    <% if (order.ReturnImageURL || order.ReturnVideoURL) { %>
+    <div class="od-section" style="margin-bottom: 0.65rem;">
+        <div class="od-section-title">Return Evidence</div>
+        <div class="od-section-body" style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <% if (order.ReturnImageURL) { %>
+            <button type="button" onclick="openReturnMediaModal(<%= order.OrderID %>, 'image', '<%= order.ReturnImageURL %>')" class="btn-action" style="background: #3b82f6; color: white;">View Image</button>
+            <% } %>
+            <% if (order.ReturnVideoURL) { %>
+            <button type="button" onclick="openReturnMediaModal(<%= order.OrderID %>, 'video', '<%= order.ReturnVideoURL %>')" class="btn-action" style="background: #8b5cf6; color: white;">View Video</button>
+            <% } %>
+        </div>
+    </div>
+    <% } %>
+    <div class="od-return-actions-bar">
+        <% if (order.Status === 'Returned') { %>
+            <button type="button" onclick="openApproveModal(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Approve Return</button>
+            <button type="button" onclick="openDeclineModal(<%= order.OrderID %>)" class="btn-action btn-decline table-action-btn">Decline Return</button>
+        <% } else if (order.Status === 'Processing (Pickup)' || (order.Status === 'Processing' && actionType)) { %>
+            <button type="button" onclick="confirmReturnPickup(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Confirm Pickup</button>
+            <span class="od-return-status-msg" style="color:#6b7280;font-size:0.85em;">Confirm pickup before refund or replacement.</span>
+        <% } else if (order.Status === 'Pickup Received' && actionType === 'refund') { %>
+            <button type="button" onclick="openRefundModal(<%= order.OrderID %>)" class="btn-action btn-refund table-action-btn">Process Refund</button>
+        <% } else if (order.Status === 'Pickup Received' && actionType === 'replacement') { %>
+            <button type="button" onclick="openReplacementModal(<%= order.OrderID %>)" class="btn-action btn-replacement table-action-btn">Process Replacement</button>
+        <% } else if (order.Status === 'Refunded') { %>
+            <span class="od-return-status-msg od-return-status-msg--success">Refunded</span>
+            <a href="/Employee/Admin/ProductReturns" class="btn-action table-action-btn" style="background:#6366f1;color:#fff;text-decoration:none;">Product Returns</a>
+        <% } else if (order.Status === 'Declined') { %>
+            <span class="od-return-status-msg od-return-status-msg--declined">Return declined</span>
+        <% } else if (order.Status === 'Completed Returned') { %>
+            <span class="od-return-status-msg od-return-status-msg--success">Replaced</span>
+            <a href="/Employee/Admin/ProductReturns" class="btn-action table-action-btn" style="background:#6366f1;color:#fff;text-decoration:none;">Product Returns</a>
+        <% } %>
+    </div>
+</div>

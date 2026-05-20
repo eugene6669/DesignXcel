@@ -40,11 +40,17 @@ const {
     getOrdersSchemaFlags,
     attachOrderItemsBatch,
     loadProductInventoryPageData,
+    loadProductReturnsPageData,
     buildInventoryStockRefreshPayload,
-    fetchInventoryProductSummary
+    fetchInventoryProductSummary,
+    fetchProductCategoriesList,
+    buildInventoryAlertsPayload
 } = require('./utils/adminQueryHelpers');
+const { serializeActivityLogChanges, fetchActivityLogs } = require('./utils/activityLogHelpers');
 const { invalidateAdminPageCache } = require('./utils/adminPageCache');
 const { resolveProductId } = require('./utils/productIdResolver');
+const { formatInventoryDate } = require('./utils/formatInventoryDate');
+const returnedOrderDisplay = require('./utils/returnedOrderDisplay');
 // All encryption removed - using plain text storage
 
 module.exports = function (sql, pool, getStripe = null) {
@@ -2221,7 +2227,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
             // Convert recordId to string if it exists, otherwise use null
             const recordIdValue = recordId !== undefined && recordId !== null ? String(recordId) : null;
-            const changesValue = changes !== undefined && changes !== null ? String(changes) : null;
+            const changesValue = serializeActivityLogChanges(changes);
 
             await pool.request()
                 .input('userId', sql.Int, userId)
@@ -2237,6 +2243,21 @@ module.exports = function (sql, pool, getStripe = null) {
         } catch (err) {
             console.error('Error logging activity:', err);
             // Don't throw error - logging failure shouldn't break the main operation
+        }
+    }
+
+    async function sendActivityLogsData(req, res) {
+        try {
+            await pool.connect();
+            const logs = await fetchActivityLogs(pool, req.query);
+            res.json({ success: true, logs });
+        } catch (err) {
+            console.error('Error fetching activity logs data:', err);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to retrieve activity logs data.',
+                error: err.message
+            });
         }
     }
 
@@ -4952,129 +4973,16 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/Employee/InventoryManager/Alerts/Data', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
-
-            // Fetch products with low stock (≤ 20)
-            const productsResult = await pool.request().query(`
-                SELECT ProductID, Name, StockQuantity
-                FROM Products 
-                WHERE IsActive = 1 AND StockQuantity <= 20
-                ORDER BY StockQuantity ASC
-            `);
-
-            // Fetch raw materials with low stock (≤ 20)
-            const materialsResult = await pool.request().query(`
-                SELECT MaterialID, Name, QuantityAvailable, Unit
-                FROM RawMaterials 
-                WHERE IsActive = 1 AND QuantityAvailable <= 20
-                ORDER BY QuantityAvailable ASC
-            `);
-
-            res.json({
-                success: true,
-                products: productsResult.recordset,
-                rawMaterials: materialsResult.recordset
-            });
+            const maxQty = Math.max(parseInt(req.query.maxQty, 10) || 20, 1);
+            res.json(await buildInventoryAlertsPayload(pool, maxQty));
         } catch (err) {
             console.error('Error fetching InventoryManager alerts data:', err);
-            res.json({
-                success: false,
-                products: [],
-                rawMaterials: []
-            });
+            res.json({ success: false, products: [], rawMaterials: [] });
         }
     });
 
     // InventoryManager Logs Data API endpoint with filtering support
-    router.get('/Employee/InventoryManager/Logs/Data', isAuthenticated, async (req, res) => {
-        try {
-            await pool.connect();
-            const currentUserRole = req.session.user.role;
-
-            // Get query parameters for filtering
-            const {
-                action,
-                tableAffected,
-                userRole,
-                dateFrom,
-                dateTo,
-                search,
-                limit = 1000,
-                offset = 0
-            } = req.query;
-
-            // Build dynamic query with filters
-            let query = `
-                SELECT 
-                    al.LogID,
-                    al.UserID,
-                    u.FullName,
-                    r.RoleName,
-                    al.Action,
-                    al.TableAffected,
-                    al.RecordID,
-                    al.Description,
-                    al.Changes,
-                    al.Timestamp
-                FROM ActivityLogs al
-                JOIN Users u ON al.UserID = u.UserID
-                JOIN Roles r ON u.RoleID = r.RoleID
-                WHERE 1=1
-            `;
-
-            const request = pool.request();
-
-            // Add filters
-            if (action) {
-                query += ` AND al.Action = @action`;
-                request.input('action', sql.NVarChar, action);
-            }
-
-            if (tableAffected) {
-                query += ` AND al.TableAffected = @tableAffected`;
-                request.input('tableAffected', sql.NVarChar, tableAffected);
-            }
-
-            if (userRole) {
-                query += ` AND r.RoleName = @userRole`;
-                request.input('userRole', sql.NVarChar, userRole);
-            }
-
-            if (dateFrom) {
-                query += ` AND al.Timestamp >= @dateFrom`;
-                request.input('dateFrom', sql.DateTime, new Date(dateFrom));
-            }
-
-            if (dateTo) {
-                query += ` AND al.Timestamp <= @dateTo`;
-                request.input('dateTo', sql.DateTime, new Date(dateTo));
-            }
-
-            if (search) {
-                query += ` AND (al.Description LIKE @search OR u.FullName LIKE @search OR r.RoleName LIKE @search)`;
-                request.input('search', sql.NVarChar, `%${search}%`);
-            }
-
-            // Add ordering and pagination
-            query += ` ORDER BY al.Timestamp DESC OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-            request.input('offset', sql.Int, parseInt(offset));
-            request.input('limit', sql.Int, parseInt(limit));
-
-            const result = await request.query(query);
-
-            // Decrypt user FullName before sending to frontend using transparent encryption service
-            const decryptedLogs = result.recordset.map(log => {
-                return {
-                    ...log,
-                    FullName: log.FullName
-                };
-            });
-
-            res.json({ success: true, logs: decryptedLogs });
-        } catch (err) {
-            console.error('Error fetching InventoryManager activity logs data:', err);
-            res.status(500).json({ success: false, message: 'Failed to retrieve activity logs data.', error: err.message });
-        }
-    });
+    router.get('/Employee/InventoryManager/Logs/Data', isAuthenticated, sendActivityLogsData);
 
     // ==========================================
     // Order Support Routes
@@ -5565,128 +5473,16 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/Employee/TransactionManager/Alerts/Data', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
-
-            // Get products with low stock
-            const productsResult = await pool.request().query(`
-                SELECT ProductID, Name, StockQuantity 
-                FROM Products 
-                WHERE IsActive = 1 AND StockQuantity <= 10
-                ORDER BY StockQuantity ASC
-            `);
-
-            // Get raw materials with low stock
-            const materialsResult = await pool.request().query(`
-                SELECT MaterialID, Name, QuantityAvailable, Unit 
-                FROM RawMaterials 
-                WHERE IsActive = 1 AND QuantityAvailable <= 10
-                ORDER BY QuantityAvailable ASC
-            `);
-
-            res.json({
-                success: true,
-                products: productsResult.recordset,
-                rawMaterials: materialsResult.recordset
-            });
+            const maxQty = Math.max(parseInt(req.query.maxQty, 10) || 20, 1);
+            res.json(await buildInventoryAlertsPayload(pool, maxQty));
         } catch (err) {
             console.error('Error fetching alerts data:', err);
-            res.json({
-                success: false,
-                error: err.message
-            });
+            res.json({ success: false, products: [], rawMaterials: [], error: err.message });
         }
     });
 
     // Transaction Manager - Logs Data API endpoint with filtering support
-    router.get('/Employee/TransactionManager/Logs/Data', isAuthenticated, async (req, res) => {
-        try {
-            await pool.connect();
-            const currentUserRole = req.session.user.role;
-
-            // Get query parameters for filtering
-            const {
-                action,
-                tableAffected,
-                userRole,
-                dateFrom,
-                dateTo,
-                search,
-                limit = 1000,
-                offset = 0
-            } = req.query;
-
-            // Build dynamic query with filters
-            let query = `
-                SELECT 
-                    al.LogID,
-                    al.UserID,
-                    u.FullName,
-                    r.RoleName,
-                    al.Action,
-                    al.TableAffected,
-                    al.RecordID,
-                    al.Description,
-                    al.Changes,
-                    al.Timestamp
-                FROM ActivityLogs al
-                JOIN Users u ON al.UserID = u.UserID
-                JOIN Roles r ON u.RoleID = r.RoleID
-                WHERE 1=1
-            `;
-
-            const request = pool.request();
-
-            // Add filters
-            if (action) {
-                query += ` AND al.Action = @action`;
-                request.input('action', sql.NVarChar, action);
-            }
-
-            if (tableAffected) {
-                query += ` AND al.TableAffected = @tableAffected`;
-                request.input('tableAffected', sql.NVarChar, tableAffected);
-            }
-
-            if (userRole) {
-                query += ` AND r.RoleName = @userRole`;
-                request.input('userRole', sql.NVarChar, userRole);
-            }
-
-            if (dateFrom) {
-                query += ` AND al.Timestamp >= @dateFrom`;
-                request.input('dateFrom', sql.DateTime, new Date(dateFrom));
-            }
-
-            if (dateTo) {
-                query += ` AND al.Timestamp <= @dateTo`;
-                request.input('dateTo', sql.DateTime, new Date(dateTo));
-            }
-
-            if (search) {
-                query += ` AND (al.Description LIKE @search OR u.FullName LIKE @search OR r.RoleName LIKE @search)`;
-                request.input('search', sql.NVarChar, `%${search}%`);
-            }
-
-            // Add ordering and pagination
-            query += ` ORDER BY al.Timestamp DESC OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-            request.input('offset', sql.Int, parseInt(offset));
-            request.input('limit', sql.Int, parseInt(limit));
-
-            const result = await request.query(query);
-
-            // Decrypt user FullName before sending to frontend using transparent encryption service
-            const decryptedLogs = result.recordset.map(log => {
-                return {
-                    ...log,
-                    FullName: log.FullName
-                };
-            });
-
-            res.json({ success: true, logs: decryptedLogs });
-        } catch (err) {
-            console.error('Error fetching TransactionManager activity logs data:', err);
-            res.status(500).json({ success: false, message: 'Failed to retrieve activity logs data.', error: err.message });
-        }
-    });
+    router.get('/Employee/TransactionManager/Logs/Data', isAuthenticated, sendActivityLogsData);
 
     // =============================================================================
     // TRANSACTION MANAGER CRUD ROUTES
@@ -6807,127 +6603,15 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/Employee/UserManager/Alerts/Data', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
-
-            // Get products with low stock
-            const productsResult = await pool.request().query(`
-                SELECT ProductID, Name, StockQuantity 
-                FROM Products 
-                WHERE IsActive = 1 AND StockQuantity <= 10
-                ORDER BY StockQuantity ASC
-            `);
-
-            // Get raw materials with low stock
-            const materialsResult = await pool.request().query(`
-                SELECT MaterialID, Name, QuantityAvailable, Unit 
-                FROM RawMaterials 
-                WHERE IsActive = 1 AND QuantityAvailable <= 10
-                ORDER BY QuantityAvailable ASC
-            `);
-
-            res.json({
-                success: true,
-                products: productsResult.recordset,
-                rawMaterials: materialsResult.recordset
-            });
+            const maxQty = Math.max(parseInt(req.query.maxQty, 10) || 20, 1);
+            res.json(await buildInventoryAlertsPayload(pool, maxQty));
         } catch (err) {
             console.error('Error fetching alerts data:', err);
-            res.json({
-                success: false,
-                error: err.message
-            });
+            res.json({ success: false, products: [], rawMaterials: [], error: err.message });
         }
     });
     // User Manager - Logs Data API endpoint with filtering support
-    router.get('/Employee/UserManager/Logs/Data', isAuthenticated, async (req, res) => {
-        try {
-            await pool.connect();
-            const currentUserRole = req.session.user.role;
-
-            // Get query parameters for filtering
-            const {
-                action,
-                tableAffected,
-                userRole,
-                dateFrom,
-                dateTo,
-                search,
-                limit = 1000,
-                offset = 0
-            } = req.query;
-
-            // Build dynamic query with filters
-            let query = `
-                SELECT 
-                    al.LogID,
-                    al.UserID,
-                    u.FullName,
-                    r.RoleName,
-                    al.Action,
-                    al.TableAffected,
-                    al.RecordID,
-                    al.Description,
-                    al.Changes,
-                    al.Timestamp
-                FROM ActivityLogs al
-                JOIN Users u ON al.UserID = u.UserID
-                JOIN Roles r ON u.RoleID = r.RoleID
-                WHERE 1=1
-            `;
-
-            const request = pool.request();
-
-            // Add filters
-            if (action) {
-                query += ` AND al.Action = @action`;
-                request.input('action', sql.NVarChar, action);
-            }
-
-            if (tableAffected) {
-                query += ` AND al.TableAffected = @tableAffected`;
-                request.input('tableAffected', sql.NVarChar, tableAffected);
-            }
-
-            if (userRole) {
-                query += ` AND r.RoleName = @userRole`;
-                request.input('userRole', sql.NVarChar, userRole);
-            }
-
-            if (dateFrom) {
-                query += ` AND al.Timestamp >= @dateFrom`;
-                request.input('dateFrom', sql.DateTime, new Date(dateFrom));
-            }
-
-            if (dateTo) {
-                query += ` AND al.Timestamp <= @dateTo`;
-                request.input('dateTo', sql.DateTime, new Date(dateTo));
-            }
-
-            if (search) {
-                query += ` AND (al.Description LIKE @search OR u.FullName LIKE @search OR r.RoleName LIKE @search)`;
-                request.input('search', sql.NVarChar, `%${search}%`);
-            }
-
-            // Add ordering and pagination
-            query += ` ORDER BY al.Timestamp DESC OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-            request.input('offset', sql.Int, parseInt(offset));
-            request.input('limit', sql.Int, parseInt(limit));
-
-            const result = await request.query(query);
-
-            // Decrypt user FullName before sending to frontend using transparent encryption service
-            const decryptedLogs = result.recordset.map(log => {
-                return {
-                    ...log,
-                    FullName: log.FullName
-                };
-            });
-
-            res.json({ success: true, logs: decryptedLogs });
-        } catch (err) {
-            console.error('Error fetching UserManager activity logs data:', err);
-            res.status(500).json({ success: false, message: 'Failed to retrieve activity logs data.', error: err.message });
-        }
-    });
+    router.get('/Employee/UserManager/Logs/Data', isAuthenticated, sendActivityLogsData);
 
     // =============================================================================
     // TRANSACTION MANAGER ORDER PROCESSING ROUTES
@@ -9246,127 +8930,15 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/Employee/OrderSupport/Alerts/Data', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
-
-            // Get products with low stock
-            const productsResult = await pool.request().query(`
-                SELECT ProductID, Name, StockQuantity 
-                FROM Products 
-                WHERE IsActive = 1 AND StockQuantity <= 10
-                ORDER BY StockQuantity ASC
-            `);
-
-            // Get raw materials with low stock
-            const materialsResult = await pool.request().query(`
-                SELECT MaterialID, Name, QuantityAvailable, Unit 
-                FROM RawMaterials 
-                WHERE IsActive = 1 AND QuantityAvailable <= 10
-                ORDER BY QuantityAvailable ASC
-            `);
-
-            res.json({
-                success: true,
-                products: productsResult.recordset,
-                rawMaterials: materialsResult.recordset
-            });
+            const maxQty = Math.max(parseInt(req.query.maxQty, 10) || 20, 1);
+            res.json(await buildInventoryAlertsPayload(pool, maxQty));
         } catch (err) {
             console.error('Error fetching alerts data:', err);
-            res.json({
-                success: false,
-                error: err.message
-            });
+            res.json({ success: false, products: [], rawMaterials: [], error: err.message });
         }
     });
     // Order Support - Logs Data API endpoint with filtering support
-    router.get('/Employee/OrderSupport/Logs/Data', isAuthenticated, async (req, res) => {
-        try {
-            await pool.connect();
-            const currentUserRole = req.session.user.role;
-
-            // Get query parameters for filtering
-            const {
-                action,
-                tableAffected,
-                userRole,
-                dateFrom,
-                dateTo,
-                search,
-                limit = 1000,
-                offset = 0
-            } = req.query;
-
-            // Build dynamic query with filters
-            let query = `
-                SELECT 
-                    al.LogID,
-                    al.UserID,
-                    u.FullName,
-                    r.RoleName,
-                    al.Action,
-                    al.TableAffected,
-                    al.RecordID,
-                    al.Description,
-                    al.Changes,
-                    al.Timestamp
-                FROM ActivityLogs al
-                JOIN Users u ON al.UserID = u.UserID
-                JOIN Roles r ON u.RoleID = r.RoleID
-                WHERE 1=1
-            `;
-
-            const request = pool.request();
-
-            // Add filters
-            if (action) {
-                query += ` AND al.Action = @action`;
-                request.input('action', sql.NVarChar, action);
-            }
-
-            if (tableAffected) {
-                query += ` AND al.TableAffected = @tableAffected`;
-                request.input('tableAffected', sql.NVarChar, tableAffected);
-            }
-
-            if (userRole) {
-                query += ` AND r.RoleName = @userRole`;
-                request.input('userRole', sql.NVarChar, userRole);
-            }
-
-            if (dateFrom) {
-                query += ` AND al.Timestamp >= @dateFrom`;
-                request.input('dateFrom', sql.DateTime, new Date(dateFrom));
-            }
-
-            if (dateTo) {
-                query += ` AND al.Timestamp <= @dateTo`;
-                request.input('dateTo', sql.DateTime, new Date(dateTo));
-            }
-
-            if (search) {
-                query += ` AND (al.Description LIKE @search OR u.FullName LIKE @search OR r.RoleName LIKE @search)`;
-                request.input('search', sql.NVarChar, `%${search}%`);
-            }
-
-            // Add ordering and pagination
-            query += ` ORDER BY al.Timestamp DESC OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-            request.input('offset', sql.Int, parseInt(offset));
-            request.input('limit', sql.Int, parseInt(limit));
-
-            const result = await request.query(query);
-
-            // Decrypt user FullName before sending to frontend using transparent encryption service
-            const decryptedLogs = result.recordset.map(log => {
-                return {
-                    ...log,
-                    FullName: log.FullName
-                };
-            });
-
-            res.json({ success: true, logs: decryptedLogs });
-        } catch (err) {
-            console.error('Error fetching OrderSupport activity logs data:', err);
-            res.status(500).json({ success: false, message: 'Failed to retrieve activity logs data.', error: err.message });
-        }
-    });
+    router.get('/Employee/OrderSupport/Logs/Data', isAuthenticated, sendActivityLogsData);
 
     // =============================================================================
     // ORDER SUPPORT CRUD ROUTES
@@ -10501,6 +10073,17 @@ module.exports = function (sql, pool, getStripe = null) {
     // Admin Delivery Rates route
     router.get('/Employee/Admin/DeliveryRates', isAuthenticated, (req, res) => {
         res.render('Employee/Admin/AdminRates', { user: req.session.user });
+    });
+
+    router.get('/api/admin/product-categories', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const categories = await fetchProductCategoriesList(pool);
+            res.json({ success: true, categories });
+        } catch (err) {
+            console.error('Error fetching product categories:', err);
+            res.status(500).json({ success: false, categories: [], message: 'Failed to load categories.' });
+        }
     });
 
 
@@ -15779,96 +15362,7 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
     // Admin Logs Data API endpoint with filtering support
-    router.get('/Employee/Admin/Logs/Data', isAuthenticated, async (req, res) => {
-        try {
-            await pool.connect();
-            const currentUserRole = req.session.user.role;
-
-            // Get query parameters for filtering
-            const {
-                action,
-                tableAffected,
-                userRole,
-                dateFrom,
-                dateTo,
-                search,
-                limit = 1000,
-                offset = 0
-            } = req.query;
-
-            // Build dynamic query with filters
-            let query = `
-                SELECT 
-                    al.LogID,
-                    al.UserID,
-                    u.FullName,
-                    r.RoleName,
-                    al.Action,
-                    al.TableAffected,
-                    al.RecordID,
-                    al.Description,
-                    al.Changes,
-                    al.Timestamp
-                FROM ActivityLogs al
-                JOIN Users u ON al.UserID = u.UserID
-                JOIN Roles r ON u.RoleID = r.RoleID
-                WHERE 1=1
-            `;
-
-            const request = pool.request();
-
-            // Add filters
-            if (action) {
-                query += ` AND al.Action = @action`;
-                request.input('action', sql.NVarChar, action);
-            }
-
-            if (tableAffected) {
-                query += ` AND al.TableAffected = @tableAffected`;
-                request.input('tableAffected', sql.NVarChar, tableAffected);
-            }
-
-            if (userRole) {
-                query += ` AND r.RoleName = @userRole`;
-                request.input('userRole', sql.NVarChar, userRole);
-            }
-
-            if (dateFrom) {
-                query += ` AND al.Timestamp >= @dateFrom`;
-                request.input('dateFrom', sql.DateTime, new Date(dateFrom));
-            }
-
-            if (dateTo) {
-                query += ` AND al.Timestamp <= @dateTo`;
-                request.input('dateTo', sql.DateTime, new Date(dateTo));
-            }
-
-            if (search) {
-                query += ` AND (al.Description LIKE @search OR u.FullName LIKE @search OR r.RoleName LIKE @search)`;
-                request.input('search', sql.NVarChar, `%${search}%`);
-            }
-
-            // Add ordering and pagination
-            query += ` ORDER BY al.Timestamp DESC OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-            request.input('offset', sql.Int, parseInt(offset));
-            request.input('limit', sql.Int, parseInt(limit));
-
-            const result = await request.query(query);
-
-            // Decrypt user FullName before sending to frontend using transparent encryption service
-            const decryptedLogs = result.recordset.map(log => {
-                return {
-                    ...log,
-                    FullName: log.FullName
-                };
-            });
-
-            res.json({ success: true, logs: decryptedLogs });
-        } catch (err) {
-            console.error('Error fetching activity logs data:', err);
-            res.status(500).json({ success: false, message: 'Failed to retrieve activity logs data.', error: err.message });
-        }
-    });
+    router.get('/Employee/Admin/Logs/Data', isAuthenticated, sendActivityLogsData);
     // =============================================================================
     // ADMIN REPORTS ROUTES
     // =============================================================================
@@ -22364,26 +21858,39 @@ module.exports = function (sql, pool, getStripe = null) {
     });
 
     // Special handling for Orders routes - need to fetch orders data
-    const orderRoutes = [
-        { route: 'OrdersPending', status: 'Pending' },
-        { route: 'OrdersProcessing', status: 'Processing' },
-        { route: 'OrdersShipping', status: 'Shipping' },
-        { route: 'OrdersDelivery', status: 'Delivery' },
-        { route: 'OrdersReceive', status: 'Received' },
-        { route: 'CancelledOrders', status: 'Cancelled' },
-        { route: 'ReturnedOrders', status: 'Returned', includeStatuses: ['Returned', 'Processing (Pickup)', 'Declined'] },
-        { route: 'CompletedOrders', status: 'Completed' },
-        { route: 'CompletedReplacement', status: 'Completed Returned', includeStatuses: ['Completed Returned'], extraWhere: "AND (o.ActionType IS NULL OR LOWER(LTRIM(RTRIM(o.ActionType))) = 'replacement')" },
-        { route: 'CompletedRefunded', status: 'Refunded' }
+    const adminOrdersTabRoutes = [
+        { tab: 'pending', route: 'OrdersPending', status: 'Pending' },
+        { tab: 'processing', route: 'OrdersProcessing', status: 'Processing' },
+        { tab: 'shipping', route: 'OrdersShipping', status: 'Shipping' },
+        { tab: 'delivery', route: 'OrdersDelivery', status: 'Delivery' },
+        { tab: 'receive', route: 'OrdersReceive', status: 'Received' },
+        { tab: 'cancelled', route: 'CancelledOrders', status: 'Cancelled' },
+        { tab: 'completed', route: 'CompletedOrders', status: 'Completed' }
     ];
 
-    // Legacy URL → Completed Replacement
-    router.get('/Employee/Admin/CompletedReturned', isAuthenticated, (req, res) => {
-        res.redirect(301, '/Employee/Admin/CompletedReplacement');
+    const returnedOrdersConfig = {
+        route: 'ReturnedOrders',
+        status: 'Returned',
+        includeStatuses: ['Returned', 'Processing (Pickup)', 'Pickup Received', 'Declined', 'Completed Returned', 'Refunded']
+    };
+
+    const legacyOrderRedirects = [
+        'OrdersPending', 'OrdersProcessing', 'OrdersShipping', 'OrdersDelivery', 'OrdersReceive',
+        'CancelledOrders', 'CompletedOrders', 'CompletedRefunded', 'CompletedReplacement', 'CompletedReturned'
+    ];
+    legacyOrderRedirects.forEach((legacyRoute) => {
+        router.get(`/Employee/Admin/${legacyRoute}`, isAuthenticated, (req, res) => {
+            const tabMatch = adminOrdersTabRoutes.find((c) => c.route === legacyRoute);
+            if (tabMatch) {
+                const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+                return res.redirect(301, `/Employee/Admin/Orders?tab=${tabMatch.tab}${qs ? qs.replace('?', '&') : ''}`);
+            }
+            const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+            return res.redirect(301, `/Employee/Admin/ReturnedOrders${qs || ''}`);
+        });
     });
 
-    orderRoutes.forEach(({ route, status, includeStatuses, extraWhere }) => {
-        router.get(`/Employee/Admin/${route}`, isAuthenticated, async (req, res) => {
+    async function fetchAndRenderAdminOrders(req, res, { route, status, includeStatuses, extraWhere, tab }) {
             try {
                 await pool.connect();
 
@@ -22722,26 +22229,44 @@ module.exports = function (sql, pool, getStripe = null) {
                     order.PaymentMethodDisplay = paymentMethodDisplayForOrder(order);
                 }
 
+                const returnedOrdersLocals = route === 'ReturnedOrders' ? returnedOrderDisplay : {};
+
                 res.render(`Employee/Admin/Admin${route}`, {
                     user: req.session.user,
                     orders: orders,
+                    ordersTab: tab || null,
+                    activePage: route === 'ReturnedOrders' ? 'orders-returned' : 'orders',
                     pagination: {
                         currentPage: page,
                         totalPages: totalPages,
                         totalOrders: totalOrders,
                         limit: limit,
                         offset: offset
-                    }
+                    },
+                    ...returnedOrdersLocals
                 });
             } catch (err) {
                 console.error(`Error fetching ${status.toLowerCase()} orders:`, err);
+                const returnedOrdersLocals = route === 'ReturnedOrders' ? returnedOrderDisplay : {};
                 res.render(`Employee/Admin/Admin${route}`, {
                     user: req.session.user,
                     orders: [],
-                    error: `Failed to load ${status.toLowerCase()} orders.`
+                    ordersTab: tab || null,
+                    activePage: route === 'ReturnedOrders' ? 'orders-returned' : 'orders',
+                    error: `Failed to load ${status.toLowerCase()} orders.`,
+                    ...returnedOrdersLocals
                 });
             }
-        });
+    }
+
+    router.get('/Employee/Admin/Orders', isAuthenticated, async (req, res) => {
+        const tab = String(req.query.tab || 'pending').toLowerCase();
+        const config = adminOrdersTabRoutes.find((c) => c.tab === tab) || adminOrdersTabRoutes[0];
+        return fetchAndRenderAdminOrders(req, res, config);
+    });
+
+    router.get('/Employee/Admin/ReturnedOrders', isAuthenticated, async (req, res) => {
+        return fetchAndRenderAdminOrders(req, res, returnedOrdersConfig);
     });
 
     // =============================================================================
@@ -23633,94 +23158,8 @@ module.exports = function (sql, pool, getStripe = null) {
 
     adminRoutes.forEach(route => {
         if (route === 'Products') {
-            // Special handling for Products route - needs to fetch products data with pagination
-            router.get(`/Employee/Admin/${route}`, isAuthenticated, async (req, res) => {
-                try {
-                    await pool.connect();
-                    const page = parseInt(req.query.page) || 1;
-                    const limit = 10;
-                    const offset = (page - 1) * limit;
-
-                    // Get total count - only products with available inventory
-                    let countResult;
-                    // ProductInventory table has been removed
-                    // Count all active products (CMS products don't have direct inventory tracking anymore)
-                    countResult = await pool.request().query('SELECT COUNT(*) as count FROM Products WHERE IsActive = 1');
-                    const total = countResult.recordset[0].count;
-                    const totalPages = Math.ceil(total / limit);
-
-                    // Get paginated products with discount information
-                    // ProductInventory table has been removed - show all products with StockQuantity from Products table
-                    let result;
-                    result = await pool.request().query(`
-                        SELECT DISTINCT
-                            p.*,
-                            pd.DiscountID,
-                            pd.DiscountType,
-                            pd.DiscountValue,
-                            pd.StartDate as DiscountStartDate,
-                            pd.EndDate as DiscountEndDate,
-                            pd.IsActive as DiscountIsActive,
-                            CASE 
-                                WHEN pd.DiscountType = 'percentage' THEN 
-                                    p.Price - (p.Price * pd.DiscountValue / 100)
-                                WHEN pd.DiscountType = 'fixed' THEN 
-                                    GREATEST(p.Price - pd.DiscountValue, 0)
-                                ELSE p.Price
-                            END as DiscountedPrice,
-                            CASE 
-                                WHEN pd.DiscountType = 'percentage' THEN 
-                                    p.Price * pd.DiscountValue / 100
-                                WHEN pd.DiscountType = 'fixed' THEN 
-                                    LEAST(pd.DiscountValue, p.Price)
-                                ELSE 0
-                            END as DiscountAmount,
-                            COALESCE(p.StockQuantity, 0) as AvailableStock
-                        FROM Products p
-                        LEFT JOIN ProductDiscounts pd ON p.ProductID = pd.ProductID 
-                            AND pd.IsActive = 1 
-                            AND GETDATE() BETWEEN pd.StartDate AND pd.EndDate
-                        WHERE p.IsActive = 1
-                        ORDER BY p.ProductID DESC
-                        OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY
-                    `);
-
-                    const products = result.recordset;
-
-                    // Fetch products for dropdown from InventoryProducts (products created in ProductInventory page)
-                    let dropdownProducts = [];
-                    try {
-                        const dropdownResult = await pool.request().query(`
-                            SELECT DISTINCT ip.InventoryProductID as ProductID, ip.Name, ip.SKU 
-                            FROM InventoryProducts ip
-                            WHERE ip.IsActive = 1
-                            ORDER BY ip.Name
-                        `);
-                        dropdownProducts = dropdownResult.recordset || [];
-                    } catch (dropdownErr) {
-                        console.error('Error fetching dropdown products:', dropdownErr);
-                        dropdownProducts = [];
-                    }
-
-                    res.render(`Employee/Admin/Admin${route}`, {
-                        user: req.session.user,
-                        products: products,
-                        page: page,
-                        totalPages: totalPages,
-                        dropdownProducts: dropdownProducts
-                    });
-                } catch (err) {
-                    console.error('Error fetching products:', err);
-                    req.flash('error', 'Could not fetch products.');
-                    res.render(`Employee/Admin/Admin${route}`, {
-                        user: req.session.user,
-                        products: [],
-                        page: 1,
-                        totalPages: 1,
-                        dropdownProducts: []
-                    });
-                }
-            });
+            // Inventory product listing: GET /Employee/Admin/Products (registered below).
+            return;
         } else if (route === 'BulkOrders') {
             // Special handling for BulkOrders route - needs to fetch bulk orders data
             router.get(`/Employee/Admin/${route}`, isAuthenticated, async (req, res) => {
@@ -25187,6 +24626,45 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             });
 
+            router.post('/api/admin/inventory-products/:id/update-basic', isAuthenticated, productUpload.single('productImage'), async (req, res) => {
+                try {
+                    await pool.connect();
+                    const id = parseInt(req.params.id, 10);
+                    const { name, category, currentImageURL } = req.body;
+                    if (!id || Number.isNaN(id)) {
+                        return res.status(400).json({ success: false, message: 'Invalid product id.' });
+                    }
+                    if (!name || !String(name).trim()) {
+                        return res.status(400).json({ success: false, message: 'Product name is required.' });
+                    }
+                    if (!category || !String(category).trim()) {
+                        return res.status(400).json({ success: false, message: 'Category is required.' });
+                    }
+                    let imageUrl = currentImageURL || null;
+                    if (req.file) {
+                        imageUrl = publicUrlFromMulterProductFile(req.file);
+                    }
+                    await pool.request()
+                        .input('id', sql.Int, id)
+                        .input('name', sql.NVarChar, String(name).trim())
+                        .input('category', sql.NVarChar, String(category).trim())
+                        .input('imageUrl', sql.NVarChar, imageUrl)
+                        .query(`
+                            UPDATE InventoryProducts
+                            SET Name = @name,
+                                Category = @category,
+                                ImageURL = COALESCE(@imageUrl, ImageURL),
+                                UpdatedAt = GETDATE()
+                            WHERE InventoryProductID = @id AND IsActive = 1
+                        `);
+                    invalidateAdminPageCache('admin:');
+                    return res.json({ success: true, message: 'Product updated successfully.', imageUrl });
+                } catch (err) {
+                    console.error('Error updating inventory product:', err);
+                    return res.status(500).json({ success: false, message: 'Failed to update product: ' + err.message });
+                }
+            });
+
             router.post('/api/admin/inventory-products/restock', isAuthenticated, async (req, res) => {
                 try {
                     await pool.connect();
@@ -25423,7 +24901,12 @@ module.exports = function (sql, pool, getStripe = null) {
                                     pv.VariationImageURL
                                 ) AS VariationImageURL,
                                 v.IsActive,
-                                v.CreatedAt
+                                v.CreatedAt,
+                                CASE
+                                    WHEN ip.ProductID IS NULL THEN 0
+                                    WHEN pv.VariationID IS NULL THEN 1
+                                    ELSE CAST(ISNULL(pv.IsActive, 0) AS INT)
+                                END AS ShowOnStorefront
                             FROM InventoryProductVariations v
                             LEFT JOIN InventoryProducts ip ON ip.InventoryProductID = v.InventoryProductID
                             LEFT JOIN Products p ON p.ProductID = COALESCE(v.ProductID, ip.ProductID)
@@ -25755,6 +25238,14 @@ module.exports = function (sql, pool, getStripe = null) {
                     const addVariationRefresh = actualInventoryProductID
                         ? await buildInventoryStockRefreshPayload(pool, actualInventoryProductID)
                         : {};
+                    await logActivity(
+                        req.session.user.id,
+                        'INSERT',
+                        'InventoryProductVariations',
+                        String(variationID),
+                        `Added variation "${variationName || variationID}" (Variation #${variationID}, qty ${variationQuantity})`,
+                        { Quantity: { old: null, new: variationQuantity } }
+                    );
                     res.json(Object.assign(
                         { success: true, message: 'Variation added successfully.' },
                         addVariationRefresh
@@ -25963,6 +25454,71 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             });
 
+            router.post('/api/admin/inventory-product-variations/:variationId/storefront', isAuthenticated, async (req, res) => {
+                try {
+                    await pool.connect();
+                    const variationId = parseInt(req.params.variationId, 10);
+                    const showOnStorefront = req.body.showOnStorefront === true
+                        || req.body.showOnStorefront === 1
+                        || req.body.showOnStorefront === '1'
+                        || req.body.showOnStorefront === 'true';
+
+                    if (!variationId) {
+                        return res.json({ success: false, message: 'Invalid variation ID.' });
+                    }
+
+                    const rowResult = await pool.request()
+                        .input('variationId', sql.Int, variationId)
+                        .query(`
+                            SELECT ipv.VariationID, ipv.InventoryProductID, ip.ProductID
+                            FROM InventoryProductVariations ipv
+                            INNER JOIN InventoryProducts ip ON ip.InventoryProductID = ipv.InventoryProductID
+                            WHERE ipv.VariationID = @variationId AND ipv.IsActive = 1
+                        `);
+
+                    if (!rowResult.recordset.length) {
+                        return res.json({ success: false, message: 'Variation not found.' });
+                    }
+
+                    const row = rowResult.recordset[0];
+                    if (!row.ProductID) {
+                        return res.json({
+                            success: false,
+                            message: 'Link this product to the storefront catalog in Product Inventory first.'
+                        });
+                    }
+
+                    const pvCheck = await pool.request()
+                        .input('variationId', sql.Int, variationId)
+                        .query(`SELECT VariationID FROM ProductVariations WHERE VariationID = @variationId`);
+
+                    if (!pvCheck.recordset.length) {
+                        return res.json({
+                            success: false,
+                            message: 'Storefront listing not found. Publish the product from Product Inventory first.'
+                        });
+                    }
+
+                    await pool.request()
+                        .input('variationId', sql.Int, variationId)
+                        .input('isActive', sql.Bit, showOnStorefront ? 1 : 0)
+                        .query(`
+                            UPDATE ProductVariations
+                            SET IsActive = @isActive, UpdatedAt = GETDATE()
+                            WHERE VariationID = @variationId
+                        `);
+
+                    res.json({
+                        success: true,
+                        message: showOnStorefront ? 'Variation is visible on the storefront.' : 'Variation hidden from the storefront.',
+                        showOnStorefront: showOnStorefront
+                    });
+                } catch (err) {
+                    console.error('Error updating variation storefront visibility:', err);
+                    res.json({ success: false, message: 'Failed to update storefront visibility: ' + err.message });
+                }
+            });
+
             // Delete inventory product variation
             // Get variation status/quantity data
             router.get('/api/admin/inventory-variation-quantity/:variationID', isAuthenticated, async (req, res) => {
@@ -25984,6 +25540,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                     ELSE AvailableQuantity
                                 END as AvailableQuantity,
                                 COALESCE(DamagedQuantity, 0) as DamagedQuantity,
+                                COALESCE(ReturnedQuantity, 0) as ReturnedQuantity,
                                 COALESCE(RepairedQuantity, 0) as RepairedQuantity,
                                 COALESCE(DisposedQuantity, 0) as DisposedQuantity,
                                 COALESCE(Notes, '') as Notes,
@@ -26029,6 +25586,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     // Handle form data (from FormData)
                     const variationID = req.body.variationID;
                     const availableQuantity = req.body.availableQuantity;
+                    const returnedQuantity = req.body.returnedQuantity;
                     const damagedQuantity = req.body.damagedQuantity;
                     const repairedQuantity = req.body.repairedQuantity;
                     const disposedQuantity = req.body.disposedQuantity;
@@ -26036,6 +25594,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
                     const parsedVariationID = parseInt(variationID);
                     const availableQty = parseInt(availableQuantity) || 0;
+                    const returnedQty = parseInt(returnedQuantity) || 0;
                     const damagedQty = parseInt(damagedQuantity) || 0;
                     const repairedQty = parseInt(repairedQuantity) || 0;
                     const disposedQty = parseInt(disposedQuantity) || 0;
@@ -26043,6 +25602,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     console.log('Parsed quantities:', {
                         variationID: parsedVariationID,
                         availableQty,
+                        returnedQty,
                         damagedQty,
                         repairedQty,
                         disposedQty,
@@ -26058,7 +25618,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     const hasNewModel = !!uploadedMedia.model3d;
 
                     // Validation: quantities cannot be negative
-                    if (availableQty < 0 || damagedQty < 0 || repairedQty < 0 || disposedQty < 0) {
+                    if (availableQty < 0 || returnedQty < 0 || damagedQty < 0 || repairedQty < 0 || disposedQty < 0) {
                         return res.json({
                             success: false,
                             message: 'Quantities cannot be negative.'
@@ -26067,7 +25627,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
                     // Validation: maximum quantity
                     const MAX_QUANTITY = 999999;
-                    if (availableQty > MAX_QUANTITY || damagedQty > MAX_QUANTITY ||
+                    if (availableQty > MAX_QUANTITY || returnedQty > MAX_QUANTITY || damagedQty > MAX_QUANTITY ||
                         repairedQty > MAX_QUANTITY || disposedQty > MAX_QUANTITY) {
                         return res.json({
                             success: false,
@@ -26084,7 +25644,12 @@ module.exports = function (sql, pool, getStripe = null) {
                     const variationCheck = await pool.request()
                         .input('variationID', sql.Int, parsedVariationID)
                         .query(`
-                            SELECT VariationID, InventoryProductID, Quantity
+                            SELECT VariationID, InventoryProductID, VariationName, SKU,
+                                Quantity, AvailableQuantity,
+                                ISNULL(DamagedQuantity, 0) AS DamagedQuantity,
+                                ISNULL(ReturnedQuantity, 0) AS ReturnedQuantity,
+                                ISNULL(RepairedQuantity, 0) AS RepairedQuantity,
+                                ISNULL(DisposedQuantity, 0) AS DisposedQuantity
                             FROM InventoryProductVariations
                             WHERE VariationID = @variationID
                         `);
@@ -26096,8 +25661,9 @@ module.exports = function (sql, pool, getStripe = null) {
                         });
                     }
 
-                    const inventoryProductId = variationCheck.recordset[0].InventoryProductID;
-                    const oldQuantity = variationCheck.recordset[0].Quantity || 0;
+                    const variationBefore = variationCheck.recordset[0];
+                    const inventoryProductId = variationBefore.InventoryProductID;
+                    const oldQuantity = variationBefore.Quantity || 0;
                     const stockDelta = totalQty - oldQuantity;
                     console.log('Old quantity:', oldQuantity, 'New quantity:', totalQty, 'Stock delta:', stockDelta);
 
@@ -26122,6 +25688,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     const updateQuery = `
                             UPDATE InventoryProductVariations 
                             SET AvailableQuantity = @availableQuantity,
+                                ReturnedQuantity = @returnedQuantity,
                                 DamagedQuantity = @damagedQuantity,
                                 RepairedQuantity = @repairedQuantity,
                                 DisposedQuantity = @disposedQuantity,
@@ -26136,6 +25703,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             SELECT 
                                 VariationID,
                                 AvailableQuantity,
+                                ReturnedQuantity,
                                 DamagedQuantity,
                                 RepairedQuantity,
                                 DisposedQuantity,
@@ -26155,6 +25723,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         updateResult = await variationTransaction.request()
                             .input('variationID', sql.Int, parsedVariationID)
                             .input('availableQuantity', sql.Int, availableQty)
+                            .input('returnedQuantity', sql.Int, returnedQty)
                             .input('damagedQuantity', sql.Int, damagedQty)
                             .input('repairedQuantity', sql.Int, repairedQty)
                             .input('disposedQuantity', sql.Int, disposedQty)
@@ -26268,6 +25837,19 @@ module.exports = function (sql, pool, getStripe = null) {
                     const statusRefresh = inventoryProductId
                         ? await buildInventoryStockRefreshPayload(pool, inventoryProductId)
                         : {};
+                    const vLabel = variationBefore.VariationName || `Variation #${parsedVariationID}`;
+                    await logActivity(
+                        req.session.user.id,
+                        'UPDATE',
+                        'InventoryProductVariations',
+                        String(parsedVariationID),
+                        `Updated stock for "${vLabel}" (Variation #${parsedVariationID}): available ${availableQty}, total ${totalQty}`,
+                        {
+                            AvailableQuantity: { old: variationBefore.AvailableQuantity, new: availableQty },
+                            DamagedQuantity: { old: variationBefore.DamagedQuantity, new: damagedQty },
+                            Quantity: { old: oldQuantity, new: totalQty }
+                        }
+                    );
                     res.json(Object.assign(
                         {
                             success: true,
@@ -26333,6 +25915,15 @@ module.exports = function (sql, pool, getStripe = null) {
                     const archiveRefresh = archivedInvProductId
                         ? await buildInventoryStockRefreshPayload(pool, archivedInvProductId)
                         : {};
+                    const archivedVar = variationResult.recordset[0];
+                    await logActivity(
+                        req.session.user.id,
+                        'UPDATE',
+                        'InventoryProductVariations',
+                        String(variationID),
+                        `Archived variation "${archivedVar.VariationName || variationID}" (Variation #${variationID})`,
+                        { IsActive: { old: 1, new: 0 } }
+                    );
                     res.json(Object.assign(
                         { success: true, message: 'Variation archived successfully.' },
                         archiveRefresh
@@ -29603,6 +29194,49 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
+    // Admin route: Confirm return pickup (items received) — enables refund/replacement processing
+    router.post('/api/admin/orders/:orderId/return/pickup-complete', isAuthenticated, async (req, res) => {
+        const orderId = parseInt(req.params.orderId, 10);
+        if (!orderId) {
+            return res.status(400).json({ success: false, message: 'Invalid order ID.' });
+        }
+        try {
+            await pool.connect();
+            const orderResult = await pool.request()
+                .input('orderId', sql.Int, orderId)
+                .query(`
+                    SELECT OrderID, Status, ActionType
+                    FROM Orders
+                    WHERE OrderID = @orderId
+                      AND Status IN ('Processing (Pickup)', 'Processing')
+                      AND ActionType IN ('refund', 'replacement')
+                `);
+
+            if (!orderResult.recordset.length) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Order not found or not awaiting pickup confirmation.'
+                });
+            }
+
+            await pool.request()
+                .input('orderId', sql.Int, orderId)
+                .query(`
+                    UPDATE Orders
+                    SET Status = 'Pickup Received'
+                    WHERE OrderID = @orderId
+                `);
+
+            return res.json({
+                success: true,
+                message: 'Pickup confirmed. Process refund or replacement, then manage returned stock in Product Returns.'
+            });
+        } catch (err) {
+            console.error('Error confirming return pickup:', err);
+            return res.status(500).json({ success: false, message: 'Failed to confirm pickup.' });
+        }
+    });
+
     // Admin route: Process replacement for returned order
     router.post('/api/admin/orders/:orderId/replacement', isAuthenticated, async (req, res) => {
         const orderId = parseInt(req.params.orderId);
@@ -29620,7 +29254,7 @@ module.exports = function (sql, pool, getStripe = null) {
                            o.DeliveryType, o.ShippingAddressID, o.ReturnType
                     FROM Orders o
                     WHERE o.OrderID = @orderId 
-                    AND (o.Status = 'Processing' OR o.Status = 'Processing (Pickup)')
+                    AND o.Status = 'Pickup Received'
                     AND o.ActionType = 'replacement'
                 `);
 
@@ -29688,7 +29322,8 @@ module.exports = function (sql, pool, getStripe = null) {
                                     .input('quantity', sql.Int, quantity)
                                     .query(`
                                         UPDATE InventoryProductVariations
-                                        SET DamagedQuantity = DamagedQuantity + @quantity,
+                                        SET ReturnedQuantity = ReturnedQuantity + @quantity,
+                                            DamagedQuantity = DamagedQuantity + @quantity,
                                             AvailableQuantity = CASE 
                                                 WHEN AvailableQuantity >= @quantity 
                                                 THEN AvailableQuantity - @quantity 
@@ -29698,7 +29333,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                           AND VariationID = @variationId 
                                           AND IsActive = 1
                                     `);
-                                console.log(`[REPLACEMENT] Added ${quantity} to damaged inventory and decreased available for ProductID ${productId}, VariationID ${variationId}`);
+                                console.log(`[REPLACEMENT] Added ${quantity} to returned/damaged inventory for ProductID ${productId}, VariationID ${variationId}`);
                             } else {
                                 // If returnType is 'other', items are in AvailableQuantity, move them to DamagedQuantity
                                 await transaction.request()
@@ -29707,7 +29342,8 @@ module.exports = function (sql, pool, getStripe = null) {
                                     .input('quantity', sql.Int, quantity)
                                     .query(`
                                         UPDATE InventoryProductVariations
-                                        SET DamagedQuantity = DamagedQuantity + @quantity,
+                                        SET ReturnedQuantity = ReturnedQuantity + @quantity,
+                                            DamagedQuantity = DamagedQuantity + @quantity,
                                             AvailableQuantity = CASE 
                                                 WHEN AvailableQuantity >= @quantity 
                                                 THEN AvailableQuantity - @quantity 
@@ -29718,7 +29354,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                           AND IsActive = 1
                                           AND AvailableQuantity >= @quantity
                                     `);
-                                console.log(`[REPLACEMENT] Moved ${quantity} items from available to damaged inventory for ProductID ${productId}, VariationID ${variationId}`);
+                                console.log(`[REPLACEMENT] Moved ${quantity} items to returned/damaged inventory for ProductID ${productId}, VariationID ${variationId}`);
                             }
                         }
                     } else {
@@ -29731,7 +29367,8 @@ module.exports = function (sql, pool, getStripe = null) {
                                 .input('quantity', sql.Int, quantity)
                                 .query(`
                                     UPDATE InventoryProducts
-                                    SET DamagedQuantity = DamagedQuantity + @quantity,
+                                    SET ReturnedQuantity = ReturnedQuantity + @quantity,
+                                        DamagedQuantity = DamagedQuantity + @quantity,
                                         AvailableQuantity = CASE 
                                             WHEN AvailableQuantity >= @quantity 
                                             THEN AvailableQuantity - @quantity 
@@ -29739,15 +29376,15 @@ module.exports = function (sql, pool, getStripe = null) {
                                         END
                                     WHERE InventoryProductID = @inventoryProductId
                                 `);
-                            console.log(`[REPLACEMENT] Added ${quantity} to damaged inventory and decreased available for ProductID ${productId}`);
+                            console.log(`[REPLACEMENT] Added ${quantity} to returned/damaged inventory for ProductID ${productId}`);
                         } else {
-                            // If returnType is 'other', items are in AvailableQuantity, move them to DamagedQuantity
                             await transaction.request()
                                 .input('inventoryProductId', sql.Int, inventoryProductId)
                                 .input('quantity', sql.Int, quantity)
                                 .query(`
                                     UPDATE InventoryProducts
-                                    SET DamagedQuantity = DamagedQuantity + @quantity,
+                                    SET ReturnedQuantity = ReturnedQuantity + @quantity,
+                                        DamagedQuantity = DamagedQuantity + @quantity,
                                         AvailableQuantity = CASE 
                                             WHEN AvailableQuantity >= @quantity 
                                             THEN AvailableQuantity - @quantity 
@@ -29756,7 +29393,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                     WHERE InventoryProductID = @inventoryProductId
                                       AND AvailableQuantity >= @quantity
                                 `);
-                            console.log(`[REPLACEMENT] Moved ${quantity} items from available to damaged inventory for ProductID ${productId}`);
+                            console.log(`[REPLACEMENT] Moved ${quantity} items to returned/damaged inventory for ProductID ${productId}`);
                         }
                     }
                 }
@@ -29831,7 +29468,7 @@ module.exports = function (sql, pool, getStripe = null) {
                            ${refundAmountSelect}
                     FROM Orders o
                     WHERE o.OrderID = @orderId 
-                    AND (o.Status = 'Processing' OR o.Status = 'Processing (Pickup)')
+                    AND o.Status = 'Pickup Received'
                     AND o.ActionType = 'refund'
                 `);
 
@@ -30215,39 +29852,56 @@ module.exports = function (sql, pool, getStripe = null) {
 
                         if (variationResult.recordset.length > 0) {
                             if (returnType === 'damage') {
-                                // Add to damaged quantity only (available quantity stays the same)
-                                // For refunds, damaged items are added to damaged inventory but available quantity is not decreased
                                 await transaction.request()
                                     .input('inventoryProductId', sql.Int, inventoryProductId)
                                     .input('variationId', sql.Int, variationId)
                                     .input('quantity', sql.Int, quantity)
                                     .query(`
                                         UPDATE InventoryProductVariations
-                                        SET DamagedQuantity = DamagedQuantity + @quantity
+                                        SET ReturnedQuantity = ReturnedQuantity + @quantity,
+                                            DamagedQuantity = DamagedQuantity + @quantity
                                         WHERE InventoryProductID = @inventoryProductId 
                                           AND VariationID = @variationId 
                                           AND IsActive = 1
                                     `);
-                                console.log(`[REFUND] Added ${quantity} damaged items to inventory for ProductID ${productId}, VariationID ${variationId} (available quantity unchanged)`);
+                            } else {
+                                await transaction.request()
+                                    .input('inventoryProductId', sql.Int, inventoryProductId)
+                                    .input('variationId', sql.Int, variationId)
+                                    .input('quantity', sql.Int, quantity)
+                                    .query(`
+                                        UPDATE InventoryProductVariations
+                                        SET ReturnedQuantity = ReturnedQuantity + @quantity
+                                        WHERE InventoryProductID = @inventoryProductId 
+                                          AND VariationID = @variationId 
+                                          AND IsActive = 1
+                                    `);
                             }
-                            // Note: If returnType is 'other', items were already added to available inventory when return was submitted
+                            console.log(`[REFUND] Added ${quantity} returned items to inventory for ProductID ${productId}, VariationID ${variationId}`);
                         }
                     } else {
                         // Update product inventory (no variation)
                         if (returnType === 'damage') {
-                            // Add to damaged quantity only (available quantity stays the same)
-                            // For refunds, damaged items are added to damaged inventory but available quantity is not decreased
                             await transaction.request()
                                 .input('inventoryProductId', sql.Int, inventoryProductId)
                                 .input('quantity', sql.Int, quantity)
                                 .query(`
                                     UPDATE InventoryProducts
-                                    SET DamagedQuantity = DamagedQuantity + @quantity
+                                    SET ReturnedQuantity = ReturnedQuantity + @quantity,
+                                        DamagedQuantity = DamagedQuantity + @quantity
                                     WHERE InventoryProductID = @inventoryProductId
                                 `);
-                            console.log(`[REFUND] Added ${quantity} damaged items to inventory for ProductID ${productId} (available quantity unchanged)`);
+                        } else {
+                            await transaction.request()
+                                .input('inventoryProductId', sql.Int, inventoryProductId)
+                                .input('quantity', sql.Int, quantity)
+                                .query(`
+                                    UPDATE InventoryProducts
+                                    SET ReturnedQuantity = ReturnedQuantity + @quantity
+                                    WHERE InventoryProductID = @inventoryProductId
+                                `);
                         }
-                        // Note: If returnType is 'other', items were already added to available inventory when return was submitted
+                        console.log(`[REFUND] Added ${quantity} returned items to inventory for ProductID ${productId}`);
                     }
                 }
             }
@@ -30633,33 +30287,24 @@ module.exports = function (sql, pool, getStripe = null) {
 
             let refundAmount = 0;
             if (order.ActionType === 'refund') {
-                const allConditionsMet = hasOriginalPackaging && hasAllParts && hasUnused && hasProofOfPurchase;
-                const totalAmount = parseFloat(order.TotalAmount) || 0;
+                const unmetConditions = [
+                    !hasOriginalPackaging,
+                    !hasAllParts,
+                    !hasUnused,
+                    !hasProofOfPurchase
+                ].filter(Boolean).length;
 
-                if (allConditionsMet) {
-                    // Full refund: Returned items subtotal (no deductions)
-                    // For partial returns, only refund the returned items amount
+                if (unmetConditions === 0) {
+                    // All conditions met — full product refund (delivery fee never included)
                     refundAmount = returnedSubtotal;
+                } else if (unmetConditions <= 2) {
+                    // 1–2 requirements unchecked — 50% of product price deducted
+                    refundAmount = returnedSubtotal * 0.5;
                 } else {
-                    // Partial refund: Returned items subtotal - Proportional delivery cost
-                    // Calculate proportional delivery fee based on returned items ratio
-                    let proportionalDeliveryFee = 0;
-                    if (isPartialReturn && fullOrderSubtotal > 0) {
-                        // Calculate ratio of returned items to total order
-                        const returnRatio = returnedSubtotal / fullOrderSubtotal;
-                        proportionalDeliveryFee = totalDeliveryFee * returnRatio;
-                    } else {
-                        // Full return: deduct full delivery fee
-                        proportionalDeliveryFee = totalDeliveryFee;
-                    }
-
-                    refundAmount = returnedSubtotal - proportionalDeliveryFee;
-                }
-
-                // Ensure refund amount is not negative
-                if (refundAmount < 0) {
                     refundAmount = 0;
                 }
+
+                refundAmount = Math.max(0, Math.round(refundAmount * 100) / 100);
             }
 
             // Store fees in database and update status
@@ -31930,8 +31575,8 @@ module.exports = function (sql, pool, getStripe = null) {
             await pool.connect();
 
             const result = await pool.request().query(`
-                SELECT COUNT(*) as count 
-                FROM Products 
+                SELECT COUNT(*) as count
+                FROM InventoryProducts
                 WHERE IsActive = 1
             `);
 
@@ -32145,35 +31790,11 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/Employee/Admin/Alerts/Data', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
-
-            // Fetch products with low stock (≤ 20)
-            const productsResult = await pool.request().query(`
-                SELECT ProductID, Name, StockQuantity
-                FROM Products 
-                WHERE IsActive = 1 AND StockQuantity <= 20
-                ORDER BY StockQuantity ASC
-            `);
-
-            // Fetch raw materials with low stock (≤ 20)
-            const materialsResult = await pool.request().query(`
-                SELECT MaterialID, Name, QuantityAvailable, Unit
-                FROM RawMaterials 
-                WHERE IsActive = 1 AND QuantityAvailable <= 20
-                ORDER BY QuantityAvailable ASC
-            `);
-
-            res.json({
-                success: true,
-                products: productsResult.recordset,
-                rawMaterials: materialsResult.recordset
-            });
+            const maxQty = Math.max(parseInt(req.query.maxQty, 10) || 20, 1);
+            res.json(await buildInventoryAlertsPayload(pool, maxQty));
         } catch (err) {
             console.error('Error fetching alerts data:', err);
-            res.json({
-                success: false,
-                products: [],
-                rawMaterials: []
-            });
+            res.json({ success: false, products: [], rawMaterials: [] });
         }
     });
 
@@ -32181,10 +31802,131 @@ module.exports = function (sql, pool, getStripe = null) {
     // PRODUCT MANAGEMENT ROUTES
     // =============================================================================
 
-    // Admin Products page removed — catalog is managed via Product Inventory only
-    router.get('/Employee/Admin/Products', isAuthenticated, (req, res) => {
-        const q = new URLSearchParams(req.query).toString();
-        return res.redirect('/Employee/Admin/ProductInventory' + (q ? `?${q}` : ''));
+    // Storefront visibility (top-level — always registered)
+    router.post('/api/admin/inventory-product-variations/:variationId/storefront', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const variationId = parseInt(req.params.variationId, 10);
+            const showOnStorefront = req.body.showOnStorefront === true
+                || req.body.showOnStorefront === 1
+                || req.body.showOnStorefront === '1'
+                || req.body.showOnStorefront === 'true';
+
+            if (!variationId) {
+                return res.json({ success: false, message: 'Invalid variation ID.' });
+            }
+
+            const rowResult = await pool.request()
+                .input('variationId', sql.Int, variationId)
+                .query(`
+                    SELECT ipv.VariationID, ipv.InventoryProductID, ip.ProductID
+                    FROM InventoryProductVariations ipv
+                    INNER JOIN InventoryProducts ip ON ip.InventoryProductID = ipv.InventoryProductID
+                    WHERE ipv.VariationID = @variationId AND ipv.IsActive = 1
+                `);
+
+            if (!rowResult.recordset.length) {
+                return res.json({ success: false, message: 'Variation not found.' });
+            }
+
+            const row = rowResult.recordset[0];
+            if (!row.ProductID) {
+                return res.json({
+                    success: false,
+                    message: 'Link this product to the storefront catalog in Product Inventory first.'
+                });
+            }
+
+            const pvCheck = await pool.request()
+                .input('variationId', sql.Int, variationId)
+                .query(`SELECT VariationID FROM ProductVariations WHERE VariationID = @variationId`);
+
+            if (!pvCheck.recordset.length) {
+                return res.json({
+                    success: false,
+                    message: 'Storefront listing not found. Publish the product from Product Inventory first.'
+                });
+            }
+
+            await pool.request()
+                .input('variationId', sql.Int, variationId)
+                .input('isActive', sql.Bit, showOnStorefront ? 1 : 0)
+                .query(`
+                    UPDATE ProductVariations
+                    SET IsActive = @isActive, UpdatedAt = GETDATE()
+                    WHERE VariationID = @variationId
+                `);
+
+            res.json({
+                success: true,
+                message: showOnStorefront ? 'Variation is visible on the storefront.' : 'Variation hidden from the storefront.',
+                showOnStorefront: showOnStorefront
+            });
+        } catch (err) {
+            console.error('Error updating variation storefront visibility:', err);
+            res.json({ success: false, message: 'Failed to update storefront visibility: ' + err.message });
+        }
+    });
+
+    router.get('/Employee/Admin/Products', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const pageData = await loadProductInventoryPageData(pool, {
+                search: req.query.search || '',
+                category: req.query.category || '',
+                page: parseInt(req.query.page, 10) || 1,
+                limit: 50,
+                inventoryProductId: req.query.inventoryProductId
+            });
+            if (pageData.redirectToPage) {
+                const q = new URLSearchParams(req.query);
+                q.set('page', String(pageData.redirectToPage));
+                return res.redirect('/Employee/Admin/Products?' + q.toString());
+            }
+            res.render('Employee/Admin/AdminProducts', {
+                user: req.session.user,
+                error: req.flash('error'),
+                success: req.flash('success'),
+                materials: pageData.materials,
+                units: pageData.units,
+                categories: pageData.categories,
+                allInventoryProducts: pageData.allInventoryProducts,
+                pagination: pageData.pagination,
+                listFilters: pageData.listFilters,
+                inventoryProductIdFocus: pageData.inventoryProductIdFocus,
+                formatInventoryDate: formatInventoryDate
+            });
+        } catch (err) {
+            console.error('Error loading Admin Products page:', err);
+            req.flash('error', 'Failed to load products.');
+            res.redirect('/Employee/Admin/ProductInventory');
+        }
+    });
+
+    router.get('/Employee/Admin/ProductReturns', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const pageData = await loadProductReturnsPageData(pool, {
+                search: req.query.search || '',
+                category: req.query.category || '',
+                page: parseInt(req.query.page, 10) || 1,
+                limit: 50
+            });
+            res.render('Employee/Admin/AdminProductReturns', {
+                user: req.session.user,
+                error: req.flash('error'),
+                success: req.flash('success'),
+                categories: pageData.categories,
+                allInventoryProducts: pageData.allInventoryProducts,
+                pagination: pageData.pagination,
+                listFilters: pageData.listFilters,
+                formatInventoryDate: formatInventoryDate
+            });
+        } catch (err) {
+            console.error('Error loading Admin Product Returns page:', err);
+            req.flash('error', 'Failed to load product returns.');
+            res.redirect('/Employee/Admin/Products');
+        }
     });
 
     router.get('/Employee/Admin/Products/_legacy', isAuthenticated, async (req, res) => {

@@ -1,0 +1,17 @@
+<body class="page-products-listing">
+    <div id="customPopup" class="custom-popup">
+        <motion.div class="custom-popup-content">
+            <span class="custom-popup-icon">✓</span>
+            <span class="custom-popup-message"></span>
+        </motion.div>
+    </motion.div>
+    <motion.div class="dashboard-container">
+        <motion.div class="sidebar">
+            <%- include('partials/sidebar', { activePage: 'products' }) %>
+        </motion.div>
+        <motion.div class="main-content">
+            <motion.div class="header">
+                <h2>Products</h2>
+                <p class="products-list-hint">Products and variations — edit status and stock here. Add products in Product Inventory.</p>
+            </motion.div>
+            <motion.div class="content-area">

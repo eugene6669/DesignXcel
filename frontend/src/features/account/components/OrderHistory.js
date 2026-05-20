@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../../shared/contexts/CartContext';
 import { productService } from '../../../features/products/services/productService';
@@ -1162,7 +1162,21 @@ const OrderHistory = () => {
     setSelectedItems(initialItems);
   };
 
+  const returnOverlayClickAt = useRef(0);
+
+  const handleReturnOverlayClick = (e) => {
+    if (e.target !== e.currentTarget) return;
+    const now = Date.now();
+    if (returnOverlayClickAt.current && now - returnOverlayClickAt.current < 450) {
+      closeReturnModal();
+      returnOverlayClickAt.current = 0;
+    } else {
+      returnOverlayClickAt.current = now;
+    }
+  };
+
   const closeReturnModal = () => {
+    returnOverlayClickAt.current = 0;
     setReturnModal({ open: false, orderId: null, order: null });
     setReturnReason('');
     setReturnType('');
@@ -1274,9 +1288,9 @@ const OrderHistory = () => {
       return;
     }
     
-    // Note: Other return conditions are optional - admin will check conditions during approval to determine refund amount
-    // - If all 4 conditions met → Full refund (no delivery fee deduction)
-    // - If any of first 3 conditions missing (but has proof of purchase) → Deduct delivery fee
+    // Refund policy (reviewed on approval):
+    // - All 4 conditions met → full product refund (delivery fee not refunded)
+    // - 1–2 conditions unchecked → 50% of product price deducted
     
     // Note: Evidence upload is optional - admin will review request regardless
 
@@ -2422,7 +2436,7 @@ const OrderHistory = () => {
                   </>
                 )}
                 
-                {order.Status !== 'Cancelled' && order.Status !== 'Completed' && order.Status !== 'Delivered' && order.Status !== 'Shipping' && order.Status !== 'Delivering' && order.Status !== 'Refunded' && order.Status !== 'Processing' && (
+                {order.Status !== 'Cancelled' && order.Status !== 'Completed' && order.Status !== 'Delivered' && order.Status !== 'Shipping' && order.Status !== 'Delivering' && order.Status !== 'Refunded' && order.Status !== 'Processing' && order.Status !== 'Receive' && order.Status !== 'Received' && order.Status !== 'To Receive' && (
                   <button
                     className="btn btn-primary"
                     disabled={cancelling[order.OrderID]}
@@ -2506,7 +2520,7 @@ const OrderHistory = () => {
       />
       {/* Return Order Modal */}
       {returnModal.open && (
-        <div className="modal-overlay order-details-overlay" onClick={closeReturnModal} style={{ zIndex: 2000 }}>
+        <div className="modal-overlay order-details-overlay" onClick={handleReturnOverlayClick} style={{ zIndex: 2000 }}>
           <div className="modal-content order-details-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px', width: '95vw', maxHeight: '95vh', overflowY: 'auto', overflowX: 'hidden' }}>
             <div className="order-details-header">
               <div className="order-details-title-section">
@@ -2720,9 +2734,17 @@ const OrderHistory = () => {
                 <label style={{ display: 'block', marginBottom: '12px', fontWeight: '600', color: '#111827' }}>
                   Return Conditions Checklist
                 </label>
-                <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>
-                  These conditions will be reviewed by our team. Meeting all conditions may result in a full refund.
+                <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px', lineHeight: 1.55 }}>
+                  These conditions will be reviewed by our team.
                 </p>
+                <ul style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px 1.1rem', padding: 0, lineHeight: 1.55 }}>
+                  <li style={{ marginBottom: '6px' }}>
+                    Meeting <strong>all</strong> requirements may result in a <strong>full refund of the product price</strong>. Delivery fees are <strong>not</strong> included in the refund.
+                  </li>
+                  <li>
+                    If you leave <strong>1 or 2</strong> requirements unchecked, <strong>50% of the product price</strong> will be deducted from your refund.
+                  </li>
+                </ul>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '10px', border: '1px solid #e5e7eb', borderRadius: '6px', backgroundColor: returnConditions.originalPackaging ? '#f0fdf4' : '#ffffff', transition: 'all 0.2s' }}>
                     <input

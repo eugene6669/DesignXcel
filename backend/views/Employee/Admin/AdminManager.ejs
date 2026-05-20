@@ -1417,7 +1417,9 @@
                 document.getElementById('totalMaterials').textContent = materialsData.count || 0;
 
                 // Fetch alerts count
-                const alertsResponse = await fetch('/Employee/Admin/Alerts/Data');
+                const safetyRes = await fetch('/api/safety-stock-value');
+                const safetyStock = (await safetyRes.json()).value || 10;
+                const alertsResponse = await fetch(alertsDataUrl(safetyStock));
                 const alertsData = await alertsResponse.json();
                 const totalAlerts = (alertsData.products?.length || 0) + (alertsData.rawMaterials?.length || 0);
                 document.getElementById('totalAlerts').textContent = totalAlerts;
@@ -1457,6 +1459,34 @@
             return { label: '', class: '' };
         }
 
+        function formatVariationAlertMeta(product) {
+            const parts = [];
+            if (product.SKU) parts.push('SKU: ' + product.SKU);
+            const variationId = product.VariationID != null ? product.VariationID : product.ProductID;
+            if (variationId != null) parts.push('Variation #' + variationId);
+            return parts.length ? parts.join(' \u2022 ') : 'N/A';
+        }
+
+        function variationAvailableQty(product) {
+            if (product.AvailableQuantity != null && product.AvailableQuantity !== '') {
+                return Number(product.AvailableQuantity) || 0;
+            }
+            return Number(product.StockQuantity) || 0;
+        }
+
+        function formatStockAlertDescription(product) {
+            const avail = variationAvailableQty(product);
+            const total = product.TotalQuantity != null ? Number(product.TotalQuantity) : avail;
+            let text = formatVariationAlertMeta(product) + ' \u2022 Available: ' + avail;
+            if (total !== avail) text += ' \u2022 Total: ' + total;
+            return text;
+        }
+
+        function alertsDataUrl(safetyStock) {
+            const maxQty = Math.max((Number(safetyStock) || 10) * 2, 20);
+            return '/Employee/Admin/Alerts/Data?maxQty=' + maxQty;
+        }
+
         function getStatusIcon(label) {
             switch (label) {
                 case 'Out of Stock':
@@ -1472,23 +1502,19 @@
 
         async function loadAlerts() {
             try {
-                const [alertsRes, safetyRes] = await Promise.all([
-                    fetch('/Employee/Admin/Alerts/Data'),
-                    fetch('/api/safety-stock-value')
-                ]);
-                const data = await alertsRes.json();
+                const safetyRes = await fetch('/api/safety-stock-value');
                 const safetyStock = (await safetyRes.json()).value || 10;
+                const data = await (await fetch(alertsDataUrl(safetyStock))).json();
                 const alertsContainer = document.getElementById('alertsContainer');
                 if (data.success && (data.products?.length > 0 || data.rawMaterials?.length > 0)) {
                     const alertItems = [];
                     if (data.products && data.products.length > 0) {
                         data.products.forEach(product => {
-                            const status = getStockStatus(product.StockQuantity, safetyStock);
+                            const availQty = variationAvailableQty(product);
+                            const status = getStockStatus(availQty, safetyStock);
                             if (!status.label) return;
                             const statusClass = status.class.replace('alerts-status-', '');
                             const statusIcon = getStatusIcon(status.label);
-                            const productId = product.ProductID ?? product.ReferenceNumber ?? 'N/A';
-                            const stockQty = product.StockQuantity ?? 0;
                             alertItems.push(`
                                 <div class="alert-item ${statusClass}">
                                     <div class="alert-icon">
@@ -1497,7 +1523,7 @@
                                     <div class="alert-content">
                                         <span class="alert-status">${status.label}</span>
                                         <div class="alert-title">${product.Name}</div>
-                                        <p class="alert-description">Product ID: ${productId} &bull; Current Stock: ${stockQty}</p>
+                                        <p class="alert-description">${formatStockAlertDescription(product)}</p>
                                     </div>
                                 </div>
                             `);
@@ -1574,20 +1600,25 @@
                     
                     recentLogs.forEach(log => {
                         const dbTimestamp = new Date(log.Timestamp);
-                        // Display the time exactly as it appears in the database
-                        const timeString = dbTimestamp.toLocaleTimeString('en-US', { 
-                            hour12: false 
+                        const formattedTime = dbTimestamp.toLocaleString('en-PH', {
+                            timeZone: 'Asia/Manila',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true
                         });
-                        const formattedTime = formatTimeWithAMPM(timeString);
                         const logIcon = getLogIcon(log.Action || '');
+                        const desc = (log.Description || '').trim();
+                        const shortDesc = desc.length > 72 ? desc.slice(0, 72) + '…' : desc;
                         logsHTML += `
                             <div class="log-item">
                                 <div class="log-icon">
                                     <i class="fa-solid ${logIcon}"></i>
                                 </div>
                                 <div class="log-info">
-                                    <div class="log-action">${log.Action} - ${log.TableAffected}</div>
-                                    <div class="log-user">${log.FullName} (${log.RoleName})</div>
+                                    <div class="log-action">${log.Action} · ${log.TableAffected || '—'}</div>
+                                    <div class="log-user">${shortDesc || log.FullName + ' (' + log.RoleName + ')'}</div>
                                 </div>
                                 <div class="log-time">${formattedTime}</div>
                             </div>
@@ -1661,7 +1692,8 @@
         // Function to update bell dot indicator
         async function updateAlertsBellDot() {
             try {
-                const response = await fetch('/Employee/Admin/Alerts/Data');
+                const safetyStock = (await (await fetch('/api/safety-stock-value')).json()).value || 10;
+                const response = await fetch(alertsDataUrl(safetyStock));
                 const data = await response.json();
                 if ((data.products && data.products.length > 0) || (data.rawMaterials && data.rawMaterials.length > 0)) {
                     alertsBellDot.style.display = 'block';
@@ -1688,36 +1720,31 @@
             alertsBellBtn.setAttribute('aria-expanded', 'true');
             alertsDropdownContent.innerHTML = '<div class="alerts-dropdown-empty">Loading...</div>';
             try {
-                const [alertsRes, safetyRes] = await Promise.all([
-                    fetch('/Employee/Admin/Alerts/Data'),
-                    fetch('/api/safety-stock-value')
-                ]);
-                const alertsData = await alertsRes.json();
-                const safetyStock = (await safetyRes.json()).value || 10;
+                const safetyStock = (await (await fetch('/api/safety-stock-value')).json()).value || 10;
+                const alertsData = await (await fetch(alertsDataUrl(safetyStock))).json();
                 const sections = [];
                 if ((alertsData.products && alertsData.products.length > 0) || (alertsData.rawMaterials && alertsData.rawMaterials.length > 0)) {
                     const productRows = [];
                     if (alertsData.products && alertsData.products.length > 0) {
                         alertsData.products.forEach(product => {
-                            const status = getStockStatus(product.StockQuantity, safetyStock);
+                            const availQty = variationAvailableQty(product);
+                            const status = getStockStatus(availQty, safetyStock);
                             if (!status.label) return;
                             const statusClass = status.class.replace('alerts-status-', '');
                             const statusIcon = getStatusIcon(status.label);
-                            const productId = product.ProductID ?? product.ReferenceNumber ?? 'N/A';
-                            const stockQty = product.StockQuantity ?? 0;
                             productRows.push(`
                                 <div class="alerts-dropdown-row ${statusClass}">
                                     <span class="alerts-dropdown-icon"><i class="fa-solid ${statusIcon}"></i></span>
                                     <div class="alerts-dropdown-details">
                                         <div class="alerts-dropdown-name">${product.Name}</div>
-                                        <div class="alerts-dropdown-description">Product ID: ${productId} &bull; Stock: ${stockQty}</div>
+                                        <div class="alerts-dropdown-description">${formatStockAlertDescription(product)}</div>
                                     </div>
                                     <span class="alerts-dropdown-status ${statusClass}">${status.label}</span>
                                 </div>
                             `);
                         });
                         if (productRows.length > 0) {
-                            sections.push(`<div class="alerts-dropdown-section-title">Products</div>`);
+                            sections.push(`<div class="alerts-dropdown-section-title">Product Variations</div>`);
                             sections.push(productRows.join(''));
                         }
                     }
@@ -2020,12 +2047,8 @@
             modalBody.innerHTML = '<div class="dashboard-modal-loading">Loading alerts...</div>';
             
             try {
-                const [alertsRes, safetyRes] = await Promise.all([
-                    fetch('/Employee/Admin/Alerts/Data'),
-                    fetch('/api/safety-stock-value')
-                ]);
-                const alertsData = await alertsRes.json();
-                const safetyStock = (await safetyRes.json()).value || 10;
+                const safetyStock = (await (await fetch('/api/safety-stock-value')).json()).value || 10;
+                const alertsData = await (await fetch(alertsDataUrl(safetyStock))).json();
                 
                 if ((alertsData.products && alertsData.products.length > 0) || (alertsData.rawMaterials && alertsData.rawMaterials.length > 0)) {
                     renderAlertsList(alertsData, safetyStock);
@@ -2046,20 +2069,20 @@
             
             if (alertsData.products && alertsData.products.length > 0) {
                 alertsData.products.forEach(product => {
-                    const status = getStockStatus(product.StockQuantity, safetyStock);
+                    const availQty = variationAvailableQty(product);
+                    const status = getStockStatus(availQty, safetyStock);
                     if (!status.label) return;
                     const statusClass = status.class.replace('alerts-status-', '');
                     const statusIcon = getStatusIcon(status.label);
-                    const stockQty = product.StockQuantity || 0;
                     
                     const item = document.createElement('div');
                     item.className = 'dashboard-list-item';
                     item.innerHTML = `
                         <div class="dashboard-list-item-info">
-                            <div class="dashboard-list-item-name">${product.Name || 'Unnamed Product'}</div>
+                            <div class="dashboard-list-item-name">${product.Name || 'Unnamed Variation'}</div>
                             <div class="dashboard-list-item-meta">
-                                <span><i class="fa-solid fa-hashtag"></i> ID: ${product.ProductID || 'N/A'}</span>
-                                <span><i class="fa-solid fa-box"></i> Stock: ${stockQty}</span>
+                                <span><i class="fa-solid fa-barcode"></i> ${formatVariationAlertMeta(product)}</span>
+                                <span><i class="fa-solid fa-box"></i> ${formatStockAlertDescription(product)}</span>
                             </div>
                         </div>
                         <div class="alert-status-badge ${statusClass}">

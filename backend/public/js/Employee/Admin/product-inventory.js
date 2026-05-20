@@ -17,6 +17,10 @@
             const n = Number(qty) || 0;
             return '<span class="stock-qty stock-qty-available">' + n + '</span>';
         }
+        function formatReturnQtyHtml(qty, kind) {
+            const n = Number(qty) || 0;
+            return '<span class="return-qty return-qty-' + kind + (n > 0 ? ' has-stock' : '') + '">' + n + '</span>';
+        }
 
         // Show custom popup
         function showCustomPopup(message, isError) {
@@ -89,6 +93,166 @@
         }
         window.archiveVariation = archiveVariation;
 
+        const isProductsListingPage = document.body.classList.contains('page-products-listing');
+        const isProductReturnsPage = document.body.classList.contains('page-product-returns');
+        const isInventoryPage = document.body.classList.contains('page-inventory');
+        const isFlatListPage = false;
+
+        function configureVariationEditModalForPage() {
+            const statusBlocks = document.querySelectorAll('.variation-status-edit-only');
+            const title = document.getElementById('editVariationStatusModalTitle');
+            const submitBtn = document.getElementById('submitEditVariationStatus');
+            const inventoryOnlyBlocks = document.querySelectorAll('.variation-edit-inventory-only');
+            if (isInventoryPage) {
+                statusBlocks.forEach(function(el) { el.style.display = 'none'; });
+                inventoryOnlyBlocks.forEach(function(el) { el.style.display = ''; });
+                if (title) title.textContent = 'Edit Variation';
+                if (submitBtn) submitBtn.textContent = 'Save';
+            } else if (isProductReturnsPage) {
+                statusBlocks.forEach(function(el) { el.style.display = ''; });
+                inventoryOnlyBlocks.forEach(function(el) { el.style.display = 'none'; });
+                if (title) title.textContent = 'Edit Variation Status & Quantity';
+                if (submitBtn) submitBtn.textContent = 'Update';
+                const statusSelect = document.getElementById('editVariationStatusSelect');
+                if (statusSelect) {
+                    const availOpt = statusSelect.querySelector('option[value="available"]');
+                    const returnedOpt = statusSelect.querySelector('option[value="returned"]');
+                    if (availOpt) availOpt.hidden = true;
+                    if (returnedOpt) returnedOpt.hidden = false;
+                }
+                const availCurrent = document.getElementById('variationCurrentAvailable');
+                if (availCurrent) availCurrent.style.display = 'none';
+                const returnedCurrent = document.getElementById('variationCurrentReturned');
+                if (returnedCurrent) returnedCurrent.style.display = '';
+            } else {
+                const statusSelect = document.getElementById('editVariationStatusSelect');
+                if (statusSelect) {
+                    const availOpt = statusSelect.querySelector('option[value="available"]');
+                    const returnedOpt = statusSelect.querySelector('option[value="returned"]');
+                    if (availOpt) availOpt.hidden = false;
+                    if (returnedOpt) returnedOpt.hidden = false;
+                }
+                const availCurrent = document.getElementById('variationCurrentAvailable');
+                if (availCurrent) availCurrent.style.display = '';
+                const returnedCurrent = document.getElementById('variationCurrentReturned');
+                if (returnedCurrent) returnedCurrent.style.display = '';
+                statusBlocks.forEach(function(el) { el.style.display = ''; });
+                inventoryOnlyBlocks.forEach(function(el) { el.style.display = ''; });
+            }
+        }
+
+        function variationHasIssueStock(variation) {
+            if (!variation) return false;
+            return (Number(variation.DamagedQuantity) || 0) > 0
+                || (Number(variation.ReturnedQuantity) || 0) > 0
+                || (Number(variation.RepairedQuantity) || 0) > 0
+                || (Number(variation.DisposedQuantity) || 0) > 0;
+        }
+
+        function buildFlatVariationRowHtml(variation, productId) {
+            const imageUrl = variation.VariationImageURL || '/images/placeholder-no-image.svg';
+            const variationName = variation.VariationName || 'N/A';
+            const variationId = variation.VariationID || 0;
+            const variationSku = variation.SKU || '—';
+            const color = variation.Color || '—';
+            let availableQty = variation.AvailableQuantity;
+            const baseQuantity = variation.Quantity || 0;
+            if ((availableQty === null || availableQty === undefined || availableQty === 0) && baseQuantity > 0) {
+                availableQty = baseQuantity;
+            } else {
+                availableQty = availableQty || 0;
+            }
+            const damagedQty = variation.DamagedQuantity || 0;
+            const returnedQty = variation.ReturnedQuantity || 0;
+            const repairedQty = variation.RepairedQuantity || 0;
+            const disposedQty = variation.DisposedQuantity || 0;
+            const totalQty = (availableQty + damagedQty) > 0 ? (availableQty + damagedQty) : baseQuantity;
+            const price = variation.Price
+                ? '₱' + parseFloat(variation.Price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : '—';
+
+            let cols = '<tr class="variation-flat-row" data-parent-product-id="' + productId + '" data-variation-id="' + variationId + '">' +
+                '<td><span class="row-type-badge row-type-variation">Variation</span></td>' +
+                '<td>' + escapeHtml(variationName) + '</td>' +
+                '<td><code style="font-size:0.85em;">' + escapeHtml(variationSku) + '</code> · ' + escapeHtml(color) + '</td>' +
+                '<td class="qty-col">' + formatStockQty(totalQty) + '</td>';
+
+            if (!isProductReturnsPage) {
+                cols += '<td class="qty-col">' + formatAvailableQty(availableQty) + '</td>';
+            } else {
+                cols += '<td class="qty-col">' + formatReturnQtyHtml(damagedQty, 'damaged') + '</td>' +
+                    '<td class="qty-col">' + formatReturnQtyHtml(returnedQty, 'returned') + '</td>' +
+                    '<td class="qty-col">' + formatReturnQtyHtml(repairedQty, 'repaired') + '</td>' +
+                    '<td class="qty-col">' + formatReturnQtyHtml(disposedQty, 'disposed') + '</td>';
+            }
+
+            cols += '<td style="text-align:center;"><img src="' + escapeHtml(imageUrl) + '" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" onerror="this.src=\'/images/placeholder-no-image.svg\'"></td>';
+
+            if (!isProductReturnsPage) {
+                cols += '<td style="color:#999;">—</td>';
+            }
+
+            if (isProductReturnsPage) {
+                cols += '<td style="text-align:center;"><button type="button" class="edit-variation-status-btn" data-variation-id="' + variationId + '" title="Edit variation status" style="background:#ffc107;color:#000;border:none;padding:5px 8px;border-radius:4px;cursor:pointer;">Edit</button></td>';
+            }
+
+            cols += '</tr>';
+            return cols;
+        }
+
+        function removeFlatVariationRows(productId) {
+            document.querySelectorAll('tr.variation-flat-row[data-parent-product-id="' + productId + '"]').forEach(function(row) {
+                row.remove();
+            });
+        }
+
+        function insertFlatVariationRows(productRow, variations, productId) {
+            removeFlatVariationRows(productId);
+            const emptyColspan = isProductReturnsPage ? 11 : 7;
+            if (!variations || !variations.length) {
+                productRow.insertAdjacentHTML('afterend',
+                    '<tr class="variation-flat-row variation-flat-empty" data-parent-product-id="' + productId + '">' +
+                    '<td colspan="' + emptyColspan + '" style="padding:8px 28px;color:#888;font-size:0.9em;">No variations</td></tr>');
+                return;
+            }
+            let list = variations;
+            if (isProductReturnsPage) {
+                list = variations.filter(variationHasIssueStock);
+            }
+            if (isProductReturnsPage && list.length === 0) {
+                productRow.insertAdjacentHTML('afterend',
+                    '<tr class="variation-flat-row variation-flat-empty" data-parent-product-id="' + productId + '">' +
+                    '<td colspan="' + emptyColspan + '" style="padding:8px 28px;color:#888;font-size:0.9em;">No variations with return/damaged/repaired/disposed stock</td></tr>');
+                return;
+            }
+            let insertAfter = productRow;
+            list.forEach(function(variation) {
+                insertAfter.insertAdjacentHTML('afterend', buildFlatVariationRowHtml(variation, productId));
+                insertAfter = insertAfter.nextElementSibling;
+            });
+        }
+
+        async function loadFlatVariationsForProduct(productId, productRow) {
+            if (!productId || !productRow) return;
+            try {
+                const response = await fetch('/api/admin/inventory-product-variations/' + productId);
+                const result = await response.json();
+                if (result.success) {
+                    insertFlatVariationRows(productRow, filterVariationsForListSearch(result.variations || []), productId);
+                }
+            } catch (err) {
+                console.error('Error loading flat variations:', err);
+            }
+        }
+
+        function initFlatProductTables() {
+            if (!isFlatListPage) return;
+            const rows = document.querySelectorAll('#productsFlatTable tr.product-flat-row');
+            rows.forEach(function(row) {
+                const pid = row.getAttribute('data-inventory-product-id');
+                if (pid) loadFlatVariationsForProduct(pid, row);
+            });
+        }
         const addInventoryItemBtn = document.getElementById('addInventoryItemBtn');
 let currentSelectedProductId = null;
         let currentSelectedProductName = null;
@@ -104,6 +268,63 @@ const urlParams = new URLSearchParams(window.location.search);
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
+        }
+
+        function parseInventoryDateValue(val) {
+            if (val == null || val === '') return null;
+            if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+            const s = String(val).trim();
+            const netDate = s.match(/^\/Date\((-?\d+)\)\/$/);
+            if (netDate) {
+                const d = new Date(parseInt(netDate[1], 10));
+                return isNaN(d.getTime()) ? null : d;
+            }
+            const n = Number(s);
+            if (s !== '' && !isNaN(n) && /^-?\d+(\.\d+)?$/.test(s)) {
+                if (n > 1e11) {
+                    const d = new Date(n);
+                    return isNaN(d.getTime()) ? null : d;
+                }
+                if (n > 25000 && n < 120000) {
+                    const d = new Date(Date.UTC(1899, 11, 30) + Math.round(n * 86400000));
+                    return isNaN(d.getTime()) ? null : d;
+                }
+            }
+            const d = new Date(s);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        function formatVariationDate(val) {
+            const d = parseInventoryDateValue(val);
+            if (!d) return '—';
+            return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
+        }
+
+        function variationShowOnStorefront(variation) {
+            return variation.ShowOnStorefront !== false
+                && variation.ShowOnStorefront !== 0
+                && variation.ShowOnStorefront !== '0';
+        }
+
+        async function setVariationStorefrontVisibility(variationId, showOnStorefront, checkboxEl) {
+            try {
+                const res = await fetch('/api/admin/inventory-product-variations/' + variationId + '/storefront', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ showOnStorefront: !!showOnStorefront })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    showCustomPopup(result.message || (showOnStorefront ? 'Shown on storefront.' : 'Hidden from storefront.'));
+                } else {
+                    if (checkboxEl) checkboxEl.checked = !showOnStorefront;
+                    showCustomPopup(result.message || 'Failed to update storefront visibility.', true);
+                }
+            } catch (err) {
+                if (checkboxEl) checkboxEl.checked = !showOnStorefront;
+                showCustomPopup('Failed to update storefront visibility.', true);
+            }
         }
 
         function getInventoryListSearchFilter() {
@@ -149,6 +370,27 @@ const urlParams = new URLSearchParams(window.location.search);
                 'tr[data-inventory-product-id="' + summary.inventoryProductId + '"]:not(.variations-row)'
             );
             if (!row) return;
+            if (isProductReturnsPage) {
+                const qtyTds = row.querySelectorAll('td.qty-col');
+                const totalSpan = qtyTds[0] && qtyTds[0].querySelector('.stock-qty');
+                if (totalSpan && summary.totalQuantity != null) {
+                    totalSpan.textContent = summary.totalQuantity;
+                    totalSpan.className = 'stock-qty ' + getStockQtyClass(summary.totalQuantity);
+                }
+                const kinds = ['damaged', 'returned', 'repaired', 'disposed'];
+                const vals = [
+                    summary.damagedQuantity,
+                    summary.returnedQuantity,
+                    summary.repairedQuantity,
+                    summary.disposedQuantity
+                ];
+                kinds.forEach(function(kind, i) {
+                    if (qtyTds[i + 1]) {
+                        qtyTds[i + 1].innerHTML = formatReturnQtyHtml(vals[i], kind);
+                    }
+                });
+                return;
+            }
             const qtyCells = row.querySelectorAll('td.qty-col .stock-qty');
             if (qtyCells[0]) {
                 qtyCells[0].textContent = summary.totalQuantity;
@@ -195,6 +437,9 @@ const urlParams = new URLSearchParams(window.location.search);
         function renderInventoryVariationsInRow(inventoryProductId, variations) {
             const container = getVariationsContainerEl(inventoryProductId);
             if (!container) return;
+            if (isProductReturnsPage && Array.isArray(variations)) {
+                variations = variations.filter(variationHasIssueStock);
+            }
             const loadingDiv = container.querySelector('.variations-loading');
             const tableContainer = container.querySelector('.variations-table-container');
             const emptyDiv = container.querySelector('.variations-empty');
@@ -204,7 +449,15 @@ const urlParams = new URLSearchParams(window.location.search);
             if (!variations || variations.length === 0) {
                 if (loadingDiv) loadingDiv.style.display = 'none';
                 if (tableContainer) tableContainer.style.display = 'none';
-                if (emptyDiv) emptyDiv.style.display = 'block';
+                if (emptyDiv) {
+                    emptyDiv.style.display = 'block';
+                    const emptyMsg = emptyDiv.querySelector('p');
+                    if (emptyMsg) {
+                        emptyMsg.textContent = isProductReturnsPage
+                            ? 'No variations with returned, damaged, repaired, or disposed stock.'
+                            : 'No variations found.';
+                    }
+                }
                 tableBody.innerHTML = '';
                 return;
             }
@@ -219,7 +472,6 @@ const urlParams = new URLSearchParams(window.location.search);
                     ? '₱' + parseFloat(variation.Price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     : 'N/A';
                 const variationName = variation.VariationName || 'N/A';
-                const variationNameEscaped = variationName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 const variationId = variation.VariationID || 0;
                 const baseQuantity = variation.Quantity || 0;
                 let availableQty = variation.AvailableQuantity;
@@ -236,28 +488,46 @@ const urlParams = new URLSearchParams(window.location.search);
                 const totalQty = calculatedTotal > 0 ? calculatedTotal : baseQuantity;
                 const color = variation.Color || 'N/A';
                 const variationSku = variation.SKU || '—';
-                return '<tr>' +
+                const showStorefront = variationShowOnStorefront(variation);
+                const editTitle = 'Edit Variation';
+                const showVariationEdit = isInventoryPage;
+                const showVariationArchive = isInventoryPage;
+                let row = '<tr>' +
                     '<td><strong>' + escapeHtml(variationName) + '</strong></td>' +
                     '<td><code style="font-size:0.85em;">' + escapeHtml(variationSku) + '</code></td>' +
                     '<td>' + escapeHtml(color) + '</td>' +
-                    '<td class="qty-col">' + formatStockQty(totalQty) + '</td>' +
-                    '<td class="qty-col">' + formatAvailableQty(availableQty) + '</td>' +
-                    '<td style="text-align:center;">' + (damagedQty > 0 ? '<span class="status-badge status-damaged">' + damagedQty + '</span>' : '<span style="color:#999;">0</span>') + '</td>' +
-                    '<td style="text-align:center;">' + (returnedQty > 0 ? '<span class="status-badge status-returned">' + returnedQty + '</span>' : '<span style="color:#999;">0</span>') + '</td>' +
-                    '<td style="text-align:center;">' + (repairedQty > 0 ? '<span class="status-badge status-repaired">' + repairedQty + '</span>' : '<span style="color:#999;">0</span>') + '</td>' +
-                    '<td style="text-align:center;">' + (disposedQty > 0 ? '<span class="status-badge status-disposed">' + disposedQty + '</span>' : '<span style="color:#999;">0</span>') + '</td>' +
-                    '<td style="text-align:center;">' + price + '</td>' +
-                    '<td style="text-align:center;"><img src="' + escapeHtml(imageUrl) + '" alt="Variation" style="width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" onerror="this.src=\'/images/placeholder-no-image.svg\'"></td>' +
-                    '<td style="text-align:center;">' + statusBadge + '</td>' +
-                    '<td style="text-align:center;">' +
-                    '<div style="display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap;">' +
-                    '<input type="number" id="restock-qty-' + variationId + '" min="1" value="1" style="width:52px;padding:4px;border:1px solid #ced4da;border-radius:4px;text-align:center;">' +
-                    '<button type="button" class="variation-restock-btn" data-variation-id="' + variationId + '" data-inventory-product-id="' + inventoryProductId + '" style="background:#17a2b8;color:#fff;border:none;padding:5px 8px;border-radius:4px;cursor:pointer;font-size:0.85em;">Add</button>' +
-                    '</div></td>' +
-                    '<td style="text-align:center;"><div style="display:flex;gap:5px;justify-content:center;flex-wrap:wrap;">' +
-                    '<button type="button" class="edit-variation-status-btn" data-variation-id="' + variationId + '" title="Edit Variation Status" style="background-color:#ffc107;color:#000;border:none;padding:5px 8px;border-radius:4px;cursor:pointer;">Edit</button>' +
-                    '<button type="button" class="archive-variation-btn" data-variation-id="' + variationId + '" data-variation-name="' + escapeHtml(variationName) + '" title="Archive Variation">Archive</button>' +
-                    '</div></td></tr>';
+                    '<td class="qty-col">' + formatStockQty(totalQty) + '</td>';
+                if (!isProductReturnsPage) {
+                    row += '<td class="qty-col">' + formatAvailableQty(availableQty) + '</td>';
+                } else {
+                    row += '<td class="qty-col" style="text-align:center;">' + formatReturnQtyHtml(damagedQty, 'damaged') + '</td>' +
+                        '<td class="qty-col" style="text-align:center;">' + formatReturnQtyHtml(returnedQty, 'returned') + '</td>' +
+                        '<td class="qty-col" style="text-align:center;">' + formatReturnQtyHtml(repairedQty, 'repaired') + '</td>' +
+                        '<td class="qty-col" style="text-align:center;">' + formatReturnQtyHtml(disposedQty, 'disposed') + '</td>';
+                }
+                row += '<td style="text-align:center;">' + price + '</td>' +
+                    '<td style="text-align:center;"><img src="' + escapeHtml(imageUrl) + '" alt="Variation" style="width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" onerror="this.src=\'/images/placeholder-no-image.svg\'"></td>';
+                if (isProductsListingPage) {
+                    row += '<td style="text-align:center;">' +
+                        '<label class="storefront-toggle-label" title="Include on customer storefront">' +
+                        '<input type="checkbox" class="variation-storefront-toggle" data-variation-id="' + variationId + '"' +
+                        (showStorefront ? ' checked' : '') + '> Storefront</label></td>' +
+                        '<td class="last-added-cell" style="text-align:center;">' + formatVariationDate(variation.CreatedAt) + '</td>';
+                } else if (isProductReturnsPage) {
+                    row += '<td style="text-align:center;"><button type="button" class="edit-variation-status-btn" data-variation-id="' + variationId + '" title="Edit variation status" style="background:#ffc107;color:#000;border:none;padding:5px 8px;border-radius:4px;cursor:pointer;">Edit</button></td>';
+                } else {
+                    row += '<td style="text-align:center;">' + statusBadge + '</td>' +
+                        '<td style="text-align:center;"><div style="display:flex;gap:5px;justify-content:center;flex-wrap:wrap;">' +
+                        (showVariationEdit
+                            ? '<button type="button" class="edit-variation-status-btn" data-variation-id="' + variationId + '" title="' + editTitle + '" style="background-color:#ffc107;color:#000;border:none;padding:5px 8px;border-radius:4px;cursor:pointer;">Edit</button>'
+                            : '') +
+                        (showVariationArchive
+                            ? '<button type="button" class="archive-variation-btn" data-variation-id="' + variationId + '" data-variation-name="' + escapeHtml(variationName) + '" title="Archive Variation">Archive</button>'
+                            : '') +
+                        '</div></td>';
+                }
+                row += '</tr>';
+                return row;
             }).join('');
 
             if (loadingDiv) loadingDiv.style.display = 'none';
@@ -359,6 +629,14 @@ const urlParams = new URLSearchParams(window.location.search);
         }
         window.notifyInventoryStockChanged = notifyInventoryStockChanged;
 
+        document.addEventListener('change', function(e) {
+            const sfToggle = e.target.closest('.variation-storefront-toggle');
+            if (sfToggle) {
+                const vid = parseInt(sfToggle.getAttribute('data-variation-id'), 10);
+                if (vid) setVariationStorefrontVisibility(vid, sfToggle.checked, sfToggle);
+            }
+        });
+
         document.addEventListener('click', function(e) {
             const toggleBtn = e.target.closest('.toggle-variations-btn');
             if (toggleBtn) {
@@ -368,6 +646,7 @@ const urlParams = new URLSearchParams(window.location.search);
                     const isVisible = variationsRow.style.display !== 'none';
                     variationsRow.style.display = isVisible ? 'none' : 'table-row';
                     toggleBtn.classList.toggle('expanded', !isVisible);
+                    toggleBtn.setAttribute('aria-expanded', !isVisible ? 'true' : 'false');
                     if (!isVisible) loadInventoryProductVariations(inventoryProductId);
                 }
                 return;
@@ -384,15 +663,6 @@ const urlParams = new URLSearchParams(window.location.search);
                 currentSelectedProductId = productId;
                 currentSelectedProductName = productName;
                 openAddVariationModal(productId, productName, false);
-                return;
-            }
-            const restockBtn = e.target.closest('.variation-restock-btn');
-            if (restockBtn && restockBtn.dataset.variationId) {
-                const vid = parseInt(restockBtn.dataset.variationId, 10);
-                const ipid = parseInt(restockBtn.dataset.inventoryProductId, 10);
-                if (vid && ipid && typeof window.restockVariationInline === 'function') {
-                    window.restockVariationInline(vid, ipid, restockBtn);
-                }
                 return;
             }
             const editVarBtn = e.target.closest('.edit-variation-status-btn[data-variation-id]');
@@ -420,7 +690,10 @@ const urlParams = new URLSearchParams(window.location.search);
             const variationsRow = document.querySelector('tr.variations-row[data-inventory-product-id="' + inventoryProductId + '"]');
             if (variationsRow) {
                 variationsRow.style.display = 'table-row';
-                if (toggleBtn) toggleBtn.classList.add('expanded');
+                if (toggleBtn) {
+                    toggleBtn.classList.add('expanded');
+                    toggleBtn.setAttribute('aria-expanded', 'true');
+                }
                 loadInventoryProductVariations(inventoryProductId);
             }
             currentSelectedProductId = inventoryProductId;
@@ -641,9 +914,14 @@ const urlParams = new URLSearchParams(window.location.search);
             updateCreateVariationTotalSummary();
         }
 
-        window.restockVariationInline = async function(variationId, inventoryProductId, buttonEl) {
-            const qtyInput = document.getElementById('restock-qty-' + variationId);
-            const quantity = parseInt(qtyInput?.value, 10);
+        window.restockVariationInline = async function(variationId, inventoryProductId, buttonEl, qtyOverride) {
+            const modalQtyInput = document.getElementById('editVariationRestockQty');
+            const qtyInput = qtyOverride != null
+                ? null
+                : (modalQtyInput || document.getElementById('restock-qty-' + variationId));
+            const quantity = qtyOverride != null
+                ? parseInt(qtyOverride, 10)
+                : parseInt(qtyInput?.value, 10);
             if (!variationId || !inventoryProductId || !quantity || quantity <= 0) {
                 showCustomPopup('Enter a positive restock quantity.', true);
                 return;
@@ -667,13 +945,22 @@ const urlParams = new URLSearchParams(window.location.search);
                 if (result.success) {
                     showCustomPopup(result.message || 'Restock successful.');
                     await notifyInventoryStockChanged(inventoryProductId, result);
+                    if (document.getElementById('editVariationStatusModal')?.style.display === 'block' && typeof window.editVariationStatus === 'function') {
+                        await window.editVariationStatus(variationId);
+                    }
+                    if (typeof loadInventoryProductVariations === 'function') {
+                        await loadInventoryProductVariations(inventoryProductId);
+                    }
                 } else {
                     showCustomPopup(result.message || 'Restock failed.', true);
                 }
             } catch (err) {
                 showCustomPopup('Restock failed: ' + err.message, true);
             } finally {
-                if (buttonEl) { buttonEl.disabled = false; buttonEl.textContent = 'Add'; }
+                if (buttonEl) {
+                    buttonEl.disabled = false;
+                    buttonEl.textContent = buttonEl.id === 'editVariationRestockBtn' ? 'Add Stock' : 'Add';
+                }
             }
         };
 
@@ -1045,7 +1332,7 @@ const urlParams = new URLSearchParams(window.location.search);
                     if (result.success) {
                         showCustomPopup(result.message || 'Product created.');
                         setTimeout(() => {
-                            window.location.href = '/Employee/Admin/ProductInventory?inventoryProductId=' + result.inventoryProductId + '&tab=variations';
+                            window.location.href = '/Employee/Admin/ProductInventory';
                         }, 500);
                     } else {
                         showCustomPopup(result.message || 'Failed to create product.', true);
@@ -1084,68 +1371,250 @@ const urlParams = new URLSearchParams(window.location.search);
             });
         }
 
-        // Add Category Inline Form logic
-        const addCategoryBtn = document.getElementById('addCategoryBtn');
-        const addCategoryForm = document.getElementById('addCategoryForm');
-        const cancelAddCategoryBtn = document.getElementById('cancelAddCategoryBtn');
-        const saveCategoryBtn = document.getElementById('saveCategoryBtn');
-        
-        if (addCategoryBtn && addCategoryForm) {
-            addCategoryBtn.addEventListener('click', function() {
-                addCategoryForm.style.display = 'block';
-                const newCategoryNameInput = document.getElementById('newCategoryName');
-                if (newCategoryNameInput) {
-                    newCategoryNameInput.value = '';
-                    newCategoryNameInput.focus();
+        // Manage Categories modal (UI-only)
+        let managedCategories = [];
+
+        function collectCategoriesFromSelect(selectEl) {
+            if (!selectEl) return [];
+            return Array.from(selectEl.options)
+                .map(function(opt) { return (opt.value || '').trim(); })
+                .filter(function(val) { return val.length > 0; });
+        }
+
+        function syncCategoryDropdowns() {
+            const categorySelect = document.getElementById('category');
+            const filterSelect = document.getElementById('invCategory');
+            [categorySelect, filterSelect].forEach(function(selectEl) {
+                if (!selectEl) return;
+                const current = selectEl.value;
+                const isFilter = selectEl.id === 'invCategory';
+                const placeholder = isFilter
+                    ? { value: '', text: 'All categories' }
+                    : { value: '', text: 'Select a category' };
+                selectEl.innerHTML = '';
+                const ph = document.createElement('option');
+                ph.value = placeholder.value;
+                ph.textContent = placeholder.text;
+                selectEl.appendChild(ph);
+                managedCategories.forEach(function(cat) {
+                    const option = document.createElement('option');
+                    option.value = cat;
+                    option.textContent = cat;
+                    selectEl.appendChild(option);
+                });
+                if (current && managedCategories.indexOf(current) !== -1) {
+                    selectEl.value = current;
                 }
             });
         }
-        
-        if (cancelAddCategoryBtn && addCategoryForm) {
-            cancelAddCategoryBtn.addEventListener('click', function() {
-                addCategoryForm.style.display = 'none';
-                const newCategoryNameInput = document.getElementById('newCategoryName');
-                if (newCategoryNameInput) {
-                    newCategoryNameInput.value = '';
-                }
+
+        function seedManagedCategories() {
+            const fromSelect = collectCategoriesFromSelect(document.getElementById('category'));
+            const fromFilter = collectCategoriesFromSelect(document.getElementById('invCategory'));
+            const merged = fromSelect.concat(fromFilter);
+            managedCategories = merged.filter(function(cat, idx) { return merged.indexOf(cat) === idx; }).sort();
+        }
+
+        function isCategoryInUse(categoryName) {
+            const rows = document.querySelectorAll('#productsTab table tbody tr:not(.variations-row)');
+            for (let i = 0; i < rows.length; i++) {
+                const cells = rows[i].querySelectorAll('td');
+                if (cells.length < 3) continue;
+                const cellText = (cells[1].textContent || '').trim();
+                if (cellText === categoryName) return true;
+            }
+            return false;
+        }
+
+        function loadCategoriesList() {
+            const listEl = document.getElementById('piCategoriesList');
+            if (!listEl) return;
+            if (!managedCategories.length) {
+                listEl.innerHTML = '<p style="color:#888;font-size:0.85em;">No categories yet. Add one above.</p>';
+                return;
+            }
+            listEl.innerHTML = managedCategories.map(function(cat) {
+                const safe = escapeHtml(cat).replace(/'/g, "\\'");
+                return '<div class="pi-category-row"><span>' + escapeHtml(cat) + '</span>' +
+                    '<button type="button" class="pi-btn" style="background:#dc3545;color:#fff;padding:4px 10px;" data-category-name="' + safe + '">Delete</button></div>';
+            }).join('');
+            listEl.querySelectorAll('button[data-category-name]').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const name = btn.getAttribute('data-category-name');
+                    if (isCategoryInUse(name)) {
+                        showCustomPopup('Cannot delete "' + name + '". It is used by one or more products.', true);
+                        return;
+                    }
+                    managedCategories = managedCategories.filter(function(c) { return c !== name; });
+                    syncCategoryDropdowns();
+                    loadCategoriesList();
+                });
             });
         }
-        
-        if (saveCategoryBtn) {
-            saveCategoryBtn.addEventListener('click', function() {
-                const newCategoryNameInput = document.getElementById('newCategoryName');
-                const categorySelect = document.getElementById('category');
-                
-                if (!newCategoryNameInput || !categorySelect) {
-                    return;
+
+        async function fetchProductCategoriesFromServer() {
+            try {
+                const res = await fetch('/api/admin/product-categories', { credentials: 'include' });
+                const data = await res.json();
+                if (data.success && Array.isArray(data.categories)) {
+                    const merged = managedCategories.concat(data.categories);
+                    managedCategories = merged.filter(function(c, i) {
+                        return c && merged.indexOf(c) === i;
+                    }).sort();
+                    syncCategoryDropdowns();
                 }
-                
-                const newCat = newCategoryNameInput.value.trim();
-                if (!newCat) {
-                    alert('Please enter a category name.');
-                    return;
-                }
-                
-                // Check if category already exists
-                const existingOptions = Array.from(categorySelect.options);
-                if (existingOptions.some(opt => opt.value === newCat)) {
-                    alert('This category already exists.');
-                    return;
-                }
-                
-                // Add to dropdown
-                const option = document.createElement('option');
-                option.value = newCat;
-                option.textContent = newCat;
-                categorySelect.appendChild(option);
-                categorySelect.value = newCat;
-                
-                // Hide form and clear input
-                addCategoryForm.style.display = 'none';
-                newCategoryNameInput.value = '';
-                alert('Category added to dropdown! It will be saved when you create a product with this category.');
+            } catch (err) {
+                console.error('Failed to load product categories:', err);
+            }
+        }
+
+        function openManageCategoriesModal() {
+            const modal = document.getElementById('piManageCategoriesModal');
+            if (!modal) return;
+            seedManagedCategories();
+            const listEl = document.getElementById('piCategoriesList');
+            if (listEl) listEl.innerHTML = '<em style="color:#888;">Loading…</em>';
+            modal.style.display = 'block';
+            fetchProductCategoriesFromServer().then(function() {
+                loadCategoriesList();
             });
         }
+
+        function closeManageCategoriesModal() {
+            const modal = document.getElementById('piManageCategoriesModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function initManageCategories() {
+            seedManagedCategories();
+            const manageBtn = document.getElementById('manageCategoriesBtn');
+            const addBtn = document.getElementById('piAddCategoryBtn');
+            const newInput = document.getElementById('piNewCategoryName');
+            if (manageBtn) {
+                manageBtn.addEventListener('click', openManageCategoriesModal);
+            }
+            ['piCloseManageCategories', 'piCloseManageCategoriesBtn'].forEach(function(id) {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('click', closeManageCategoriesModal);
+            });
+            if (addBtn && newInput) {
+                addBtn.addEventListener('click', function() {
+                    const newCat = newInput.value.trim();
+                    if (!newCat) {
+                        showCustomPopup('Enter a category name.', true);
+                        return;
+                    }
+                    if (managedCategories.indexOf(newCat) !== -1) {
+                        showCustomPopup('This category already exists.', true);
+                        return;
+                    }
+                    managedCategories.push(newCat);
+                    managedCategories.sort();
+                    syncCategoryDropdowns();
+                    newInput.value = '';
+                    loadCategoriesList();
+                    showCustomPopup('Category added.');
+                });
+            }
+        }
+
+        if (isInventoryPage) initManageCategories();
+
+        function populateEditProductCategorySelect(selected) {
+            const sel = document.getElementById('editInventoryProductCategory');
+            const createSel = document.getElementById('category');
+            if (!sel) return;
+            const names = [];
+            if (createSel) {
+                Array.from(createSel.options).forEach(function(opt) {
+                    if (opt.value) names.push(opt.value);
+                });
+            }
+            managedCategories.forEach(function(c) {
+                if (names.indexOf(c) === -1) names.push(c);
+            });
+            sel.innerHTML = '';
+            names.forEach(function(cat) {
+                const o = document.createElement('option');
+                o.value = cat;
+                o.textContent = cat;
+                sel.appendChild(o);
+            });
+            if (selected) sel.value = selected;
+        }
+
+        function openEditInventoryProductModal(productId) {
+            const modal = document.getElementById('editInventoryProductModal');
+            if (!modal) return;
+            fetch('/api/admin/inventory-product/' + productId + '?source=InventoryProducts', { credentials: 'include' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data.success || !data.product) {
+                        showCustomPopup(data.message || 'Failed to load product.', true);
+                        return;
+                    }
+                    const p = data.product;
+                    document.getElementById('editInventoryProductId').value = productId;
+                    document.getElementById('editInventoryProductName').value = p.Name || '';
+                    document.getElementById('editInventoryProductCurrentImage').value = p.ImageURL || '';
+                    populateEditProductCategorySelect(p.Category || '');
+                    const preview = document.getElementById('editInventoryProductImagePreview');
+                    if (preview) {
+                        if (p.ImageURL) {
+                            preview.innerHTML = '<img src="' + escapeHtml(p.ImageURL) + '" alt="Current" style="max-width:120px;max-height:120px;border-radius:4px;border:1px solid #ddd;" onerror="this.style.display=\'none\'">';
+                        } else {
+                            preview.innerHTML = '<em style="color:#888;">No image</em>';
+                        }
+                    }
+                    modal.style.display = 'block';
+                })
+                .catch(function() { showCustomPopup('Failed to load product.', true); });
+        }
+
+        function initEditInventoryProductModal() {
+            const modal = document.getElementById('editInventoryProductModal');
+            const form = document.getElementById('editInventoryProductForm');
+            if (!modal || !form) return;
+            const close = function() { modal.style.display = 'none'; form.reset(); };
+            ['closeEditInventoryProductModal', 'cancelEditInventoryProduct'].forEach(function(id) {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('click', close);
+            });
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const id = document.getElementById('editInventoryProductId').value;
+                const fd = new FormData(form);
+                const btn = document.getElementById('saveEditInventoryProduct');
+                if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+                try {
+                    const res = await fetch('/api/admin/inventory-products/' + id + '/update-basic', {
+                        method: 'POST',
+                        credentials: 'include',
+                        body: fd
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                        showCustomPopup(result.message || 'Product updated.');
+                        close();
+                        window.location.reload();
+                    } else {
+                        showCustomPopup(result.message || 'Update failed.', true);
+                    }
+                } catch (err) {
+                    showCustomPopup('Update failed: ' + err.message, true);
+                } finally {
+                    if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+                }
+            });
+            document.addEventListener('click', function(e) {
+                const btn = e.target.closest('.edit-inventory-product-btn');
+                if (!btn) return;
+                const pid = parseInt(btn.getAttribute('data-product-id'), 10);
+                if (pid) openEditInventoryProductModal(pid);
+            });
+        }
+
+        if (isInventoryPage) initEditInventoryProductModal();
 
         // Function to archive product
         function archiveProduct(productId, productName, isFromProductsTable) {
@@ -1306,6 +1775,7 @@ const urlParams = new URLSearchParams(window.location.search);
         // Load variations for an inventory product
         // ProductInventory page ALWAYS uses InventoryProductVariations (for InventoryProducts table)
         async function loadVariations(inventoryProductId, isFromProducts = false) {
+            if (!getVariationsContainer()) return;
             try {
                 console.log('Loading variations for inventory product:', inventoryProductId);
                 // Always use InventoryProductVariations endpoint for ProductInventory page
@@ -1399,11 +1869,12 @@ const urlParams = new URLSearchParams(window.location.search);
 
         // Edit variation status (similar to edit inventory status)
         window.editVariationStatus = async function editVariationStatus(variationId) {
-            const variation = window.currentVariations.find(v => v.VariationID === variationId);
+            let variation = (window.currentVariations || []).find(function(v) { return v.VariationID === variationId; });
             if (!variation) {
-                console.error('Variation not found:', variationId);
-                showCustomPopup('Variation not found.', true);
-                return;
+                variation = {
+                    VariationID: variationId,
+                    InventoryProductID: window.currentVariationProductId || currentSelectedProductId
+                };
             }
 
             try {
@@ -1423,7 +1894,22 @@ const urlParams = new URLSearchParams(window.location.search);
                 document.getElementById('editVariationStatusName').value = variationData.VariationName || variation.VariationName || 'N/A';
 
                 const parentInvId = variationData.InventoryProductID || variation.InventoryProductID || currentSelectedProductId;
-                await loadEditVariationRecipe(parentInvId);
+                const invIdEl = document.getElementById('editVariationStatusInventoryProductID');
+                if (invIdEl) invIdEl.value = parentInvId || '';
+                const restockQtyEl = document.getElementById('editVariationRestockQty');
+                if (restockQtyEl) restockQtyEl.value = '1';
+                if (!isProductReturnsPage) {
+                    await loadEditVariationRecipe(parentInvId);
+                } else {
+                    resetEditVariationMaterials();
+                    const recipeHidden = document.getElementById('editVariationRecipeMaterials');
+                    if (recipeHidden) {
+                        recipeHidden.value = '';
+                        recipeHidden.setAttribute('data-initial-recipe', '[]');
+                    }
+                    const rs = document.getElementById('editVariationRecipeStatus');
+                    if (rs) rs.innerHTML = '';
+                }
                 
                 // Set current quantities
                 // If AvailableQuantity is NULL, undefined, or 0, fall back to Quantity field
@@ -1438,6 +1924,7 @@ const urlParams = new URLSearchParams(window.location.search);
                     currentAvailable = currentAvailable || 0;
                 }
                 
+                const currentReturned = variationData.ReturnedQuantity || 0;
                 const currentDamaged = variationData.DamagedQuantity || 0;
                 const currentRepaired = variationData.RepairedQuantity || 0;
                 const currentDisposed = variationData.DisposedQuantity || 0;
@@ -1448,22 +1935,28 @@ const urlParams = new URLSearchParams(window.location.search);
                 const currentTotal = (calculatedTotal > 0) ? calculatedTotal : quantityFromDB;
 
                 document.getElementById('currentVariationStatusAvailableQty').textContent = currentAvailable;
+                document.getElementById('currentVariationStatusReturnedQty').textContent = currentReturned;
                 document.getElementById('currentVariationStatusDamagedQty').textContent = currentDamaged;
                 document.getElementById('currentVariationStatusRepairedQty').textContent = currentRepaired;
                 document.getElementById('currentVariationStatusDisposedQty').textContent = currentDisposed;
 
                 // Set hidden inputs
                 document.getElementById('editVariationStatusAvailableQuantity').value = currentAvailable;
+                document.getElementById('editVariationStatusReturnedQuantity').value = currentReturned;
                 document.getElementById('editVariationStatusDamagedQuantity').value = currentDamaged;
                 document.getElementById('editVariationStatusRepairedQuantity').value = currentRepaired;
                 document.getElementById('editVariationStatusDisposedQuantity').value = currentDisposed;
                 
                 const mediaPreview = document.getElementById('editVariationStatusMediaPreview');
-                renderVariationMediaPreviews(mediaPreview, {
-                    mainImage: variationData.VariationImageURL || null,
-                    thumbnails: parseThumbnailUrls(variationData.ThumbnailURLs),
-                    model3d: variationData.Model3D || null
-                });
+                if (!isProductReturnsPage) {
+                    renderVariationMediaPreviews(mediaPreview, {
+                        mainImage: variationData.VariationImageURL || null,
+                        thumbnails: parseThumbnailUrls(variationData.ThumbnailURLs),
+                        model3d: variationData.Model3D || null
+                    });
+                } else if (mediaPreview) {
+                    mediaPreview.innerHTML = '';
+                }
 
                 // Removed Notes field for compact modal
 
@@ -1476,7 +1969,8 @@ const urlParams = new URLSearchParams(window.location.search);
                 // Attach event listeners when modal is opened (in case they weren't attached on page load)
                 attachEditVariationStatusListeners();
                 attachEditVariationStatusCloseListeners();
-                
+                configureVariationEditModalForPage();
+
                 // Show modal
                 document.getElementById('editVariationStatusModal').style.display = 'block';
             } catch (error) {
@@ -1500,6 +1994,12 @@ const urlParams = new URLSearchParams(window.location.search);
                 switch(statusSelect.value) {
                     case 'available':
                         currentQty = parseInt(document.getElementById('currentVariationStatusAvailableQty').textContent) || 0;
+                        quantityInput.value = currentQty;
+                        quantityInput.min = 0;
+                        quantityInput.max = MAX_QUANTITY;
+                        break;
+                    case 'returned':
+                        currentQty = parseInt(document.getElementById('currentVariationStatusReturnedQty').textContent) || 0;
                         quantityInput.value = currentQty;
                         quantityInput.min = 0;
                         quantityInput.max = MAX_QUANTITY;
@@ -1555,6 +2055,7 @@ const urlParams = new URLSearchParams(window.location.search);
             }
             
             const currentAvailable = parseInt(document.getElementById('currentVariationStatusAvailableQty').textContent) || 0;
+            const currentReturned = parseInt(document.getElementById('currentVariationStatusReturnedQty').textContent) || 0;
             const currentDamaged = parseInt(document.getElementById('currentVariationStatusDamagedQty').textContent) || 0;
             const currentRepaired = parseInt(document.getElementById('currentVariationStatusRepairedQty').textContent) || 0;
             const currentDisposed = parseInt(document.getElementById('currentVariationStatusDisposedQty').textContent) || 0;
@@ -1563,6 +2064,9 @@ const urlParams = new URLSearchParams(window.location.search);
             switch(statusSelect.value) {
                 case 'available':
                     quantityChange = newQuantity - currentAvailable;
+                    break;
+                case 'returned':
+                    quantityChange = newQuantity - currentReturned;
                     break;
                 case 'damaged':
                     quantityChange = newQuantity;
@@ -1576,6 +2080,7 @@ const urlParams = new URLSearchParams(window.location.search);
             }
             
             let newAvailable = currentAvailable;
+            let newReturned = currentReturned;
             let newDamaged = currentDamaged;
             let newRepaired = currentRepaired;
             let newDisposed = currentDisposed;
@@ -1587,6 +2092,7 @@ const urlParams = new URLSearchParams(window.location.search);
                 quantityInput.value = MAX_QUANTITY;
                 switch(statusSelect.value) {
                     case 'available': quantityChange = newQuantity - currentAvailable; break;
+                    case 'returned': quantityChange = newQuantity - currentReturned; break;
                     case 'damaged': quantityChange = newQuantity; break;
                     case 'repaired': quantityChange = newQuantity; break;
                     case 'disposed': quantityChange = newQuantity; break;
@@ -1597,6 +2103,7 @@ const urlParams = new URLSearchParams(window.location.search);
                 showCustomPopup('Please enter a valid whole number for quantity.', true);
                 switch(statusSelect.value) {
                     case 'available': quantityInput.value = currentAvailable; break;
+                    case 'returned': quantityInput.value = currentReturned; break;
                     case 'damaged': quantityInput.value = 0; break;
                     case 'repaired': quantityInput.value = 0; break;
                     case 'disposed': quantityInput.value = 0; break;
@@ -1626,6 +2133,10 @@ const urlParams = new URLSearchParams(window.location.search);
                             newDamaged += decreaseAmount;
                         }
                     }
+                    break;
+                case 'returned':
+                    newReturned = newQuantity;
+                    if (newReturned < 0) newReturned = 0;
                     break;
                 case 'damaged':
                     let itemsToTransfer = Math.min(newQuantity, currentAvailable);
@@ -1690,18 +2201,21 @@ const urlParams = new URLSearchParams(window.location.search);
             
             // Ensure no negative values
             newAvailable = Math.max(0, newAvailable);
+            newReturned = Math.max(0, newReturned);
             newDamaged = Math.max(0, newDamaged);
             newRepaired = Math.max(0, newRepaired);
             newDisposed = Math.max(0, newDisposed);
             
             // Update hidden inputs
             document.getElementById('editVariationStatusAvailableQuantity').value = newAvailable;
+            document.getElementById('editVariationStatusReturnedQuantity').value = newReturned;
             document.getElementById('editVariationStatusDamagedQuantity').value = newDamaged;
             document.getElementById('editVariationStatusRepairedQuantity').value = newRepaired;
             document.getElementById('editVariationStatusDisposedQuantity').value = newDisposed;
             
             // Update display
             document.getElementById('currentVariationStatusAvailableQty').textContent = newAvailable;
+            document.getElementById('currentVariationStatusReturnedQty').textContent = newReturned;
             document.getElementById('currentVariationStatusDamagedQty').textContent = newDamaged;
             document.getElementById('currentVariationStatusRepairedQty').textContent = newRepaired;
             document.getElementById('currentVariationStatusDisposedQty').textContent = newDisposed;
@@ -1729,34 +2243,48 @@ const urlParams = new URLSearchParams(window.location.search);
                 const selectedStatus = document.getElementById('editVariationStatusSelect').value;
 
                 const currentAvailable = parseInt(document.getElementById('currentVariationStatusAvailableQty').textContent) || 0;
+                const currentReturned = parseInt(document.getElementById('currentVariationStatusReturnedQty').textContent) || 0;
                 const currentDamaged = parseInt(document.getElementById('currentVariationStatusDamagedQty').textContent) || 0;
                 const currentRepaired = parseInt(document.getElementById('currentVariationStatusRepairedQty').textContent) || 0;
                 const currentDisposed = parseInt(document.getElementById('currentVariationStatusDisposedQty').textContent) || 0;
 
                 const finalAvailable = parseInt(document.getElementById('editVariationStatusAvailableQuantity').value) || 0;
+                const finalReturned = parseInt(document.getElementById('editVariationStatusReturnedQuantity').value) || 0;
                 const finalDamaged = parseInt(document.getElementById('editVariationStatusDamagedQuantity').value) || 0;
                 const finalRepaired = parseInt(document.getElementById('editVariationStatusRepairedQuantity').value) || 0;
                 const finalDisposed = parseInt(document.getElementById('editVariationStatusDisposedQuantity').value) || 0;
 
                 const quantitiesChanged = (finalAvailable !== currentAvailable) ||
+                    (finalReturned !== currentReturned) ||
                     (finalDamaged !== currentDamaged) ||
                     (finalRepaired !== currentRepaired) ||
                     (finalDisposed !== currentDisposed);
 
-                const hasMediaUpload = !!(document.getElementById('editVariationStatusMainImage')?.files?.length ||
+                const hasMediaUpload = !isProductReturnsPage && !!(document.getElementById('editVariationStatusMainImage')?.files?.length ||
                     document.getElementById('editVariationStatusThumbnails')?.files?.length ||
                     document.getElementById('editVariationStatusModel3d')?.files?.length);
 
                 const currentRecipeJson = JSON.stringify(getEditVariationRequiredMaterials());
                 const initialRecipeJson = document.getElementById('editVariationRecipeMaterials')?.getAttribute('data-initial-recipe') || '[]';
-                const recipeChanged = currentRecipeJson !== initialRecipeJson;
+                const recipeChanged = !isProductReturnsPage && currentRecipeJson !== initialRecipeJson;
 
                 if (!quantitiesChanged && !selectedStatus && !hasMediaUpload && !recipeChanged) {
-                    showCustomPopup('No changes detected. Modify quantities, media, raw materials, or select a status before saving.', true);
+                    const noChangeMsg = isInventoryPage
+                        ? 'No changes detected. Update media or raw materials before saving.'
+                        : (isProductReturnsPage
+                            ? 'No changes detected. Select a status or adjust quantities before saving.'
+                            : 'No changes detected. Modify quantities, media, raw materials, or select a status before saving.');
+                    showCustomPopup(noChangeMsg, true);
+                    return;
+                }
+
+                if (isInventoryPage && (quantitiesChanged || selectedStatus)) {
+                    showCustomPopup('Status quantity changes are managed on the Product listing page.', true);
                     return;
                 }
 
                 const newAvailableQty = finalAvailable;
+                const newReturnedQty = finalReturned;
                 const newDamagedQty = finalDamaged;
                 const newRepairedQty = finalRepaired;
                 const newDisposedQty = finalDisposed;
@@ -1767,15 +2295,21 @@ const urlParams = new URLSearchParams(window.location.search);
                 const formData = new FormData();
                 formData.append('variationID', parseInt(variationId));
                 formData.append('availableQuantity', newAvailableQty);
+                formData.append('returnedQuantity', newReturnedQty);
                 formData.append('damagedQuantity', newDamagedQty);
                 formData.append('repairedQuantity', newRepairedQty);
                 formData.append('disposedQuantity', newDisposedQty);
                 formData.append('notes', notes || '');
-                appendVariationMediaToFormData(formData, document.getElementById('editVariationStatusForm'));
-                formData.append('recipeMaterials', JSON.stringify(getEditVariationRequiredMaterials()));
+                if (!isProductReturnsPage) {
+                    appendVariationMediaToFormData(formData, document.getElementById('editVariationStatusForm'));
+                }
+                formData.append('recipeMaterials', isProductReturnsPage
+                    ? '[]'
+                    : JSON.stringify(getEditVariationRequiredMaterials()));
                 
                 console.log('Final quantities to save:', {
                     available: newAvailableQty,
+                    returned: newReturnedQty,
                     damaged: newDamagedQty,
                     repaired: newRepairedQty,
                     disposed: newDisposedQty,
@@ -1783,7 +2317,7 @@ const urlParams = new URLSearchParams(window.location.search);
                 });
 
                 // Enhanced validation: If status is selected and quantity input is visible, it should have a value
-                if (selectedStatus) {
+                if (selectedStatus && !isInventoryPage) {
                     const quantityInputContainer = document.getElementById('variationStatusQuantityInputContainer');
                     if (quantityInputContainer && quantityInputContainer.style.display !== 'none') {
                         const quantityInputValue = document.getElementById('editVariationStatusQuantityInput').value;
@@ -1802,21 +2336,21 @@ const urlParams = new URLSearchParams(window.location.search);
                 }
 
                 // Enhanced validation: New quantities cannot be negative
-                if (newAvailableQty < 0 || newDamagedQty < 0 || newRepairedQty < 0 || newDisposedQty < 0) {
+                if (newAvailableQty < 0 || newReturnedQty < 0 || newDamagedQty < 0 || newRepairedQty < 0 || newDisposedQty < 0) {
                     showCustomPopup('Validation Error: Quantities cannot be negative. Please check your inputs.', true);
                     return;
                 }
 
                 // Enhanced validation: Maximum quantity check
                 const MAX_QUANTITY = 999999;
-                if (newAvailableQty > MAX_QUANTITY || newDamagedQty > MAX_QUANTITY || 
+                if (newAvailableQty > MAX_QUANTITY || newReturnedQty > MAX_QUANTITY || newDamagedQty > MAX_QUANTITY ||
                     newRepairedQty > MAX_QUANTITY || newDisposedQty > MAX_QUANTITY) {
                     showCustomPopup(`Validation Error: Quantities cannot exceed ${MAX_QUANTITY.toLocaleString()}. Please check your inputs.`, true);
                     return;
                 }
 
                 const stockDelta = (newAvailableQty + newDamagedQty) - (currentAvailable + currentDamaged);
-                if (stockDelta > 0) {
+                if (!isProductReturnsPage && stockDelta > 0) {
                     if (!allRawMaterials.length) await fetchRawMaterialsForInventory();
                     let recipe = getEditVariationRequiredMaterials();
                     if (!recipe.length) {
@@ -1856,7 +2390,15 @@ const urlParams = new URLSearchParams(window.location.search);
                         const editVariationStatusModal = document.getElementById('editVariationStatusModal');
                         if (editVariationStatusModal) editVariationStatusModal.style.display = 'none';
                         const pid = currentSelectedProductId || window.currentVariationProductId;
-                        if (pid) await notifyInventoryStockChanged(pid, result);
+                        if (pid) {
+                            await notifyInventoryStockChanged(pid, result);
+                            if (isFlatListPage) {
+                                const productRow = document.querySelector('#productsFlatTable tr.product-flat-row[data-inventory-product-id="' + pid + '"]');
+                                if (productRow) loadFlatVariationsForProduct(pid, productRow);
+                            } else if (isProductReturnsPage) {
+                                await loadInventoryProductVariations(pid);
+                            }
+                        }
                     } else {
                         console.error('Failed to update variation status:', result);
                         showCustomPopup('Failed to update variation status: ' + (result.message || 'Unknown error'), true);
@@ -1902,6 +2444,19 @@ const urlParams = new URLSearchParams(window.location.search);
                 console.warn('Update Variation Status button not found - will retry when modal opens');
             }
 
+            const editVariationRestockBtn = document.getElementById('editVariationRestockBtn');
+            if (editVariationRestockBtn && !editVariationRestockBtn.hasAttribute('data-listener-attached')) {
+                editVariationRestockBtn.addEventListener('click', async function() {
+                    const vid = parseInt(document.getElementById('editVariationStatusVariationID')?.value, 10);
+                    const ipid = parseInt(document.getElementById('editVariationStatusInventoryProductID')?.value, 10);
+                    const qty = parseInt(document.getElementById('editVariationRestockQty')?.value, 10);
+                    if (vid && ipid && typeof window.restockVariationInline === 'function') {
+                        await window.restockVariationInline(vid, ipid, editVariationRestockBtn, qty);
+                    }
+                });
+                editVariationRestockBtn.setAttribute('data-listener-attached', 'true');
+            }
+
             const addEditVariationMaterialBtn = document.getElementById('addEditVariationMaterialBtn');
             if (addEditVariationMaterialBtn && !addEditVariationMaterialBtn.hasAttribute('data-listener-attached')) {
                 addEditVariationMaterialBtn.addEventListener('click', function(e) {
@@ -1917,15 +2472,17 @@ const urlParams = new URLSearchParams(window.location.search);
             }
         }
         
-        // Attach listeners when DOM is ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', function() {
-                // Small delay to ensure all elements are rendered
+        // Attach variation status listeners only on Products listing page
+        if (document.getElementById('editVariationStatusModal')) {
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    configureVariationEditModalForPage();
+                    setTimeout(attachEditVariationStatusListeners, 100);
+                });
+            } else {
+                configureVariationEditModalForPage();
                 setTimeout(attachEditVariationStatusListeners, 100);
-            });
-        } else {
-            // Small delay to ensure all elements are rendered
-            setTimeout(attachEditVariationStatusListeners, 100);
+            }
         }
         
         // Also make the handler globally available for debugging
@@ -1963,10 +2520,12 @@ const urlParams = new URLSearchParams(window.location.search);
         window.closeEditVariationStatusModalFunc = closeEditVariationStatusModalFunc;
         window.attachEditVariationStatusCloseListeners = attachEditVariationStatusCloseListeners;
 
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => setTimeout(attachEditVariationStatusCloseListeners, 100));
-        } else {
-            setTimeout(attachEditVariationStatusCloseListeners, 100);
+        if (document.getElementById('editVariationStatusModal')) {
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => setTimeout(attachEditVariationStatusCloseListeners, 100));
+            } else {
+                setTimeout(attachEditVariationStatusCloseListeners, 100);
+            }
         }
 
         // Image preview functions
@@ -1988,6 +2547,14 @@ const urlParams = new URLSearchParams(window.location.search);
         window.previewProductImage = previewProductImage;
 
         // Add event listeners for edit and archive buttons using data attributes
+        if (isFlatListPage) {
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initFlatProductTables);
+            } else {
+                initFlatProductTables();
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             // Edit inventory buttons
 

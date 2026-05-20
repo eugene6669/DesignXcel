@@ -1,0 +1,185 @@
+<%#
+  locals:
+    allProductsList, invFilters, stockQtyClass, formatListDate
+    showReturnColumns (boolean, default false)
+    showActions (boolean, default false)
+    showVariationActions (boolean, optional — defaults true when showReturnColumns)
+    showStorefront (boolean, default false)
+    emptyListMessage (optional string)
+%>
+<%
+    const showReturnCols = !!showReturnColumns;
+    const showAct = !!showActions;
+    const showVarAct = typeof showVariationActions !== 'undefined' ? !!showVariationActions : showReturnCols;
+    const showSf = !!showStorefront;
+    const productColspan = showReturnCols ? 8 : (6 + (showAct ? 1 : 0));
+    const fmtDate = typeof formatListDate === 'function'
+        ? formatListDate
+        : function(v) { return v ? String(v) : 'N/A'; };
+%>
+<% if (allProductsList && allProductsList.length > 0) { %>
+    <% if (!showReturnCols) { %>
+    <div class="stock-legend">
+        <span><i style="background:#DC3545;"></i> Out of stock (0)</span>
+        <span><i style="background:#FF9800;"></i> Critical (1–10)</span>
+        <span><i style="background:#d4af37;"></i> Low (11–20)</span>
+    </div>
+    <% } %>
+    <table id="productsListingTable" class="products-listing-table<%= showReturnCols ? ' products-returns-table' : '' %>">
+        <thead>
+            <tr>
+                <th>Product Name</th>
+                <th>Category</th>
+                <th class="qty-col" title="Sum of all variation quantities">Total Qty</th>
+                <% if (!showReturnCols) { %><th class="qty-col">Available</th><% } %>
+                <% if (showReturnCols) { %>
+                <th class="qty-col return-qty-th return-qty-th-damaged">Damaged</th>
+                <th class="qty-col return-qty-th return-qty-th-returned">Returned</th>
+                <th class="qty-col return-qty-th return-qty-th-repaired">Repaired</th>
+                <th class="qty-col return-qty-th return-qty-th-disposed">Disposed</th>
+                <% } %>
+                <th>Image</th>
+                <% if (!showReturnCols) { %><th>Last Added</th><% } %>
+                <% if (showAct && !showReturnCols) { %><th>Actions</th><% } %>
+            </tr>
+        </thead>
+        <tbody>
+            <% allProductsList.forEach(function(item) {
+                const productName = item.InventoryProductName || 'N/A';
+                const productCategory = item.InventoryProductCategory || 'N/A';
+                const productImageRaw = item.InventoryProductImageURL || null;
+                const productImageNormalized = productImageRaw ? String(productImageRaw).trim().replace(/\\/g, '/') : '';
+                const ensureLeadingSlash = function(value) {
+                    const v = String(value || '').trim();
+                    if (!v) return '';
+                    if (v.startsWith('http://') || v.startsWith('https://') || v.startsWith('data:')) return v;
+                    return v.startsWith('/') ? v : '/' + v;
+                };
+                const looksLikeFilename = function(value) { return /\.(png|jpe?g|gif|webp|svg)$/i.test(String(value || '')); };
+                const normalizedForFilenameCheck = productImageNormalized.replace(/^\/+/, '');
+                let productImage = ensureLeadingSlash(productImageNormalized);
+                if (normalizedForFilenameCheck && looksLikeFilename(normalizedForFilenameCheck) && normalizedForFilenameCheck.indexOf('/') === -1) {
+                    productImage = '/uploads/products/images/' + normalizedForFilenameCheck;
+                }
+                let productImagePrimary = productImage || '';
+                let productImageFallback = '';
+                let productImageFallback2 = '';
+                if (productImage && productImage.startsWith('/uploads/products/') && productImage.indexOf('/uploads/products/images/') !== 0) {
+                    productImagePrimary = productImage.replace('/uploads/products/', '/uploads/products/images/');
+                    productImageFallback = productImage;
+                } else if (productImage && productImage.startsWith('/uploads/products/images/')) {
+                    productImageFallback = productImage.replace('/uploads/products/images/', '/uploads/products/');
+                } else if (productImage && productImage.startsWith('/uploads/products/inventory/')) {
+                    productImageFallback = productImage.replace('/uploads/products/inventory/', '/uploads/products/images/');
+                    productImageFallback2 = productImage.replace('/uploads/products/inventory/', '/uploads/products/');
+                }
+                const totalQuantity = item.TotalQuantity || 0;
+                const availableQty = item.AvailableQuantity || 0;
+                const damagedQty = item.DamagedQuantity || 0;
+                const returnedQty = item.ReturnedQuantity || 0;
+                const repairedQty = item.RepairedQuantity || 0;
+                const disposedQty = item.DisposedQuantity || 0;
+                const productId = item.InventoryProductID;
+                const lastAddedDisplay = item.LastDateAddedLabel || fmtDate(item.LastDateAdded);
+            %>
+            <tr class="product-listing-row" data-inventory-product-id="<%= productId %>" data-product-name="<%= productName.replace(/"/g, '&quot;') %>">
+                <td>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <button type="button" class="toggle-variations-btn" data-inventory-product-id="<%= productId %>" style="background:none;border:none;cursor:pointer;padding:4px;color:#666;" title="Show variations" aria-expanded="false">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="toggle-icon">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </button>
+                        <strong><%= productName %></strong>
+                    </div>
+                </td>
+                <td><%= productCategory %></td>
+                <td class="qty-col"><span class="stock-qty <%= stockQtyClass(totalQuantity) %>"><%= totalQuantity %></span></td>
+                <% if (!showReturnCols) { %>
+                <td class="qty-col"><span class="stock-qty stock-qty-available"><%= availableQty %></span></td>
+                <% } %>
+                <% if (showReturnCols) { %>
+                <td class="qty-col"><span class="return-qty return-qty-damaged<%= damagedQty > 0 ? ' has-stock' : '' %>"><%= damagedQty %></span></td>
+                <td class="qty-col"><span class="return-qty return-qty-returned<%= returnedQty > 0 ? ' has-stock' : '' %>"><%= returnedQty %></span></td>
+                <td class="qty-col"><span class="return-qty return-qty-repaired<%= repairedQty > 0 ? ' has-stock' : '' %>"><%= repairedQty %></span></td>
+                <td class="qty-col"><span class="return-qty return-qty-disposed<%= disposedQty > 0 ? ' has-stock' : '' %>"><%= disposedQty %></span></td>
+                <% } %>
+                <td>
+                    <% if (productImagePrimary) { %>
+                        <img src="<%= productImagePrimary %>" alt="" class="image-preview" style="width:48px;height:48px;object-fit:cover;border-radius:4px;"
+                            data-fallback-src="<%= productImageFallback %>"
+                            data-fallback-src2="<%= productImageFallback2 %>"
+                            onerror="if(this.dataset.fallbackSrc&&this.src.indexOf(this.dataset.fallbackSrc)===-1){this.src=this.dataset.fallbackSrc;}else if(this.dataset.fallbackSrc2&&this.src.indexOf(this.dataset.fallbackSrc2)===-1){this.src=this.dataset.fallbackSrc2;}else{this.onerror=null;this.src='/images/placeholder-no-image.svg';}">
+                    <% } else { %>
+                        <span style="color:#999;">—</span>
+                    <% } %>
+                </td>
+                <% if (!showReturnCols) { %>
+                <td class="last-added-cell"><%= lastAddedDisplay %></td>
+                <% } %>
+            </tr>
+            <tr class="variations-row" data-inventory-product-id="<%= productId %>" style="display:none;">
+                <td colspan="<%= productColspan %>" style="padding:16px 20px;background:#f8f9fa;border-top:2px solid #dee2e6;">
+                    <div class="variations-container" data-inventory-product-id="<%= productId %>" data-show-return-columns="<%= showReturnCols ? '1' : '0' %>" data-show-storefront="<%= showSf ? '1' : '0' %>" data-show-variation-actions="<%= showVarAct ? '1' : '0' %>">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+                            <h4 style="margin:0;color:#333;font-size:0.95em;">Variations</h4>
+                            <button type="button" class="refresh-variations-btn pi-btn pi-btn-sm" data-inventory-product-id="<%= productId %>" style="background:#28a745;color:#fff;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:0.85em;">Refresh</button>
+                        </div>
+                        <div class="variations-loading" style="text-align:center;padding:16px;color:#666;">
+                            <p>Expand to load variations.</p>
+                        </div>
+                        <div class="variations-table-container" style="display:none;">
+                            <table style="width:100%;border-collapse:collapse;">
+                                <thead>
+                                    <tr style="background:#e9ecef;">
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:left;">Variation</th>
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:left;">SKU</th>
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:left;">Color</th>
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Qty</th>
+                                        <% if (!showReturnCols) { %>
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Available</th>
+                                        <% } %>
+                                        <% if (showReturnCols) { %>
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Damaged</th>
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Returned</th>
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Repaired</th>
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Disposed</th>
+                                        <% } %>
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Price</th>
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Image</th>
+                                        <% if (showSf) { %>
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Storefront</th>
+                                        <% } %>
+                                        <% if (!showReturnCols) { %>
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Last Added</th>
+                                        <% } %>
+                                        <% if (showVarAct) { %>
+                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Actions</th>
+                                        <% } %>
+                                    </tr>
+                                </thead>
+                                <tbody class="variations-table-body"></tbody>
+                            </table>
+                        </div>
+                        <div class="variations-empty" style="display:none;text-align:center;padding:16px;color:#999;">
+                            <p>No variations found.</p>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            <% }); %>
+        </tbody>
+    </table>
+<% } else { %>
+    <p class="inventory-list-empty">
+        <% if (invFilters.search || invFilters.category) { %>
+            No products match your filters.
+        <% } else if (typeof emptyListMessage !== 'undefined' && emptyListMessage) { %>
+            <%= emptyListMessage %>
+        <% } else if (showReturnCols) { %>
+            No products have active variations with returned, damaged, repaired, or disposed stock.
+        <% } else { %>
+            No inventory items found. Add products in Product Inventory.
+        <% } %>
+    </p>
+<% } %>

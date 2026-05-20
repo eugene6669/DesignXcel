@@ -1,0 +1,482 @@
+/* Orders hub tabs */
+.main-content > .admin-orders-tabs {
+    margin: 0 0 1rem 0;
+}
+
+.admin-orders-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.35rem;
+    background: #f3f4f6;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+}
+
+.admin-orders-tabs a {
+    padding: 0.45rem 0.85rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #4b5563;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+}
+
+.admin-orders-tabs a:hover {
+    background: #e5e7eb;
+    color: #111827;
+}
+
+.admin-orders-tabs a.active {
+    background: #F0B21B;
+    color: #fff;
+}
+
+.orders-view-toggle-row {
+    display: none !important;
+}
+
+#ordersGrid {
+    display: none !important;
+}
+
+#ordersTable {
+    display: block !important;
+    background: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e5e7eb;
+}
+
+/* Inline spinner above table, aligned with actions */
+.orders-table-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    min-height: 2rem;
+    margin-bottom: 0.5rem;
+    padding: 0 0.15rem;
+}
+
+.orders-inline-spinner {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.85rem;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #92400e;
+}
+
+.orders-inline-spinner.hidden {
+    display: none !important;
+}
+
+.orders-inline-spinner__icon {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #fde68a;
+    border-top-color: #F0B21B;
+    border-radius: 50%;
+    animation: orders-spin 0.7s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes orders-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Use inline spinner instead of full-page overlay on orders pages */
+body.orders-page .content-area > #admin-loading-spinner,
+body.orders-page .content-area > #orders-loading-spinner {
+    display: none !important;
+}
+
+/* ——— Main table rows: normal comfortable size ——— */
+#ordersTable .admin-orders-compact-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    table-layout: auto;
+}
+
+#ordersTable .admin-orders-compact-table thead {
+    background: #f9fafb;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+#ordersTable .admin-orders-compact-table th {
+    padding: 0.75rem 1rem !important;
+    text-align: left;
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6b7280 !important;
+    white-space: nowrap;
+}
+
+#ordersTable .admin-orders-compact-table tbody tr.table-order-row td {
+    padding: 0.75rem 1rem !important;
+    vertical-align: middle;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+#ordersTable .admin-orders-compact-table tbody tr.table-order-row:hover {
+    background: #f9fafb;
+}
+
+#ordersTable .admin-orders-compact-table .customer-cell-name {
+    font-weight: 600;
+    color: #111827;
+    font-size: 0.875rem;
+    margin-bottom: 0.15rem;
+}
+
+#ordersTable .admin-orders-compact-table .customer-cell-email {
+    font-size: 0.8125rem;
+    color: #6b7280;
+}
+
+#ordersTable .order-card-status {
+    padding: 4px 10px !important;
+    font-size: 0.7rem !important;
+}
+
+#ordersTable .order-card-toggle,
+#ordersTable .order-card-action {
+    padding: 0.45rem 0.85rem !important;
+    font-size: 0.8125rem !important;
+    border-radius: 6px !important;
+    margin-right: 0.35rem !important;
+    white-space: nowrap;
+}
+
+#ordersTable .orders-actions-cell {
+    text-align: center !important;
+    white-space: nowrap;
+}
+
+#ordersTable .bulk-badge-inline {
+    display: inline-flex;
+    margin-left: 0.35rem;
+    background: linear-gradient(135deg, #f0b21b 0%, #d4a017 100%);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    vertical-align: middle;
+}
+
+/* ——— Expandable details: normal layout (not cramped) ——— */
+#ordersTable tr.table-details-row,
+#ordersTable tr[id^="table-details-"] {
+    background: #f8fafc !important;
+}
+
+#ordersTable tr.table-details-row > td,
+#ordersTable tr[id^="table-details-"] > td {
+    padding: 1rem 1.25rem !important;
+    background: #f8fafc !important;
+    vertical-align: top !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
+    white-space: normal !important;
+}
+
+#ordersTable .order-details-compact-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 1rem 1.25rem !important;
+    font-size: 0.875rem !important;
+    line-height: 1.55 !important;
+    color: #111827;
+    align-items: start;
+}
+
+#ordersTable .order-details-compact-grid .od-section {
+    min-width: 0;
+}
+
+#ordersTable .order-details-compact-grid .od-products {
+    grid-column: 1 / -1;
+    order: 1;
+}
+
+#ordersTable .order-details-compact-grid .od-customer,
+#ordersTable .order-details-compact-grid .od-shipping,
+#ordersTable .order-details-compact-grid .od-payment {
+    order: 2;
+}
+
+#ordersTable .order-details-compact-grid .od-order-summary {
+    grid-column: 1 / -1;
+    order: 3;
+}
+
+#ordersTable .order-details-compact-grid .od-return-actions {
+    grid-column: 1 / -1;
+    order: 4;
+}
+
+#ordersTable .order-details-compact-grid .od-section-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6b7280;
+    margin: 0 0 0.5rem 0;
+}
+
+#ordersTable .order-details-compact-grid .od-section-body {
+    font-size: 0.875rem;
+    color: #111827;
+    line-height: 1.55;
+    word-break: break-word;
+}
+
+#ordersTable .order-details-compact-grid .od-shipping .od-section-body {
+    display: block !important;
+    visibility: visible !important;
+}
+
+/* Product rows: compact od-product-info only */
+#ordersTable .order-details-compact-grid .od-product-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+#ordersTable .order-details-compact-grid .od-product-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.5rem 0.65rem;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+}
+
+#ordersTable .order-details-compact-grid .od-product-thumb {
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #f3f4f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#ordersTable .order-details-compact-grid .od-product-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+#ordersTable .order-details-compact-grid .od-product-info {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.4;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+}
+
+#ordersTable .order-details-compact-grid .od-product-name {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #111827;
+    margin-bottom: 0;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    width: 100%;
+}
+
+#ordersTable .order-details-compact-grid .od-product-meta {
+    font-size: 0.75rem;
+    color: #6b7280;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+    width: 100%;
+}
+
+#ordersTable .order-details-compact-grid .od-product-meta span {
+    display: block;
+}
+
+#ordersTable .order-details-compact-grid .od-product-price {
+    font-weight: 700;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+#ordersTable .order-details-compact-grid .od-order-summary .od-summary-strip,
+#ordersTable .order-details-compact-grid .od-order-summary > .od-section-body {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 0.5rem 1.5rem !important;
+    padding: 0.75rem 1rem !important;
+    background: #fff !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 8px !important;
+}
+
+#ordersTable .order-details-compact-grid .od-summary-row,
+#ordersTable .order-details-compact-grid .od-order-summary .od-summary-strip > div,
+#ordersTable .order-details-compact-grid .od-order-summary > .od-section-body > div {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: baseline !important;
+    gap: 0.35rem 0.5rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    border-bottom: none !important;
+    font-size: 0.8125rem !important;
+    white-space: nowrap;
+}
+
+#ordersTable .order-details-compact-grid .od-summary-total,
+#ordersTable .order-details-compact-grid .od-order-summary .od-summary-strip > div[style*="border-top"],
+#ordersTable .order-details-compact-grid .od-order-summary > .od-section-body > div[style*="border-top"] {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: baseline !important;
+    gap: 0.35rem 0.5rem !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    margin-top: 0 !important;
+    border: none !important;
+    border-top: none !important;
+    font-weight: 700 !important;
+    font-size: 0.9rem !important;
+    margin-left: auto;
+}
+
+.return-type-label {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.return-type-label.replacement {
+    background: rgba(59, 130, 246, 0.15);
+    color: #2563eb;
+}
+
+.return-type-label.refunded {
+    background: rgba(16, 185, 129, 0.15);
+    color: #059669;
+}
+
+.return-type-label.returned {
+    background: rgba(245, 158, 11, 0.15);
+    color: #d97706;
+}
+
+body.orders-returned-page #ordersTable .order-details-compact-grid .od-product-row {
+    padding: 0.4rem 0.55rem;
+}
+
+body.orders-returned-page #ordersTable .order-details-compact-grid .od-product-thumb {
+    width: 44px;
+    height: 44px;
+}
+
+/* Returned orders — refund / replacement actions in table */
+#ordersTable .od-return-actions-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+#ordersTable .od-return-actions .btn-action,
+#ordersTable .table-action-buttons .table-action-btn {
+    padding: 0.4rem 0.75rem !important;
+    font-size: 0.75rem !important;
+    border-radius: 6px !important;
+    white-space: nowrap;
+}
+
+#ordersTable .table-action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    justify-content: center;
+    align-items: center;
+}
+
+#ordersTable .od-return-status-msg {
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.35rem 0.65rem;
+    border-radius: 6px;
+}
+
+#ordersTable .od-return-status-msg--success {
+    background: #f0fdf4;
+    color: #059669;
+    border: 1px solid #10b981;
+}
+
+#ordersTable .od-return-status-msg--declined {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #ef4444;
+}
+
+body.orders-returned-page #ordersTable .admin-orders-compact-table.has-return-type th:nth-child(8),
+body.orders-returned-page #ordersTable .admin-orders-compact-table.has-return-type td:nth-child(8) {
+    width: 22%;
+    min-width: 200px;
+}
+
+@media (max-width: 900px) {
+    #ordersTable .order-details-compact-grid {
+        grid-template-columns: 1fr !important;
+    }
+    #ordersTable .order-details-compact-grid .od-customer,
+    #ordersTable .order-details-compact-grid .od-shipping,
+    #ordersTable .order-details-compact-grid .od-payment {
+        grid-column: 1 / -1;
+    }
+    #ordersTable .order-details-compact-grid .od-order-summary .od-summary-strip,
+    #ordersTable .order-details-compact-grid .od-order-summary > .od-section-body {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+    #ordersTable .order-details-compact-grid .od-summary-total {
+        margin-left: 0 !important;
+    }
+}
+
+@media (max-width: 1100px) {
+    #ordersTable {
+        overflow-x: auto;
+    }
+    #ordersTable .admin-orders-compact-table {
+        min-width: 900px;
+    }
+}

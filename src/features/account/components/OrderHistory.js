@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../../shared/services/api/apiClient';
 import { Bars } from 'react-loader-spinner';
@@ -285,6 +285,7 @@ const SuccessModal = ({ open, onClose, message }) => {
 };
 
 const ReturnModal = ({ open, onClose, order, onConfirm, returning }) => {
+  const overlayClickAt = useRef(0);
   const [selectedItems, setSelectedItems] = useState({});
   const [actionType, setActionType] = useState('');
   const [returnType, setReturnType] = useState('');
@@ -414,9 +415,20 @@ const ReturnModal = ({ open, onClose, order, onConfirm, returning }) => {
     selectedItemsKeys: Object.keys(selectedItems)
   });
 
+  const handleOverlayClick = (e) => {
+    if (e.target !== e.currentTarget) return;
+    const now = Date.now();
+    if (overlayClickAt.current && now - overlayClickAt.current < 450) {
+      onClose();
+      overlayClickAt.current = 0;
+    } else {
+      overlayClickAt.current = now;
+    }
+  };
+
   return (
-    <div className="modal-overlay">
-      <div className="modal-content order-details-modal" style={{ maxWidth: '700px' }}>
+    <div className="modal-overlay" onClick={handleOverlayClick}>
+      <div className="modal-content order-details-modal" style={{ maxWidth: '700px' }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-header-content">
             <div className="modal-icon">
@@ -1235,7 +1247,7 @@ const OrderHistory = () => {
                   View Details
                 </button>
                 
-                {order.Status !== 'Cancelled' && order.Status !== 'Completed' && order.Status !== 'Delivered' && order.Status !== 'Shipping' && order.Status !== 'Delivering' && (
+                {order.Status !== 'Cancelled' && order.Status !== 'Completed' && order.Status !== 'Delivered' && order.Status !== 'Shipping' && order.Status !== 'Delivering' && order.Status !== 'Receive' && order.Status !== 'Received' && order.Status !== 'To Receive' && (
                   <button
                     className="btn btn-primary"
                     disabled={cancelling[order.OrderID]}
