@@ -1103,8 +1103,7 @@
                                 <th>Product Name</th>
                                 <th>Category</th>
                                 <th>Status</th>
-                                <th class="qty-col" title="Sum of all variation quantities">Total Qty</th>
-                                <th class="qty-col">Available</th>
+                                <th class="qty-col">Quantity</th>
                                 <th>Image</th>
                                 <th>Last Added</th>
                                 <th>Actions</th>
@@ -1144,7 +1143,6 @@
                                     productImageFallback = productImage.replace('/uploads/products/inventory/', '/uploads/products/images/');
                                     productImageFallback2 = productImage.replace('/uploads/products/inventory/', '/uploads/products/');
                                 }
-                                const totalQuantity = item.TotalQuantity || 0;
                                 const availableQty = item.AvailableQuantity || 0;
                                 const damagedQty = item.DamagedQuantity || 0;
                                 const returnedQty = item.ReturnedQuantity || 0;
@@ -1178,7 +1176,6 @@
                                             <%= primaryStatus === 'no_stock' ? 'No Stock' : primaryStatus.charAt(0).toUpperCase() + primaryStatus.slice(1) %>
                                         </span>
                                     </td>
-                                    <td class="qty-col"><span class="stock-qty <%= stockQtyClass(totalQuantity) %>"><%= totalQuantity %></span></td>
                                     <td class="qty-col"><span class="stock-qty stock-qty-available"><%= availableQty %></span></td>
                                     <td>
                                         <% if (productImagePrimary) { %>
@@ -1218,7 +1215,7 @@
                                     </td>
                                 </tr>
                                 <tr class="variations-row" data-inventory-product-id="<%= productId %>" style="display: none;">
-                                    <td colspan="9" style="padding: 20px; background-color: #f8f9fa; border-top: 2px solid #dee2e6;">
+                                    <td colspan="7" style="padding: 20px; background-color: #f8f9fa; border-top: 2px solid #dee2e6;">
                                         <div class="variations-container" data-inventory-product-id="<%= productId %>">
                                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                                                 <h4 style="margin: 0; color: #333;">Product Variations</h4>
@@ -1237,8 +1234,7 @@
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">Variation Name</th>
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">SKU</th>
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">Color</th>
-                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Qty</th>
-                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Available</th>
+                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Quantity</th>
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Price</th>
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Image</th>
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Status</th>
@@ -1372,7 +1368,7 @@
         </div>
     </div>
 
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260523b" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260521d" defer></script>
     <script src="/js/Employee/Admin/product-inventory-tabs.js" defer></script>
     <script src="/js/Employee/Admin/raw-materials-tab.js"></script>
 

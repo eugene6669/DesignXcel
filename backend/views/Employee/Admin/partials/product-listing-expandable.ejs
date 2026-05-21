@@ -12,7 +12,7 @@
     const showAct = !!showActions;
     const showVarAct = typeof showVariationActions !== 'undefined' ? !!showVariationActions : showReturnCols;
     const showSf = !!showStorefront;
-    const productColspan = showReturnCols ? 8 : (6 + (showAct ? 1 : 0));
+    const productColspan = showReturnCols ? 7 : (6 + (showAct ? 1 : 0));
     const fmtDate = typeof formatListDate === 'function'
         ? formatListDate
         : function(v) { return v ? String(v) : 'N/A'; };
@@ -36,7 +36,6 @@
                 <th class="qty-col return-qty-th return-qty-th-damaged">Damaged</th>
                 <th class="qty-col return-qty-th return-qty-th-returned">Returned</th>
                 <th class="qty-col return-qty-th return-qty-th-repaired">Repaired</th>
-                <th class="qty-col return-qty-th return-qty-th-disposed">Disposed</th>
                 <% } %>
                 <th>Image</th>
                 <% if (!showReturnCols) { %><th>Last Added</th><% } %>
@@ -78,7 +77,6 @@
                 const damagedQty = item.DamagedQuantity || 0;
                 const returnedQty = item.ReturnedQuantity || 0;
                 const repairedQty = item.RepairedQuantity || 0;
-                const disposedQty = item.DisposedQuantity || 0;
                 const productId = item.InventoryProductID;
                 const lastAddedDisplay = item.LastDateAddedLabel || fmtDate(item.LastDateAdded);
             %>
@@ -102,7 +100,6 @@
                 <td class="qty-col"><span class="return-qty return-qty-damaged<%= damagedQty > 0 ? ' has-stock' : '' %>"><%= damagedQty %></span></td>
                 <td class="qty-col"><span class="return-qty return-qty-returned<%= returnedQty > 0 ? ' has-stock' : '' %>"><%= returnedQty %></span></td>
                 <td class="qty-col"><span class="return-qty return-qty-repaired<%= repairedQty > 0 ? ' has-stock' : '' %>"><%= repairedQty %></span></td>
-                <td class="qty-col"><span class="return-qty return-qty-disposed<%= disposedQty > 0 ? ' has-stock' : '' %>"><%= disposedQty %></span></td>
                 <% } %>
                 <td>
                     <% if (productImagePrimary) { %>
@@ -129,32 +126,31 @@
                             <p>Expand to load variations.</p>
                         </div>
                         <div class="variations-table-container" style="display:none;">
-                            <table style="width:100%;border-collapse:collapse;">
+                            <table class="variations-nested-table<%= showReturnCols ? ' variations-returns-table' : '' %>" style="width:100%;border-collapse:collapse;table-layout:fixed;">
                                 <thead>
                                     <tr style="background:#e9ecef;">
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:left;">Variation</th>
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:left;">SKU</th>
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:left;">Color</th>
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Qty</th>
+                                        <th class="var-col-name">Variation</th>
+                                        <th class="var-col-sku">SKU</th>
+                                        <th class="var-col-color">Color</th>
                                         <% if (!showReturnCols) { %>
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Available</th>
+                                        <th class="var-col-qty">Qty</th>
+                                        <th class="var-col-qty">Available</th>
                                         <% } %>
                                         <% if (showReturnCols) { %>
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Damaged</th>
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Returned</th>
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Repaired</th>
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Disposed</th>
+                                        <th class="var-col-qty return-qty-th return-qty-th-damaged">Damaged</th>
+                                        <th class="var-col-qty return-qty-th return-qty-th-returned">Returned</th>
+                                        <th class="var-col-qty return-qty-th return-qty-th-repaired">Repaired</th>
                                         <% } %>
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Price</th>
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Image</th>
+                                        <th class="var-col-price">Price</th>
+                                        <th class="var-col-image">Image</th>
                                         <% if (showSf) { %>
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Storefront</th>
+                                        <th class="var-col-action">Storefront</th>
                                         <% } %>
                                         <% if (!showReturnCols) { %>
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Last Added</th>
+                                        <th class="var-col-date">Last Added</th>
                                         <% } %>
                                         <% if (showVarAct) { %>
-                                        <th style="padding:8px;border:1px solid #dee2e6;text-align:center;">Actions</th>
+                                        <th class="var-col-action">Actions</th>
                                         <% } %>
                                     </tr>
                                 </thead>
@@ -177,7 +173,7 @@
         <% } else if (typeof emptyListMessage !== 'undefined' && emptyListMessage) { %>
             <%= emptyListMessage %>
         <% } else if (showReturnCols) { %>
-            No products have active variations with returned, damaged, repaired, or disposed stock.
+            No products have active variations with returned, damaged, or repaired stock.
         <% } else { %>
             No inventory items found. Add products in Product Inventory.
         <% } %>

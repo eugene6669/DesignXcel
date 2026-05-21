@@ -795,8 +795,26 @@
         }
         .variations-table-container td,
         .variations-table-container th {
-            padding: 8px;
+            padding: 8px 10px;
             vertical-align: middle;
+            border: 1px solid #dee2e6;
+        }
+        .variations-nested-table thead th {
+            background: #e9ecef;
+            font-weight: 600;
+            font-size: 0.8em;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+        .variations-returns-table .var-col-name { width: 14%; text-align: left; }
+        .variations-returns-table .var-col-sku { width: 14%; text-align: left; word-break: break-all; }
+        .variations-returns-table .var-col-color { width: 8%; text-align: left; }
+        .variations-returns-table .var-col-qty { width: 7%; text-align: center; }
+        .variations-returns-table .var-col-price { width: 9%; text-align: center; }
+        .variations-returns-table .var-col-image { width: 10%; text-align: center; }
+        .variations-returns-table .var-col-action { width: 10%; text-align: center; }
+        .variations-returns-table tbody td.var-col-qty {
+            text-align: center;
         }
 
         .modal-notification {
@@ -882,7 +900,7 @@
         <div class="main-content">
             <div class="header">
                 <h2>Product Returns</h2>
-                <p class="products-list-hint">Inventory products that have at least one active variation with returned, damaged, repaired, or disposed stock. Expand a row to edit variation status and quantities.</p>
+                <p class="products-list-hint">Inventory products that have at least one active variation with returned, damaged, or repaired stock. Expand a row to edit variation status and quantities.</p>
             </div>
             <div id="productReturnsPanel" class="content-area">
 
@@ -978,7 +996,7 @@
                     showActions: false,
                     showVariationActions: true,
                     showStorefront: false,
-                    emptyListMessage: 'No products have active variations with returned, damaged, repaired, or disposed stock.'
+                    emptyListMessage: 'No products have active variations with returned, damaged, or repaired stock.'
                 }) %>
 
                 <% if (invPag.totalPages > 1) { %>
@@ -1006,6 +1024,6 @@
         </div>
     </div>
     <%- include('partials/edit-variation-status-modal') %>
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260523c" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260521f" defer></script>
 </body>
 </html>

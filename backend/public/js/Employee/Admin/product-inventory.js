@@ -182,8 +182,7 @@
             } else {
                 cols += '<td class="qty-col">' + formatReturnQtyHtml(damagedQty, 'damaged') + '</td>' +
                     '<td class="qty-col">' + formatReturnQtyHtml(returnedQty, 'returned') + '</td>' +
-                    '<td class="qty-col">' + formatReturnQtyHtml(repairedQty, 'repaired') + '</td>' +
-                    '<td class="qty-col">' + formatReturnQtyHtml(disposedQty, 'disposed') + '</td>';
+                    '<td class="qty-col">' + formatReturnQtyHtml(repairedQty, 'repaired') + '</td>';
             }
 
             cols += '<td style="text-align:center;"><img src="' + escapeHtml(imageUrl) + '" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" onerror="this.src=\'/images/placeholder-no-image.svg\'"></td>';
@@ -208,7 +207,7 @@
 
         function insertFlatVariationRows(productRow, variations, productId) {
             removeFlatVariationRows(productId);
-            const emptyColspan = isProductReturnsPage ? 11 : 7;
+            const emptyColspan = isProductReturnsPage ? 9 : 7;
             if (!variations || !variations.length) {
                 productRow.insertAdjacentHTML('afterend',
                     '<tr class="variation-flat-row variation-flat-empty" data-parent-product-id="' + productId + '">' +
@@ -222,7 +221,7 @@
             if (isProductReturnsPage && list.length === 0) {
                 productRow.insertAdjacentHTML('afterend',
                     '<tr class="variation-flat-row variation-flat-empty" data-parent-product-id="' + productId + '">' +
-                    '<td colspan="' + emptyColspan + '" style="padding:8px 28px;color:#888;font-size:0.9em;">No variations with return/damaged/repaired/disposed stock</td></tr>');
+                    '<td colspan="' + emptyColspan + '" style="padding:8px 28px;color:#888;font-size:0.9em;">No variations with return/damaged/repaired stock</td></tr>');
                 return;
             }
             let insertAfter = productRow;
@@ -377,12 +376,11 @@ const urlParams = new URLSearchParams(window.location.search);
                     totalSpan.textContent = summary.totalQuantity;
                     totalSpan.className = 'stock-qty ' + getStockQtyClass(summary.totalQuantity);
                 }
-                const kinds = ['damaged', 'returned', 'repaired', 'disposed'];
+                const kinds = ['damaged', 'returned', 'repaired'];
                 const vals = [
                     summary.damagedQuantity,
                     summary.returnedQuantity,
-                    summary.repairedQuantity,
-                    summary.disposedQuantity
+                    summary.repairedQuantity
                 ];
                 kinds.forEach(function(kind, i) {
                     if (qtyTds[i + 1]) {
@@ -392,13 +390,20 @@ const urlParams = new URLSearchParams(window.location.search);
                 return;
             }
             const qtyCells = row.querySelectorAll('td.qty-col .stock-qty');
-            if (qtyCells[0]) {
-                qtyCells[0].textContent = summary.totalQuantity;
-                qtyCells[0].className = 'stock-qty ' + getStockQtyClass(summary.totalQuantity);
-            }
-            if (qtyCells[1]) {
-                qtyCells[1].textContent = summary.availableQuantity;
-                qtyCells[1].className = 'stock-qty stock-qty-available';
+            if (isInventoryPage) {
+                if (qtyCells[0]) {
+                    qtyCells[0].textContent = summary.availableQuantity;
+                    qtyCells[0].className = 'stock-qty stock-qty-available';
+                }
+            } else {
+                if (qtyCells[0]) {
+                    qtyCells[0].textContent = summary.totalQuantity;
+                    qtyCells[0].className = 'stock-qty ' + getStockQtyClass(summary.totalQuantity);
+                }
+                if (qtyCells[1]) {
+                    qtyCells[1].textContent = summary.availableQuantity;
+                    qtyCells[1].className = 'stock-qty stock-qty-available';
+                }
             }
             const badge = row.querySelector('.status-badge');
             if (badge && summary.inventoryStatus) {
@@ -454,7 +459,7 @@ const urlParams = new URLSearchParams(window.location.search);
                     const emptyMsg = emptyDiv.querySelector('p');
                     if (emptyMsg) {
                         emptyMsg.textContent = isProductReturnsPage
-                            ? 'No variations with returned, damaged, repaired, or disposed stock.'
+                            ? 'No variations with returned, damaged, or repaired stock.'
                             : 'No variations found.';
                     }
                 }
@@ -493,20 +498,21 @@ const urlParams = new URLSearchParams(window.location.search);
                 const showVariationEdit = isInventoryPage;
                 const showVariationArchive = isInventoryPage;
                 let row = '<tr>' +
-                    '<td><strong>' + escapeHtml(variationName) + '</strong></td>' +
-                    '<td><code style="font-size:0.85em;">' + escapeHtml(variationSku) + '</code></td>' +
-                    '<td>' + escapeHtml(color) + '</td>' +
-                    '<td class="qty-col">' + formatStockQty(totalQty) + '</td>';
-                if (!isProductReturnsPage) {
+                    '<td class="var-col-name"><strong>' + escapeHtml(variationName) + '</strong></td>' +
+                    '<td class="var-col-sku"><code style="font-size:0.85em;">' + escapeHtml(variationSku) + '</code></td>' +
+                    '<td class="var-col-color">' + escapeHtml(color) + '</td>';
+                if (isInventoryPage) {
                     row += '<td class="qty-col">' + formatAvailableQty(availableQty) + '</td>';
-                } else {
-                    row += '<td class="qty-col" style="text-align:center;">' + formatReturnQtyHtml(damagedQty, 'damaged') + '</td>' +
-                        '<td class="qty-col" style="text-align:center;">' + formatReturnQtyHtml(returnedQty, 'returned') + '</td>' +
-                        '<td class="qty-col" style="text-align:center;">' + formatReturnQtyHtml(repairedQty, 'repaired') + '</td>' +
-                        '<td class="qty-col" style="text-align:center;">' + formatReturnQtyHtml(disposedQty, 'disposed') + '</td>';
+                } else if (!isProductReturnsPage) {
+                    row += '<td class="qty-col">' + formatStockQty(totalQty) + '</td>' +
+                        '<td class="qty-col">' + formatAvailableQty(availableQty) + '</td>';
+                } else if (isProductReturnsPage) {
+                    row += '<td class="qty-col var-col-qty">' + formatReturnQtyHtml(damagedQty, 'damaged') + '</td>' +
+                        '<td class="qty-col var-col-qty">' + formatReturnQtyHtml(returnedQty, 'returned') + '</td>' +
+                        '<td class="qty-col var-col-qty">' + formatReturnQtyHtml(repairedQty, 'repaired') + '</td>';
                 }
-                row += '<td style="text-align:center;">' + price + '</td>' +
-                    '<td style="text-align:center;"><img src="' + escapeHtml(imageUrl) + '" alt="Variation" style="width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" onerror="this.src=\'/images/placeholder-no-image.svg\'"></td>';
+                row += '<td class="var-col-price" style="text-align:center;">' + price + '</td>' +
+                    '<td class="var-col-image" style="text-align:center;"><img src="' + escapeHtml(imageUrl) + '" alt="Variation" style="width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" onerror="this.src=\'/images/placeholder-no-image.svg\'"></td>';
                 if (isProductsListingPage) {
                     row += '<td style="text-align:center;">' +
                         '<label class="storefront-toggle-label" title="Include on customer storefront">' +
@@ -514,7 +520,7 @@ const urlParams = new URLSearchParams(window.location.search);
                         (showStorefront ? ' checked' : '') + '> Storefront</label></td>' +
                         '<td class="last-added-cell" style="text-align:center;">' + formatVariationDate(variation.CreatedAt) + '</td>';
                 } else if (isProductReturnsPage) {
-                    row += '<td style="text-align:center;"><button type="button" class="edit-variation-status-btn" data-variation-id="' + variationId + '" title="Edit variation status" style="background:#ffc107;color:#000;border:none;padding:5px 8px;border-radius:4px;cursor:pointer;">Edit</button></td>';
+                    row += '<td class="var-col-action" style="text-align:center;"><button type="button" class="edit-variation-status-btn" data-variation-id="' + variationId + '" title="Edit variation status" style="background:#ffc107;color:#000;border:none;padding:5px 8px;border-radius:4px;cursor:pointer;">Edit</button></td>';
                 } else {
                     row += '<td style="text-align:center;">' + statusBadge + '</td>' +
                         '<td style="text-align:center;"><div style="display:flex;gap:5px;justify-content:center;flex-wrap:wrap;">' +

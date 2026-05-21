@@ -5,8 +5,10 @@ function returnedOrderStatusLabel(order) {
     if (status === 'Refunded') return 'Refunded';
     if (status === 'Completed Returned') return 'Replaced';
     if (status === 'Pickup Received') return 'Pickup Received';
+    if (status === 'Inspection Complete') return 'Inspection Complete';
+    if (status === 'Awaiting Inspection') return 'Awaiting Inspection';
     if (status === 'Processing (Pickup)' || (status === 'Processing' && order?.ActionType)) {
-        return 'Processing (Pickup)';
+        return 'Waiting for Receiving Item';
     }
     if (status === 'Returned') return 'Returned';
     if (status === 'Declined') return 'Declined';
@@ -18,7 +20,9 @@ function returnedOrderStatusClass(order) {
     if (label === 'Refunded') return 'status-refunded';
     if (label === 'Replaced') return 'status-replaced';
     if (label === 'Pickup Received') return 'status-pickup-received';
-    if (label === 'Processing (Pickup)') return 'status-processing';
+    if (label === 'Inspection Complete') return 'status-inspection-complete';
+    if (label === 'Awaiting Inspection') return 'status-awaiting-inspection';
+    if (label === 'Waiting for Receiving Item') return 'status-processing';
     if (label === 'Declined') return 'status-declined';
     return 'status-returned';
 }

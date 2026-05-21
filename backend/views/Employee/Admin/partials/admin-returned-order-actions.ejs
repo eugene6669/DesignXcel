@@ -135,8 +135,12 @@
             <button type="button" onclick="openApproveModal(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Approve Return</button>
             <button type="button" onclick="openDeclineModal(<%= order.OrderID %>)" class="btn-action btn-decline table-action-btn">Decline Return</button>
         <% } else if (order.Status === 'Processing (Pickup)' || (order.Status === 'Processing' && actionType)) { %>
+            <button type="button" onclick="confirmReturnReceivingProceed(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Proceed</button>
+            <span class="od-return-status-msg" style="color:#6b7280;font-size:0.85em;">Waiting for receiving item.</span>
+        <% } else if (order.Status === 'Awaiting Inspection') { %>
+            <button type="button" onclick="openReturnInspectModal(<%= order.OrderID %>)" class="btn-action table-action-btn" style="background:#0ea5e9;color:#fff;">Inspect Items</button>
+        <% } else if (order.Status === 'Inspection Complete') { %>
             <button type="button" onclick="confirmReturnPickup(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Confirm Pickup</button>
-            <span class="od-return-status-msg" style="color:#6b7280;font-size:0.85em;">Confirm pickup before refund or replacement.</span>
         <% } else if (order.Status === 'Pickup Received' && actionType === 'refund') { %>
             <button type="button" onclick="openRefundModal(<%= order.OrderID %>)" class="btn-action btn-refund table-action-btn">Process Refund</button>
         <% } else if (order.Status === 'Pickup Received' && actionType === 'replacement') { %>
