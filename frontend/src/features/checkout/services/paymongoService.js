@@ -1,4 +1,9 @@
 import apiClient from '../../../shared/services/api/apiClient';
+import {
+    setLastPaymongoSessionId,
+    setPendingOrderSuccessCheckout,
+    setLastPaymentProvider
+} from '../utils/checkoutStorageKeys';
 
 export const paymongoService = {
     async isPayMongoAvailable() {
@@ -25,9 +30,10 @@ export const paymongoService = {
         }
 
         if (result?.sessionId) {
-            localStorage.setItem('lastPaymongoSessionId', String(result.sessionId));
+            setLastPaymongoSessionId(result.sessionId);
+            setPendingOrderSuccessCheckout(result.sessionId, 'paymongo');
         }
-        localStorage.setItem('lastPaymentProvider', 'paymongo');
+        setLastPaymentProvider('paymongo');
         window.location.href = result.checkoutUrl;
     },
 

@@ -153,7 +153,8 @@ const ProductDetail = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- reload variations when product changes
   }, [product]);
 
-  const hasVariations = variations.length > 0;
+  const hasVariations =
+    variations.length > 0 || Boolean(product?.hasVariations || product?.requiresVariationSelection);
 
   const variationIdsKey = useMemo(
     () => variations.map((v) => String(v.id)).sort().join(','),
@@ -482,13 +483,15 @@ const ProductDetail = () => {
   const hasDiscount = product.hasDiscount && product.discountInfo;
   const displayPrice = hasDiscount ? product.discountInfo.discountedPrice : basePrice;
   const originalPrice = hasDiscount ? basePrice : null;
-  const variationStockSum = variations.reduce((sum, v) => {
-    const q =
-      variationAvailableById[v.id] !== undefined
-        ? variationAvailableById[v.id]
-        : Number(v.quantity) || 0;
-    return sum + q;
-  }, 0);
+  const variationStockSum = variations.length
+    ? variations.reduce((sum, v) => {
+        const q =
+          variationAvailableById[v.id] !== undefined
+            ? variationAvailableById[v.id]
+            : Number(v.quantity) || 0;
+        return sum + q;
+      }, 0)
+    : Number(product?.variationStockSum ?? product?.availableStock ?? 0) || 0;
 
   const stockQuantity = hasVariations
     ? (selectedVariation

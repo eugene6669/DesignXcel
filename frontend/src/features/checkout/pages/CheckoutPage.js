@@ -427,7 +427,7 @@ const CheckoutPage = () => {
                 return;
             }
         }
-        
+
         console.log('[CheckoutPage] Navigating to payment with pickupDateTime:', pickupDateTime);
         setShowTermsModal(false);
         // Redirect to payment page after confirming terms, passing items and shipping info

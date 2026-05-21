@@ -1,12 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { invalidateAvailableStockCache } from '../../../shared/services/availableStockService';
-import { useParams, useLocation, Link, useSearchParams } from 'react-router-dom';
+import { useParams, useLocation, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../shared/hooks/useAuth';
 import stripeService from '../services/stripeService';
 import paymongoService from '../services/paymongoService';
 import apiClient from '../../../shared/services/api/apiClient';
+import { persistOrderReceiptNotificationOnce } from '../../../shared/utils/customerNotificationStorage';
+import {
+    clearCheckoutPaymentSessionKeys,
+    getLastPaymongoSessionId,
+    getPendingOrderSuccessCheckout,
+    setPendingOrderSuccessCheckout
+} from '../utils/checkoutStorageKeys';
 import { downloadOrderInvoicePdf } from '../utils/generateOrderInvoicePdf';
 import './order-success.css';
+
+const paymongoMethodLabel = (sourceType, fallback = 'PayMongo') => {
+    const t = String(sourceType || '').toLowerCase();
+    if (['gcash', 'paymaya', 'grab_pay', 'qrph'].includes(t)) return 'E-Wallet';
+    if (t === 'card') return 'Card (PayMongo)';
+    return fallback;
+};
 
 // Cart Icon Component
 const CartIcon = () => (
@@ -17,45 +31,13 @@ const CartIcon = () => (
     </svg>
 );
 
-const getNotificationStorageKey = (baseKey, user) => {
-    const userId = user?.id || user?.CustomerID || user?.email || 'guest';
-    return `${baseKey}:${String(userId).toLowerCase()}`;
-};
-
-/** Persist each order receipt separately so older receipts are not overwritten by newer checkouts. */
-const persistOrderReceiptNotification = (orderNumber, user) => {
+const notifyOrderReceiptOnce = (order, fallbackUser, checkoutSessionId) => {
+    const orderNumber = order?.ReferenceNumber || order?.OrderID;
     if (!orderNumber) return;
-    const receiptId = `order-receipt-${String(orderNumber)}`;
-    const receiptKey = getNotificationStorageKey('orderReceiptNotifications', user);
-    const legacyReceiptKey = getNotificationStorageKey('orderReceiptNotification', user);
-    const readReceiptKey = getNotificationStorageKey('readReceiptNotifications', user);
-    const notificationData = {
-        id: receiptId,
-        orderNumber: String(orderNumber),
-        timestamp: new Date().toISOString(),
-        dismissed: false
-    };
-    try {
-        const existing = JSON.parse(localStorage.getItem(receiptKey) || '[]');
-        const withoutCurrent = existing.filter((item) => item.id !== receiptId);
-        const next = [notificationData, ...withoutCurrent];
-        localStorage.setItem(receiptKey, JSON.stringify(next));
-    } catch {
-        localStorage.setItem(receiptKey, JSON.stringify([notificationData]));
-    }
-
-    // Backward compatibility for components still checking the legacy single-item key.
-    localStorage.setItem(legacyReceiptKey, JSON.stringify(notificationData));
-
-    try {
-        const read = JSON.parse(localStorage.getItem(readReceiptKey) || '[]');
-        const next = read.filter((id) => id !== receiptId);
-        localStorage.setItem(readReceiptKey, JSON.stringify(next));
-    } catch {
-        localStorage.setItem(readReceiptKey, '[]');
-    }
-    window.dispatchEvent(new CustomEvent('notificationUpdated'));
-    window.dispatchEvent(new Event('storage'));
+    const notifyUser = order?.Email
+        ? { email: order.Email, id: order.CustomerID }
+        : fallbackUser;
+    persistOrderReceiptNotificationOnce(orderNumber, notifyUser, checkoutSessionId);
 };
 
 /** Collapse duplicated gateway transaction ids (e.g. pay_x,pay_x or doubled string). Prefer pi_ / pay_ over TXN. */
@@ -147,6 +129,7 @@ const enrichPaymentDetailsFromStripeSession = (session, base = {}) => {
 const OrderSuccessPage = () => {
     const { orderId } = useParams();
     const location = useLocation();
+    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { user, isAuthenticated } = useAuth();
     const { order, message, paymentStatus, paymentMethod } = location.state || {};
@@ -156,12 +139,112 @@ const OrderSuccessPage = () => {
     const [error, setError] = useState(null);
     const [invoiceDownloading, setInvoiceDownloading] = useState(false);
     const paymongoFinalizeStartedRef = useRef(false);
+    const stripeFlowStartedRef = useRef(false);
+    const paymentReturnHandledRef = useRef(false);
+    const backTrapInstalledRef = useRef(false);
 
     const resolvePaymentMethodLabel = () => {
         const sid = (searchParams.get('session_id') || '').trim();
         if (/^cs_(test_|live_)/i.test(sid)) return 'Bank Card';
         return paymentDetails?.method || paymentMethod || 'E-Wallet';
     };
+
+    const stripPaymentReturnQueryFromUrl = () => {
+        if (paymentReturnHandledRef.current) return;
+        const hasReturnParams =
+            searchParams.has('session_id') ||
+            searchParams.has('paymongo_session_id') ||
+            searchParams.get('provider') === 'paymongo';
+        if (!hasReturnParams) return;
+        paymentReturnHandledRef.current = true;
+        // replaceState avoids React Router searchParams change re-running the effect with no session id
+        window.history.replaceState(window.history.state, '', '/order-success');
+    };
+
+    const applyDbOrderToPage = (resolvedOrder, {
+        checkoutSessionId,
+        stripeSession = null,
+        fallbackMethod = 'E-Wallet',
+        paymongoSessionSnapshot = null
+    }) => {
+        setError(null);
+        clearCheckoutPaymentSessionKeys();
+        notifyOrderReceiptOnce(resolvedOrder, user, checkoutSessionId);
+        stripPaymentReturnQueryFromUrl();
+
+        const sessionLineItems = stripeSession ? buildLineItemsFromStripeSession(stripeSession) : [];
+        const subtotalFromOrder =
+            (parseFloat(resolvedOrder.TotalAmount) || 0) -
+            (parseFloat(resolvedOrder.DeliveryCost) || 0) -
+            (parseFloat(resolvedOrder.ExtraDeliveryFee) || 0);
+
+        const methodLabel =
+            resolvedOrder.PaymentMethodDisplay ||
+            (paymongoSessionSnapshot
+                ? paymongoMethodLabel(
+                      paymongoSessionSnapshot?.attributes?.payments?.[0]?.attributes?.source?.type,
+                      resolvedOrder.PaymentMethod || fallbackMethod
+                  )
+                : resolvedOrder.PaymentMethod || fallbackMethod);
+
+        setPaymentDetails((prev) =>
+            enrichPaymentDetailsFromStripeSession(stripeSession || {}, {
+                ...prev,
+                method: methodLabel,
+                orderId: resolvedOrder.ReferenceNumber || resolvedOrder.OrderID,
+                referenceNumber: resolvedOrder.ReferenceNumber,
+                transactionId: normalizeDisplayTransactionId(resolvedOrder.TransactionID),
+                status: resolvedOrder.Status || prev?.status || 'Pending',
+                paymentStatus: resolvedOrder.PaymentStatus || prev?.paymentStatus || 'Paid',
+                deliveryType: resolvedOrder.DeliveryType || prev?.deliveryType,
+                deliveryTypeName: resolvedOrder.DeliveryTypeName || prev?.deliveryTypeName,
+                deliveryCost: resolvedOrder.DeliveryCost,
+                extraDeliveryFee: parseFloat(resolvedOrder.ExtraDeliveryFee) || 0,
+                pickupDate: resolvedOrder.PickupDate || prev?.pickupDate,
+                subtotal: subtotalFromOrder > 0 ? subtotalFromOrder : prev?.subtotal,
+                amount: parseFloat(resolvedOrder.TotalAmount) || prev?.amount,
+                customerEmail: resolvedOrder.Email || prev?.customerEmail || user?.email || '',
+                completedAt: new Date().toISOString(),
+                customerInfo: {
+                    name: resolvedOrder.FullName,
+                    email: resolvedOrder.Email
+                },
+                address: {
+                    houseNumber: resolvedOrder.HouseNumber,
+                    street: resolvedOrder.Street,
+                    barangay: resolvedOrder.Barangay,
+                    city: resolvedOrder.City,
+                    province: resolvedOrder.Province,
+                    postalCode: resolvedOrder.PostalCode,
+                    country: resolvedOrder.Country,
+                    phoneNumber: resolvedOrder.PhoneNumber
+                }
+            })
+        );
+
+        const dbItems = resolvedOrder.items && Array.isArray(resolvedOrder.items) ? resolvedOrder.items : [];
+        setOrderItems(dbItems.length > 0 ? dbItems : sessionLineItems);
+    };
+
+    // Browser "back" from order success → homepage (not PayMongo/payment return URL).
+    useEffect(() => {
+        if (backTrapInstalledRef.current) {
+            return undefined;
+        }
+        backTrapInstalledRef.current = true;
+
+        window.history.pushState({ orderSuccessBackTrap: true }, '', window.location.pathname + window.location.search);
+
+        const onPopState = () => {
+            navigate('/', { replace: true });
+        };
+
+        window.addEventListener('popstate', onPopState);
+        return () => {
+            window.removeEventListener('popstate', onPopState);
+            backTrapInstalledRef.current = false;
+        };
+    }, [navigate]);
 
     const handleDownloadInvoice = async () => {
         if (!paymentDetails || invoiceDownloading) return;
@@ -212,9 +295,7 @@ const OrderSuccessPage = () => {
                     const orderExtraDeliveryFee = parseFloat(order.ExtraDeliveryFee) || 0;
                     const calculatedSubtotal = orderTotal - orderShipping - orderExtraDeliveryFee;
                     
-                    if (order.ReferenceNumber || order.OrderID) {
-                        persistOrderReceiptNotification(order.ReferenceNumber || order.OrderID, user);
-                    }
+                    notifyOrderReceiptOnce(order, user, session.id);
                     
                     setPaymentDetails((prev) =>
                         enrichPaymentDetailsFromStripeSession(session, {
@@ -334,9 +415,7 @@ const OrderSuccessPage = () => {
                             const extraDeliveryFeeFromMetadata = parseFloat(session.metadata?.extraDeliveryFee) || 0;
                             const orderExtraDeliveryFee = parseFloat(order.ExtraDeliveryFee) || extraDeliveryFeeFromMetadata || 0;
                             
-                            if (order.ReferenceNumber || order.OrderID) {
-                                persistOrderReceiptNotification(order.ReferenceNumber || order.OrderID, user);
-                            }
+                            notifyOrderReceiptOnce(order, user, session.id);
                             
                             setPaymentDetails((prev) =>
                                 enrichPaymentDetailsFromStripeSession(session, {
@@ -391,14 +470,54 @@ const OrderSuccessPage = () => {
         const sessionIdFromUrl = searchParams.get('session_id');
         const provider = searchParams.get('provider');
         const paymongoSessionIdFromUrl = searchParams.get('paymongo_session_id');
-        const cachedPaymongoSessionId = localStorage.getItem('lastPaymongoSessionId');
-        const lastPaymentProvider = localStorage.getItem('lastPaymentProvider');
+        const cachedPaymongoSessionId = getLastPaymongoSessionId();
+        const pendingCheckout = getPendingOrderSuccessCheckout();
         const hasPlaceholderSession = (value) => value && String(value).includes('{CHECKOUT_SESSION_ID}');
         const validSessionIdFromUrl = hasPlaceholderSession(sessionIdFromUrl) ? null : sessionIdFromUrl;
         const validPaymongoSessionFromUrl = hasPlaceholderSession(paymongoSessionIdFromUrl) ? null : paymongoSessionIdFromUrl;
-        const isPaymongoFlow = provider === 'paymongo' || lastPaymentProvider === 'paymongo' || !!validPaymongoSessionFromUrl;
-        const paymongoSessionId = validPaymongoSessionFromUrl || (isPaymongoFlow ? (validSessionIdFromUrl || cachedPaymongoSessionId) : cachedPaymongoSessionId);
-        const sessionId = !isPaymongoFlow ? validSessionIdFromUrl : null;
+        const isStripeCheckoutSession = (id) => /^cs_(test_|live_)/i.test(String(id || '').trim());
+        const isPaymongoSessionId = (id) => {
+            const s = String(id || '').trim();
+            return s.length > 0 && !isStripeCheckoutSession(s);
+        };
+
+        let sessionId = null;
+        let paymongoSessionId = null;
+
+        // Stripe success_url always uses session_id=cs_* — must win over stale PayMongo cache
+        if (validSessionIdFromUrl && isStripeCheckoutSession(validSessionIdFromUrl)) {
+            sessionId = validSessionIdFromUrl;
+        } else if (provider === 'paymongo' || validPaymongoSessionFromUrl) {
+            paymongoSessionId =
+                validPaymongoSessionFromUrl ||
+                (pendingCheckout.provider === 'paymongo' ? pendingCheckout.sessionId : null) ||
+                cachedPaymongoSessionId;
+        } else if (
+            pendingCheckout.provider === 'stripe' &&
+            pendingCheckout.sessionId &&
+            isStripeCheckoutSession(pendingCheckout.sessionId)
+        ) {
+            sessionId = pendingCheckout.sessionId;
+        } else if (
+            pendingCheckout.provider === 'paymongo' &&
+            pendingCheckout.sessionId &&
+            isPaymongoSessionId(pendingCheckout.sessionId)
+        ) {
+            paymongoSessionId = pendingCheckout.sessionId;
+        } else if (validSessionIdFromUrl && isPaymongoSessionId(validSessionIdFromUrl)) {
+            paymongoSessionId = validSessionIdFromUrl;
+        } else if (cachedPaymongoSessionId && isPaymongoSessionId(cachedPaymongoSessionId)) {
+            paymongoSessionId = cachedPaymongoSessionId;
+        }
+
+        if (sessionId) {
+            setPendingOrderSuccessCheckout(sessionId, 'stripe');
+        } else if (paymongoSessionId) {
+            setPendingOrderSuccessCheckout(paymongoSessionId, 'paymongo');
+        }
+
+        const checkoutFlowInProgress =
+            paymongoFinalizeStartedRef.current || stripeFlowStartedRef.current;
         
         // Check if we need to restore session after Stripe redirect
         const restoreSessionIfNeeded = async () => {
@@ -430,6 +549,12 @@ const OrderSuccessPage = () => {
         
         // If we have a Stripe session ID, fetch the session details
         if (sessionId) {
+            if (stripeFlowStartedRef.current) {
+                return;
+            }
+            stripeFlowStartedRef.current = true;
+            setError(null);
+
             setLoading(true);
             stripeService.getCheckoutSession(sessionId)
                 .then(result => {
@@ -464,60 +589,44 @@ const OrderSuccessPage = () => {
 
                         restoreSessionIfNeeded();
 
-                        const applyOrderToState = (order) => {
-                            if (order.ReferenceNumber || order.OrderID) {
-                                persistOrderReceiptNotification(order.ReferenceNumber || order.OrderID, user);
-                            }
-                            const subtotalFromMetadata = parseFloat(session.metadata?.subtotal) || 0;
-                            const extraDeliveryFeeFromMetadata = parseFloat(session.metadata?.extraDeliveryFee) || 0;
-                            const orderExtraDeliveryFee = parseFloat(order.ExtraDeliveryFee) || extraDeliveryFeeFromMetadata || 0;
-                            const pickupFromOrder = order.PickupDate
-                                ? (typeof order.PickupDate === 'string' ? order.PickupDate : new Date(order.PickupDate).toISOString())
-                                : null;
-
-                            setPaymentDetails((prev) =>
-                                enrichPaymentDetailsFromStripeSession(session, {
-                                    ...prev,
-                                    method: order.PaymentMethodDisplay || order.PaymentMethod || prev?.method || 'Bank Card',
-                                    orderId: order.ReferenceNumber || order.OrderID,
-                                    referenceNumber: order.ReferenceNumber,
-                                    transactionId: normalizeDisplayTransactionId(order.TransactionID) || prev?.transactionId,
-                                    status: order.Status || prev?.status,
-                                    paymentStatus: order.PaymentStatus || prev?.paymentStatus,
-                                    deliveryType: order.DeliveryType || prev?.deliveryType,
-                                    deliveryTypeName: order.DeliveryTypeName || prev?.deliveryTypeName,
-                                    deliveryCost: order.DeliveryCost,
-                                    extraDeliveryFee: orderExtraDeliveryFee,
-                                    pickupDate: pickupFromOrder || prev?.pickupDate,
-                                    subtotal: subtotalFromMetadata || prev?.subtotal,
-                                    customerInfo: {
-                                        name: order.FullName || prev?.customerInfo?.name || session.metadata?.customerName,
-                                        email: order.Email || prev?.customerInfo?.email || session.customer_email
-                                    },
-                                    address: {
-                                        houseNumber: order.HouseNumber,
-                                        street: order.Street,
-                                        barangay: order.Barangay,
-                                        city: order.City,
-                                        province: order.Province,
-                                        postalCode: order.PostalCode,
-                                        country: order.Country,
-                                        phoneNumber: order.PhoneNumber
-                                    }
-                                })
-                            );
-
-                            const dbItems = order.items && Array.isArray(order.items) ? order.items : [];
-                            setOrderItems(dbItems.length > 0 ? dbItems : sessionLineItems);
-                        };
-
                         void (async () => {
-                            const maxAttempts = 15;
+                            for (let finAttempt = 0; finAttempt < 3; finAttempt += 1) {
+                                try {
+                                    const finalizeResult = await apiClient.post(
+                                        `/api/stripe/finalize-checkout-session/${sessionId}`
+                                    );
+                                    if (finalizeResult?.order) {
+                                        applyDbOrderToPage(finalizeResult.order, {
+                                            checkoutSessionId: sessionId,
+                                            stripeSession: session,
+                                            fallbackMethod: 'Bank Card'
+                                        });
+                                        return;
+                                    }
+                                    if (finalizeResult?.success && finalizeResult?.orderId) {
+                                        break;
+                                    }
+                                    if (finalizeResult?.message === 'Payment not completed yet') {
+                                        await new Promise((r) => setTimeout(r, 1200));
+                                        continue;
+                                    }
+                                    break;
+                                } catch (finErr) {
+                                    console.warn('[Stripe] finalize attempt failed:', finErr?.message || finErr);
+                                    await new Promise((r) => setTimeout(r, 800));
+                                }
+                            }
+
+                            const maxAttempts = 12;
                             for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
                                 try {
                                     const orderResult = await apiClient.get(`/api/order/stripe-session/${sessionId}`);
                                     if (orderResult.success && orderResult.order) {
-                                        applyOrderToState(orderResult.order);
+                                        applyDbOrderToPage(orderResult.order, {
+                                            checkoutSessionId: sessionId,
+                                            stripeSession: session,
+                                            fallbackMethod: 'Bank Card'
+                                        });
                                         return;
                                     }
                                 } catch (err) {
@@ -525,7 +634,7 @@ const OrderSuccessPage = () => {
                                 }
                                 await new Promise((r) => setTimeout(r, 800));
                             }
-                            console.log('Order not found after waiting for webhook; optional dev simulation may run.');
+                            console.log('Order not in database yet; trying finalize/simulation fallback.');
                             triggerWebhookSimulation(session);
                         })();
                     }
@@ -542,19 +651,22 @@ const OrderSuccessPage = () => {
                 return;
             }
             paymongoFinalizeStartedRef.current = true;
+            setError(null);
 
             setLoading(true);
             (async () => {
                 try {
-                    let paymongoMethod = 'E-Wallet';
+                    let paymongoMethod = 'PayMongo';
+                    let paymongoSessionSnapshot = null;
                     try {
                         const result = await paymongoService.getCheckoutSession(paymongoSessionId);
                         if (result.success) {
+                            paymongoSessionSnapshot = result.session;
                             const session = result.session;
                             const metadata = session?.attributes?.metadata || {};
                             const amountFromMetadata = parseFloat(metadata.total) || 0;
-                            const sourceType = String(session?.attributes?.payments?.[0]?.attributes?.source?.type || '').toLowerCase();
-                            paymongoMethod = ['gcash', 'paymaya', 'grab_pay', 'qrph'].includes(sourceType) ? 'E-Wallet' : 'Bank Transfer';
+                            const sourceType = session?.attributes?.payments?.[0]?.attributes?.source?.type || '';
+                            paymongoMethod = paymongoMethodLabel(sourceType, 'PayMongo');
                             setPaymentDetails({
                                 status: session?.attributes?.payment_intent?.attributes?.status || 'paid',
                                 method: paymongoMethod,
@@ -579,7 +691,9 @@ const OrderSuccessPage = () => {
                             finalizeResult = await apiClient.post(
                                 `/api/paymongo/finalize-checkout-session/${paymongoSessionId}`
                             );
-                            if (finalizeResult?.success && finalizeResult?.orderId) break;
+                            if (finalizeResult?.order || (finalizeResult?.success && finalizeResult?.orderId)) {
+                                break;
+                            }
                             if (finalizeResult?.message === 'Payment not completed yet') {
                                 await new Promise((r) => setTimeout(r, 1200));
                                 continue;
@@ -594,72 +708,63 @@ const OrderSuccessPage = () => {
                         }
                     }
 
-                    if (finalizeResult?.success === false && !finalizeResult?.orderId) {
-                        throw new Error(finalizeResult.message || 'Could not create order from PayMongo payment');
+                    if (finalizeResult?.order) {
+                        applyDbOrderToPage(finalizeResult.order, {
+                            checkoutSessionId: paymongoSessionId,
+                            fallbackMethod: paymongoMethod,
+                            paymongoSessionSnapshot
+                        });
+                        return;
                     }
 
-                    // Retry DB lookup so PayMongo page matches Stripe rich summary.
+                    if (finalizeResult?.success === false && !finalizeResult?.orderId) {
+                        const msg = finalizeResult.message || 'Could not create order from PayMongo payment';
+                        if (msg.includes('different account')) {
+                            throw new Error(
+                                `${msg} Sign in with the account you used at checkout, then refresh this page.`
+                            );
+                        }
+                        throw new Error(msg);
+                    }
+
                     let resolvedOrder = null;
-                    for (let attempt = 0; attempt < 8; attempt += 1) {
+                    for (let attempt = 0; attempt < 10; attempt += 1) {
                         try {
                             const orderResult = await apiClient.get(`/api/order/stripe-session/${paymongoSessionId}`);
                             if (orderResult.success && orderResult.order) {
                                 resolvedOrder = orderResult.order;
                                 break;
                             }
-                        } catch (err) {
-                            // retry below
+                        } catch (lookupErr) {
+                            console.warn('[PayMongo] order lookup:', lookupErr?.message || lookupErr);
                         }
                         await new Promise((resolve) => setTimeout(resolve, 700));
                     }
 
-                    if (!resolvedOrder) {
-                        throw new Error('Order not found for PayMongo session');
+                    if (resolvedOrder) {
+                        applyDbOrderToPage(resolvedOrder, {
+                            checkoutSessionId: paymongoSessionId,
+                            fallbackMethod: paymongoMethod,
+                            paymongoSessionSnapshot
+                        });
+                        return;
                     }
 
-                    localStorage.removeItem('lastPaymongoSessionId');
-                    localStorage.removeItem('lastPaymentProvider');
-                    if (resolvedOrder.ReferenceNumber || resolvedOrder.OrderID) {
-                        persistOrderReceiptNotification(resolvedOrder.ReferenceNumber || resolvedOrder.OrderID, user);
+                    if (paymongoSessionSnapshot) {
+                        setError(
+                            'Your payment was received. Your order is being processed — check Order History in a few minutes or contact support with your payment reference.'
+                        );
+                        return;
                     }
-                    setPaymentDetails(prev => ({
-                        ...prev,
-                        method: prev?.method || resolvedOrder.PaymentMethodDisplay || resolvedOrder.PaymentMethod || paymongoMethod,
-                        orderId: resolvedOrder.ReferenceNumber || resolvedOrder.OrderID,
-                        referenceNumber: resolvedOrder.ReferenceNumber,
-                        transactionId: normalizeDisplayTransactionId(resolvedOrder.TransactionID),
-                        status: resolvedOrder.Status,
-                        paymentStatus: resolvedOrder.PaymentStatus,
-                        deliveryType: resolvedOrder.DeliveryType,
-                        deliveryTypeName: resolvedOrder.DeliveryTypeName,
-                        deliveryCost: resolvedOrder.DeliveryCost,
-                        extraDeliveryFee: parseFloat(resolvedOrder.ExtraDeliveryFee) || 0,
-                        pickupDate: resolvedOrder.PickupDate,
-                        subtotal: (parseFloat(resolvedOrder.TotalAmount) || 0) - (parseFloat(resolvedOrder.DeliveryCost) || 0) - (parseFloat(resolvedOrder.ExtraDeliveryFee) || 0),
-                        amount: parseFloat(resolvedOrder.TotalAmount) || 0,
-                        customerEmail: resolvedOrder.Email || prev?.customerEmail || user?.email || '',
-                        completedAt: new Date().toISOString(),
-                        customerInfo: {
-                            name: resolvedOrder.FullName,
-                            email: resolvedOrder.Email
-                        },
-                        address: {
-                            houseNumber: resolvedOrder.HouseNumber,
-                            street: resolvedOrder.Street,
-                            barangay: resolvedOrder.Barangay,
-                            city: resolvedOrder.City,
-                            province: resolvedOrder.Province,
-                            postalCode: resolvedOrder.PostalCode,
-                            country: resolvedOrder.Country,
-                            phoneNumber: resolvedOrder.PhoneNumber
-                        }
-                    }));
-                    if (resolvedOrder.items && Array.isArray(resolvedOrder.items)) {
-                        setOrderItems(resolvedOrder.items);
-                    }
+
+                    throw new Error('Order not found for this payment session');
                 } catch (err) {
-                    console.error('Failed to load finalized PayMongo order details:', err);
-                    setError('Failed to load PayMongo payment details. Please contact support if your payment was successful.');
+                    console.error('Failed to load finalized checkout order details:', err);
+                    const friendly =
+                        err?.message && err.message.includes('different account')
+                            ? err.message
+                            : err?.message || 'Failed to load payment details. Please contact support if your payment was successful.';
+                    setError(friendly);
                 } finally {
                     setLoading(false);
                 }
@@ -691,13 +796,8 @@ const OrderSuccessPage = () => {
                     address: order?.shippingAddress
                 });
             }
-        } else {
-            // Set default payment details even if order is not available
-            setPaymentDetails({
-                status: 'completed',
-                method: paymentMethod || 'card',
-                completedAt: new Date().toISOString()
-            });
+        } else if (!paymongoSessionId && !sessionId && !checkoutFlowInProgress) {
+            setError('No order information found. If you completed a payment, open your account order history or contact support.');
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run on session/order params; triggerWebhookSimulation is stable for this flow
     }, [order, orderId, paymentStatus, paymentMethod, searchParams, user?.email]);
@@ -828,11 +928,7 @@ const OrderSuccessPage = () => {
                                 <div className="order-detail-item">
                                     <span className="order-detail-label">Payment Method:</span>
                                     <span className="order-detail-value">
-                                        {(() => {
-                                            const sid = (searchParams.get('session_id') || '').trim();
-                                            if (/^cs_(test_|live_)/i.test(sid)) return 'Bank Card';
-                                            return paymentDetails.method || paymentMethod || 'E-Wallet';
-                                        })()}
+                                        {paymentDetails.method || paymentMethod || 'E-Wallet'}
                                     </span>
                                 </div>
                                 {paymentDetails.paymentStatus && (
@@ -1056,7 +1152,10 @@ const OrderSuccessPage = () => {
                 {/* Action Buttons */}
                 <div className="success-actions-section">
                     <div className="success-actions">
-                        <Link to="/products" className="btn btn-primary">
+                        <Link to="/" className="btn btn-primary" replace>
+                            Back to Home
+                        </Link>
+                        <Link to="/products" className="btn btn-secondary">
                             Continue Shopping
                         </Link>
                         <Link to="/account?tab=orders" className="btn btn-secondary">

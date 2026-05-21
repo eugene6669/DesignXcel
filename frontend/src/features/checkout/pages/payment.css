@@ -56,6 +56,33 @@
     line-height: 1.35;
 }
 
+.payment-stock-issues-list {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.payment-stock-issues-list li {
+    margin-bottom: 0.35rem;
+}
+
+.payment-stock-issues-list li:last-child {
+    margin-bottom: 0;
+}
+
+.payment-stock-hint {
+    margin: 0.5rem 0 0;
+    font-size: 0.85rem;
+    color: #991b1b;
+}
+
+.payment-error-line {
+    margin: 0 0 0.35rem;
+}
+
+.payment-error-line:last-child {
+    margin-bottom: 0;
+}
+
 /* Payment Methods Section */
 .payment-methods-section {
     background: #ffffff;

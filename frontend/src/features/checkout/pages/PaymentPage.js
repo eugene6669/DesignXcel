@@ -5,6 +5,10 @@ import stripeService from '../services/stripeService';
 import paymongoService from '../services/paymongoService';
 import apiClient from '../../../shared/services/api/apiClient';
 import checkoutSessionManager from '../utils/checkoutSessionManager';
+import {
+    mapCartLinesToCheckoutItems,
+    validateCheckoutStock
+} from '../utils/checkoutStockValidation';
 import './payment.css';
 
 // Cart Icon Component
@@ -24,6 +28,8 @@ const Payment = () => {
     const [paymongoAvailable, setPaymongoAvailable] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [stockIssues, setStockIssues] = useState([]);
+    const [stockValidating, setStockValidating] = useState(false);
 
     // Check for cancellation parameter and validate session
     useEffect(() => {
@@ -90,6 +96,46 @@ const Payment = () => {
     // Calculate total: subtotal + shipping + extra delivery fee
     const total = subtotal + shippingCost + extraDeliveryFee;
 
+    const checkedItemsKey = JSON.stringify(
+        (checkedItems || []).map((item) => ({
+            id: item.product?.id || item.id || item.productId,
+            variationId: item.product?.selectedVariation?.id ?? item.variationId,
+            quantity: item.quantity
+        }))
+    );
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const runStockValidation = async () => {
+            if (!checkedItems?.length) {
+                setStockIssues([]);
+                return;
+            }
+            setStockValidating(true);
+            try {
+                const { valid, issues } = await validateCheckoutStock(checkedItems);
+                if (!cancelled) {
+                    setStockIssues(valid ? [] : issues);
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    console.error('PaymentPage stock validation:', err);
+                    setStockIssues([]);
+                }
+            } finally {
+                if (!cancelled) {
+                    setStockValidating(false);
+                }
+            }
+        };
+
+        runStockValidation();
+        return () => {
+            cancelled = true;
+        };
+    }, [checkedItemsKey]);
+
     // Format price in PHP
     const formatPrice = (price) => {
         return new Intl.NumberFormat('en-PH', {
@@ -126,39 +172,20 @@ const Payment = () => {
                 return;
             }
 
-            // Prepare items for checkout with enhanced product information
-            const checkoutItems = checkedItems.map(item => {
-                const variationId = item.product?.selectedVariation?.id || null;
-                const variationName = item.product?.selectedVariation?.name || null;
-                const useOriginalProduct = item.product?.useOriginalProduct || false;
-                
-                console.log('PaymentPage: Processing cart item:', {
-                    itemName: item.product?.name || item.name,
-                    productId: item.product?.id || item.product?.ProductID || item.id,
-                    variationId: variationId,
-                    variationName: variationName,
-                    useOriginalProduct: useOriginalProduct,
-                    selectedVariation: item.product?.selectedVariation,
-                    hasVariation: !!variationId
-                });
-                
-                const productIdentifier =
-                    item.product?.id ||
-                    item.product?.ProductID ||
-                    item.id ||
-                    item.productId;
+            const { valid, issues } = await validateCheckoutStock(checkedItems);
+            if (!valid) {
+                setStockIssues(issues);
+                setError(
+                    issues.length === 1
+                        ? issues[0]
+                        : `Some items are no longer available:\n${issues.join('\n')}`
+                );
+                setLoading(false);
+                return;
+            }
+            setStockIssues([]);
 
-                return {
-                    name: item.product?.name || item.name || 'Product',
-                    quantity: item.quantity,
-                    price: item.price,
-                    id: productIdentifier,
-                    productId: productIdentifier,
-                    variationId: variationId,
-                    variationName: variationName,
-                    useOriginalProduct: useOriginalProduct
-                };
-            });
+            const checkoutItems = mapCartLinesToCheckoutItems(checkedItems);
             
             // No shipping cost added
             
@@ -204,7 +231,6 @@ const Payment = () => {
                 if (!stripeAvailable) {
                     throw new Error('Stripe is currently unavailable.');
                 }
-                localStorage.setItem('lastPaymentProvider', 'stripe');
                 await stripeService.createCheckoutSession(checkoutItems, customerEmail, 'Bank Transfer', checkoutOptions);
             }
             
@@ -214,9 +240,17 @@ const Payment = () => {
         } catch (error) {
             console.error('E-Wallet payment error:', error);
 
+            const stockMsg =
+                error.message && /only \d+ available|Insufficient stock|Select a variation/i.test(error.message);
+            if (stockMsg) {
+                const split = error.message.split('; ').filter(Boolean);
+                setStockIssues(split.length > 1 ? split : [error.message]);
+                setError(split.length > 1 ? split.join('\n') : error.message);
+            }
+
             // Handle checkout-specific errors first
             const handled = checkoutSessionManager.handleCheckoutError(error, `${selectedPaymentMethod}-checkout`);
-            if (!handled) {
+            if (!handled && !stockMsg) {
                 // Provide more specific error messages based on error type
                 let errorMessage = 'Payment setup failed: ';
                 if (error.message.includes('checkout session')) {
@@ -244,9 +278,24 @@ const Payment = () => {
         <div className="payment-page">
             <div className="payment-container">
                 {/* Error Display */}
-                {error && (
+                {(error || stockIssues.length > 0) && (
                     <div className="payment-error-message">
-                        {error}
+                        {stockIssues.length > 0 ? (
+                            <ul className="payment-stock-issues-list">
+                                {stockIssues.map((issue, i) => (
+                                    <li key={i}>{issue}</li>
+                                ))}
+                            </ul>
+                        ) : (
+                            error.split('\n').map((line, i) => (
+                                <p key={i} className="payment-error-line">{line}</p>
+                            ))
+                        )}
+                        {stockIssues.length > 0 && (
+                            <p className="payment-stock-hint">
+                                Update quantities in your cart or return to checkout, then try again.
+                            </p>
+                        )}
                     </div>
                 )}
 
@@ -365,9 +414,20 @@ const Payment = () => {
                     <button 
                         className="confirm-payment-btn"
                         onClick={handleEWalletPayment}
-                        disabled={loading || checkedItems.length === 0}
+                        disabled={
+                            loading ||
+                            stockValidating ||
+                            checkedItems.length === 0 ||
+                            stockIssues.length > 0
+                        }
                     >
-                        {loading ? 'Processing...' : 'Confirm Payment'}
+                        {loading
+                            ? 'Processing...'
+                            : stockValidating
+                                ? 'Checking availability...'
+                                : stockIssues.length > 0
+                                    ? 'Fix quantities to continue'
+                                    : 'Confirm Payment'}
                     </button>
                 </div>
             </div>

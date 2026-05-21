@@ -10,6 +10,7 @@ import {
   ShoppingCartIcon, 
   ShoppingBagIcon
 } from '../../../shared/components/ui/SvgIcons';
+import { validateCheckoutStock } from '../../checkout/utils/checkoutStockValidation';
 import '../components/cart-discounts.css';
 
 const Cart = () => {
@@ -23,6 +24,8 @@ const Cart = () => {
     const [itemIdForBulkOrder, setItemIdForBulkOrder] = useState(null);
     const [showInsufficientStockModal, setShowInsufficientStockModal] = useState(false);
     const [insufficientStockMessage, setInsufficientStockMessage] = useState('');
+    const [stockIssues, setStockIssues] = useState([]);
+    const [stockValidating, setStockValidating] = useState(false);
     
     // Maximum quantity for regular checkout
     const MAX_REGULAR_CHECKOUT_QUANTITY = 9;
@@ -45,6 +48,45 @@ const Cart = () => {
             return newChecked;
         });
     }, [items]);
+
+    const checkedCartItems = items.filter((item) => checkedItems[item.id]);
+    const checkedItemsKey = JSON.stringify(
+        checkedCartItems.map((item) => ({
+            id: item.product?.id || item.id || item.productId,
+            variationId: item.product?.selectedVariation?.id ?? item.variationId,
+            quantity: item.quantity
+        }))
+    );
+
+    useEffect(() => {
+        let cancelled = false;
+        const runStockValidation = async () => {
+            if (!checkedCartItems.length) {
+                setStockIssues([]);
+                return;
+            }
+            setStockValidating(true);
+            try {
+                const { valid, issues } = await validateCheckoutStock(checkedCartItems);
+                if (!cancelled) {
+                    setStockIssues(valid ? [] : issues);
+                }
+            } catch (err) {
+                console.error('[Cart] stock validation:', err);
+                if (!cancelled) {
+                    setStockIssues([]);
+                }
+            } finally {
+                if (!cancelled) {
+                    setStockValidating(false);
+                }
+            }
+        };
+        runStockValidation();
+        return () => {
+            cancelled = true;
+        };
+    }, [checkedItemsKey]);
 
     const handleCheck = (id, checked) => {
       setCheckedItems(prev => ({ ...prev, [id]: checked }));
@@ -150,30 +192,48 @@ const Cart = () => {
         setShowClearConfirmation(false);
     };
 
-    // Calculate values for only checked items
-    const checkedCartItems = items.filter(item => checkedItems[item.id]);
     const subtotal = checkedCartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const total = subtotal;
     const totalQuantity = checkedCartItems.reduce((sum, item) => sum + item.quantity, 0);
 
-    // Handler for checkout button
-    const handleProceedToCheckout = () => {
+    const handleProceedToCheckout = async () => {
       const checked = items.filter(item => checkedItems[item.id]);
-      
-      // Check if cart exceeds the different items limit
-      if (checked.length > CART_LIMITS.MAX_DIFFERENT_ITEMS) {
-        // Silently prevent checkout
+
+      if (checked.length === 0) {
         return;
       }
       
-      // Check if any item exceeds the quantity limit
+      if (checked.length > CART_LIMITS.MAX_DIFFERENT_ITEMS) {
+        return;
+      }
+      
       const exceededItems = checked.filter(item => item.quantity > CART_LIMITS.MAX_QUANTITY_PER_PRODUCT);
       if (exceededItems.length > 0) {
-        // Silently prevent checkout
         return;
       }
-      
-      navigate('/checkout', { state: { items: checked } });
+
+      setStockValidating(true);
+      try {
+        const { valid, issues } = await validateCheckoutStock(checked);
+        if (!valid) {
+          setStockIssues(issues);
+          setInsufficientStockMessage(
+            issues.length === 1
+              ? issues[0]
+              : issues.join('\n')
+          );
+          setShowInsufficientStockModal(true);
+          return;
+        }
+        setStockIssues([]);
+        navigate('/checkout', { state: { items: checked } });
+      } catch (err) {
+        console.error('[Cart] checkout stock validation:', err);
+        setInsufficientStockMessage('Could not verify item availability. Please try again.');
+        setShowInsufficientStockModal(true);
+      } finally {
+        setStockValidating(false);
+      }
     };
 
     if (items.length === 0) {
@@ -241,6 +301,18 @@ const Cart = () => {
                             </div>
                         )}
 
+                        {stockIssues.length > 0 && (
+                            <div className="cart-stock-warning" role="alert">
+                                <p className="cart-stock-warning-title">Some items are not available in the quantity selected:</p>
+                                <ul>
+                                    {stockIssues.map((issue, i) => (
+                                        <li key={i}>{issue}</li>
+                                    ))}
+                                </ul>
+                                <p className="cart-stock-warning-hint">Update quantities before checkout.</p>
+                            </div>
+                        )}
+
                         <div className="cart-table-header">
                             <div className="header-product">Product</div>
                             <div className="header-price">Price</div>
@@ -286,9 +358,17 @@ const Cart = () => {
                                 <button
                                     className="btn btn-primary btn-full btn-large"
                                     onClick={handleProceedToCheckout}
-                                    disabled={items.filter(item => checkedItems[item.id]).length === 0}
+                                    disabled={
+                                        items.filter(item => checkedItems[item.id]).length === 0 ||
+                                        stockValidating ||
+                                        stockIssues.length > 0
+                                    }
                                 >
-                                    Proceed to Checkout
+                                    {stockValidating
+                                        ? 'Checking availability...'
+                                        : stockIssues.length > 0
+                                            ? 'Fix quantities to checkout'
+                                            : 'Proceed to Checkout'}
                                 </button>
 
                                 <div className="payment-methods">

@@ -51,7 +51,8 @@ const { invalidateAdminPageCache } = require('./utils/adminPageCache');
 const { resolveProductId } = require('./utils/productIdResolver');
 const { formatInventoryDate } = require('./utils/formatInventoryDate');
 const returnedOrderDisplay = require('./utils/returnedOrderDisplay');
-// All encryption removed - using plain text storage
+const TransparentEncryptionService = require('./utils/transparentEncryptionService');
+// All encryption removed - using plain text storage (service is pass-through)
 
 module.exports = function (sql, pool, getStripe = null) {
     const router = express.Router();
@@ -508,8 +509,8 @@ module.exports = function (sql, pool, getStripe = null) {
                 const inventoryProductId = inventoryProduct.InventoryProductID;
 
                 const hasInventoryVariations = await productHasActiveInventoryVariations(inventoryProductId, transaction);
-                const { productHasActiveProductVariations } = require('./utils/productVariationPolicy');
-                const hasProductVariations = await productHasActiveProductVariations(pool, productId, transaction);
+                const { productHasAnyCatalogVariations } = require('./utils/productVariationPolicy');
+                const hasProductVariations = await productHasAnyCatalogVariations(pool, productId, transaction);
                 const hasVariations = hasInventoryVariations || hasProductVariations;
                 // Parent CMS stock is not sellable when variations exist (variations hold stock).
                 const stockToSync = hasVariations ? 0 : availableQuantity;
@@ -564,8 +565,8 @@ module.exports = function (sql, pool, getStripe = null) {
 
                 return true;
             } else {
-                const { productHasActiveProductVariations } = require('./utils/productVariationPolicy');
-                if (await productHasActiveProductVariations(pool, productId, transaction)) {
+                const { productHasAnyCatalogVariations } = require('./utils/productVariationPolicy');
+                if (await productHasAnyCatalogVariations(pool, productId, transaction)) {
                     const updateRequest = transaction ? transaction.request() : pool.request();
                     await updateRequest
                         .input('productId', sql.Int, productId)

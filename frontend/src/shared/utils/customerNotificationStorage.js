@@ -21,6 +21,65 @@ export const getNotificationUserStorageKey = (baseKey, user) => {
 };
 
 /**
+ * Store one in-app "order receipt sent" notification per order (per checkout session).
+ */
+export function persistOrderReceiptNotification(orderNumber, user) {
+  if (!orderNumber) return;
+
+  const receiptId = `order-receipt-${String(orderNumber)}`;
+  const receiptKey = getNotificationUserStorageKey('orderReceiptNotifications', user);
+  const legacyReceiptKey = getNotificationUserStorageKey('orderReceiptNotification', user);
+  const readReceiptKey = getNotificationUserStorageKey('readReceiptNotifications', user);
+  const notificationData = {
+    id: receiptId,
+    orderNumber: String(orderNumber),
+    timestamp: new Date().toISOString(),
+    dismissed: false
+  };
+
+  try {
+    const existing = JSON.parse(localStorage.getItem(receiptKey) || '[]');
+    const withoutCurrent = Array.isArray(existing)
+      ? existing.filter((item) => item.id !== receiptId)
+      : [];
+    localStorage.setItem(receiptKey, JSON.stringify([notificationData, ...withoutCurrent]));
+  } catch {
+    localStorage.setItem(receiptKey, JSON.stringify([notificationData]));
+  }
+
+  localStorage.setItem(legacyReceiptKey, JSON.stringify(notificationData));
+
+  try {
+    const read = JSON.parse(localStorage.getItem(readReceiptKey) || '[]');
+    const next = Array.isArray(read) ? read.filter((id) => id !== receiptId) : [];
+    localStorage.setItem(readReceiptKey, JSON.stringify(next));
+  } catch {
+    localStorage.setItem(readReceiptKey, '[]');
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('notificationUpdated'));
+  }
+}
+
+/** Idempotent wrapper — avoids duplicate bell/popup notifications on effect re-runs. */
+export function persistOrderReceiptNotificationOnce(orderNumber, user, checkoutSessionId = null) {
+  if (!orderNumber) return false;
+  const dedupeKey = checkoutSessionId
+    ? `checkout:${String(checkoutSessionId)}`
+    : `order:${String(orderNumber)}`;
+  const flagKey = `orderReceiptPersisted:${dedupeKey}`;
+  if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(flagKey) === '1') {
+    return false;
+  }
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.setItem(flagKey, '1');
+  }
+  persistOrderReceiptNotification(orderNumber, user);
+  return true;
+}
+
+/**
  * Remove all stored customer notifications: receipt list, legacy receipt, refund banner,
  * and dismiss every order-status notification returned by the API.
  */

@@ -1416,11 +1416,43 @@ body.theme-dark .payment-methods p {
     font-size: 0.875rem;
 }
 
+.cart-stock-warning {
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    color: #92400e;
+    padding: 12px 14px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.cart-stock-warning ul {
+    margin: 0.35rem 0 0.5rem;
+    padding-left: 1.25rem;
+}
+
+.cart-stock-warning-title {
+    margin: 0 0 0.25rem;
+    font-weight: 600;
+}
+
+.cart-stock-warning-hint {
+    margin: 0;
+    font-size: 0.8125rem;
+}
+
 /* Dark mode support for cart error message */
 body.theme-dark .cart-error-message {
     background: #58151c;
     border-color: #842029;
     color: #f1aeb5;
+}
+
+body.theme-dark .cart-stock-warning {
+    background: #422006;
+    border-color: #854d0e;
+    color: #fde68a;
 }
 
 @media (max-width: 480px) {

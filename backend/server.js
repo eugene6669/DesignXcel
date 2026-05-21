@@ -70,6 +70,7 @@ const {
     findExistingOrderByCheckoutSessionId,
     dedupeOrdersByCheckoutSession
 } = require('./utils/orderIdempotency');
+const { fetchOrderDetailsByCheckoutSessionId } = require('./utils/checkoutOrderDetails');
 const {
     computeAvailableStock,
     computeAvailableStockBatch,
@@ -2299,7 +2300,17 @@ app.use((req, res, next) => {
         req.path.startsWith('/api/account') ||
         req.path.startsWith('/api/terms') ||
         req.path.startsWith('/api/bulk-order') ||
-        req.path.startsWith('/api/reviews')) {
+        req.path.startsWith('/api/reviews') ||
+        req.path.startsWith('/api/checkout/validate-stock') ||
+        req.path.startsWith('/api/create-checkout-session') ||
+        req.path.startsWith('/api/create-paymongo-checkout-session') ||
+        req.path.startsWith('/api/create-bulk-order-checkout-session') ||
+        req.path.startsWith('/api/paymongo') ||
+        req.path.startsWith('/api/stripe/finalize-checkout-session') ||
+        req.path.startsWith('/api/order/') ||
+        req.path.startsWith('/api/confirm-payment') ||
+        req.path.startsWith('/api/check-bulk-order-stock') ||
+        req.path.startsWith('/api/checkout-session')) {
         return customerSession(req, res, next);
     }
     // Default to employee session for other routes
@@ -4208,6 +4219,30 @@ async function validateCheckoutItemsStock(items) {
     return stockIssues;
 }
 
+// Pre-checkout stock validation (same rules as Stripe/PayMongo create-checkout-session)
+app.post('/api/checkout/validate-stock', async (req, res) => {
+    try {
+        const items = req.body?.items;
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                issues: ['No items provided']
+            });
+        }
+        const issues = await validateCheckoutItemsStock(items);
+        return res.json({
+            success: issues.length === 0,
+            issues
+        });
+    } catch (err) {
+        console.error('[CHECKOUT] validate-stock error:', err);
+        return res.status(500).json({
+            success: false,
+            issues: ['Failed to validate stock. Please try again.']
+        });
+    }
+});
+
 // Search products (must be declared before /api/products/:id)
 app.get('/api/products/search', async (req, res) => {
     try {
@@ -4573,9 +4608,20 @@ app.post('/api/create-checkout-session', async (req, res) => {
                 tax: String(typeof tax === 'number' ? tax : 0),
                 subtotal: String(typeof subtotal === 'number' ? subtotal : 0),
                 total: String(typeof total === 'number' ? total : 0),
-                shippingAddressId: shippingAddressId ? String(shippingAddressId) : ''
+                shippingAddressId: shippingAddressId ? String(shippingAddressId) : '',
+                orderType: 'regular'
             },
         };
+
+        if (req.session?.user?.role === 'Customer') {
+            const checkoutCustomerId = parseInt(req.session.user.id, 10);
+            if (checkoutCustomerId && !Number.isNaN(checkoutCustomerId)) {
+                sessionParams.metadata.customerId = String(checkoutCustomerId);
+                if (email && typeof email === 'string' && email.includes('@')) {
+                    sessionParams.metadata.customerEmail = email.trim();
+                }
+            }
+        }
 
         if (email && typeof email === 'string' && email.includes('@')) {
             sessionParams.customer_email = email;
@@ -4601,10 +4647,29 @@ app.post('/api/create-checkout-session', async (req, res) => {
 // PayMongo customer checkout
 app.post('/api/create-paymongo-checkout-session', async (req, res) => {
     try {
+        if (!req.session?.user || req.session.user.role !== 'Customer') {
+            return res.status(401).json({ success: false, error: 'Authentication required' });
+        }
+
         const paymongoSecretKey = process.env.PAYMONGO_SECRET_KEY;
         if (!paymongoSecretKey) {
             return res.status(500).json({ success: false, error: 'PayMongo is not configured' });
         }
+
+        const checkoutCustomerId = parseInt(req.session.user.id, 10);
+        if (!checkoutCustomerId || Number.isNaN(checkoutCustomerId)) {
+            return res.status(401).json({ success: false, error: 'Invalid customer session' });
+        }
+
+        await poolConnect;
+        const customerRow = await pool.request()
+            .input('customerId', sql.Int, checkoutCustomerId)
+            .query('SELECT CustomerID, Email, FullName FROM Customers WHERE CustomerID = @customerId AND IsActive = 1');
+        if (!customerRow.recordset.length) {
+            return res.status(401).json({ success: false, error: 'Customer account not found' });
+        }
+        const checkoutCustomer = customerRow.recordset[0];
+        const checkoutEmail = String(checkoutCustomer.Email || '').trim();
 
         const {
             items,
@@ -4685,14 +4750,14 @@ app.post('/api/create-paymongo-checkout-session', async (req, res) => {
                         send_email_receipt: false,
                         show_description: true,
                         show_line_items: true,
-                        description: `DesignXcel order — ${email || 'customer'}`,
+                        description: `DesignXcel order — ${checkoutEmail || email || 'customer'}`,
                         line_items,
                         payment_method_types: ['card', 'gcash', 'paymaya', 'grab_pay'],
                         success_url: `${origin}/order-success?provider=paymongo&paymongo_session_id={CHECKOUT_SESSION_ID}`,
                         cancel_url: `${origin}/payment?cancelled=true`,
-                        billing: email && String(email).includes('@')
-                            ? { email: String(email).trim() }
-                            : undefined,
+                        billing: checkoutEmail && checkoutEmail.includes('@')
+                            ? { email: checkoutEmail }
+                            : (email && String(email).includes('@') ? { email: String(email).trim() } : undefined),
                         metadata: {
                             cart: JSON.stringify(cartForMetadata),
                             paymentMethod: paymentMethod || 'E-Wallet',
@@ -4703,7 +4768,9 @@ app.post('/api/create-paymongo-checkout-session', async (req, res) => {
                             subtotal: String(typeof subtotal === 'number' ? subtotal : 0),
                             total: String(typeof total === 'number' ? total : 0),
                             shippingAddressId: shippingAddressId ? String(shippingAddressId) : '',
-                            email: email ? String(email).trim() : '',
+                            email: checkoutEmail || (email ? String(email).trim() : ''),
+                            customerId: String(checkoutCustomerId),
+                            customerEmail: checkoutEmail,
                             orderType: 'regular'
                         }
                     }
@@ -4791,22 +4858,68 @@ app.post('/api/paymongo/finalize-checkout-session/:sessionId', async (req, res) 
         await poolConnect;
         const existingPaymongoOrder = await findExistingOrderByCheckoutSessionId(pool, sessionId);
         if (existingPaymongoOrder) {
+            const metaCustomerIdEarly = parseInt((attrs.metadata || {}).customerId, 10);
+            const sessionCustomerIdEarly = parseInt(
+                (req.session?.user || req.session?.customerData || {}).id ||
+                    (req.session?.user || {}).CustomerID,
+                10
+            );
+            const lookupCustomerId =
+                (metaCustomerIdEarly && !Number.isNaN(metaCustomerIdEarly)
+                    ? metaCustomerIdEarly
+                    : sessionCustomerIdEarly) || null;
+            const order = await fetchOrderDetailsByCheckoutSessionId(
+                pool,
+                sessionId,
+                lookupCustomerId
+            );
             return res.json({
                 success: true,
                 message: 'Order already exists',
-                orderId: existingPaymongoOrder.OrderID
+                orderId: existingPaymongoOrder.OrderID,
+                order
             });
         }
 
         const metadata = attrs.metadata || {};
         const sessionUser = req.session?.user || req.session?.customerData || {};
+        const metaCustomerId = parseInt(metadata.customerId, 10);
+        const sessionCustomerId = parseInt(sessionUser.id || sessionUser.CustomerID, 10);
+        let customerIdForOrder = metaCustomerId;
+        if (sessionCustomerId && metaCustomerId && sessionCustomerId !== metaCustomerId) {
+            console.warn(
+                '[PAYMONGO FINALIZE] Session customer',
+                sessionCustomerId,
+                'does not match checkout metadata customer',
+                metaCustomerId,
+                '— using checkout owner from metadata'
+            );
+        }
+        if (!customerIdForOrder || Number.isNaN(customerIdForOrder)) {
+            customerIdForOrder = sessionCustomerId;
+        }
+        if (
+            sessionCustomerId &&
+            customerIdForOrder &&
+            !Number.isNaN(sessionCustomerId) &&
+            !Number.isNaN(customerIdForOrder) &&
+            sessionCustomerId !== customerIdForOrder
+        ) {
+            return res.status(403).json({
+                success: false,
+                message: 'This payment belongs to a different account. Please sign in with the account that placed the order.'
+            });
+        }
+
         const email =
-            attrs.billing?.email ||
+            metadata.customerEmail ||
             metadata.email ||
+            attrs.billing?.email ||
             sessionUser.email ||
             '';
 
         const paymongoPaymentId = attrs.payments?.[0]?.id || null;
+        const paymongoSourceType = String(attrs.payments?.[0]?.attributes?.source?.type || '').toLowerCase();
         const amountRaw = Number(attrs.amount);
         const amountPhp = Number.isFinite(amountRaw) && amountRaw > 0
             ? amountRaw / 100
@@ -4826,8 +4939,9 @@ app.post('/api/paymongo/finalize-checkout-session/:sessionId', async (req, res) 
         const webhookPayload = {
             sessionId,
             email,
-            customerId: sessionUser.id || sessionUser.CustomerID || null,
+            customerId: customerIdForOrder || null,
             paymentMethod: metadata.paymentMethod || 'E-Wallet',
+            paymongoSourceType,
             deliveryType: metadata.deliveryType || 'pickup',
             pickupDate: metadata.pickupDate || '',
             shippingCost: metadata.shippingCost || '0',
@@ -4898,16 +5012,169 @@ app.post('/api/paymongo/finalize-checkout-session/:sessionId', async (req, res) 
             });
         }
 
+        const orderDetails = await fetchOrderDetailsByCheckoutSessionId(
+            pool,
+            sessionId,
+            customerIdForOrder || sessionCustomerId || null
+        );
+
         res.json({
             success: true,
             message: webhookJson.message || 'Order finalized',
-            orderId
+            orderId,
+            order: orderDetails
         });
     } catch (error) {
         console.error('[PAYMONGO FINALIZE] Error:', error);
         res.status(500).json({
             success: false,
             message: error.message || 'Failed to finalize PayMongo checkout'
+        });
+    }
+});
+
+/** Create order from paid Stripe Checkout when webhook did not run (local dev / missed webhook). */
+app.post('/api/stripe/finalize-checkout-session/:sessionId', async (req, res) => {
+    try {
+        const sessionId = String(req.params.sessionId || '').trim();
+        if (!/^cs_(test_|live_)/i.test(sessionId)) {
+            return res.status(400).json({ success: false, message: 'Invalid Stripe checkout session id' });
+        }
+
+        const stripeInstance = getStripe();
+        if (!stripeInstance) {
+            return res.status(500).json({ success: false, message: 'Stripe not configured' });
+        }
+
+        const session = await stripeInstance.checkout.sessions.retrieve(sessionId, {
+            expand: ['payment_intent']
+        });
+
+        const paid =
+            session.payment_status === 'paid' ||
+            session.status === 'complete';
+        if (!paid) {
+            return res.json({
+                success: false,
+                message: 'Payment not completed yet',
+                paymentStatus: session.payment_status
+            });
+        }
+
+        await poolConnect;
+
+        const sessionUser = req.session?.user || req.session?.customerData || {};
+        const sessionCustomerId = parseInt(sessionUser.id || sessionUser.CustomerID, 10);
+        const metaCustomerId = parseInt(session.metadata?.customerId, 10);
+        let customerIdForLookup = metaCustomerId;
+        if (!customerIdForLookup || Number.isNaN(customerIdForLookup)) {
+            customerIdForLookup = sessionCustomerId;
+        }
+        if (
+            sessionCustomerId &&
+            metaCustomerId &&
+            !Number.isNaN(sessionCustomerId) &&
+            !Number.isNaN(metaCustomerId) &&
+            sessionCustomerId !== metaCustomerId
+        ) {
+            return res.status(403).json({
+                success: false,
+                message: 'This payment belongs to a different account. Please sign in with the account that placed the order.'
+            });
+        }
+
+        const existing = await findExistingOrderByCheckoutSessionId(pool, sessionId);
+        if (existing) {
+            const order = await fetchOrderDetailsByCheckoutSessionId(
+                pool,
+                sessionId,
+                customerIdForLookup || null
+            );
+            return res.json({
+                success: true,
+                message: 'Order already exists',
+                orderId: existing.OrderID,
+                order
+            });
+        }
+
+        const md = session.metadata || {};
+        let cartItems = [];
+        try {
+            if (md.cart) {
+                cartItems = typeof md.cart === 'string' ? JSON.parse(md.cart) : md.cart;
+            }
+        } catch (cartErr) {
+            console.warn('[STRIPE FINALIZE] Could not parse cart metadata:', cartErr.message);
+        }
+
+        const webhookPayload = {
+            sessionId,
+            email: session.customer_email || md.customerEmail || md.email || sessionUser.email || '',
+            customerId: customerIdForLookup || null,
+            orderType: md.orderType || 'regular',
+            paymentMethod: md.paymentMethod || 'Bank Transfer',
+            deliveryType: md.deliveryType || 'pickup',
+            pickupDate: md.pickupDate || md.pickupDateTime || '',
+            shippingCost: md.shippingCost || '0',
+            extraDeliveryFee: md.extraDeliveryFee || '0',
+            subtotal: md.subtotal || '0',
+            total: session.amount_total != null ? session.amount_total / 100 : md.total,
+            shippingAddressId: md.shippingAddressId || '',
+            items: Array.isArray(cartItems) ? cartItems : [],
+            cart: cartItems
+        };
+
+        const port = process.env.PORT || 5000;
+        const baseUrl = process.env.API_BASE_URL || `http://127.0.0.1:${port}`;
+        const webhookRes = await fetch(`${baseUrl}/api/test-webhook`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(req.headers.cookie ? { Cookie: req.headers.cookie } : {})
+            },
+            body: JSON.stringify(webhookPayload)
+        });
+
+        const webhookJson = await webhookRes.json().catch(() => ({}));
+        if (!webhookRes.ok || webhookJson.success === false) {
+            console.error('[STRIPE FINALIZE] test-webhook failed:', webhookRes.status, webhookJson);
+            return res.status(500).json({
+                success: false,
+                message: webhookJson.message || webhookJson.error || 'Failed to create order from Stripe payment',
+                details: webhookJson.details
+            });
+        }
+
+        const orderAfter = await pool.request()
+            .input('sessionId', sql.NVarChar, sessionId)
+            .query('SELECT OrderID FROM Orders WHERE StripeSessionID = @sessionId');
+
+        const orderId = orderAfter.recordset[0]?.OrderID || webhookJson.orderId || null;
+        if (!orderId) {
+            return res.status(500).json({
+                success: false,
+                message: 'Payment received but order was not saved. Please contact support.'
+            });
+        }
+
+        const order = await fetchOrderDetailsByCheckoutSessionId(
+            pool,
+            sessionId,
+            customerIdForLookup || null
+        );
+
+        res.json({
+            success: true,
+            message: webhookJson.message || 'Order finalized',
+            orderId,
+            order
+        });
+    } catch (error) {
+        console.error('[STRIPE FINALIZE] Error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to finalize Stripe checkout'
         });
     }
 });
@@ -6204,16 +6471,24 @@ app.post('/api/test-webhook', async (req, res) => {
                     });
                 }
 
-                // Find customer — prefer logged-in customer id from PayMongo finalize payload
+                // Find customer — checkout metadata customerId is authoritative (who started PayMongo session)
                 let customer = null;
+                const metaCustomerIdRaw =
+                    actualSession?.metadata?.customerId != null
+                        ? parseInt(actualSession.metadata.customerId, 10)
+                        : null;
                 const bodyCustomerId = parseInt(req.body.customerId, 10);
-                if (bodyCustomerId && !Number.isNaN(bodyCustomerId)) {
+                const customerIdToUse =
+                    metaCustomerIdRaw && !Number.isNaN(metaCustomerIdRaw)
+                        ? metaCustomerIdRaw
+                        : bodyCustomerId;
+                if (customerIdToUse && !Number.isNaN(customerIdToUse)) {
                     const byIdResult = await pool.request()
-                        .input('customerId', sql.Int, bodyCustomerId)
+                        .input('customerId', sql.Int, customerIdToUse)
                         .query('SELECT CustomerID, FullName, Email FROM Customers WHERE CustomerID = @customerId');
                     customer = byIdResult.recordset[0];
                     if (customer) {
-                        console.log('[TEST WEBHOOK] Using customer from session customerId:', customer.CustomerID);
+                        console.log('[TEST WEBHOOK] Using customer from checkout metadata/session:', customer.CustomerID);
                     }
                 }
 
@@ -6327,10 +6602,11 @@ app.post('/api/test-webhook', async (req, res) => {
                 // Get Manila timezone date
                 const manilaTime = getManilaTime();
 
-                // Determine payment method from metadata (only E-Wallet is supported)
                 const webhookPaymentMethod = metadata.paymentMethod || 'E-Wallet';
-                // Only E-Wallet payment method is allowed
-                const paymentMethodToSave = 'E-Wallet';
+                const paymongoSource = String(req.body.paymongoSourceType || '').toLowerCase();
+                const paymentMethodToSave =
+                    paymongoSource === 'card' ? 'Bank Transfer' : 'E-Wallet';
+                console.log('[TEST WEBHOOK] Payment method to save:', paymentMethodToSave, '(paymongo source:', paymongoSource || 'n/a', ', metadata:', webhookPaymentMethod, ')');
 
                 const deliveryType = metadata.deliveryType || 'pickup';
 
@@ -6803,63 +7079,26 @@ app.get('/api/checkout-session/:sessionId', async (req, res) => {
 // Get order details by Stripe session ID
 app.get('/api/order/stripe-session/:sessionId', async (req, res) => {
     try {
+        if (!req.session?.user || req.session.user.role !== 'Customer') {
+            return res.status(401).json({ success: false, message: 'Authentication required' });
+        }
+
+        const customerId = parseInt(req.session.user.id, 10);
+        if (!customerId || Number.isNaN(customerId)) {
+            return res.status(401).json({ success: false, message: 'Invalid customer session' });
+        }
+
         const { sessionId } = req.params;
 
         await poolConnect;
-        const result = await pool.request()
-            .input('sessionId', sql.NVarChar, sessionId)
-            .query(`
-                SELECT o.*, c.FullName, c.Email,
-                       ISNULL(o.ExtraDeliveryFee, 0) AS ExtraDeliveryFee,
-                       o.TransactionID,
-                       COALESCE(o.ServiceType,
-                           CASE 
-                               WHEN o.DeliveryType = 'pickup' THEN 'Pick up'
-                               WHEN o.DeliveryType LIKE 'rate_%' THEN 
-                                   CASE 
-                                       WHEN COALESCE(dr.ServiceType, rdr.ServiceType, 'Standard') LIKE '%Delivery%' 
-                                       THEN COALESCE(dr.ServiceType, rdr.ServiceType, 'Standard')
-                                       ELSE COALESCE(dr.ServiceType, rdr.ServiceType, 'Standard') + ' Delivery'
-                                   END
-                               ELSE o.DeliveryType
-                           END
-                       ) AS DeliveryTypeName,
-                       a.HouseNumber, a.Street, a.Barangay, a.City, a.Province, a.PostalCode, a.Country
-                FROM Orders o
-                INNER JOIN Customers c ON o.CustomerID = c.CustomerID
-                LEFT JOIN CustomerAddresses a ON o.ShippingAddressID = a.AddressID
-                LEFT JOIN DeliveryRates dr ON o.DeliveryType = 'rate_' + CAST(dr.RateID AS NVARCHAR(10))
-                LEFT JOIN RegionDeliveryRates rdr ON o.DeliveryType = 'rate_' + CAST(rdr.RegionRateID AS NVARCHAR(10))
-                WHERE o.StripeSessionID = @sessionId
-            `);
+        const order = await fetchOrderDetailsByCheckoutSessionId(pool, sessionId, customerId);
 
-        if (result.recordset.length === 0) {
+        if (!order) {
             return res.status(404).json({
                 success: false,
                 message: 'Order not found for this session'
             });
         }
-
-        const order = result.recordset[0];
-
-        // Get order items with product names
-        const itemsResult = await pool.request()
-            .input('orderId', sql.Int, order.OrderID)
-            .query(`
-                SELECT 
-                    oi.OrderItemID,
-                    oi.ProductID,
-                    oi.Quantity,
-                    oi.PriceAtPurchase,
-                    COALESCE(p.Name, oi.Name, 'Product') AS ProductName,
-                    COALESCE(p.SKU, '') AS SKU
-                FROM OrderItems oi
-                LEFT JOIN Products p ON oi.ProductID = p.ProductID
-                WHERE oi.OrderID = @orderId
-                ORDER BY oi.OrderItemID
-            `);
-
-        order.items = itemsResult.recordset;
 
         res.json({
             success: true,

@@ -3,6 +3,7 @@
 const sql = require('mssql');
 const { ORDER_ITEMS_CATALOG_CROSS_APPLY } = require('./orderItemCatalogResolveSql');
 const {
+    productHasAnyCatalogVariations,
     productHasActiveProductVariations,
     getProductVariationStockSum,
     getProductVariationQuantity
@@ -86,10 +87,12 @@ async function computeAvailableStock(pool, catalogProductId, options = {}) {
         return { success: false, message: 'Product not found' };
     }
 
-    const hasVariations = await productHasActiveProductVariations(pool, catalogProductId);
+    const hasAnyVariations = await productHasAnyCatalogVariations(pool, catalogProductId);
+    const hasActiveVariations = await productHasActiveProductVariations(pool, catalogProductId);
+    const usesVariationStock = hasAnyVariations;
 
     let actualStock = productResult.recordset[0].StockQuantity || 0;
-    if (hasVariations) {
+    if (usesVariationStock) {
         if (parsedVariationId) {
             actualStock = await getProductVariationQuantity(pool, catalogProductId, parsedVariationId);
         } else {
@@ -98,12 +101,12 @@ async function computeAvailableStock(pool, catalogProductId, options = {}) {
     }
 
     const totalPending = await getPendingQuantity(pool, catalogProductId, {
-        hasVariations,
+        hasVariations: usesVariationStock,
         variationId: parsedVariationId
     });
     const availableStock = Math.max(0, actualStock - totalPending);
 
-    const variationStockSum = hasVariations
+    const variationStockSum = usesVariationStock
         ? await getProductVariationStockSum(pool, catalogProductId)
         : null;
 
@@ -114,8 +117,8 @@ async function computeAvailableStock(pool, catalogProductId, options = {}) {
         actualStock,
         pendingQuantity: totalPending,
         availableStock,
-        hasVariations,
-        requiresVariationSelection: hasVariations,
+        hasVariations: hasAnyVariations,
+        requiresVariationSelection: hasActiveVariations,
         variationStockSum,
         variationId: parsedVariationId
     };
@@ -125,7 +128,7 @@ async function computeAvailableStock(pool, catalogProductId, options = {}) {
  * Pending qty for a catalog product (all variation lines).
  */
 async function getCatalogPendingQuantity(pool, catalogProductId) {
-    const hasVariations = await productHasActiveProductVariations(pool, catalogProductId);
+    const hasVariations = await productHasAnyCatalogVariations(pool, catalogProductId);
     return getPendingQuantity(pool, catalogProductId, { hasVariations, variationId: null });
 }
 
@@ -159,10 +162,20 @@ async function computeAvailableStockBatch(pool, resolveProductId, identifiers = 
  * Per-variation sellable map for product detail (one round-trip).
  */
 async function computeVariationAvailableStockMap(pool, catalogProductId) {
-    const hasVariations = await productHasActiveProductVariations(pool, catalogProductId);
-    if (!hasVariations) {
+    const hasAnyVariations = await productHasAnyCatalogVariations(pool, catalogProductId);
+    const hasActiveVariations = await productHasActiveProductVariations(pool, catalogProductId);
+    if (!hasAnyVariations) {
         const single = await computeAvailableStock(pool, catalogProductId);
         return { success: true, hasVariations: false, availableStock: single.availableStock, byVariationId: {} };
+    }
+    if (!hasActiveVariations) {
+        const single = await computeAvailableStock(pool, catalogProductId);
+        return {
+            success: true,
+            hasVariations: true,
+            availableStock: single.availableStock,
+            byVariationId: {}
+        };
     }
 
     const variationsResult = await pool.request()

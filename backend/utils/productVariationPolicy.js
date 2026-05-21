@@ -20,20 +20,32 @@ const VARIATION_SELLABLE_QTY_SQL = `
     END
 `;
 
+/** Any CMS variation rows (product uses variation stock model on storefront). */
+async function productHasAnyCatalogVariations(pool, productId, transaction = null) {
+    if (!productId) return false;
+    const request = transaction ? transaction.request() : pool.request();
+    const result = await request
+        .input('productId', sql.Int, productId)
+        .query(`
+            SELECT COUNT(*) as Cnt
+            FROM ProductVariations
+            WHERE ProductID = @productId
+        `);
+    return (result.recordset[0]?.Cnt || 0) > 0;
+}
+
+/** Storefront-visible variations (Admin Products "Storefront" checkbox → ProductVariations.IsActive). */
 async function productHasActiveProductVariations(pool, productId, transaction = null) {
     if (!productId) return false;
     const request = transaction ? transaction.request() : pool.request();
     const result = await request
         .input('productId', sql.Int, productId)
         .query(`
-            SELECT
-                (SELECT COUNT(*) FROM ProductVariations WHERE ProductID = @productId AND IsActive = 1) as PvCnt,
-                (SELECT COUNT(*) FROM InventoryProductVariations ipv
-                 INNER JOIN InventoryProducts ip ON ip.InventoryProductID = ipv.InventoryProductID
-                 WHERE ip.ProductID = @productId AND ip.IsActive = 1 AND ipv.IsActive = 1) as InvCnt
+            SELECT COUNT(*) as PvCnt
+            FROM ProductVariations
+            WHERE ProductID = @productId AND IsActive = 1
         `);
-    const row = result.recordset[0] || {};
-    return (row.PvCnt || 0) > 0 || (row.InvCnt || 0) > 0;
+    return (result.recordset[0]?.PvCnt || 0) > 0;
 }
 
 async function getInventoryVariationStockSum(pool, productId, transaction = null) {
@@ -45,6 +57,8 @@ async function getInventoryVariationStockSum(pool, productId, transaction = null
             SELECT ISNULL(SUM(${VARIATION_SELLABLE_QTY_SQL}), 0) as Total
             FROM InventoryProductVariations ipv
             INNER JOIN InventoryProducts ip ON ip.InventoryProductID = ipv.InventoryProductID
+            INNER JOIN ProductVariations pv
+                ON pv.VariationID = ipv.VariationID AND pv.ProductID = @productId AND pv.IsActive = 1
             WHERE ip.ProductID = @productId AND ip.IsActive = 1 AND ipv.IsActive = 1
         `);
     return result.recordset[0]?.Total || 0;
@@ -76,6 +90,8 @@ async function getProductVariationQuantity(pool, productId, variationId, transac
             SELECT ${VARIATION_SELLABLE_QTY_SQL} as Quantity
             FROM InventoryProductVariations ipv
             INNER JOIN InventoryProducts ip ON ip.InventoryProductID = ipv.InventoryProductID
+            INNER JOIN ProductVariations pv
+                ON pv.VariationID = ipv.VariationID AND pv.ProductID = @productId AND pv.IsActive = 1
             WHERE ip.ProductID = @productId AND ipv.VariationID = @variationId AND ipv.IsActive = 1
         `);
     if (invResult.recordset.length) {
@@ -118,42 +134,75 @@ async function loadVariationAggByProductId(pool) {
     const invAgg = await pool.request().query(`
         SELECT
             ip.ProductID,
-            COUNT(*) as VariationCount,
+            COUNT(*) as ActiveVariationCount,
             ISNULL(SUM(${VARIATION_SELLABLE_QTY_SQL}), 0) as VariationStockSum
         FROM InventoryProducts ip
         INNER JOIN InventoryProductVariations ipv
             ON ipv.InventoryProductID = ip.InventoryProductID AND ipv.IsActive = 1
+        INNER JOIN ProductVariations pv
+            ON pv.VariationID = ipv.VariationID AND pv.ProductID = ip.ProductID AND pv.IsActive = 1
         WHERE ip.IsActive = 1 AND ip.ProductID IS NOT NULL
         GROUP BY ip.ProductID
     `);
 
-    const pvAgg = await pool.request().query(`
+    const pvActiveAgg = await pool.request().query(`
         SELECT
             ProductID,
-            COUNT(*) as VariationCount,
+            COUNT(*) as ActiveVariationCount,
             ISNULL(SUM(COALESCE(Quantity, 0)), 0) as VariationStockSum
         FROM ProductVariations
         WHERE IsActive = 1
         GROUP BY ProductID
     `);
 
+    const pvAnyAgg = await pool.request().query(`
+        SELECT ProductID, COUNT(*) as AnyVariationCount
+        FROM ProductVariations
+        GROUP BY ProductID
+    `);
+
     const byProductId = new Map();
-    for (const row of pvAgg.recordset || []) {
-        byProductId.set(row.ProductID, row);
+    for (const row of pvAnyAgg.recordset || []) {
+        byProductId.set(row.ProductID, {
+            ProductID: row.ProductID,
+            AnyVariationCount: row.AnyVariationCount || 0,
+            ActiveVariationCount: 0,
+            VariationStockSum: 0
+        });
+    }
+    for (const row of pvActiveAgg.recordset || []) {
+        const existing = byProductId.get(row.ProductID) || {
+            ProductID: row.ProductID,
+            AnyVariationCount: 0,
+            ActiveVariationCount: 0,
+            VariationStockSum: 0
+        };
+        existing.ActiveVariationCount = Math.max(
+            existing.ActiveVariationCount || 0,
+            row.ActiveVariationCount || 0
+        );
+        existing.VariationStockSum = Math.max(
+            existing.VariationStockSum || 0,
+            row.VariationStockSum || 0
+        );
+        byProductId.set(row.ProductID, existing);
     }
     for (const row of invAgg.recordset || []) {
-        const existing = byProductId.get(row.ProductID);
+        const existing = byProductId.get(row.ProductID) || {
+            ProductID: row.ProductID,
+            AnyVariationCount: 0,
+            ActiveVariationCount: 0,
+            VariationStockSum: 0
+        };
         const invStock = row.VariationStockSum || 0;
-        const invCount = row.VariationCount || 0;
-        if (!existing || invStock > 0 || invCount > (existing.VariationCount || 0)) {
-            byProductId.set(row.ProductID, {
-                ProductID: row.ProductID,
-                VariationCount: Math.max(invCount, existing?.VariationCount || 0),
-                VariationStockSum: invStock > 0 ? invStock : (existing?.VariationStockSum || 0)
-            });
-        } else if (existing && invCount > 0) {
-            existing.VariationCount = Math.max(existing.VariationCount || 0, invCount);
+        existing.ActiveVariationCount = Math.max(
+            existing.ActiveVariationCount || 0,
+            row.ActiveVariationCount || 0
+        );
+        if (invStock > 0) {
+            existing.VariationStockSum = invStock;
         }
+        byProductId.set(row.ProductID, existing);
     }
     return byProductId;
 }
@@ -165,10 +214,13 @@ async function enrichProductWithVariationPolicy(pool, product) {
     if (!product) return product;
 
     const productId = await resolveCatalogProductId(pool, product);
-    const hasVariations = productId
+    const hasAnyVariations = productId
+        ? await productHasAnyCatalogVariations(pool, productId)
+        : false;
+    const hasActiveVariations = productId
         ? await productHasActiveProductVariations(pool, productId)
         : false;
-    const variationStockSum = hasVariations
+    const variationStockSum = hasAnyVariations
         ? await getProductVariationStockSum(pool, productId)
         : 0;
 
@@ -182,12 +234,12 @@ async function enrichProductWithVariationPolicy(pool, product) {
     const enriched = {
         ...product,
         productId: productId || product.productId,
-        hasVariations,
-        requiresVariationSelection: hasVariations,
+        hasVariations: hasAnyVariations,
+        requiresVariationSelection: hasActiveVariations,
         variationStockSum
     };
 
-    if (hasVariations) {
+    if (hasAnyVariations) {
         enriched.stockQuantity = 0;
         enriched.availableStock = Math.max(0, variationStockSum - pendingFromProduct);
     }
@@ -210,18 +262,19 @@ async function enrichProductsWithVariationPolicy(pool, products) {
         products.map(async (product) => {
             const productId = await resolveCatalogProductId(pool, product);
             const row = productId ? byProductId.get(productId) : null;
-            const hasVariations = (row?.VariationCount || 0) > 0;
+            const hasAnyVariations = (row?.AnyVariationCount || 0) > 0;
+            const hasActiveVariations = (row?.ActiveVariationCount || 0) > 0;
             const variationStockSum = row?.VariationStockSum || 0;
 
             const enriched = {
                 ...product,
                 productId: productId || product.productId,
-                hasVariations,
-                requiresVariationSelection: hasVariations,
+                hasVariations: hasAnyVariations,
+                requiresVariationSelection: hasActiveVariations,
                 variationStockSum
             };
 
-            if (hasVariations) {
+            if (hasAnyVariations) {
                 enriched.stockQuantity = 0;
                 let pendingQty = 0;
                 if (productId && getCatalogPendingQuantity) {
@@ -464,6 +517,7 @@ async function enrichProductDetailFromInventory(pool, product) {
 }
 
 module.exports = {
+    productHasAnyCatalogVariations,
     productHasActiveProductVariations,
     getInventoryVariationStockSum,
     getProductVariationStockSum,

@@ -1,5 +1,6 @@
 import { loadStripe } from '@stripe/stripe-js';
 import apiClient from '../../../shared/services/api/apiClient';
+import { setPendingOrderSuccessCheckout, setLastPaymentProvider } from '../utils/checkoutStorageKeys';
 
 // Initialize Stripe with your publishable key
 const stripePromise = (() => {
@@ -90,7 +91,9 @@ export const stripeService = {
 
             if (result.sessionId) {
                 console.log('Stripe checkout session created successfully! SessionID:', result.sessionId);
-                
+                setPendingOrderSuccessCheckout(result.sessionId, 'stripe');
+                setLastPaymentProvider('stripe');
+
                 // Redirect to Stripe Checkout
                 const { error } = await stripe.redirectToCheckout({
                     sessionId: result.sessionId,

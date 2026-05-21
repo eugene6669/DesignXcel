@@ -128,6 +128,12 @@ export const AuthProvider = ({ children }) => {
 
             // Legacy global keys (pre-scope)
             scopedPrefixes.forEach((key) => localStorage.removeItem(key));
+
+            localStorage.removeItem('lastPaymongoSessionId');
+            localStorage.removeItem('lastPaymentProvider');
+            if (userId) {
+                localStorage.removeItem(`lastPaymongoSessionId:${String(userId).toLowerCase()}`);
+            }
         } catch (e) {
             // Keep auth clear resilient even if localStorage parsing fails.
         }

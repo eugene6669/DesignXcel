@@ -65,7 +65,7 @@ export const extractProductIdFromPath = (path) => {
 /** Sellable units for catalog/filter (variation sum when product has options). */
 export const getSellableStock = (product) => {
   if (!product) return 0;
-  if (product.hasVariations || product.requiresVariationSelection) {
+  if (product.hasVariations) {
     if (product.availableStock != null) return Number(product.availableStock) || 0;
     if (product.variationStockSum != null) return Number(product.variationStockSum) || 0;
     return 0;
