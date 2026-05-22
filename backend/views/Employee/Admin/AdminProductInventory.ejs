@@ -508,13 +508,7 @@
             font-weight: 600;
         }
 
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
+        /* Tab panels: visibility controlled by #id.tab-content rules below */
 
         /* Stock qty alerts — number only (not full row) */
         .stock-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; font-size: 0.8em; color: #555; align-items: center; }
@@ -634,8 +628,8 @@
             align-items: center;
         }
         .qty-col { text-align: center !important; }
-        #rawMaterialsTable th:nth-child(2),
-        #rawMaterialsTable td:nth-child(2) { text-align: center !important; }
+        #rawMaterialsTable th.qty-col,
+        #rawMaterialsTable td.qty-col { text-align: center !important; }
 
         /* Products tab toolbar */
         .pi-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; align-items: center; justify-content: flex-end; }
@@ -734,6 +728,94 @@
             background: #B8860B;
             color: #1a1a1a;
         }
+        /* Create product modal — compact + mobile */
+        #addProductModal.pi-create-product-modal .modal-content {
+            max-width: min(720px, calc(100vw - 24px));
+            padding: 14px 16px;
+            margin: 12px auto;
+        }
+        #addProductModal .pi-create-form .pi-create-top {
+            display: grid;
+            grid-template-columns: 1fr 140px 1fr;
+            gap: 10px 12px;
+            align-items: start;
+        }
+        #addProductModal .pi-create-form .pi-create-top .form-group { margin-bottom: 0; }
+        #addProductModal #createProductPrice { text-align: right; }
+        #addProductModal .pi-create-form textarea { min-height: 56px; }
+        #addProductModal .pi-section { margin-top: 8px; padding: 10px; }
+        #addProductModal .pi-section h4 { margin-bottom: 4px; }
+        #addProductModal .pi-section > p { margin: 0 0 6px; font-size: 0.78em; }
+        #addProductModal #createBomBundleSelect { max-width: none; margin-bottom: 8px; padding: 6px 8px; }
+        #addProductModal .materials-section { padding: 8px; }
+        #addProductModal #createInventoryMaterialsSummary { margin-top: 6px; padding: 6px; font-size: 0.82em; }
+        #addProductModal .pi-variation-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 72px;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            background: #fff;
+        }
+        #addProductModal .pi-variation-row .pi-var-full { grid-column: 1 / -1; }
+        #addProductModal .pi-variation-row .pi-var-media {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            grid-column: 1 / -1;
+        }
+        #addProductModal .pi-variation-row label {
+            display: block;
+            font-size: 0.78em;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 3px;
+        }
+        #addProductModal .pi-variation-row input[type="text"],
+        #addProductModal .pi-variation-row input[type="number"],
+        #addProductModal .pi-variation-row input[type="file"] {
+            width: 100%;
+            padding: 5px 6px;
+            font-size: 0.85em;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        #addProductModal .pi-variation-remove {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: flex-end;
+        }
+        #addProductModal .pi-variation-remove button {
+            background: #dc3545;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            height: 30px;
+            width: 30px;
+            cursor: pointer;
+            font-size: 1.1em;
+            line-height: 1;
+        }
+        @media (max-width: 640px) {
+            #addProductModal.pi-create-product-modal .modal-content {
+                max-width: calc(100vw - 16px);
+                padding: 12px 14px;
+                margin: 8px auto;
+                max-height: 92vh;
+            }
+            #addProductModal .pi-create-form .pi-create-top {
+                grid-template-columns: 1fr;
+            }
+            #addProductModal .pi-variation-row {
+                grid-template-columns: 1fr 1fr;
+            }
+            #addProductModal .pi-variation-row .pi-var-media {
+                grid-template-columns: 1fr;
+            }
+        }
         .pi-modal-compact .pi-btn-secondary { background: #6c757d; color: #fff; }
         .pi-modal-compact .pi-btn-info { background: #007bff; color: #fff; }
         .pi-modal-compact .pi-btn-sm { padding: 5px 10px; font-size: 0.8em; }
@@ -741,8 +823,98 @@
         #productsTab > .content-area > table { font-size: 0.9em; }
         #productsTab > .content-area > table th,
         #productsTab > .content-area > table td { padding: 10px; }
-        #rawMaterialsTable { font-size: 0.88em; }
-        #rawMaterialsTable th, #rawMaterialsTable td { padding: 8px 10px; }
+        #rawMaterialsTable, #bomBundlesTable { font-size: 0.88em; }
+        #rawMaterialsTable th, #rawMaterialsTable td,
+        #bomBundlesTable th, #bomBundlesTable td { padding: 8px 10px; }
+        #bomBundlesTable { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        #bomBundlesTable th, #bomBundlesTable td { border: 1px solid #ddd; text-align: left; }
+        #bomBundlesTable th { background: #f2f2f2; }
+        .bom-intro { font-size: 0.88em; color: #555; margin: 0 0 12px 0; max-width: 720px; }
+        body.page-inventory #productsTab.tab-content,
+        body.page-inventory #rawMaterialsTab.tab-content,
+        body.page-inventory #bomBundlesTab.tab-content {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            overflow: hidden !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+        }
+        body.page-inventory #productsTab.tab-content.active,
+        body.page-inventory #rawMaterialsTab.tab-content.active,
+        body.page-inventory #bomBundlesTab.tab-content.active {
+            display: block !important;
+            visibility: visible !important;
+            height: auto !important;
+            overflow: visible !important;
+        }
+        /* BOM modal — compact, wrapping selects */
+        #bomBundleModal.bom-modal { display: none; }
+        #bomBundleModal.bom-modal[style*="display: block"] { display: block !important; }
+        .bom-modal { z-index: 1100; }
+        .bom-modal .modal-content {
+            max-width: 480px;
+            width: 92%;
+            padding: 14px 16px;
+            margin: 3% auto;
+            max-height: 88vh;
+            overflow-y: auto;
+        }
+        .bom-modal h3 { margin: 0 0 10px; font-size: 1.05em; }
+        .bom-modal h4 { margin: 12px 0 6px; font-size: 0.92em; }
+        .bom-modal .req { color: #dc3545; }
+        .bom-form-compact label { display: block; font-size: 0.78em; font-weight: 600; color: #444; margin: 8px 0 4px; }
+        .bom-form-compact label:first-of-type { margin-top: 0; }
+        .bom-form-compact input,
+        .bom-form-compact textarea { width: 100%; padding: 6px 8px; font-size: 0.88em; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; }
+        .bom-hint { font-size: 0.78em; color: #666; margin: 0 0 8px; }
+        .bom-materials-block .bom-material-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 64px 28px;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .bom-materials-block .material-select {
+            width: 100%;
+            min-width: 0;
+            padding: 6px 8px;
+            font-size: 0.82em;
+            line-height: 1.35;
+            white-space: normal;
+            word-wrap: break-word;
+            height: auto;
+            min-height: 34px;
+        }
+        .bom-materials-block .material-select option {
+            white-space: normal;
+            padding: 4px 6px;
+        }
+        .bom-materials-block .material-quantity {
+            width: 100%;
+            padding: 6px;
+            font-size: 0.88em;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .bom-materials-block .material-qty-hint {
+            grid-column: 1 / -1;
+            font-size: 0.72em;
+            color: #888;
+            margin: -4px 0 0;
+        }
+        .bom-materials-block .remove-material-btn {
+            padding: 4px 6px;
+            font-size: 0.75em;
+            background: #dc3545;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .bom-add-row-btn { margin-top: 4px; font-size: 0.82em; padding: 6px 12px; }
         .rm-modal-compact .modal-content { max-width: 420px; padding: 16px 18px; margin: 4% auto; }
         .rm-modal-compact.rm-modal-wide .modal-content { max-width: 720px; }
         .rm-modal-compact h3 { margin: 0 0 12px; font-size: 1.1em; }
@@ -878,11 +1050,12 @@
             </div>
 
             <div class="tab-navigation" role="tablist">
-                <button type="button" class="tab-button active" data-tab="products" id="tabBtnProducts">Products</button>
-                <button type="button" class="tab-button" data-tab="raw-materials" id="tabBtnRawMaterials">Raw Materials</button>
+                <button type="button" class="tab-button<%= (typeof activeTab !== 'undefined' && activeTab === 'products') || (typeof activeTab === 'undefined') ? ' active' : '' %>" data-tab="products" id="tabBtnProducts">Products</button>
+                <button type="button" class="tab-button<%= typeof activeTab !== 'undefined' && activeTab === 'raw-materials' ? ' active' : '' %>" data-tab="raw-materials" id="tabBtnRawMaterials">Raw Materials</button>
+                <button type="button" class="tab-button<%= typeof activeTab !== 'undefined' && activeTab === 'bom-bundles' ? ' active' : '' %>" data-tab="bom-bundles" id="tabBtnBomBundles">BOM Bundles</button>
             </div>
 
-            <div id="productsTab" class="tab-content active" data-search-filter="<%= (typeof listFilters !== 'undefined' && listFilters.search) ? String(listFilters.search).replace(/"/g, '&quot;') : '' %>">
+            <div id="productsTab" class="tab-content<%= (typeof activeTab === 'undefined' || activeTab === 'products') ? ' active' : '' %>" data-search-filter="<%= (typeof listFilters !== 'undefined' && listFilters.search) ? String(listFilters.search).replace(/"/g, '&quot;') : '' %>">
             <div class="content-area">
                 <% 
                     // Use allInventoryProducts directly from InventoryProducts table
@@ -979,33 +1152,26 @@
                 <% } %>
 
                 <!-- Create Product Modal -->
-                <div id="addProductModal" class="modal pi-modal-compact pi-modal-wide">
+                <div id="addProductModal" class="modal pi-modal-compact pi-create-product-modal">
                     <div class="modal-content">
                         <span class="close-button" id="closeAddModal">&times;</span>
                         <h3>Create New Product</h3>
-                        <form id="addProductForm" action="/Employee/Admin/ProductInventory/Add" method="POST" enctype="multipart/form-data">
-                            <div class="form-group">
-                                <label for="name">Product Name:</label>
-                                <input type="text" id="name" name="name" required>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="description">Description:</label>
-                                <textarea id="description" name="description" rows="4"></textarea>
-                            </div>
-
+                        <form id="addProductForm" class="pi-create-form" action="/Employee/Admin/ProductInventory/Add" method="POST" enctype="multipart/form-data">
                             <input type="hidden" id="quantity" name="quantity" value="0">
 
-                            <div class="form-group">
-                                <label for="price">Price (₱) <span style="color: #dc3545;">*</span></label>
-                                <input type="number" id="price" name="price" step="0.01" min="0.01" required placeholder="0.00" style="width: 100%; max-width: 280px; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; margin-bottom: 12px;">
-                                <small style="display: block; margin: 0 0 14px 0; color: #666;">Applies to every variation added below.</small>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="category">Category:</label>
-                                <select id="category" name="category" required style="width: 100%; max-width: 280px; padding: 8px; border: 1px solid #ced4da; border-radius: 4px;">
-                                    <option value="">Select a category</option>
+                            <div class="pi-form-grid pi-create-top">
+                                <div class="form-group">
+                                    <label for="name">Product Name <span style="color:#dc3545;">*</span></label>
+                                    <input type="text" id="name" name="name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="createProductPrice">Price (₱) <span style="color:#dc3545;">*</span></label>
+                                    <input type="text" id="createProductPrice" name="price" inputmode="decimal" autocomplete="off" required placeholder="0.00">
+                                </div>
+                                <div class="form-group">
+                                    <label for="category">Category <span style="color:#dc3545;">*</span></label>
+                                    <select id="category" name="category" required>
+                                        <option value="">Select category</option>
                                         <% if (categories && categories.length > 0) { %>
                                             <% categories.forEach(cat => { %>
                                                 <option value="<%= cat %>"><%= cat %></option>
@@ -1017,7 +1183,13 @@
                                             <option value="Partitions">Partitions</option>
                                             <option value="Others">Others</option>
                                         <% } %>
-                                </select>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="description">Description</label>
+                                <textarea id="description" name="description" rows="2" placeholder="Optional"></textarea>
                             </div>
 <div class="form-group pi-section" style="display: none;">
                                 <h4>Dimensions</h4>
@@ -1042,9 +1214,21 @@
                             </div>
                             
                             <div class="form-group pi-section">
-                                <h4>Raw Materials <span style="color:#dc3545;">*</span></h4>
-                                <p>Qty per unit when stocked. Required — initial variation quantities deduct from these materials on create.</p>
-                                <div id="createInventoryRecipeStatus" style="font-size: 0.9em; margin-bottom: 10px; color: #666;"><em>Add at least one material used per unit</em></div>
+                                <h4>BOM Bundle <span style="color:#dc3545;">*</span></h4>
+                                <p>Pick a saved recipe or add materials manually.</p>
+                                <label for="createBomBundleSelect">Bundle</label>
+                                <select id="createBomBundleSelect" name="bomBundleId">
+                                    <option value="">— Manual materials (no bundle) —</option>
+                                    <% const bundleList = typeof bomBundles !== 'undefined' && Array.isArray(bomBundles) ? bomBundles : []; %>
+                                    <% bundleList.forEach(function(b) { %>
+                                        <option value="<%= b.BomBundleID %>"><%= b.BundleCode %> — <%= b.Name %></option>
+                                    <% }); %>
+                                </select>
+                            </div>
+                            <div class="form-group pi-section">
+                                <h4>Materials <span style="color:#dc3545;">*</span></h4>
+                                <p>Qty per unit when stocked.</p>
+                                <div id="createInventoryRecipeStatus" style="font-size:0.82em;margin-bottom:8px;color:#666;"><em>Select a bundle or add materials</em></div>
                                 <div class="materials-section">
                                     <div id="createInventoryMaterialsContainer"></div>
                                     <button type="button" id="addCreateInventoryMaterialBtn" class="add-material-btn">+ Add Material</button>
@@ -1058,11 +1242,11 @@
 
 
                             <div class="form-group pi-section">
-                                <h4>Product Variations <span style="color:#dc3545;">*</span></h4>
-                                <p>At least one variation required. Each needs a <strong>main image</strong>; optional thumbnails and 3D model (GLB/GLTF).</p>
-                                <p id="createVariationTotalSummary" style="font-size: 0.9em; margin: 0 0 12px 0; color: #007bff; font-weight: 600;">Total quantity: 0</p>
+                                <h4>Variations <span style="color:#dc3545;">*</span></h4>
+                                <p>At least one. Main image required; thumbnails and 3D optional.</p>
+                                <p id="createVariationTotalSummary" style="font-size:0.85em;margin:0 0 8px;color:#007bff;font-weight:600;">Total quantity: 0</p>
                                 <div id="createProductVariationsList"></div>
-                                <button type="button" id="addCreateProductVariationBtn" style="margin-top: 8px; background: #007bff; color: white; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-size: 0.9em;">+ Add Variation</button>
+                                <button type="button" id="addCreateProductVariationBtn" class="pi-btn pi-btn-info pi-btn-sm" style="margin-top:6px;">+ Add Variation</button>
                             </div>
                             <input type="hidden" id="variationsJson" name="variationsJson" value="">
 
@@ -1289,9 +1473,26 @@
             </div>
             </div>
 
-            <%- include('partials/raw-materials-tab', { materials: typeof materials !== 'undefined' ? materials : [], units: typeof units !== 'undefined' ? units : [] }) %>
+            <%- include('partials/raw-materials-tab', { materials: typeof materials !== 'undefined' ? materials : [], units: typeof units !== 'undefined' ? units : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'products' }) %>
+            <%- include('partials/bom-bundles-tab', { bomBundles: typeof bomBundles !== 'undefined' ? bomBundles : [], materials: typeof materials !== 'undefined' ? materials : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'products' }) %>
 
         </div>
+        <script>
+        (function () {
+            var tab = <%- JSON.stringify(typeof activeTab !== 'undefined' ? activeTab : 'products') %>;
+            var panels = { products: 'productsTab', 'raw-materials': 'rawMaterialsTab', 'bom-bundles': 'bomBundlesTab' };
+            var activeId = panels[tab] || 'productsTab';
+            ['productsTab', 'rawMaterialsTab', 'bomBundlesTab'].forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) el.classList.toggle('active', id === activeId);
+            });
+            document.querySelectorAll('.tab-navigation .tab-button').forEach(function (btn) {
+                btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+            });
+        })();
+        </script>
+
+    <%- include('partials/bom-bundle-modal') %>
     </div>
 
     <!-- Variations Management Modal -->
@@ -1370,9 +1571,10 @@
         </div>
     </div>
 
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260521e" defer></script>
-    <script src="/js/Employee/Admin/product-inventory-tabs.js" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260522g" defer></script>
+    <script src="/js/Employee/Admin/product-inventory-tabs.js?v=20260522c" defer></script>
     <script src="/js/Employee/Admin/raw-materials-tab.js"></script>
+    <script src="/js/Employee/Admin/bom-bundles-tab.js?v=20260522b" defer></script>
 
     <% if (locals.error && locals.error.length > 0) { %>
     <script>
@@ -1396,6 +1598,54 @@
         });
     </script>
     <% } %>
+    <script>
+    (function () {
+        function sanitizeCreatePrice(v) {
+            v = String(v || '').replace(/,/g, '').replace(/[^\d.]/g, '');
+            var dot = v.indexOf('.');
+            if (dot !== -1) {
+                v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, '');
+                if (v.length - dot - 1 > 2) v = v.slice(0, dot + 3);
+            }
+            return v;
+        }
+        function formatCreatePrice(el) {
+            if (!el) return;
+            var v = sanitizeCreatePrice(el.value);
+            if (!v || v === '.') { el.value = v; return; }
+            if (v.endsWith('.')) v = v.slice(0, -1);
+            var n = parseFloat(v);
+            if (isFinite(n)) el.value = n.toFixed(2);
+        }
+        function wireCreateProductPrice() {
+            var el = document.getElementById('createProductPrice');
+            if (!el || el.getAttribute('data-auto-price') === '1') return;
+            el.setAttribute('data-auto-price', '1');
+            el.addEventListener('input', function () {
+                var v = sanitizeCreatePrice(el.value);
+                if (el.value !== v) el.value = v;
+            });
+            el.addEventListener('focusout', function () { formatCreatePrice(el); });
+            el.addEventListener('change', function () { formatCreatePrice(el); });
+            el.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { formatCreatePrice(el); }
+            });
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', wireCreateProductPrice);
+        } else {
+            wireCreateProductPrice();
+        }
+        var addBtn = document.getElementById('addInventoryItemBtn');
+        if (addBtn) addBtn.addEventListener('click', function () { setTimeout(wireCreateProductPrice, 0); });
+        var form = document.getElementById('addProductForm');
+        if (form) {
+            form.addEventListener('submit', function () {
+                formatCreatePrice(document.getElementById('createProductPrice'));
+            }, true);
+        }
+    })();
+    </script>
 </body>
 </html>
 

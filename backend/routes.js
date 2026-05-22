@@ -50,6 +50,15 @@ const { serializeActivityLogChanges, fetchActivityLogs } = require('./utils/acti
 const { invalidateAdminPageCache } = require('./utils/adminPageCache');
 const { resolveProductId } = require('./utils/productIdResolver');
 const { formatInventoryDate } = require('./utils/formatInventoryDate');
+const { generateRawMaterialSKU, generateBomBundleCode } = require('./utils/generateMaterialIdentifiers');
+const {
+    ensureBomBundleSchema,
+    loadActiveBomBundles,
+    loadArchivedBomBundles,
+    loadBomBundleWithMaterials,
+    saveBomBundleMaterials,
+    normalizeBundleMaterials
+} = require('./utils/bomBundleSchema');
 const returnedOrderDisplay = require('./utils/returnedOrderDisplay');
 const TransparentEncryptionService = require('./utils/transparentEncryptionService');
 // All encryption removed - using plain text storage (service is pass-through)
@@ -21494,12 +21503,15 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/api/rawmaterials', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
+            await ensureBomBundleSchema(pool);
             const result = await pool.request().query(`
                 SELECT 
                     MaterialID as id,
+                    SKU as sku,
                     Name as name,
                     QuantityAvailable as stockQuantity,
                     Unit as unit,
+                    Supplier as supplier,
                     LastUpdated as createdAt,
                     IsActive as active
                 FROM RawMaterials
@@ -21594,10 +21606,11 @@ module.exports = function (sql, pool, getStripe = null) {
                 .input('materialId', sql.Int, id)
                 .query('UPDATE RawMaterials SET IsActive = 0 WHERE MaterialID = @materialId');
 
-            res.json({ success: true, message: 'Raw material deleted successfully.' });
+            invalidateAdminPageCache('admin:');
+            res.json({ success: true, message: 'Raw material archived successfully.' });
         } catch (err) {
             console.error('Error deleting raw material:', err);
-            res.json({ success: false, message: 'Failed to delete raw material.' });
+            res.json({ success: false, message: 'Failed to archive raw material.' });
         }
     });
 
@@ -21840,6 +21853,37 @@ module.exports = function (sql, pool, getStripe = null) {
         } catch (err) {
             console.error('Error permanently deleting raw material:', err);
             res.json({ success: false, message: 'Failed to permanently delete raw material.' });
+        }
+    });
+
+    router.delete('/api/admin/archived/bom-bundles/:id/permanent', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            await ensureBomBundleSchema(pool);
+            const id = parseInt(req.params.id, 10);
+            if (!id) {
+                return res.status(400).json({ success: false, message: 'Invalid bundle ID.' });
+            }
+
+            const check = await pool.request()
+                .input('id', sql.Int, id)
+                .query('SELECT BomBundleID, Name FROM BomBundles WHERE BomBundleID = @id AND IsActive = 0');
+            if (!check.recordset.length) {
+                return res.status(404).json({ success: false, message: 'Archived BOM bundle not found.' });
+            }
+
+            await pool.request()
+                .input('id', sql.Int, id)
+                .query('DELETE FROM BomBundleMaterials WHERE BomBundleID = @id');
+            await pool.request()
+                .input('id', sql.Int, id)
+                .query('DELETE FROM BomBundles WHERE BomBundleID = @id');
+
+            invalidateAdminPageCache('admin:');
+            res.json({ success: true, message: 'BOM bundle permanently deleted.' });
+        } catch (err) {
+            console.error('Error permanently deleting BOM bundle:', err);
+            res.json({ success: false, message: 'Failed to permanently delete BOM bundle.' });
         }
     });
     router.delete('/api/admin/archived/categories/:id/permanent', isAuthenticated, async (req, res) => {
@@ -23093,7 +23137,9 @@ module.exports = function (sql, pool, getStripe = null) {
         try {
             await pool.connect();
 
-            const [productsResult, materialsResult, inventoryProductsResult, variationsResult] = await Promise.all([
+            await ensureBomBundleSchema(pool);
+
+            const [productsResult, materialsResult, inventoryProductsResult, variationsResult, bomBundlesResult] = await Promise.all([
                 pool.request().query(`
                     SELECT ProductID, Name, Description, Price, StockQuantity, Category, DateAdded, IsActive
                     FROM Products WHERE IsActive = 0 ORDER BY DateAdded DESC
@@ -23142,7 +23188,8 @@ module.exports = function (sql, pool, getStripe = null) {
                     LEFT JOIN InventoryProducts ip ON v.InventoryProductID = ip.InventoryProductID
                     WHERE v.IsActive = 0
                     ORDER BY v.UpdatedAt DESC, v.CreatedAt DESC
-                `)
+                `),
+                loadArchivedBomBundles(pool)
             ]);
 
             res.render('Employee/Admin/AdminArchived', {
@@ -23151,7 +23198,8 @@ module.exports = function (sql, pool, getStripe = null) {
                 archivedMaterials: materialsResult.recordset,
                 archivedCategories: [],
                 archivedInventoryProducts: inventoryProductsResult.recordset,
-                archivedVariations: variationsResult.recordset
+                archivedVariations: variationsResult.recordset,
+                archivedBomBundles: bomBundlesResult || []
             });
         } catch (err) {
             console.error('Error fetching archived items:', err);
@@ -23165,6 +23213,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 archivedCategories: [],
                 archivedInventoryProducts: [],
                 archivedVariations: [],
+                archivedBomBundles: [],
                 error: err.message
             });
         }
@@ -23889,7 +23938,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
             const redirectProductInventoryTab = (req, res, flashType, message) => {
                 if (flashType && message) req.flash(flashType, message);
-                const tab = req.body?.redirectTab || req.query?.tab || 'raw-materials';
+                const tab = req.body?.redirectTab || req.query?.tab || 'products';
                 return res.redirect('/Employee/Admin/ProductInventory?tab=' + encodeURIComponent(tab));
             };
 
@@ -23897,19 +23946,29 @@ module.exports = function (sql, pool, getStripe = null) {
             router.post('/Employee/Admin/RawMaterials/Add', isAuthenticated, async (req, res) => {
                 try {
                     await pool.connect();
-                    const { name, quantity, unit } = req.body;
+                    await ensureBomBundleSchema(pool);
+                    const { name, quantity, unit, supplier } = req.body;
 
-                    await pool.request()
+                    const insertResult = await pool.request()
                         .input('name', sql.NVarChar, name)
                         .input('quantity', sql.Int, quantity)
                         .input('unit', sql.NVarChar, unit)
+                        .input('supplier', sql.NVarChar, (supplier || '').trim() || null)
                         .query(`
-                            INSERT INTO RawMaterials (Name, QuantityAvailable, Unit, LastUpdated, IsActive)
-                            VALUES (@name, @quantity, @unit, GETDATE(), 1)
+                            INSERT INTO RawMaterials (Name, QuantityAvailable, Unit, Supplier, LastUpdated, IsActive)
+                            OUTPUT INSERTED.MaterialID
+                            VALUES (@name, @quantity, @unit, @supplier, GETDATE(), 1)
                         `);
 
+                    const materialId = insertResult.recordset[0].MaterialID;
+                    const sku = generateRawMaterialSKU(materialId, name);
+                    await pool.request()
+                        .input('materialId', sql.Int, materialId)
+                        .input('sku', sql.NVarChar, sku)
+                        .query('UPDATE RawMaterials SET SKU = @sku WHERE MaterialID = @materialId');
+
                     invalidateAdminPageCache('admin:');
-                    return redirectProductInventoryTab(req, res, 'success', 'Raw material added successfully!');
+                    return redirectProductInventoryTab(req, res, 'success', `Raw material added (${sku}).`);
                 } catch (err) {
                     console.error('Error adding raw material:', err);
                     return redirectProductInventoryTab(req, res, 'error', 'Failed to add raw material: ' + err.message);
@@ -23920,16 +23979,19 @@ module.exports = function (sql, pool, getStripe = null) {
             router.post('/Employee/Admin/RawMaterials/Edit', isAuthenticated, async (req, res) => {
                 try {
                     await pool.connect();
-                    const { materialid, name, quantity, unit } = req.body;
+                    await ensureBomBundleSchema(pool);
+                    const { materialid, name, quantity, unit, supplier } = req.body;
 
                     await pool.request()
                         .input('materialId', sql.Int, materialid)
                         .input('name', sql.NVarChar, name)
                         .input('quantity', sql.Int, quantity)
                         .input('unit', sql.NVarChar, unit)
+                        .input('supplier', sql.NVarChar, (supplier || '').trim() || null)
                         .query(`
                             UPDATE RawMaterials 
-                            SET Name = @name, QuantityAvailable = @quantity, Unit = @unit, LastUpdated = GETDATE()
+                            SET Name = @name, QuantityAvailable = @quantity, Unit = @unit,
+                                Supplier = @supplier, LastUpdated = GETDATE()
                             WHERE MaterialID = @materialId
                         `);
 
@@ -24031,6 +24093,161 @@ module.exports = function (sql, pool, getStripe = null) {
             });
 
             // =============================================================================
+            // BOM BUNDLE API (manufacturing recipes)
+            // =============================================================================
+
+            router.get('/api/admin/bom-bundles', isAuthenticated, async (req, res) => {
+                try {
+                    await pool.connect();
+                    const bundles = await loadActiveBomBundles(pool);
+                    res.json({ success: true, bundles });
+                } catch (err) {
+                    console.error('Error fetching BOM bundles:', err);
+                    res.status(500).json({ success: false, message: 'Failed to fetch BOM bundles.' });
+                }
+            });
+
+            router.get('/api/admin/bom-bundles/:id', isAuthenticated, async (req, res) => {
+                try {
+                    await pool.connect();
+                    const id = parseInt(req.params.id, 10);
+                    if (!id) return res.status(400).json({ success: false, message: 'Invalid bundle ID.' });
+                    const data = await loadBomBundleWithMaterials(pool, id);
+                    if (!data) return res.status(404).json({ success: false, message: 'BOM bundle not found.' });
+                    res.json({
+                        success: true,
+                        bundle: data.bundle,
+                        materials: data.materials.map((m) => ({
+                            materialId: m.MaterialID,
+                            quantityRequired: m.QuantityRequired,
+                            materialName: m.MaterialName,
+                            materialSku: m.MaterialSKU,
+                            unit: m.Unit,
+                            stockQuantity: m.QuantityAvailable
+                        }))
+                    });
+                } catch (err) {
+                    console.error('Error fetching BOM bundle:', err);
+                    res.status(500).json({ success: false, message: 'Failed to fetch BOM bundle.' });
+                }
+            });
+
+            router.post('/api/admin/bom-bundles', isAuthenticated, async (req, res) => {
+                try {
+                    await pool.connect();
+                    await ensureBomBundleSchema(pool);
+                    const { name, description, materials } = req.body;
+                    if (!name || !String(name).trim()) {
+                        return res.status(400).json({ success: false, message: 'Bundle name is required.' });
+                    }
+                    const validMaterials = normalizeBundleMaterials(materials);
+                    if (validMaterials.length === 0) {
+                        return res.status(400).json({ success: false, message: 'Add at least one material with quantity.' });
+                    }
+
+                    const transaction = new sql.Transaction(pool);
+                    await transaction.begin();
+                    try {
+                        const insertResult = await transaction.request()
+                            .input('name', sql.NVarChar, String(name).trim())
+                            .input('description', sql.NVarChar, (description || '').trim() || null)
+                            .input('userId', sql.Int, req.session.user?.id || null)
+                            .query(`
+                                INSERT INTO BomBundles (Name, Description, BundleCode, CreatedBy, IsActive)
+                                VALUES (@name, @description, 'TEMP', @userId, 1);
+                                SELECT SCOPE_IDENTITY() AS BomBundleID;
+                            `);
+                        const bundleId = insertResult.recordset[0].BomBundleID;
+                        const bundleCode = generateBomBundleCode(bundleId, name);
+                        await transaction.request()
+                            .input('id', sql.Int, bundleId)
+                            .input('code', sql.NVarChar, bundleCode)
+                            .query('UPDATE BomBundles SET BundleCode = @code WHERE BomBundleID = @id');
+
+                        await saveBomBundleMaterials(transaction, bundleId, validMaterials);
+                        await transaction.commit();
+                        invalidateAdminPageCache('admin:');
+                        res.json({
+                            success: true,
+                            message: 'BOM bundle created.',
+                            bomBundleId: bundleId,
+                            bundleCode
+                        });
+                    } catch (txErr) {
+                        await transaction.rollback();
+                        throw txErr;
+                    }
+                } catch (err) {
+                    console.error('Error creating BOM bundle:', err);
+                    res.status(500).json({ success: false, message: 'Failed to create BOM bundle: ' + err.message });
+                }
+            });
+
+            router.put('/api/admin/bom-bundles/:id', isAuthenticated, async (req, res) => {
+                try {
+                    await pool.connect();
+                    await ensureBomBundleSchema(pool);
+                    const id = parseInt(req.params.id, 10);
+                    const { name, description, materials } = req.body;
+                    if (!id) return res.status(400).json({ success: false, message: 'Invalid bundle ID.' });
+                    if (!name || !String(name).trim()) {
+                        return res.status(400).json({ success: false, message: 'Bundle name is required.' });
+                    }
+                    const validMaterials = normalizeBundleMaterials(materials);
+                    if (validMaterials.length === 0) {
+                        return res.status(400).json({ success: false, message: 'Add at least one material with quantity.' });
+                    }
+
+                    const transaction = new sql.Transaction(pool);
+                    await transaction.begin();
+                    try {
+                        await transaction.request()
+                            .input('id', sql.Int, id)
+                            .input('name', sql.NVarChar, String(name).trim())
+                            .input('description', sql.NVarChar, (description || '').trim() || null)
+                            .input('userId', sql.Int, req.session.user?.id || null)
+                            .query(`
+                                UPDATE BomBundles
+                                SET Name = @name, Description = @description,
+                                    UpdatedBy = @userId, DateUpdated = GETDATE()
+                                WHERE BomBundleID = @id AND IsActive = 1
+                            `);
+                        await saveBomBundleMaterials(transaction, id, validMaterials);
+                        await transaction.commit();
+                        invalidateAdminPageCache('admin:');
+                        res.json({ success: true, message: 'BOM bundle updated.' });
+                    } catch (txErr) {
+                        await transaction.rollback();
+                        throw txErr;
+                    }
+                } catch (err) {
+                    console.error('Error updating BOM bundle:', err);
+                    res.status(500).json({ success: false, message: 'Failed to update BOM bundle: ' + err.message });
+                }
+            });
+
+            router.delete('/api/admin/bom-bundles/:id', isAuthenticated, async (req, res) => {
+                try {
+                    await pool.connect();
+                    const id = parseInt(req.params.id, 10);
+                    if (!id) return res.status(400).json({ success: false, message: 'Invalid bundle ID.' });
+                    await pool.request()
+                        .input('id', sql.Int, id)
+                        .input('userId', sql.Int, req.session.user?.id || null)
+                        .query(`
+                            UPDATE BomBundles
+                            SET IsActive = 0, UpdatedBy = @userId, DateUpdated = GETDATE()
+                            WHERE BomBundleID = @id
+                        `);
+                    invalidateAdminPageCache('admin:');
+                    res.json({ success: true, message: 'BOM bundle archived.' });
+                } catch (err) {
+                    console.error('Error archiving BOM bundle:', err);
+                    res.status(500).json({ success: false, message: 'Failed to archive BOM bundle.' });
+                }
+            });
+
+            // =============================================================================
             // PRODUCT INVENTORY ROUTES
             // =============================================================================
 
@@ -24039,6 +24256,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 try {
                     await pool.connect();
                     await ensureVariationMediaColumns(pool);
+                    await ensureBomBundleSchema(pool);
 
                     const listOptions = {
                         page: parseInt(req.query.page, 10) || 1,
@@ -24061,6 +24279,10 @@ module.exports = function (sql, pool, getStripe = null) {
                         return res.redirect('/Employee/Admin/ProductInventory?' + q.toString());
                     }
 
+                    const tab = req.query.tab;
+                    const activeTab = tab === 'raw-materials' ? 'raw-materials'
+                        : tab === 'bom-bundles' ? 'bom-bundles' : 'products';
+
                     res.render('Employee/Admin/AdminProductInventory', {
                         user: req.session.user,
                         inventoryItems: pageData.inventoryItems,
@@ -24069,10 +24291,11 @@ module.exports = function (sql, pool, getStripe = null) {
                         allInventoryProducts: pageData.allInventoryProducts,
                         materials: pageData.materials,
                         units: pageData.units,
+                        bomBundles: pageData.bomBundles || [],
                         pagination: pageData.pagination,
                         listFilters: pageData.listFilters,
                         inventoryProductIdFocus: pageData.inventoryProductIdFocus,
-                        activeTab: req.query.tab === 'raw-materials' ? 'raw-materials' : 'products'
+                        activeTab
                     });
                 } catch (err) {
                     console.error('Error in ProductInventory route:', err);
@@ -24088,7 +24311,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         pagination: { page: 1, limit: 25, totalCount: 0, totalPages: 1 },
                         listFilters: { search: '', category: '' },
                         inventoryProductIdFocus: null,
-                        activeTab: req.query.tab === 'raw-materials' ? 'raw-materials' : 'products'
+                        activeTab: 'products',
+                        bomBundles: []
                     });
                 }
             });
@@ -24124,7 +24348,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 try {
                     await pool.connect();
                     await ensureVariationMediaColumns(pool);
-                    const { name, description, price, category, length, width, height, weight, dimensions, requiredMaterials, quantity, variationsJson } = req.body;
+                    const { name, description, price, category, length, width, height, weight, dimensions, requiredMaterials, quantity, variationsJson, bomBundleId } = req.body;
 
                     console.log('ProductInventory/Add - Received data:', {
                         name, description, price, category, quantity,
@@ -24170,13 +24394,22 @@ module.exports = function (sql, pool, getStripe = null) {
                             return respondError('Invalid recipe materials data.');
                         }
                     }
-                    const validMaterials = (Array.isArray(materialsData) ? materialsData : []).filter((m) => {
+                    let validMaterials = (Array.isArray(materialsData) ? materialsData : []).filter((m) => {
                         const mid = parseInt(m.materialId || m.MaterialID, 10);
                         const qty = parseInt(m.quantityRequired || m.QuantityRequired, 10);
                         return mid && qty > 0;
                     });
+                    if (validMaterials.length === 0 && bomBundleId) {
+                        const bundleData = await loadBomBundleWithMaterials(pool, parseInt(bomBundleId, 10));
+                        if (bundleData && bundleData.materials.length) {
+                            validMaterials = bundleData.materials.map((m) => ({
+                                materialId: m.MaterialID,
+                                quantityRequired: m.QuantityRequired
+                            }));
+                        }
+                    }
                     if (validMaterials.length === 0) {
-                        return respondError('At least one raw material with quantity per unit is required.');
+                        return respondError('Select a BOM bundle or add at least one raw material with quantity per unit.');
                     }
 
                     const catalogPrice = parentPrice;
@@ -32511,6 +32744,51 @@ module.exports = function (sql, pool, getStripe = null) {
         } catch (err) {
             console.error('Error reactivating raw material:', err);
             req.flash('error', 'Failed to reactivate raw material. Please try again.');
+            res.redirect('/Employee/Admin/Archived');
+        }
+    });
+
+    router.post('/Employee/Admin/Archived/ReactivateBomBundle/:id', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            await ensureBomBundleSchema(pool);
+
+            const bundleId = parseInt(req.params.id, 10);
+            if (!bundleId) {
+                req.flash('error', 'Invalid BOM bundle ID.');
+                return res.redirect('/Employee/Admin/Archived');
+            }
+
+            const checkResult = await pool.request()
+                .input('id', sql.Int, bundleId)
+                .query('SELECT BomBundleID, Name, IsActive FROM BomBundles WHERE BomBundleID = @id');
+
+            if (checkResult.recordset.length === 0) {
+                req.flash('error', 'BOM bundle not found.');
+                return res.redirect('/Employee/Admin/Archived');
+            }
+
+            const bundle = checkResult.recordset[0];
+            if (bundle.IsActive === 1) {
+                req.flash('error', 'BOM bundle is already active.');
+                return res.redirect('/Employee/Admin/Archived');
+            }
+
+            await pool.request()
+                .input('id', sql.Int, bundleId)
+                .input('userId', sql.Int, req.session.user?.id || null)
+                .query(`
+                    UPDATE BomBundles
+                    SET IsActive = 1, UpdatedBy = @userId, DateUpdated = GETDATE()
+                    WHERE BomBundleID = @id
+                `);
+
+            invalidateAdminPageCache('admin:');
+            req.flash('success', `BOM bundle "${bundle.Name}" has been reactivated.`);
+            res.redirect('/Employee/Admin/Archived');
+        } catch (err) {
+            console.error('Error reactivating BOM bundle:', err);
+            req.flash('error', 'Failed to reactivate BOM bundle. Please try again.');
             res.redirect('/Employee/Admin/Archived');
         }
     });

@@ -82,11 +82,22 @@ async function attachOrderItemsBatch(pool, orders) {
     return orders;
 }
 
+/** First variation SKU (parent InventoryProducts rows do not carry SKU). */
+const INVENTORY_PRODUCT_SKU_SQL = `(
+    SELECT TOP 1 ivSku.SKU
+    FROM InventoryProductVariations ivSku
+    WHERE ivSku.InventoryProductID = ip.InventoryProductID
+      AND ivSku.IsActive = 1
+      AND ivSku.SKU IS NOT NULL
+      AND LTRIM(RTRIM(ivSku.SKU)) <> ''
+    ORDER BY ivSku.VariationID
+)`;
+
 const INVENTORY_PRODUCT_LIST_CORE = `
     SELECT
         ip.InventoryProductID,
         ip.Name as InventoryProductName,
-        ip.SKU as InventoryProductSKU,
+        ${INVENTORY_PRODUCT_SKU_SQL} as InventoryProductSKU,
         ip.Category as InventoryProductCategory,
         ip.Price as InventoryProductPrice,
         COALESCE(
@@ -188,7 +199,6 @@ function applyInventoryListFilters(request, filters = {}) {
         request.input('search', sql.NVarChar, `%${search}%`);
         clause += ` AND (
             ip.Name LIKE @search
-            OR ip.SKU LIKE @search
             OR EXISTS (
                 SELECT 1
                 FROM InventoryProductVariations iv
@@ -313,10 +323,13 @@ async function loadProductInventoryPageData(pool, options = {}) {
         }
     }
 
-    const [materials, units, categories, totalCount, pageResult] = await Promise.all([
+    const { ensureBomBundleSchema, loadActiveBomBundles } = require('./bomBundleSchema');
+    await ensureBomBundleSchema(pool);
+
+    const [materials, units, categories, totalCount, pageResult, bomBundles] = await Promise.all([
         cacheLoad('admin:rawMaterials', () =>
             pool.request().query(`
-                SELECT MaterialID, Name, QuantityAvailable, Unit, LastUpdated
+                SELECT MaterialID, SKU, Name, QuantityAvailable, Unit, Supplier, LastUpdated
                 FROM RawMaterials WHERE IsActive = 1 ORDER BY Name
             `).then((r) => r.recordset || [])
         ),
@@ -335,7 +348,8 @@ async function loadProductInventoryPageData(pool, options = {}) {
             `).then((r) => r.recordset.map((row) => row.Category))
         ),
         countInventoryProducts(pool, filters),
-        fetchInventoryProductsPage(pool, filters)
+        fetchInventoryProductsPage(pool, filters),
+        loadActiveBomBundles(pool)
     ]);
 
     const totalPages = Math.max(1, Math.ceil(totalCount / pageResult.limit));
@@ -358,7 +372,8 @@ async function loadProductInventoryPageData(pool, options = {}) {
             search: filters.search,
             category: filters.category
         },
-        inventoryProductIdFocus: focusId || null
+        inventoryProductIdFocus: focusId || null,
+        bomBundles: bomBundles || []
     };
 }
 
@@ -425,12 +440,16 @@ async function fetchInventoryProductSummary(pool, inventoryProductId) {
 }
 
 async function fetchActiveRawMaterialsList(pool) {
+    const { ensureBomBundleSchema } = require('./bomBundleSchema');
+    await ensureBomBundleSchema(pool);
     const result = await pool.request().query(`
         SELECT
             MaterialID as id,
+            SKU as sku,
             Name as name,
             QuantityAvailable as stockQuantity,
             Unit as unit,
+            Supplier as supplier,
             LastUpdated as createdAt,
             IsActive as active
         FROM RawMaterials

@@ -118,9 +118,13 @@
         document.querySelectorAll('#rawMaterialsTab .edit-material-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 document.getElementById('rmEditMaterialID').value = btn.getAttribute('data-id');
+                const skuEl = document.getElementById('rmEditSku');
+                if (skuEl) skuEl.value = btn.getAttribute('data-sku') || '';
                 document.getElementById('rmEditMaterialName').value = btn.getAttribute('data-name');
                 document.getElementById('rmEditQuantity').value = btn.getAttribute('data-quantity');
                 document.getElementById('rmEditUnit').value = btn.getAttribute('data-unit');
+                const supplierEl = document.getElementById('rmEditSupplier');
+                if (supplierEl) supplierEl.value = btn.getAttribute('data-supplier') || '';
                 openModal('rmEditMaterialModal');
             });
         });
@@ -283,11 +287,58 @@
         }
     }
 
+    function removeMaterialRow(materialId) {
+        const row = document.querySelector('#rawMaterialsTable tr[data-material-id="' + materialId + '"]');
+        if (row) row.remove();
+        const tbody = document.querySelector('#rawMaterialsTable tbody');
+        if (tbody && !tbody.querySelector('tr')) {
+            const table = document.getElementById('rawMaterialsTable');
+            if (table) {
+                const empty = document.createElement('p');
+                empty.style.cssText = 'color:#666;font-size:0.9em;';
+                empty.innerHTML = 'No raw materials yet. Use <strong>Quick Add Common</strong> or <strong>Add Material</strong>.';
+                table.replaceWith(empty);
+            }
+        }
+        document.dispatchEvent(new CustomEvent('rawMaterialArchived', { detail: { materialId: materialId } }));
+    }
+
+    function initArchiveButtons() {
+        document.querySelectorAll('#rawMaterialsTab .archive-material-btn').forEach(function (btn) {
+            btn.addEventListener('click', async function () {
+                const materialId = btn.getAttribute('data-id');
+                const materialName = btn.getAttribute('data-name') || 'this material';
+                if (!materialId) return;
+                if (!confirm('Archive raw material "' + materialName + '"? You can restore it from Archived.')) return;
+
+                btn.disabled = true;
+                try {
+                    const res = await fetch('/api/rawmaterials/' + materialId, {
+                        method: 'DELETE',
+                        credentials: 'include'
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        popup('"' + materialName + '" archived. Restore it from the Archived page.');
+                        removeMaterialRow(materialId);
+                    } else {
+                        popup(data.message || 'Failed to archive material.', true);
+                        btn.disabled = false;
+                    }
+                } catch (e) {
+                    popup('Failed to archive material.', true);
+                    btn.disabled = false;
+                }
+            });
+        });
+    }
+
     function init() {
         if (!document.getElementById('rawMaterialsTab')) return;
         initAddEditModals();
         initQuickAdd();
         initManageUnits();
+        initArchiveButtons();
     }
 
     if (document.readyState === 'loading') {

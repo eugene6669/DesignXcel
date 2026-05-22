@@ -2053,7 +2053,7 @@ function getManilaTime() {
 // Database connection pool
 const pool = new sql.ConnectionPool(dbConfig);
 const poolConnect = pool.connect()
-    .then(() => {
+    .then(async () => {
         console.log('✅ Connected to MSSQL database successfully');
         console.log('Database connection details:', {
             server: dbConfig.server,
@@ -2061,6 +2061,12 @@ const poolConnect = pool.connect()
             user: dbConfig.user,
             hasPassword: !!dbConfig.password
         });
+        try {
+            const { ensureBomBundleSchema } = require('./utils/bomBundleSchema');
+            await ensureBomBundleSchema(pool);
+        } catch (schemaErr) {
+            console.error('⚠️ BOM/RawMaterials schema bootstrap failed (will retry on first admin request):', schemaErr.message);
+        }
     })
     .catch(err => {
         console.error('❌ Database Connection Failed! Bad Config: ', err);

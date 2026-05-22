@@ -264,6 +264,42 @@
                     </table>
                 </div>
                 <div class="archived-section">
+                    <h3>Archived BOM Bundles</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Code</th>
+                                <th>Name</th>
+                                <th>Materials</th>
+                                <th>Last Updated</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (archivedBomBundles && archivedBomBundles.length > 0) { %>
+                                <% archivedBomBundles.forEach(function(bundle) { %>
+                                    <tr>
+                                        <td><code style="font-size:0.85em;"><%= bundle.BundleCode || '—' %></code></td>
+                                        <td><%= bundle.Name %></td>
+                                        <td><%= bundle.MaterialCount || 0 %></td>
+                                        <td><%= bundle.DateUpdated ? new Date(bundle.DateUpdated).toLocaleDateString() : (bundle.DateAdded ? new Date(bundle.DateAdded).toLocaleDateString() : 'N/A') %></td>
+                                        <td>
+                                            <div class="archived-actions">
+                                                <form action="/Employee/Admin/Archived/ReactivateBomBundle/<%= bundle.BomBundleID %>" method="POST" style="display:inline;">
+                                                    <button type="submit" class="reactivate-btn">Reactivate</button>
+                                                </form>
+                                                <button type="button" class="delete-btn" data-id="<%= bundle.BomBundleID %>" data-type="bom-bundle" data-name="<%= bundle.Name %>">Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <% }); %>
+                            <% } else { %>
+                                <tr><td colspan="5" class="empty-table-message">No archived BOM bundles found.</td></tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="archived-section">
                     <h3>Archived Product Inventory</h3>
                     <table>
                         <thead>
@@ -464,6 +500,8 @@
                 reactivateType = 'product';
             } else if (action.includes('ReactivateMaterial')) {
                 reactivateType = 'material';
+            } else if (action.includes('ReactivateBomBundle')) {
+                reactivateType = 'BOM bundle';
             } else {
                 reactivateType = 'item';
             }
@@ -536,6 +574,8 @@
                 endpoint = `/api/admin/archived/inventory-products/${deleteItemId}/permanent`;
             } else if (deleteItemType === 'variation') {
                 endpoint = `/api/admin/inventory-product-variations/delete-permanent/${deleteItemId}`;
+            } else if (deleteItemType === 'bom-bundle') {
+                endpoint = `/api/admin/archived/bom-bundles/${deleteItemId}/permanent`;
             } else {
                 endpoint = `/api/admin/archived/${deleteItemType}s/${deleteItemId}/permanent`;
             }
@@ -558,6 +598,7 @@
                 deleteModal.style.display = 'none';
                 const itemTypeName = deleteItemType === 'product' ? 'Product' : 
                                     deleteItemType === 'material' ? 'Material' : 
+                                    deleteItemType === 'bom-bundle' ? 'BOM Bundle' :
                                     deleteItemType === 'inventory-product' ? 'Product Inventory' : 'Item';
                 showSuccessPopup(`${itemTypeName} deleted successfully!`);
                 

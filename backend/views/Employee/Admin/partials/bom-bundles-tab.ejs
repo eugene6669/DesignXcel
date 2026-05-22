@@ -1,0 +1,52 @@
+<div id="bomBundlesTab" class="tab-content<%= typeof activeTab !== 'undefined' && activeTab === 'bom-bundles' ? ' active' : '' %>">
+    <div class="content-area">
+        <p class="bom-intro">Reusable manufacturing recipes (Bill of Materials). Products can select a bundle when creating stock.</p>
+        <div class="rm-toolbar">
+            <button type="button" id="bomAddBundleBtn" class="add-material-btn">+ Create BOM Bundle</button>
+        </div>
+
+        <% const bundles = typeof bomBundles !== 'undefined' && Array.isArray(bomBundles) ? bomBundles : []; %>
+        <% if (bundles.length > 0) { %>
+            <table id="bomBundlesTable">
+                <thead>
+                    <tr>
+                        <th>Bundle Code</th>
+                        <th>Bundle Name</th>
+                        <th class="qty-col">Materials</th>
+                        <th>Created</th>
+                        <th style="width:100px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% bundles.forEach(function(b) { %>
+                        <tr data-bundle-id="<%= b.BomBundleID %>">
+                            <td><code><%= b.BundleCode || '—' %></code></td>
+                            <td><%= b.Name %></td>
+                            <td class="qty-col"><%= b.MaterialCount || 0 %></td>
+                            <td><%= b.DateAdded ? new Date(b.DateAdded).toLocaleDateString() : '—' %></td>
+                            <td class="rm-actions-cell">
+                                <button type="button" class="edit-bom-bundle-btn edit-material-btn" title="Edit"
+                                    data-id="<%= b.BomBundleID %>"
+                                    data-name="<%= (b.Name || '').replace(/"/g, '&quot;') %>"
+                                    data-code="<%= b.BundleCode || '' %>"
+                                    data-description="<%= (b.Description || '').replace(/"/g, '&quot;') %>">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 20h9"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 3.5a2.121 2.121 0 113 3L7 19 21l1.5-4L16.5 3.5z"/></svg>
+                                </button>
+                                <button type="button" class="delete-bom-bundle-btn delete-material-btn" title="Archive"
+                                    data-id="<%= b.BomBundleID %>"
+                                    data-name="<%= (b.Name || '').replace(/"/g, '&quot;') %>">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                                </button>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        <% } else { %>
+            <p style="color:#666;font-size:0.9em;">No BOM bundles yet. Create one to reuse material recipes across products.</p>
+        <% } %>
+    </div>
+</div>
+<script type="application/json" id="bomRawMaterialsJson"><%- JSON.stringify((typeof materials !== 'undefined' ? materials : []).map(function(m) {
+    return { id: m.MaterialID, sku: m.SKU, name: m.Name, unit: m.Unit, stockQuantity: m.QuantityAvailable };
+})) %></script>

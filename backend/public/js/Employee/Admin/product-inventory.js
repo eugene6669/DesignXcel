@@ -770,18 +770,18 @@ const urlParams = new URLSearchParams(window.location.search);
         const closeAddModal = document.getElementById('closeAddModal');
         const cancelAddProduct = document.getElementById('cancelAddProduct');
 
+        bindCreateProductPriceInput();
+
         if (addInventoryItemBtn && addProductModal) {
             addInventoryItemBtn.addEventListener('click', () => {
                 document.getElementById('addProductForm')?.reset();
+                resetCreateProductPrice();
                 resetCreateProductVariations();
+                resetCreateBomBundleSelect();
                 resetCreateInventoryMaterials();
                 const createVarList = document.getElementById('createProductVariationsList');
                 if (createVarList) createVarList.appendChild(buildCreateProductVariationRow());
                 updateCreateVariationTotalSummary();
-                const createMatContainer = document.getElementById('createInventoryMaterialsContainer');
-                if (createMatContainer && allRawMaterials.length > 0) {
-                    createMatContainer.appendChild(createCreateInventoryMaterialRow());
-                }
                 addProductModal.style.display = 'block';
             });
         }
@@ -789,7 +789,9 @@ const urlParams = new URLSearchParams(window.location.search);
         if (closeAddModal) {
             closeAddModal.addEventListener('click', () => {
                 if (addProductModal) addProductModal.style.display = 'none';
+                resetCreateProductPrice();
                 resetCreateProductVariations();
+                resetCreateBomBundleSelect();
                 resetCreateInventoryMaterials();
 });
         }
@@ -797,7 +799,9 @@ const urlParams = new URLSearchParams(window.location.search);
         if (cancelAddProduct) {
             cancelAddProduct.addEventListener('click', () => {
                 if (addProductModal) addProductModal.style.display = 'none';
+                resetCreateProductPrice();
                 resetCreateProductVariations();
+                resetCreateBomBundleSelect();
                 resetCreateInventoryMaterials();
 });
         }
@@ -849,35 +853,36 @@ const urlParams = new URLSearchParams(window.location.search);
 
         function buildCreateProductVariationRow() {
             const row = document.createElement('div');
-            row.className = 'create-product-variation-row';
-                        row.style.cssText = 'display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; align-items: start; margin-bottom: 14px; padding: 12px; border: 1px solid #e9ecef; border-radius: 6px; background: #fff;';
+            row.className = 'create-product-variation-row pi-variation-row';
             row.innerHTML = `
-                <div style="grid-column: span 2;">
-                    <label style="font-size: 0.85em;">Variation Name</label>
-                    <input type="text" class="create-variation-name" required placeholder="e.g. Red" style="width: 100%; padding: 6px; border: 1px solid #ced4da; border-radius: 4px;">
+                <div>
+                    <label>Variation Name</label>
+                    <input type="text" class="create-variation-name" required placeholder="e.g. Red">
                 </div>
                 <div>
-                    <label style="font-size: 0.85em;">Color</label>
-                    <input type="text" class="create-variation-color" placeholder="e.g. Red" style="width: 100%; padding: 6px; border: 1px solid #ced4da; border-radius: 4px;">
+                    <label>Color</label>
+                    <input type="text" class="create-variation-color" placeholder="Optional">
                 </div>
                 <div>
-                    <label style="font-size: 0.85em;">Quantity</label>
-                    <input type="number" class="create-variation-quantity" min="1" value="1" required style="width: 100%; padding: 6px; border: 1px solid #ced4da; border-radius: 4px;">
+                    <label>Qty</label>
+                    <input type="number" class="create-variation-quantity" min="1" value="1" required>
                 </div>
-                <div style="grid-column: span 2;">
-                    <label style="font-size: 0.85em;">Main Image</label>
-                    <input type="file" class="create-variation-main-image variation-main-image" accept="image/*" style="width: 100%; font-size: 0.8em;">
+                <div class="pi-var-media">
+                    <div>
+                        <label>Main Image</label>
+                        <input type="file" class="create-variation-main-image variation-main-image" accept="image/*">
+                    </div>
+                    <div>
+                        <label>Thumbnails (max 4)</label>
+                        <input type="file" class="create-variation-thumbnails variation-thumbnails" accept="image/*" multiple>
+                    </div>
                 </div>
-                <div style="grid-column: span 2;">
-                    <label style="font-size: 0.85em;">Thumbnails (up to 4)</label>
-                    <input type="file" class="create-variation-thumbnails variation-thumbnails" accept="image/*" multiple style="width: 100%; font-size: 0.8em;">
+                <div class="pi-var-full">
+                    <label>3D Model (GLB/GLTF)</label>
+                    <input type="file" class="create-variation-model3d variation-model3d" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
                 </div>
-                <div style="grid-column: span 3;">
-                    <label style="font-size: 0.85em;">3D Model (GLB/GLTF)</label>
-                    <input type="file" class="create-variation-model3d variation-model3d" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" style="width: 100%; font-size: 0.8em;">
-                </div>
-                <div style="display:flex;align-items:end;justify-content:flex-end;">
-                    <button type="button" class="remove-create-variation-btn" title="Remove" style="background: #dc3545; color: white; border: none; border-radius: 4px; height: 34px; width: 34px; cursor: pointer;">×</button>
+                <div class="pi-variation-remove">
+                    <button type="button" class="remove-create-variation-btn" title="Remove">×</button>
                 </div>
             `;
             row.querySelector('.remove-create-variation-btn').addEventListener('click', () => {
@@ -895,8 +900,57 @@ const urlParams = new URLSearchParams(window.location.search);
             summary.textContent = 'Total quantity: ' + total;
         }
 
+        function sanitizeCreateProductPriceRaw(str) {
+            let v = String(str || '').replace(/[^\d.]/g, '');
+            const dot = v.indexOf('.');
+            if (dot !== -1) {
+                v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, '');
+                const dec = v.slice(dot + 1);
+                if (dec.length > 2) v = v.slice(0, dot + 3);
+            }
+            return v;
+        }
+
+        function formatCreateProductPriceAuto(el) {
+            if (!el) return;
+            let v = sanitizeCreateProductPriceRaw(el.value);
+            if (!v || v === '.') {
+                el.value = v;
+                return;
+            }
+            if (v.endsWith('.')) v = v.slice(0, -1);
+            const num = parseFloat(v);
+            if (Number.isFinite(num)) el.value = num.toFixed(2);
+        }
+
+        function bindCreateProductPriceInput() {
+            const el = document.getElementById('createProductPrice');
+            if (!el || el.dataset.priceBound === '1') return;
+            el.dataset.priceBound = '1';
+            el.addEventListener('input', function () {
+                const v = sanitizeCreateProductPriceRaw(el.value);
+                if (el.value !== v) el.value = v;
+            });
+            el.addEventListener('focusout', function () { formatCreateProductPriceAuto(el); });
+            el.addEventListener('change', function () { formatCreateProductPriceAuto(el); });
+            el.addEventListener('paste', function (e) {
+                e.preventDefault();
+                const text = (e.clipboardData || window.clipboardData).getData('text') || '';
+                el.value = sanitizeCreateProductPriceRaw(text);
+                formatCreateProductPriceAuto(el);
+            });
+        }
+
+        function resetCreateProductPrice() {
+            const el = document.getElementById('createProductPrice');
+            if (el) el.value = '';
+        }
+
         function getCreateProductUnitPrice() {
-            const priceVal = parseFloat(document.getElementById('price')?.value);
+            const el = document.getElementById('createProductPrice');
+            if (!el) return null;
+            formatCreateProductPriceAuto(el);
+            const priceVal = parseFloat(el.value);
             return (!Number.isNaN(priceVal) && priceVal > 0) ? priceVal : null;
         }
 
@@ -988,6 +1042,14 @@ const urlParams = new URLSearchParams(window.location.search);
 
         let allRawMaterials = [];
 
+        document.addEventListener('rawMaterialArchived', function (e) {
+            const id = e.detail && e.detail.materialId;
+            if (!id) return;
+            allRawMaterials = allRawMaterials.filter(function (m) {
+                return String(m.id) !== String(id);
+            });
+        });
+
         async function fetchRawMaterialsForInventory() {
             try {
                 const response = await fetch('/api/rawmaterials', {
@@ -1011,7 +1073,52 @@ const urlParams = new URLSearchParams(window.location.search);
         }
 
         function formatMaterialOptionLabel(material) {
-            return material.name + ' (stock: ' + getMaterialStockQty(material) + ')';
+            const skuPart = material.sku ? material.sku + ' — ' : '';
+            return skuPart + material.name + ' (stock: ' + getMaterialStockQty(material) + ')';
+        }
+
+        async function applyBomBundleToCreateForm(bundleId) {
+            const container = document.getElementById('createInventoryMaterialsContainer');
+            if (!container) return;
+            resetCreateInventoryMaterials();
+            if (!bundleId) {
+                if (allRawMaterials.length > 0) {
+                    container.appendChild(createCreateInventoryMaterialRow());
+                }
+                updateCreateInventoryMaterialsSummary();
+                return;
+            }
+            try {
+                const res = await fetch('/api/admin/bom-bundles/' + bundleId, { credentials: 'include' });
+                const data = await res.json();
+                if (!data.success || !data.materials || !data.materials.length) {
+                    showCustomPopup(data.message || 'Bundle has no materials.', true);
+                    return;
+                }
+                data.materials.forEach(function (m) {
+                    container.appendChild(createCreateInventoryMaterialRow(m.materialId, m.quantityRequired));
+                });
+                const statusEl = document.getElementById('createInventoryRecipeStatus');
+                if (statusEl && data.bundle) {
+                    statusEl.innerHTML = '<span style="color:#155724;">Loaded from bundle <strong>' +
+                        (data.bundle.BundleCode || '') + '</strong></span>';
+                }
+                updateCreateInventoryMaterialsSummary();
+            } catch (err) {
+                showCustomPopup('Failed to load BOM bundle.', true);
+            }
+        }
+
+        function resetCreateBomBundleSelect() {
+            const sel = document.getElementById('createBomBundleSelect');
+            if (sel) sel.value = '';
+        }
+
+        const createBomBundleSelect = document.getElementById('createBomBundleSelect');
+        if (createBomBundleSelect) {
+            createBomBundleSelect.addEventListener('change', function () {
+                applyBomBundleToCreateForm(this.value);
+            });
         }
 
         function validateRecipeMaterialsStock(recipeMaterials, unitsToStock) {
@@ -1304,6 +1411,8 @@ const urlParams = new URLSearchParams(window.location.search);
                     showCustomPopup('Enter a product price greater than zero before creating the product.', true);
                     return;
                 }
+                const priceEl = document.getElementById('createProductPrice');
+                if (priceEl) priceEl.value = unitPrice.toFixed(2);
                 const variations = collectCreateProductVariations();
                 if (!variations.length) {
                     showCustomPopup('Add at least one variation with name and quantity before creating the product.', true);
@@ -1324,7 +1433,7 @@ const urlParams = new URLSearchParams(window.location.search);
 
                 const recipeMaterials = getCreateInventoryRequiredMaterials();
                 if (recipeMaterials.length === 0) {
-                    showCustomPopup('Add at least one raw material with quantity per unit before creating the product.', true);
+                    showCustomPopup('Select a BOM bundle or add at least one raw material with quantity per unit.', true);
                     return;
                 }
                 const materialsField = document.getElementById('requiredMaterials');
