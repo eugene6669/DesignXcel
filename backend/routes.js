@@ -22300,9 +22300,22 @@ module.exports = function (sql, pool, getStripe = null) {
 
             console.log(`[ADMIN ORDER PROCESSING] Found ${orderItemsResult.recordset.length} order items for Order ${orderId}`);
 
+            const orderMetaResult = await pool.request()
+                .input('orderId', sql.Int, orderId)
+                .query(`SELECT ActionType FROM Orders WHERE OrderID = @orderId`);
+            const orderActionType = String(orderMetaResult.recordset[0]?.ActionType || '').toLowerCase().trim();
+            const skipStockDecrement = orderActionType === 'refund';
+
+            if (skipStockDecrement) {
+                console.log(`[ADMIN ORDER PROCESSING] Skipping stock decrement for refund fulfillment order ${orderId}`);
+            }
+
             // Decrease stock for each item when status changes to Processing
             // Use inventory-aware stock decrement (decrements from InventoryProducts and syncs to Products)
             for (const item of orderItemsResult.recordset) {
+                if (skipStockDecrement) {
+                    continue;
+                }
                 try {
                     // Parse VariationID to integer if it exists
                     const variationId = item.VariationID ? parseInt(item.VariationID) : null;
@@ -28721,7 +28734,7 @@ module.exports = function (sql, pool, getStripe = null) {
     ]), async (req, res) => {
         const orderId = req.params.orderId;
         const customerId = req.session.user && req.session.user.id;
-        let { actionType, returnType, returnReason, originalPackaging, allParts, unused, proofOfPurchase, returnItems } = req.body;
+        let { actionType, returnType, returnReason, originalPackaging, allParts, unused, proofOfPurchase, returnItems, returnPhase } = req.body;
 
         // Parse returnItems if it's a string (JSON)
         if (typeof returnItems === 'string') {
@@ -28754,8 +28767,11 @@ module.exports = function (sql, pool, getStripe = null) {
             return res.status(400).json({ success: false, message: 'Return type and reason are required.' });
         }
 
-        if (returnType !== 'damage' && returnType !== 'other') {
-            return res.status(400).json({ success: false, message: 'Invalid return type. Must be "damage" or "other".' });
+        if (returnType !== 'damage' && returnType !== 'other' && returnType !== 'wrong_item') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid return type. Must be "damage", "wrong_item", or "other".'
+            });
         }
 
         // Note: Return conditions are NOT required for submission
@@ -28819,23 +28835,21 @@ module.exports = function (sql, pool, getStripe = null) {
             }
 
             const order = orderResult.recordset[0];
-            if (order.Status !== 'Completed' && order.Status !== 'Delivered') {
-                await transaction.rollback();
-                return res.status(400).json({ success: false, message: 'Order can only be returned if it is completed or delivered.' });
-            }
-
-            // Validate return timeframe (30 days from delivery/completion)
-            const orderDate = new Date(order.OrderDate);
-            const deliveryDate = orderDate; // Use order date as delivery date (can be enhanced with actual delivery date)
-            const daysSinceDelivery = Math.floor((new Date() - deliveryDate) / (1000 * 60 * 60 * 24));
-
-            if (daysSinceDelivery > RETURN_POLICY.timeframeDays) {
+            const receiveStatuses = ['Receive', 'Received', 'To Receive'];
+            const isPreReceiveReturn = returnPhase === 'pre_receive'
+                || receiveStatuses.includes(order.Status);
+            if (!isPreReceiveReturn) {
                 await transaction.rollback();
                 return res.status(400).json({
                     success: false,
-                    message: `This order cannot be returned. The return window of ${RETURN_POLICY.timeframeDays} days has expired. The order was placed ${daysSinceDelivery} days ago.`
+                    message: 'Returns must be filed while the order is still in To Receive status. If you already marked the order as received, contact support.'
                 });
             }
+
+            const trimmedReason = String(returnReason || '').trim();
+            const storedReturnReason = isPreReceiveReturn
+                ? `${returnedOrderDisplay.PRE_RECEIVE_RETURN_PREFIX} ${trimmedReason}`
+                : trimmedReason;
 
             // Note: Evidence upload is optional - admin will review request regardless
 
@@ -28913,16 +28927,11 @@ module.exports = function (sql, pool, getStripe = null) {
                     });
                 }
             } else {
-                // No returnItems provided - return all items (backward compatibility)
-                itemsToReturn = orderItems.map(item => ({
-                    ProductID: item.ProductID,
-                    VariationID: item.VariationID,
-                    Quantity: item.Quantity,
-                    PriceAtPurchase: item.PriceAtPurchase,
-                    Name: item.Name,
-                    VariationName: item.VariationName,
-                    Color: item.Color
-                }));
+                await transaction.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: 'Please select at least one item to return with quantity greater than 0.'
+                });
             }
 
             // Validate at least one item is being returned
@@ -28934,72 +28943,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 });
             }
 
-            // Update inventory for each item being returned
-            for (const item of itemsToReturn) {
-                const productId = item.ProductID;
-                const quantity = item.Quantity;
-                const variationId = item.VariationID;
-
-                // Get inventory product
-                const inventoryResult = await transaction.request()
-                    .input('productId', sql.Int, productId)
-                    .query(`
-                        SELECT TOP 1 InventoryProductID, AvailableQuantity, DamagedQuantity, ReturnedQuantity
-                        FROM InventoryProducts
-                        WHERE ProductID = @productId AND IsActive = 1
-                        ORDER BY InventoryProductID DESC
-                    `);
-
-                if (inventoryResult.recordset.length > 0) {
-                    const inventoryProduct = inventoryResult.recordset[0];
-                    const inventoryProductId = inventoryProduct.InventoryProductID;
-
-                    if (variationId) {
-                        // Update variation inventory
-                        const variationResult = await transaction.request()
-                            .input('inventoryProductId', sql.Int, inventoryProductId)
-                            .input('variationId', sql.Int, variationId)
-                            .query(`
-                                SELECT TOP 1 AvailableQuantity, DamagedQuantity, ReturnedQuantity
-                                FROM InventoryProductVariations
-                                WHERE InventoryProductID = @inventoryProductId 
-                                  AND VariationID = @variationId 
-                                  AND IsActive = 1
-                            `);
-
-                        if (variationResult.recordset.length > 0) {
-                            // Pending inspection: only mark units as returned; damaged/available split on admin inspect
-                            await transaction.request()
-                                .input('inventoryProductId', sql.Int, inventoryProductId)
-                                .input('variationId', sql.Int, variationId)
-                                .input('quantity', sql.Int, quantity)
-                                .query(`
-                                    UPDATE InventoryProductVariations
-                                    SET ReturnedQuantity = ReturnedQuantity + @quantity,
-                                        UpdatedAt = GETDATE()
-                                    WHERE InventoryProductID = @inventoryProductId 
-                                      AND VariationID = @variationId 
-                                      AND IsActive = 1
-                                `);
-                            await syncInventoryProductQtyFromVariations(inventoryProductId, transaction);
-                        }
-                    } else {
-                        // Update product inventory (no variation)
-                        const currentAvailable = inventoryProduct.AvailableQuantity || 0;
-                        const currentDamaged = inventoryProduct.DamagedQuantity || 0;
-                        const currentReturned = inventoryProduct.ReturnedQuantity || 0;
-
-                        await transaction.request()
-                            .input('inventoryProductId', sql.Int, inventoryProductId)
-                            .input('quantity', sql.Int, quantity)
-                            .query(`
-                                UPDATE InventoryProducts
-                                SET ReturnedQuantity = ReturnedQuantity + @quantity
-                                WHERE InventoryProductID = @inventoryProductId
-                            `);
-                    }
-                }
-            }
+            // Inventory (damaged / available on Product Returns) is updated only at admin inspection — not on customer request.
 
             // Update order status and store return information
             // Store return conditions and proof of purchase
@@ -29014,7 +28958,7 @@ module.exports = function (sql, pool, getStripe = null) {
             const updateParams = transaction.request()
                 .input('orderId', sql.Int, orderId)
                 .input('returnType', sql.NVarChar, returnType)
-                .input('returnReason', sql.NVarChar, returnReason)
+                .input('returnReason', sql.NVarChar, storedReturnReason)
                 .input('actionType', sql.NVarChar, actionType);
 
             // Add return conditions (check if columns exist)
@@ -29261,11 +29205,10 @@ module.exports = function (sql, pool, getStripe = null) {
     }
 
     /**
-     * Apply inspection split: damaged → DamagedQuantity, wrong item → AvailableQuantity.
-     * Customer return submit only increments ReturnedQuantity until inspection runs.
+     * Apply inspection split: damaged → DamagedQuantity + ReturnedQuantity;
+     * wrong item → AvailableQuantity + Quantity + ReturnedQuantity.
      */
-    async function applyReturnInspectionInventory(transaction, returnType, lineItems) {
-        const normalizedReturnType = returnType === 'damage' ? 'damage' : 'other';
+    async function applyReturnInspectionInventory(transaction, lineItems) {
         for (const item of lineItems) {
             const productId = item.productId;
             const orderVariationId = item.variationId || null;
@@ -29290,38 +29233,18 @@ module.exports = function (sql, pool, getStripe = null) {
             const inventoryVariationId = resolved.VariationID;
 
             if (inventoryVariationId) {
-                // Legacy orders may have pre-classified damaged/available on customer submit — clear before applying inspect split
-                if (normalizedReturnType === 'damage') {
-                    await transaction.request()
-                        .input('inventoryProductId', sql.Int, inventoryProductId)
-                        .input('variationId', sql.Int, inventoryVariationId)
-                        .input('qty', sql.Int, qty)
-                        .query(`
-                            UPDATE InventoryProductVariations
-                            SET DamagedQuantity = CASE WHEN DamagedQuantity >= @qty THEN DamagedQuantity - @qty ELSE 0 END
-                            WHERE InventoryProductID = @inventoryProductId AND VariationID = @variationId AND IsActive = 1
-                        `);
-                } else {
-                    await transaction.request()
-                        .input('inventoryProductId', sql.Int, inventoryProductId)
-                        .input('variationId', sql.Int, inventoryVariationId)
-                        .input('qty', sql.Int, qty)
-                        .query(`
-                            UPDATE InventoryProductVariations
-                            SET AvailableQuantity = CASE WHEN AvailableQuantity >= @qty THEN AvailableQuantity - @qty ELSE 0 END
-                            WHERE InventoryProductID = @inventoryProductId AND VariationID = @variationId AND IsActive = 1
-                        `);
-                }
-
                 const updateResult = await transaction.request()
                     .input('inventoryProductId', sql.Int, inventoryProductId)
                     .input('variationId', sql.Int, inventoryVariationId)
+                    .input('qty', sql.Int, qty)
                     .input('damagedQty', sql.Int, damagedQty)
                     .input('wrongItemQty', sql.Int, wrongItemQty)
                     .query(`
                         UPDATE InventoryProductVariations
                         SET DamagedQuantity = DamagedQuantity + @damagedQty,
+                            ReturnedQuantity = ReturnedQuantity + @qty,
                             AvailableQuantity = AvailableQuantity + @wrongItemQty,
+                            Quantity = (AvailableQuantity + @wrongItemQty) + (DamagedQuantity + @damagedQty),
                             UpdatedAt = GETDATE()
                         WHERE InventoryProductID = @inventoryProductId AND VariationID = @variationId AND IsActive = 1
                     `);
@@ -29332,32 +29255,15 @@ module.exports = function (sql, pool, getStripe = null) {
                 await syncInventoryProductQtyFromVariations(inventoryProductId, transaction);
                 await syncInventoryVariationToProductsVariation(inventoryVariationId, transaction);
             } else {
-                if (normalizedReturnType === 'damage') {
-                    await transaction.request()
-                        .input('inventoryProductId', sql.Int, inventoryProductId)
-                        .input('qty', sql.Int, qty)
-                        .query(`
-                            UPDATE InventoryProducts
-                            SET DamagedQuantity = CASE WHEN DamagedQuantity >= @qty THEN DamagedQuantity - @qty ELSE 0 END
-                            WHERE InventoryProductID = @inventoryProductId
-                        `);
-                } else {
-                    await transaction.request()
-                        .input('inventoryProductId', sql.Int, inventoryProductId)
-                        .input('qty', sql.Int, qty)
-                        .query(`
-                            UPDATE InventoryProducts
-                            SET AvailableQuantity = CASE WHEN AvailableQuantity >= @qty THEN AvailableQuantity - @qty ELSE 0 END
-                            WHERE InventoryProductID = @inventoryProductId
-                        `);
-                }
                 const updateResult = await transaction.request()
                     .input('inventoryProductId', sql.Int, inventoryProductId)
+                    .input('qty', sql.Int, qty)
                     .input('damagedQty', sql.Int, damagedQty)
                     .input('wrongItemQty', sql.Int, wrongItemQty)
                     .query(`
                         UPDATE InventoryProducts
                         SET DamagedQuantity = DamagedQuantity + @damagedQty,
+                            ReturnedQuantity = ReturnedQuantity + @qty,
                             AvailableQuantity = AvailableQuantity + @wrongItemQty
                         WHERE InventoryProductID = @inventoryProductId
                     `);
@@ -29409,7 +29315,7 @@ module.exports = function (sql, pool, getStripe = null) {
             const orderResult = await pool.request()
                 .input('orderId', sql.Int, orderId)
                 .query(`
-                    SELECT o.OrderID, o.Status, o.ReturnType${returnItemsColumn}
+                    SELECT o.OrderID, o.Status, o.ReturnType, o.ReturnReason${returnItemsColumn}
                     FROM Orders o WHERE o.OrderID = @orderId
                 `);
             if (!orderResult.recordset.length) {
@@ -29433,6 +29339,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 orderId,
                 status: order.Status,
                 returnType: order.ReturnType || 'damage',
+                returnReason: order.ReturnReason || '',
                 items: lineItems.map((item) => ({
                     productId: item.ProductID,
                     variationId: item.VariationID,
@@ -29519,7 +29426,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     message: 'Please classify all returned product variants before proceeding.'
                 });
             }
-            await applyReturnInspectionInventory(transaction, order.ReturnType, normalizedInspection);
+            await applyReturnInspectionInventory(transaction, normalizedInspection);
             await transaction.request()
                 .input('orderId', sql.Int, orderId)
                 .query(`UPDATE Orders SET Status = 'Inspection Complete' WHERE OrderID = @orderId`);
@@ -29552,7 +29459,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     SELECT OrderID, Status, ActionType
                     FROM Orders
                     WHERE OrderID = @orderId
-                      AND Status IN ('Inspection Complete', 'Processing (Pickup)', 'Processing')
+                      AND Status = 'Inspection Complete'
                       AND ActionType IN ('refund', 'replacement')
                 `);
 
@@ -29589,13 +29496,16 @@ module.exports = function (sql, pool, getStripe = null) {
         try {
             await transaction.begin();
 
-            // Get order details including ReturnType
-            // Check for both 'Processing' and 'Processing (Pickup)' statuses for replacement orders
+            const ordersSchemaReplacement = await getOrdersSchemaFlags(pool);
+            const returnItemsColReplacement = ordersSchemaReplacement.hasReturnItems
+                ? ', o.ReturnItems'
+                : ', NULL AS ReturnItems';
+
             const orderResult = await transaction.request()
                 .input('orderId', sql.Int, orderId)
                 .query(`
                     SELECT o.OrderID, o.Status, o.CustomerID, o.TotalAmount,
-                           o.DeliveryType, o.ShippingAddressID, o.ReturnType
+                           o.DeliveryType, o.ShippingAddressID, o.ReturnType${returnItemsColReplacement}
                     FROM Orders o
                     WHERE o.OrderID = @orderId 
                     AND o.Status = 'Pickup Received'
@@ -29604,145 +29514,66 @@ module.exports = function (sql, pool, getStripe = null) {
 
             if (!orderResult.recordset.length) {
                 await transaction.rollback();
-                return res.status(404).json({ success: false, message: 'Replacement order not found or not ready for processing.' });
+                return res.status(404).json({
+                    success: false,
+                    message: 'Replacement order not found or inspection is not complete yet.'
+                });
             }
 
             const order = orderResult.recordset[0];
-            const returnType = order.ReturnType || 'damage';
 
-            // Get order items to update inventory
             const orderItemsResult = await transaction.request()
                 .input('orderId', sql.Int, orderId)
                 .query(`
-                    SELECT oi.ProductID, oi.Quantity, oi.VariationID
+                    SELECT oi.ProductID, oi.Quantity, oi.VariationID, oi.PriceAtPurchase,
+                           p.Name, pv.VariationName, pv.Color, pv.SKU,
+                           COALESCE(pv.VariationImageURL, p.ImageURL) AS ImageURL
                     FROM OrderItems oi
+                    LEFT JOIN Products p ON oi.ProductID = p.ProductID
+                    LEFT JOIN ProductVariations pv ON oi.VariationID = pv.VariationID
                     WHERE oi.OrderID = @orderId
                 `);
 
-            const orderItems = orderItemsResult.recordset;
+            const replacementItems = buildReturnedLineItemsFromOrder(order, orderItemsResult.recordset);
+            if (!replacementItems.length) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: 'No items found to ship for this replacement.'
+                });
+            }
 
-            // Update inventory: Add items to damaged inventory if return type is 'damage'
-            // This happens when replacement is processed (after pickup)
-            for (const item of orderItems) {
-                const productId = item.ProductID;
-                const quantity = item.Quantity;
-                const variationId = item.VariationID;
+            const syncedInventoryProductIds = new Set();
 
-                // Get inventory product
-                const inventoryResult = await transaction.request()
+            for (const item of replacementItems) {
+                const productId = parseInt(item.ProductID, 10);
+                const quantity = parseInt(item.Quantity, 10) || 0;
+                const variationId = item.VariationID != null && item.VariationID !== ''
+                    ? parseInt(item.VariationID, 10)
+                    : null;
+
+                if (!productId || quantity <= 0) {
+                    continue;
+                }
+
+                console.log(`[REPLACEMENT] Decrementing stock for ProductID ${productId}, Qty ${quantity}, VariationID ${variationId || 'none'}`);
+                await decrementStockFromInventory(productId, quantity, variationId, transaction);
+
+                const invLinkResult = await transaction.request()
                     .input('productId', sql.Int, productId)
                     .query(`
-                        SELECT TOP 1 InventoryProductID, AvailableQuantity, DamagedQuantity, ReturnedQuantity
+                        SELECT TOP 1 InventoryProductID
                         FROM InventoryProducts
                         WHERE ProductID = @productId AND IsActive = 1
                         ORDER BY InventoryProductID DESC
                     `);
-
-                if (inventoryResult.recordset.length > 0) {
-                    const inventoryProduct = inventoryResult.recordset[0];
-                    const inventoryProductId = inventoryProduct.InventoryProductID;
-
-                    if (variationId) {
-                        // Update variation inventory
-                        const variationResult = await transaction.request()
-                            .input('inventoryProductId', sql.Int, inventoryProductId)
-                            .input('variationId', sql.Int, variationId)
-                            .query(`
-                                SELECT TOP 1 AvailableQuantity, DamagedQuantity, ReturnedQuantity
-                                FROM InventoryProductVariations
-                                WHERE InventoryProductID = @inventoryProductId 
-                                  AND VariationID = @variationId 
-                                  AND IsActive = 1
-                            `);
-
-                        if (variationResult.recordset.length > 0) {
-                            if (returnType === 'damage') {
-                                // Add to damaged quantity and decrease available quantity
-                                // When replacement is processed, damaged items move from available to damaged inventory
-                                // This ensures damaged items are properly tracked in ProductInventory
-                                await transaction.request()
-                                    .input('inventoryProductId', sql.Int, inventoryProductId)
-                                    .input('variationId', sql.Int, variationId)
-                                    .input('quantity', sql.Int, quantity)
-                                    .query(`
-                                        UPDATE InventoryProductVariations
-                                        SET ReturnedQuantity = ReturnedQuantity + @quantity,
-                                            DamagedQuantity = DamagedQuantity + @quantity,
-                                            AvailableQuantity = CASE 
-                                                WHEN AvailableQuantity >= @quantity 
-                                                THEN AvailableQuantity - @quantity 
-                                                ELSE 0 
-                                            END
-                                        WHERE InventoryProductID = @inventoryProductId 
-                                          AND VariationID = @variationId 
-                                          AND IsActive = 1
-                                    `);
-                                console.log(`[REPLACEMENT] Added ${quantity} to returned/damaged inventory for ProductID ${productId}, VariationID ${variationId}`);
-                            } else {
-                                // If returnType is 'other', items are in AvailableQuantity, move them to DamagedQuantity
-                                await transaction.request()
-                                    .input('inventoryProductId', sql.Int, inventoryProductId)
-                                    .input('variationId', sql.Int, variationId)
-                                    .input('quantity', sql.Int, quantity)
-                                    .query(`
-                                        UPDATE InventoryProductVariations
-                                        SET ReturnedQuantity = ReturnedQuantity + @quantity,
-                                            DamagedQuantity = DamagedQuantity + @quantity,
-                                            AvailableQuantity = CASE 
-                                                WHEN AvailableQuantity >= @quantity 
-                                                THEN AvailableQuantity - @quantity 
-                                                ELSE 0 
-                                            END
-                                        WHERE InventoryProductID = @inventoryProductId 
-                                          AND VariationID = @variationId 
-                                          AND IsActive = 1
-                                          AND AvailableQuantity >= @quantity
-                                    `);
-                                console.log(`[REPLACEMENT] Moved ${quantity} items to returned/damaged inventory for ProductID ${productId}, VariationID ${variationId}`);
-                            }
-                        }
-                    } else {
-                        // Update product inventory (no variation)
-                        if (returnType === 'damage') {
-                            // Add to damaged quantity and decrease available quantity
-                            // When replacement is processed, damaged items move from available to damaged inventory
-                            await transaction.request()
-                                .input('inventoryProductId', sql.Int, inventoryProductId)
-                                .input('quantity', sql.Int, quantity)
-                                .query(`
-                                    UPDATE InventoryProducts
-                                    SET ReturnedQuantity = ReturnedQuantity + @quantity,
-                                        DamagedQuantity = DamagedQuantity + @quantity,
-                                        AvailableQuantity = CASE 
-                                            WHEN AvailableQuantity >= @quantity 
-                                            THEN AvailableQuantity - @quantity 
-                                            ELSE 0 
-                                        END
-                                    WHERE InventoryProductID = @inventoryProductId
-                                `);
-                            console.log(`[REPLACEMENT] Added ${quantity} to returned/damaged inventory for ProductID ${productId}`);
-                        } else {
-                            await transaction.request()
-                                .input('inventoryProductId', sql.Int, inventoryProductId)
-                                .input('quantity', sql.Int, quantity)
-                                .query(`
-                                    UPDATE InventoryProducts
-                                    SET ReturnedQuantity = ReturnedQuantity + @quantity,
-                                        DamagedQuantity = DamagedQuantity + @quantity,
-                                        AvailableQuantity = CASE 
-                                            WHEN AvailableQuantity >= @quantity 
-                                            THEN AvailableQuantity - @quantity 
-                                            ELSE 0 
-                                        END
-                                    WHERE InventoryProductID = @inventoryProductId
-                                      AND AvailableQuantity >= @quantity
-                                `);
-                            console.log(`[REPLACEMENT] Moved ${quantity} items to returned/damaged inventory for ProductID ${productId}`);
-                        }
-                    }
+                const inventoryProductId = invLinkResult.recordset[0]?.InventoryProductID;
+                if (inventoryProductId && !syncedInventoryProductIds.has(inventoryProductId)) {
+                    await syncInventoryProductQtyFromVariations(inventoryProductId, transaction);
+                    syncedInventoryProductIds.add(inventoryProductId);
                 }
             }
-            // Move to Processing for replacement delivery (Orders Processing page, not Returned Orders)
+
             await transaction.request()
                 .input('orderId', sql.Int, orderId)
                 .query(`
@@ -29753,16 +29584,19 @@ module.exports = function (sql, pool, getStripe = null) {
 
             await transaction.commit();
 
-            console.log(`[REPLACEMENT] ✅ Order ${orderId} moved to Orders Processing for replacement delivery`);
+            console.log(`[REPLACEMENT] ✅ Order ${orderId} stock decremented and moved to Orders Processing`);
 
             return res.json({
                 success: true,
-                message: 'Replacement processed successfully. Order moved to processing for replacement delivery. Damaged items have been added to inventory.'
+                message: 'Replacement processed successfully. Stock updated and order moved to processing for replacement delivery.'
             });
         } catch (err) {
             console.error('Error processing replacement:', err);
-            await transaction.rollback();
-            return res.status(500).json({ success: false, message: 'Failed to process replacement.' });
+            try { await transaction.rollback(); } catch (e) { /* ignore */ }
+            return res.status(500).json({
+                success: false,
+                message: err.message || 'Failed to process replacement.'
+            });
         }
     });
 
@@ -29818,7 +29652,10 @@ module.exports = function (sql, pool, getStripe = null) {
 
             if (!orderResult.recordset.length) {
                 await transaction.rollback();
-                return res.status(404).json({ success: false, message: 'Returned order not found.' });
+                return res.status(404).json({
+                    success: false,
+                    message: 'Returned order not found or inspection is not complete yet.'
+                });
             }
 
             const order = orderResult.recordset[0];
@@ -30159,96 +29996,7 @@ module.exports = function (sql, pool, getStripe = null) {
             updateQuery += ` WHERE OrderID = @orderId`;
             await updateRequest.query(updateQuery);
 
-            // Update inventory: Add items to damaged inventory if return type is 'damage'
-            // This happens when refund is processed (after pickup)
-            const orderItems = orderItemsResult.recordset;
-            for (const item of orderItems) {
-                const productId = item.ProductID;
-                const quantity = item.Quantity;
-                const variationId = item.VariationID;
-
-                // Get inventory product
-                const inventoryResult = await transaction.request()
-                    .input('productId', sql.Int, productId)
-                    .query(`
-                        SELECT TOP 1 InventoryProductID, AvailableQuantity, DamagedQuantity, ReturnedQuantity
-                        FROM InventoryProducts
-                        WHERE ProductID = @productId AND IsActive = 1
-                        ORDER BY InventoryProductID DESC
-                    `);
-
-                if (inventoryResult.recordset.length > 0) {
-                    const inventoryProduct = inventoryResult.recordset[0];
-                    const inventoryProductId = inventoryProduct.InventoryProductID;
-
-                    if (variationId) {
-                        // Update variation inventory
-                        const variationResult = await transaction.request()
-                            .input('inventoryProductId', sql.Int, inventoryProductId)
-                            .input('variationId', sql.Int, variationId)
-                            .query(`
-                                SELECT TOP 1 AvailableQuantity, DamagedQuantity, ReturnedQuantity
-                                FROM InventoryProductVariations
-                                WHERE InventoryProductID = @inventoryProductId 
-                                  AND VariationID = @variationId 
-                                  AND IsActive = 1
-                            `);
-
-                        if (variationResult.recordset.length > 0) {
-                            if (returnType === 'damage') {
-                                await transaction.request()
-                                    .input('inventoryProductId', sql.Int, inventoryProductId)
-                                    .input('variationId', sql.Int, variationId)
-                                    .input('quantity', sql.Int, quantity)
-                                    .query(`
-                                        UPDATE InventoryProductVariations
-                                        SET ReturnedQuantity = ReturnedQuantity + @quantity,
-                                            DamagedQuantity = DamagedQuantity + @quantity
-                                        WHERE InventoryProductID = @inventoryProductId 
-                                          AND VariationID = @variationId 
-                                          AND IsActive = 1
-                                    `);
-                            } else {
-                                await transaction.request()
-                                    .input('inventoryProductId', sql.Int, inventoryProductId)
-                                    .input('variationId', sql.Int, variationId)
-                                    .input('quantity', sql.Int, quantity)
-                                    .query(`
-                                        UPDATE InventoryProductVariations
-                                        SET ReturnedQuantity = ReturnedQuantity + @quantity
-                                        WHERE InventoryProductID = @inventoryProductId 
-                                          AND VariationID = @variationId 
-                                          AND IsActive = 1
-                                    `);
-                            }
-                            console.log(`[REFUND] Added ${quantity} returned items to inventory for ProductID ${productId}, VariationID ${variationId}`);
-                        }
-                    } else {
-                        // Update product inventory (no variation)
-                        if (returnType === 'damage') {
-                            await transaction.request()
-                                .input('inventoryProductId', sql.Int, inventoryProductId)
-                                .input('quantity', sql.Int, quantity)
-                                .query(`
-                                    UPDATE InventoryProducts
-                                    SET ReturnedQuantity = ReturnedQuantity + @quantity,
-                                        DamagedQuantity = DamagedQuantity + @quantity
-                                    WHERE InventoryProductID = @inventoryProductId
-                                `);
-                        } else {
-                            await transaction.request()
-                                .input('inventoryProductId', sql.Int, inventoryProductId)
-                                .input('quantity', sql.Int, quantity)
-                                .query(`
-                                    UPDATE InventoryProducts
-                                    SET ReturnedQuantity = ReturnedQuantity + @quantity
-                                    WHERE InventoryProductID = @inventoryProductId
-                                `);
-                        }
-                        console.log(`[REFUND] Added ${quantity} returned items to inventory for ProductID ${productId}`);
-                    }
-                }
-            }
+            // Inventory was applied at inspection — do not modify Product Returns on refund.
 
             // Log refund completion
             if (stripeRefundId) {
@@ -30518,7 +30266,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 .input('orderId', sql.Int, orderId)
                 .query(`
                     SELECT o.OrderID, o.Status, o.ReferenceNumber, o.TotalAmount, o.ActionType, o.ReturnType,
-                           o.DeliveryCost, o.ExtraDeliveryFee, o.ReturnItems,
+                           o.ReturnReason, o.DeliveryCost, o.ExtraDeliveryFee, o.ReturnItems,
                            ISNULL(o.OriginalPackaging, 0) AS OriginalPackaging,
                            ISNULL(o.AllParts, 0) AS AllParts,
                            ISNULL(o.Unused, 0) AS Unused,
@@ -30611,41 +30359,40 @@ module.exports = function (sql, pool, getStripe = null) {
             // Use returned subtotal for calculations
             const subtotal = returnedSubtotal;
 
-            // Calculate fees based on return conditions
-            // Return shipping fee: Customer responsible unless defective/damaged during delivery
-            let returnShippingFee = 0;
-            if (order.ReturnType !== 'damage') {
-                // Customer pays return shipping for non-defective returns
-                returnShippingFee = parseFloat(order.DeliveryCost) || 0;
-            }
+            const isPreReceiveReturn = returnedOrderDisplay.isPreReceiveReturn(order);
 
             // Original delivery charges
             const originalDeliveryFee = parseFloat(order.DeliveryCost) || 0;
             const extraDeliveryFee = parseFloat(order.ExtraDeliveryFee) || 0;
             const totalDeliveryFee = originalDeliveryFee + extraDeliveryFee;
+            const deliveryProportion = fullOrderSubtotal > 0 ? returnedSubtotal / fullOrderSubtotal : 1;
+            const proportionalDeliveryFee = Math.round(totalDeliveryFee * deliveryProportion * 100) / 100;
 
-            // Calculate refund amount based on conditions and returned items
-            // Rule 1: If ALL 4 conditions are met → Full refund of returned items (no deductions)
-            // Rule 2: If any condition is missing → Refund = Returned Items Subtotal - Proportional Delivery Cost
-            // Rule 3: If proof of purchase is missing → Already declined above
+            // Return shipping: seller pays for pre-receipt returns; otherwise customer unless defective
+            let returnShippingFee = 0;
+            if (!isPreReceiveReturn && order.ReturnType !== 'damage' && order.ReturnType !== 'wrong_item') {
+                returnShippingFee = parseFloat(order.DeliveryCost) || 0;
+            }
 
             let refundAmount = 0;
             if (order.ActionType === 'refund') {
-                const unmetConditions = [
-                    !hasOriginalPackaging,
-                    !hasAllParts,
-                    !hasUnused,
-                    !hasProofOfPurchase
-                ].filter(Boolean).length;
-
-                if (unmetConditions === 0) {
-                    // All conditions met — full product refund (delivery fee never included)
-                    refundAmount = returnedSubtotal;
-                } else if (unmetConditions <= 2) {
-                    // 1–2 requirements unchecked — 50% of product price deducted
-                    refundAmount = returnedSubtotal * 0.5;
+                if (isPreReceiveReturn) {
+                    refundAmount = returnedSubtotal + proportionalDeliveryFee;
                 } else {
-                    refundAmount = 0;
+                    const unmetConditions = [
+                        !hasOriginalPackaging,
+                        !hasAllParts,
+                        !hasUnused,
+                        !hasProofOfPurchase
+                    ].filter(Boolean).length;
+
+                    if (unmetConditions === 0) {
+                        refundAmount = returnedSubtotal;
+                    } else if (unmetConditions <= 2) {
+                        refundAmount = returnedSubtotal * 0.5;
+                    } else {
+                        refundAmount = 0;
+                    }
                 }
 
                 refundAmount = Math.max(0, Math.round(refundAmount * 100) / 100);

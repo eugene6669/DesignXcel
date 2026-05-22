@@ -974,7 +974,8 @@
                     <div class="error-message"><%= error %></div>
                 <% } %>
                 <% if (locals.success && locals.success.length > 0) { %>
-                    <div class="success-message"><%= success %></div>
+                    <% const hideRawMaterialFlashOnProducts = /raw material/i.test(String(success || '')); %>
+                    <div class="success-message<%= hideRawMaterialFlashOnProducts ? ' success-message--raw-material' : '' %>"><%= success %></div>
                 <% } %>
 
                 <!-- Create Product Modal -->
@@ -1103,7 +1104,7 @@
                                 <th>Product Name</th>
                                 <th>Category</th>
                                 <th>Status</th>
-                                <th class="qty-col">Quantity</th>
+                                <th class="qty-col" title="Sum of quantity across all product variations">Total Qty</th>
                                 <th>Image</th>
                                 <th>Last Added</th>
                                 <th>Actions</th>
@@ -1144,6 +1145,7 @@
                                     productImageFallback2 = productImage.replace('/uploads/products/inventory/', '/uploads/products/');
                                 }
                                 const availableQty = item.AvailableQuantity || 0;
+                                const totalQty = item.TotalQuantity || 0;
                                 const damagedQty = item.DamagedQuantity || 0;
                                 const returnedQty = item.ReturnedQuantity || 0;
                                 const repairedQty = item.RepairedQuantity || 0;
@@ -1176,7 +1178,7 @@
                                             <%= primaryStatus === 'no_stock' ? 'No Stock' : primaryStatus.charAt(0).toUpperCase() + primaryStatus.slice(1) %>
                                         </span>
                                     </td>
-                                    <td class="qty-col"><span class="stock-qty stock-qty-available"><%= availableQty %></span></td>
+                                    <td class="qty-col"><span class="stock-qty"><%= totalQty %></span></td>
                                     <td>
                                         <% if (productImagePrimary) { %>
                                             <img
@@ -1234,7 +1236,7 @@
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">Variation Name</th>
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">SKU</th>
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">Color</th>
-                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Quantity</th>
+                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Qty</th>
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Price</th>
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Image</th>
                                                             <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Status</th>
@@ -1368,7 +1370,7 @@
         </div>
     </div>
 
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260521d" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260521e" defer></script>
     <script src="/js/Employee/Admin/product-inventory-tabs.js" defer></script>
     <script src="/js/Employee/Admin/raw-materials-tab.js"></script>
 
@@ -1382,7 +1384,15 @@
     <% if (locals.success && locals.success.length > 0) { %>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            showCustomPopup('<%= success %>');
+            var msg = <%- JSON.stringify(success || '') %>;
+            var urlTab = new URLSearchParams(window.location.search).get('tab');
+            var onProductsTab = urlTab === 'products' || (!urlTab && document.getElementById('productsTab') && document.getElementById('productsTab').classList.contains('active'));
+            if (onProductsTab && /raw material/i.test(msg)) {
+                var inlineFlash = document.querySelector('.success-message--raw-material');
+                if (inlineFlash) inlineFlash.style.display = 'none';
+                return;
+            }
+            showCustomPopup(msg);
         });
     </script>
     <% } %>

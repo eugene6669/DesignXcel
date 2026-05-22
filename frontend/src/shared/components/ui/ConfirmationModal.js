@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 
-const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, confirmText = 'Confirm', cancelText = 'Cancel', type = 'default' }) => {
+const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, confirmText = 'Confirm', cancelText = 'Cancel', type = 'default', overlayZIndex }) => {
   if (!isOpen) return null;
 
   if (typeof document === 'undefined') {
@@ -94,7 +94,11 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, confirm
 
   return (
     createPortal(
-      <div className="confirmation-modal-overlay" onClick={handleOverlayClick}>
+      <div
+        className="confirmation-modal-overlay"
+        onClick={handleOverlayClick}
+        style={overlayZIndex != null ? { zIndex: overlayZIndex } : undefined}
+      >
         <div className="confirmation-modal" onClick={(e) => e.stopPropagation()}>
           <button className="confirmation-modal-close" onClick={handleClose}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -1247,7 +1247,7 @@
                                     </div>
                                     <div class="order-card-summary-secondary">
                                         <span class="order-card-total-label">Order Total</span>
-                                        <span class="order-card-total-value">?<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></span>
+                                        <span class="order-card-total-value">₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></span>
                                     </div>
                                 </div>
                                 <div class="order-card-controls">
@@ -1304,7 +1304,7 @@
                                                                 <span>Qty: <%= item.Quantity %></span>
                                                             </div>
                                                         </div>
-                                                        <div class="order-product-price">?<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
+                                                        <div class="order-product-price">₱<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
                                                     </div>
                                                 <% }); %>
                                             <% } else { %>
@@ -1340,7 +1340,7 @@
                                     </div>
                                     <div class="order-section">
                                         <span class="order-section-title">Delivery Cost</span>
-                                        <div class="order-section-body">?<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
+                                        <div class="order-section-body">₱<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
                                     </div>
                                     <% 
                                         const extraFee = typeof order.ExtraDeliveryFee !== 'undefined' && order.ExtraDeliveryFee !== null 
@@ -1350,7 +1350,7 @@
                                     <% if (extraFee > 0) { %>
                                     <div class="order-section">
                                         <span class="order-section-title">Extra Delivery Fee (Qty &gt; 4)</span>
-                                        <div class="order-section-body">?<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
+                                        <div class="order-section-body">₱<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
                                     </div>
                                     <% } %>
 
@@ -1497,7 +1497,7 @@
                                             <%= order.PaymentMethod || 'N/A' %>
                                         </td>
                                         <td style="padding: 1rem; text-align: right; font-weight: 700; color: #111827;">
-                                            ?<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
+                                            ₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
                                         </td>
                                         <td style="padding: 1rem; text-align: center;">
                                             <button class="order-card-toggle" type="button" data-toggle-target="<%= order.OrderID %>" style="background: #F0B21B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; margin-right: 0.5rem;" onclick="toggleOrderDetails(<%= order.OrderID %>)">View</button>
@@ -1558,7 +1558,7 @@
                                                                         </div>
                                                                     </div>
                                                                     <div style="font-weight: 700; color: #111827; font-size: 0.9rem;">
-                                                                        ?<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
+                                                                        ₱<%= Number(item.PriceAtPurchase).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
                                                                     </div>
                                                                 </div>
                                                             <% }); %>
@@ -1596,12 +1596,12 @@
                                                     <div style="font-size: 0.875rem; color: #111827; display: flex; flex-direction: column; gap: 0.5rem;">
                                                         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
                                                             <span>Subtotal:</span>
-                                                            <strong>?<%= Number(order.Subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                            <strong>₱<%= Number(order.Subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
                                                         </div>
                                                         <% if (!order.IsBulkOrder) { %>
                                                         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
                                                             <span>Shipping Fee:</span>
-                                                            <strong>?<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                            <strong>₱<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
                                                         </div>
                                                         <% } %>
                                                         <% 
@@ -1623,12 +1623,12 @@
                                                         <% if (extraFee > 0) { %>
                                                         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #e2e8f0;">
                                                             <span>Extra Delivery Fee (Qty &gt; 4):</span>
-                                                            <strong>?<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                            <strong>₱<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
                                                         </div>
                                                         <% } %>
                                                         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; margin-top: 0.5rem; border-top: 2px solid #0f172a;">
                                                             <span style="font-weight: 700; font-size: 1.05rem;">Total:</span>
-                                                            <strong style="font-weight: 700; font-size: 1.05rem; color: #0f172a;">?<%= Number(order.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
+                                                            <strong style="font-weight: 700; font-size: 1.05rem; color: #0f172a;">₱<%= Number(order.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong>
                                                         </div>
                                                     </div>
                                                 </div>

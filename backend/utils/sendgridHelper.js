@@ -2305,7 +2305,7 @@ const sendReturnRequestEmail = async (toEmail, customerName, orderDetails) => {
                                         <div style="background: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
                                             <p style="margin: 0 0 10px 0; color: #1f2937; font-weight: 600;">Order Number: #${orderDetails.referenceNumber || orderDetails.orderId || 'N/A'}</p>
                                             <p style="margin: 0 0 10px 0; color: #1f2937; font-weight: 600;">Requested Action: ${orderDetails.actionType === 'refund' ? '💰 Refund' : '🔄 Replacement'}</p>
-                                            <p style="margin: 0 0 10px 0; color: #1f2937; font-weight: 600;">Return Reason: ${orderDetails.returnType === 'damage' ? 'Damaged Item' : 'Other Reason'}</p>
+                                            <p style="margin: 0 0 10px 0; color: #1f2937; font-weight: 600;">Return Reason: ${orderDetails.returnType === 'damage' ? 'Damaged Item' : orderDetails.returnType === 'wrong_item' ? 'Wrong Item' : 'Other Reason'}</p>
                                             <p style="margin: 0; color: #6b7280; font-size: 14px;">${orderDetails.returnReason || 'No additional details provided'}</p>
                                         </div>
                                         <p style="margin: 30px 0 0 0; color: #6b7280; font-size: 14px; line-height: 1.5;">

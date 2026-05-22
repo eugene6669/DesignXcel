@@ -96,6 +96,14 @@
         const isProductsListingPage = document.body.classList.contains('page-products-listing');
         const isProductReturnsPage = document.body.classList.contains('page-product-returns');
         const isInventoryPage = document.body.classList.contains('page-inventory');
+
+        function isProductInventoryProductsTab() {
+            const urlTab = new URLSearchParams(window.location.search).get('tab');
+            if (urlTab === 'products') return true;
+            if (urlTab) return false;
+            const productsTab = document.getElementById('productsTab');
+            return !!(productsTab && productsTab.classList.contains('active'));
+        }
         const isFlatListPage = false;
 
         function configureVariationEditModalForPage() {
@@ -115,15 +123,15 @@
                 if (submitBtn) submitBtn.textContent = 'Update';
                 const statusSelect = document.getElementById('editVariationStatusSelect');
                 if (statusSelect) {
-                    const availOpt = statusSelect.querySelector('option[value="available"]');
-                    const returnedOpt = statusSelect.querySelector('option[value="returned"]');
-                    if (availOpt) availOpt.hidden = true;
-                    if (returnedOpt) returnedOpt.hidden = false;
+                    ['returned', 'disposed'].forEach(function (val) {
+                        const opt = statusSelect.querySelector('option[value="' + val + '"]');
+                        if (opt) opt.remove();
+                    });
                 }
-                const availCurrent = document.getElementById('variationCurrentAvailable');
-                if (availCurrent) availCurrent.style.display = 'none';
                 const returnedCurrent = document.getElementById('variationCurrentReturned');
-                if (returnedCurrent) returnedCurrent.style.display = '';
+                if (returnedCurrent) returnedCurrent.style.display = 'none';
+                const disposedCurrent = document.getElementById('variationCurrentDisposed');
+                if (disposedCurrent) disposedCurrent.style.display = 'none';
             } else {
                 const statusSelect = document.getElementById('editVariationStatusSelect');
                 if (statusSelect) {
@@ -392,8 +400,13 @@ const urlParams = new URLSearchParams(window.location.search);
             const qtyCells = row.querySelectorAll('td.qty-col .stock-qty');
             if (isInventoryPage) {
                 if (qtyCells[0]) {
-                    qtyCells[0].textContent = summary.availableQuantity;
-                    qtyCells[0].className = 'stock-qty stock-qty-available';
+                    if (isProductInventoryProductsTab()) {
+                        qtyCells[0].textContent = summary.totalQuantity;
+                        qtyCells[0].className = 'stock-qty ' + getStockQtyClass(summary.totalQuantity);
+                    } else {
+                        qtyCells[0].textContent = summary.availableQuantity;
+                        qtyCells[0].className = 'stock-qty stock-qty-available';
+                    }
                 }
             } else {
                 if (qtyCells[0]) {
@@ -502,7 +515,7 @@ const urlParams = new URLSearchParams(window.location.search);
                     '<td class="var-col-sku"><code style="font-size:0.85em;">' + escapeHtml(variationSku) + '</code></td>' +
                     '<td class="var-col-color">' + escapeHtml(color) + '</td>';
                 if (isInventoryPage) {
-                    row += '<td class="qty-col">' + formatAvailableQty(availableQty) + '</td>';
+                    row += '<td class="qty-col">' + formatStockQty(totalQty) + '</td>';
                 } else if (!isProductReturnsPage) {
                     row += '<td class="qty-col">' + formatStockQty(totalQty) + '</td>' +
                         '<td class="qty-col">' + formatAvailableQty(availableQty) + '</td>';
@@ -930,6 +943,9 @@ const urlParams = new URLSearchParams(window.location.search);
                 : parseInt(qtyInput?.value, 10);
             if (!variationId || !inventoryProductId || !quantity || quantity <= 0) {
                 showCustomPopup('Enter a positive restock quantity.', true);
+                return;
+            }
+            if (!confirm('Restock ' + quantity + ' unit(s)? This adds available quantity and deducts raw materials per item.')) {
                 return;
             }
             if (!allRawMaterials.length) await fetchRawMaterialsForInventory();

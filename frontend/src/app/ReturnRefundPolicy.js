@@ -12,7 +12,6 @@ const ReturnRefundPolicy = () => {
       
       <div className="policy-container">
         <div className="policy-content">
-          {/* Introduction */}
           <section className="policy-section">
             <h2>Overview</h2>
             <p>
@@ -21,175 +20,214 @@ const ReturnRefundPolicy = () => {
               outlines the terms and conditions for returns, exchanges, and refunds.
             </p>
             <p>
-              <strong>Important:</strong> This policy does not cover "change of mind" purchases. 
+              <strong>Important:</strong> This policy does not cover &quot;change of mind&quot; purchases. 
               Legally, consumers are entitled to repair, replacement, or refund for products with 
               defects or imperfections, but not for buyer errors or a change of mind.
             </p>
-          </section>
-
-          {/* Return Timeframe */}
-          <section className="policy-section">
-            <h2>Return Timeframe</h2>
-            <p>
-              You have <strong>30 days from the date of delivery</strong> to request a return or exchange. 
-              Returns requested after this period will not be accepted unless there are exceptional 
-              circumstances, which will be evaluated on a case-by-case basis.
-            </p>
             <div className="policy-highlight">
-              <p><strong>⏰ Return Window:</strong> 30 days from delivery date</p>
+              <p>
+                <strong>How returns work on your account:</strong> If there is a problem with your order, 
+                file a return while it is still <strong>To Receive</strong> — before you click <strong>Order Received</strong>. 
+                Returns for defective or wrong items are not available from the account after you confirm receipt.
+              </p>
             </div>
           </section>
 
-          {/* Return Conditions */}
           <section className="policy-section">
-            <h2>Return Conditions</h2>
-            <p>To be eligible for a return or exchange, items must meet the following requirements:</p>
+            <h2>When You Can Request a Return</h2>
+            <p>
+              Self-service returns (Refund or Replacement) are available only when your order shows 
+              <strong> To Receive</strong> in your account order history. This is the period after delivery 
+              and before you confirm that you received the order in good condition.
+            </p>
             <ul className="policy-list">
               <li>
-                <strong>Original Packaging:</strong> Items must be in their original, undamaged packaging
+                <strong>Eligible reasons:</strong> Damaged item, wrong item, or other defect-related issues (not change of mind)
               </li>
               <li>
-                <strong>Unused Condition:</strong> Items must be unused, unmodified, and in their original condition
+                <strong>Time limit:</strong> You must submit your request before clicking <strong>Order Received</strong>
               </li>
               <li>
-                <strong>All Parts Included:</strong> All parts, accessories, and documentation must be included
+                <strong>After you confirm receipt:</strong> The order moves to Completed and the Return / Refund option 
+                is no longer available in your account
+              </li>
+            </ul>
+            <p>
+              If you accidentally clicked Order Received, contact customer service as soon as possible. 
+              We will review your case, but online self-service returns will not be available for that order.
+            </p>
+          </section>
+
+          <section className="policy-section">
+            <h2>Return Conditions</h2>
+            <p>
+              When you submit a return request, you will be asked to confirm the following. 
+              Our team reviews these during approval:
+            </p>
+            <ul className="policy-list">
+              <li>
+                <strong>Original Packaging:</strong> Items should be in their original, undamaged packaging where possible
               </li>
               <li>
-                <strong>Proof of Purchase:</strong> Original receipt or other proof of purchase is required
+                <strong>Unused Condition:</strong> Items should be unused, unmodified, and in their original condition where applicable
               </li>
               <li>
-                <strong>Evidence of Defect:</strong> For defective items, photos or videos showing the defect must be provided
+                <strong>All Parts Included:</strong> All parts, accessories, and documentation should be included
+              </li>
+              <li>
+                <strong>Proof of Purchase:</strong> Order receipt or proof of purchase is required
+              </li>
+              <li>
+                <strong>Evidence of Issue:</strong> At least one photo or video showing the damage, defect, or wrong item
               </li>
             </ul>
           </section>
 
-          {/* Return Process */}
+          <section className="policy-section">
+            <h2>Confirming &quot;Order Received&quot;</h2>
+            <p>
+              When your order appears as <strong>To Receive</strong>, inspect your items before clicking <strong>Order Received</strong>.
+              This confirms that your order is correct, complete, and free of damage.
+            </p>
+            <ul className="policy-list">
+              <li>
+                <strong>Before you confirm:</strong> Check that all items match your order, are undamaged, and include all parts and accessories.
+              </li>
+              <li>
+                <strong>Damaged or wrong item:</strong> Do <strong>not</strong> click Order Received. Use <strong>Return / Refund</strong> 
+                and choose <strong>Refund</strong> or <strong>Replacement</strong> while the order is still To Receive.
+              </li>
+              <li>
+                <strong>Accidentally confirmed:</strong> Once you click Order Received, you <strong>cannot</strong> file a return through your account. 
+                Contact customer service immediately — we will review your case.
+              </li>
+            </ul>
+            <div className="policy-highlight">
+              <p><strong>Customer Service:</strong> designexcellence1@gmail.com | (02) 413-6682</p>
+            </div>
+          </section>
+
           <section className="policy-section">
             <h2>How to Request a Return</h2>
             <ol className="policy-list">
               <li>
-                <strong>Log in to Your Account:</strong> Go to your order history in your account dashboard
+                <strong>Log in to Your Account:</strong> Go to Order History (<strong>Account → Orders</strong>)
               </li>
               <li>
-                <strong>Select the Order:</strong> Find the order you wish to return and click the "Return" button
+                <strong>Open a To Receive order:</strong> Use <strong>Return / Refund</strong> (do not click Order Received first)
               </li>
               <li>
-                <strong>Choose Action Type:</strong> Select either "Refund" or "Replacement"
+                <strong>Choose Refund or Replacement</strong>
               </li>
               <li>
-                <strong>Select Return Reason:</strong> Choose "Damaged Item" or "Other Reason"
+                <strong>Select return reason:</strong> Damaged Item, Wrong Item, or Other Reason
               </li>
               <li>
-                <strong>Provide Evidence:</strong> Upload at least one image or video showing the defect or issue
+                <strong>Upload evidence:</strong> At least one image or video of the issue, plus proof of purchase
               </li>
               <li>
-                <strong>Confirm Conditions:</strong> Check all required return condition boxes
-              </li>
-              <li>
-                <strong>Submit Request:</strong> Submit your return request for review
+                <strong>Submit:</strong> Our team will review within 2–3 business days
               </li>
             </ol>
             <p>
-              Once submitted, our team will review your request within 2-3 business days. 
-              You will receive an email notification regarding the approval or decline of your return request.
+              You will receive an email when your request is approved or declined.
             </p>
           </section>
 
-          {/* Refund Policy */}
           <section className="policy-section">
             <h2>Refund Policy</h2>
             <h3>Refund Eligibility</h3>
             <p>
-              Refunds are available for orders that meet all return conditions and are approved by our team. 
-              Refunds will be processed to your original payment method.
+              Refunds apply to approved return requests filed while the order is <strong>To Receive</strong>. 
+              Refunds are processed to your original payment method after pickup and verification.
             </p>
             
-            <h3>Refund Amount Calculation</h3>
-            <p>The refund amount is calculated as follows:</p>
+            <h3>Refund Amount (Pre-Receipt Returns)</h3>
+            <p>For approved pre-receipt refund requests:</p>
             <ul className="policy-list">
               <li>
-                <strong>Product Amount:</strong> Full refund of the product purchase price (after discounts)
+                <strong>Product amount:</strong> Full refund of the returned item price (for the quantities you return)
               </li>
               <li>
-                <strong>Delivery Fees:</strong> Original delivery charges are <strong>non-refundable</strong>
+                <strong>Delivery fees:</strong> Original delivery charges are <strong>included</strong> in your refund (proportional to items returned on partial returns)
               </li>
               <li>
-                <strong>Return Shipping:</strong> Customer is responsible for return shipping costs unless the 
-                product is defective or was damaged during initial delivery
+                <strong>Return shipping:</strong> Paid by DesignXcel — you do not pay return shipping for pre-receipt defective or wrong-item returns
               </li>
             </ul>
 
             <h3>Refund Processing Time</h3>
             <p>
-              Once your return is approved and the items are picked up by our delivery team, refunds are 
-              typically processed within 5-7 business days. The refund will appear in your original payment 
-              method (Stripe) within 7-10 business days after processing.
+              After approval, our team arranges pickup. Refunds are typically processed within 5–7 business days 
+              after we receive and verify the returned items. Funds appear on your original payment method 
+              (e.g. Stripe) within 7–10 business days after processing.
             </p>
           </section>
 
-          {/* Replacement Policy */}
           <section className="policy-section">
             <h2>Replacement Policy</h2>
             <p>
-              If you choose "Replacement" as your action type, we will send you a replacement item for the 
-              defective or damaged product. The replacement process works as follows:
+              If you choose <strong>Replacement</strong>, we send a replacement for the defective or wrong product. 
+              The process is:
             </p>
             <ol className="policy-list">
               <li>Your return request is reviewed and approved</li>
-              <li>Our delivery team picks up the returned item from your location</li>
-              <li>The returned item is inspected and marked as damaged in our inventory</li>
-              <li>A replacement item is prepared and shipped to you</li>
-              <li>You receive the replacement item through our normal delivery process</li>
+              <li>Our delivery team picks up the returned item</li>
+              <li>The item is inspected</li>
+              <li>A replacement is prepared and shipped to you</li>
             </ol>
             <p>
-              <strong>Note:</strong> Replacement items will be the same product and variation as your original order. 
-              If the same item is unavailable, we will contact you to discuss alternatives.
+              <strong>Pre-receipt replacements:</strong> Return shipping is paid by DesignXcel. 
+              <strong>Replacement delivery is free.</strong> The replacement will match your original product and variation when available; 
+              if unavailable, we will contact you about alternatives.
             </p>
           </section>
 
-          {/* Fees and Charges */}
           <section className="policy-section">
-            <h2>Fees and Charges</h2>
-            
-            <h3>Shipping Costs</h3>
+            <h2>Fees and Shipping</h2>
+            <p>
+              The following applies to <strong>pre-receipt returns</strong> (orders still in <strong>To Receive</strong> status) 
+              for damaged, wrong, or defective items:
+            </p>
             <ul className="policy-list">
               <li>
-                <strong>Return Shipping:</strong> Customer is responsible for return shipping charges unless 
-                the product is defective or was damaged during initial delivery
+                <strong>Return shipping:</strong> Paid by DesignXcel (seller). You are not charged return shipping for eligible pre-receipt returns.
               </li>
               <li>
-                <strong>Original Delivery Charges:</strong> Non-refundable, as delivery service has already been provided
+                <strong>Original delivery (refunds):</strong> Included in your refund amount when your refund request is approved.
               </li>
               <li>
-                <strong>Replacement Delivery:</strong> Free delivery for replacement items
+                <strong>Replacement delivery:</strong> Free — no delivery charge for the replacement shipment.
               </li>
             </ul>
+            <p>
+              <strong>After Order Received:</strong> Self-service returns are not offered through your account. 
+              If you confirmed receipt by mistake or have an exceptional situation, contact customer service — 
+              fees and eligibility will be reviewed case by case.
+            </p>
           </section>
 
-          {/* Return Decline */}
           <section className="policy-section">
             <h2>When Returns May Be Declined</h2>
             <p>Your return request may be declined if:</p>
             <ul className="policy-list">
-              <li>The return window (30 days) has expired</li>
-              <li>Items are not in original condition or packaging</li>
-              <li>Items show signs of use, modification, or damage caused by the customer</li>
-              <li>Required parts, accessories, or documentation are missing</li>
-              <li>No proof of purchase is provided</li>
+              <li>The order is no longer in To Receive status (e.g. you already clicked Order Received)</li>
+              <li>The reason is change of mind (not covered by this policy)</li>
+              <li>Items do not match the reported issue or required evidence is missing</li>
+              <li>Items show damage caused by the customer, not a defect or delivery issue</li>
+              <li>Required parts, accessories, documentation, or proof of purchase are missing</li>
               <li>Items do not meet the return conditions outlined in this policy</li>
-              <li>The return is for "change of mind" reasons (not covered by this policy)</li>
             </ul>
             <p>
-              If your return is declined, you will receive an email notification with the reason for the decline.
+              If your return is declined, you will receive an email with the reason. 
+              You may contact customer service if you believe there was an error.
             </p>
           </section>
 
-          {/* Contact Information */}
           <section className="policy-section">
             <h2>Need Help?</h2>
             <p>
-              If you have questions about our Return & Refund Policy or need assistance with a return request, 
-              please contact our customer service team:
+              Questions about returns, accidental Order Received confirmations, or order issues? Contact us:
             </p>
             <div className="contact-info">
               <p><strong>Email:</strong> designexcellence1@gmail.com</p>
@@ -197,11 +235,10 @@ const ReturnRefundPolicy = () => {
               <p><strong>Address:</strong> #1 Binmaka Street Cor. Biak na Bato Brgy. Manresa, Quezon City</p>
             </div>
             <p>
-              You can also visit your account dashboard to track your return request status and view your order history.
+              Track return status and orders in your account dashboard under <strong>Orders</strong>.
             </p>
           </section>
 
-          {/* Legal Rights */}
           <section className="policy-section">
             <h2>Your Legal Rights</h2>
             <p>
@@ -219,13 +256,11 @@ const ReturnRefundPolicy = () => {
             </p>
           </section>
 
-          {/* Policy Updates */}
           <section className="policy-section">
             <h2>Policy Updates</h2>
             <p>
-              We reserve the right to update this Return & Refund Policy at any time. Changes will be effective 
-              immediately upon posting on this page. We encourage you to review this policy periodically to stay 
-              informed about our return and refund procedures.
+              We reserve the right to update this Return & Refund Policy at any time. Changes are effective 
+              upon posting on this page. Please review this policy periodically.
             </p>
             <p><strong>Last Updated:</strong> {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
           </section>
@@ -236,4 +271,3 @@ const ReturnRefundPolicy = () => {
 };
 
 export default ReturnRefundPolicy;
-

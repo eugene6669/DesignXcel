@@ -209,15 +209,14 @@ function applyInventoryListFilters(request, filters = {}) {
     return clause;
 }
 
-/** Products with variation-level returned / damaged / repaired / disposed stock only. */
+/** Products with post-inspection stock only (damaged / repaired / disposed — not pending ReturnedQuantity). */
 function applyReturnsListFilters(request, filters = {}) {
     let clause = applyInventoryListFilters(request, filters);
     clause += ` AND EXISTS (
             SELECT 1 FROM InventoryProductVariations iv
             WHERE iv.InventoryProductID = ip.InventoryProductID AND iv.IsActive = 1
             AND (
-                COALESCE(iv.ReturnedQuantity, 0) > 0
-                OR COALESCE(iv.DamagedQuantity, 0) > 0
+                COALESCE(iv.DamagedQuantity, 0) > 0
                 OR COALESCE(iv.RepairedQuantity, 0) > 0
                 OR COALESCE(iv.DisposedQuantity, 0) > 0
             )

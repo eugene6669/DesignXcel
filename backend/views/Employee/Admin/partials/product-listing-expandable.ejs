@@ -31,7 +31,7 @@
                 <th>Product Name</th>
                 <th>Category</th>
                 <th class="qty-col" title="Sum of all variation quantities">Total Qty</th>
-                <% if (!showReturnCols) { %><th class="qty-col">Available</th><% } %>
+                <% if (!showReturnCols) { %><th class="qty-col" title="Sum of available quantity across all variations">Total Available</th><% } %>
                 <% if (showReturnCols) { %>
                 <th class="qty-col return-qty-th return-qty-th-damaged">Damaged</th>
                 <th class="qty-col return-qty-th return-qty-th-returned">Returned</th>

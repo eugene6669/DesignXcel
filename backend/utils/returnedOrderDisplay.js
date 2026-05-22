@@ -1,16 +1,36 @@
 'use strict';
 
+const PRE_RECEIVE_RETURN_PREFIX = '[PRE_RECEIVE]';
+
+function isPreReceiveReturn(order) {
+    return String(order?.ReturnReason || '').trim().startsWith(PRE_RECEIVE_RETURN_PREFIX);
+}
+
+function stripReturnReasonPrefix(reason) {
+    const s = String(reason || '').trim();
+    if (s.startsWith('DECLINED:')) return s.replace(/^DECLINED:\s*/, '');
+    if (s.startsWith(PRE_RECEIVE_RETURN_PREFIX)) {
+        return s.slice(PRE_RECEIVE_RETURN_PREFIX.length).trim();
+    }
+    return s;
+}
+
 function returnedOrderStatusLabel(order) {
     const status = String(order?.Status || '').trim();
     if (status === 'Refunded') return 'Refunded';
     if (status === 'Completed Returned') return 'Replaced';
-    if (status === 'Pickup Received') return 'Pickup Received';
-    if (status === 'Inspection Complete') return 'Inspection Complete';
-    if (status === 'Awaiting Inspection') return 'Awaiting Inspection';
-    if (status === 'Processing (Pickup)' || (status === 'Processing' && order?.ActionType)) {
-        return 'Waiting for Receiving Item';
+    if (status === 'Pickup Received') {
+        const actionType = String(order?.ActionType || '').toLowerCase().trim();
+        if (actionType === 'refund') return 'Process Refund';
+        if (actionType === 'replacement') return 'Process Replacement';
+        return 'Pickup Received';
     }
-    if (status === 'Returned') return 'Returned';
+    if (status === 'Inspection Complete') return 'Inspection Complete';
+    if (status === 'Awaiting Inspection') return 'Waiting for Inspection';
+    if (status === 'Processing (Pickup)' || (status === 'Processing' && order?.ActionType)) {
+        return 'Process Pickup';
+    }
+    if (status === 'Returned') return 'Return';
     if (status === 'Declined') return 'Declined';
     return status || 'Returned';
 }
@@ -21,10 +41,18 @@ function returnedOrderStatusClass(order) {
     if (label === 'Replaced') return 'status-replaced';
     if (label === 'Pickup Received') return 'status-pickup-received';
     if (label === 'Inspection Complete') return 'status-inspection-complete';
-    if (label === 'Awaiting Inspection') return 'status-awaiting-inspection';
+    if (label === 'Waiting for Inspection') return 'status-awaiting-inspection';
     if (label === 'Waiting for Receiving Item') return 'status-processing';
     if (label === 'Declined') return 'status-declined';
     return 'status-returned';
+}
+
+function returnReasonTypeLabel(returnType) {
+    const t = String(returnType || '').toLowerCase().trim();
+    if (t === 'damage') return 'Damaged Item';
+    if (t === 'wrong_item') return 'Wrong Item';
+    if (t === 'other') return 'Other Reason';
+    return returnType ? String(returnType) : '—';
 }
 
 function returnedOrderTypeLabel(order) {
@@ -32,6 +60,14 @@ function returnedOrderTypeLabel(order) {
     if (actionType === 'refund') return 'Refund';
     if (actionType === 'replacement') return 'Replacement';
     return '—';
+}
+
+/** Primary workflow button after inspection complete. */
+function returnProcessButtonLabel(order) {
+    const actionType = String(order?.ActionType || '').toLowerCase().trim();
+    if (actionType === 'refund') return 'Process Refund';
+    if (actionType === 'replacement') return 'Process Replacement';
+    return 'Proceed';
 }
 
 function returnedOrderTypeClass(order) {
@@ -76,6 +112,11 @@ function computeRefundAmountForOrder(order) {
     const subtotal = parseFloat(order?.Subtotal || 0);
     if (!subtotal || subtotal <= 0) return 0;
 
+    if (isPreReceiveReturn(order)) {
+        const delivery = (parseFloat(order?.DeliveryCost || 0) || 0) + (parseFloat(order?.ExtraDeliveryFee || 0) || 0);
+        return Math.round((subtotal + delivery) * 100) / 100;
+    }
+
     const unmet = returnConditionsUnmetCount(order);
     if (unmet === 0) return Math.round(subtotal * 100) / 100;
     if (unmet <= 2) return Math.round(subtotal * 0.5 * 100) / 100;
@@ -83,6 +124,13 @@ function computeRefundAmountForOrder(order) {
 }
 
 function refundPolicySummary(order) {
+    if (isPreReceiveReturn(order)) {
+        const actionType = String(order?.ActionType || '').toLowerCase().trim();
+        if (actionType === 'replacement') {
+            return 'Pre-receipt replacement — seller pays return shipping; replacement delivery is free.';
+        }
+        return 'Pre-receipt refund — full refund including delivery and return shipping (seller pays all fees).';
+    }
     const unmet = returnConditionsUnmetCount(order);
     if (unmet === 0) {
         return 'All conditions met — full product refund (delivery fee not included).';
@@ -94,10 +142,15 @@ function refundPolicySummary(order) {
 }
 
 module.exports = {
+    PRE_RECEIVE_RETURN_PREFIX,
+    isPreReceiveReturn,
+    stripReturnReasonPrefix,
     returnedOrderStatusLabel,
     returnedOrderStatusClass,
+    returnReasonTypeLabel,
     returnedOrderTypeLabel,
     returnedOrderTypeClass,
+    returnProcessButtonLabel,
     showProductReturnsLink,
     returnConditionsUnmetCount,
     returnConditionsAllMet,

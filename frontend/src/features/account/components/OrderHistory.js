@@ -63,11 +63,50 @@ const statusBorderColor = (status) => {
   return '#6b7280';
 };
 
-// Normalize status display - ensure "Receive" is shown correctly
+// Customer-facing status labels
 const normalizeStatusDisplay = (status) => {
   if (status === 'Received') return 'Receive';
   if (status === 'To Receive') return 'Receive';
+  if (status === 'Returned') return 'Return';
+  if (status === 'Refunded' || status === 'Completed Returned') return 'Returned';
   return status;
+};
+
+const RETURN_RELATED_STATUSES = [
+  'Returned',
+  'Refunded',
+  'Completed Returned',
+  'Processing (Pickup)',
+  'Awaiting Inspection',
+  'Inspection Complete',
+  'Pickup Received',
+  'Declined',
+];
+
+const normalizeReturnWorkflowStatus = (status, order) => {
+  if (status === 'Awaiting Inspection') return 'Waiting for Inspection';
+  if (status === 'Pickup Received') {
+    const action = String(order?.ActionType || '').toLowerCase();
+    if (action === 'refund') return 'Process Refund';
+    if (action === 'replacement') return 'Process Replacement';
+  }
+  if (status === 'Returned') return 'Return';
+  if (status === 'Refunded' || status === 'Completed Returned') return 'Returned';
+  return status;
+};
+
+const RECEIVE_STATUSES = ['Receive', 'Received', 'To Receive'];
+const PRE_RECEIVE_RETURN_PREFIX = '[PRE_RECEIVE]';
+
+const isReceiveStatus = (status) => RECEIVE_STATUSES.includes(status);
+
+const formatReturnReasonDisplay = (reason) => {
+  if (!reason) return '';
+  if (reason.startsWith('DECLINED:')) return reason.replace(/^DECLINED:\s*/, '');
+  if (reason.startsWith(PRE_RECEIVE_RETURN_PREFIX)) {
+    return reason.slice(PRE_RECEIVE_RETURN_PREFIX.length).trim();
+  }
+  return reason;
 };
 
 const orderFlow = [
@@ -77,7 +116,7 @@ const orderFlow = [
   { key: 'Delivering', label: 'Delivering' },
   { key: 'To Receive', label: 'To Receive' },
   { key: 'Completed', label: 'Completed' },
-  { key: 'Returned', label: 'Returned' },
+  { key: 'Returned', label: 'Return' },
 ];
 
 /** Stripe Checkout session ids used by this app (Stripe test/live). */
@@ -502,7 +541,13 @@ const DetailsModal = ({ open, onClose, order }) => {
                   {ReturnType && !ReturnReason?.startsWith('DECLINED:') && (
                     <div className="info-row">
                       <span className="info-label">Return Reason</span>
-                      <span className="info-value">{ReturnType === 'damage' ? 'Damaged Item' : 'Other Reason'}</span>
+                      <span className="info-value">
+                        {ReturnType === 'damage'
+                          ? 'Damaged Item'
+                          : ReturnType === 'wrong_item'
+                            ? 'Wrong Item'
+                            : 'Other Reason'}
+                      </span>
                     </div>
                   )}
                   {ReturnReason && (
@@ -513,7 +558,7 @@ const DetailsModal = ({ open, onClose, order }) => {
                       <span className="info-value" style={{ 
                         color: ReturnReason.startsWith('DECLINED:') ? '#dc2626' : 'inherit'
                       }}>
-                        {ReturnReason.startsWith('DECLINED:') ? ReturnReason.replace('DECLINED: ', '') : ReturnReason}
+                        {formatReturnReasonDisplay(ReturnReason)}
                       </span>
                     </div>
                   )}
@@ -924,7 +969,7 @@ const TABS = [
   { key: 'delivery', label: 'Delivery' },
   { key: 'receive', label: 'Receive' },
   { key: 'completed', label: 'Completed' },
-  { key: 'returned', label: 'Returned' },
+  { key: 'returned', label: 'Return' },
   { key: 'cancelled', label: 'Cancelled' },
 ];
 
@@ -937,6 +982,9 @@ const OrderHistory = () => {
   const [error, setError] = useState('');
   const [cancelling, setCancelling] = useState({});
   const [modal, setModal] = useState({ open: false, orderId: null });
+  const [receiveConfirmModal, setReceiveConfirmModal] = useState({ open: false, orderId: null, order: null });
+  const [returnSubmitConfirmModal, setReturnSubmitConfirmModal] = useState({ open: false });
+  const pendingReturnSubmitRef = useRef(null);
   const [countdown, setCountdown] = useState(5);
   const [activeTab, setActiveTab] = useState('all');
   const [detailsModal, setDetailsModal] = useState({ open: false, order: null });
@@ -945,10 +993,10 @@ const OrderHistory = () => {
   const [successModal, setSuccessModal] = useState({ open: false, message: '', navigateTo: null, modalType: 'buyAgain', isSuccess: false });
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [reviewModal, setReviewModal] = useState({ open: false, order: null });
-  const [returnModal, setReturnModal] = useState({ open: false, orderId: null });
+  const [returnModal, setReturnModal] = useState({ open: false, orderId: null, order: null, isPreReceive: false });
   const [returning, setReturning] = useState({});
   const [returnReason, setReturnReason] = useState('');
-  const [returnType, setReturnType] = useState(''); // 'damage' or 'other' - reason for return
+  const [returnType, setReturnType] = useState(''); // damage | wrong_item | other
   const [actionType, setActionType] = useState(''); // 'refund' or 'replacement' - what customer wants
   const [selectedItems, setSelectedItems] = useState({}); // For partial returns: {key: {productId, variationId, maxQuantity, returnQuantity}}
   const [returnImage, setReturnImage] = useState(null);
@@ -1050,6 +1098,22 @@ const OrderHistory = () => {
     }
   };
 
+  const openReceiveConfirmModal = (order) => {
+    if (!order?.OrderID) return;
+    setReceiveConfirmModal({ open: true, orderId: order.OrderID, order });
+  };
+
+  const closeReceiveConfirmModal = () => {
+    setReceiveConfirmModal({ open: false, orderId: null, order: null });
+  };
+
+  const confirmReceiveOrder = async () => {
+    const orderId = receiveConfirmModal.orderId;
+    if (!orderId) return;
+    closeReceiveConfirmModal();
+    await handleReceiveOrder(orderId);
+  };
+
   // Add handler for receiving order
   const handleReceiveOrder = async (orderId) => {
     setReceiving((prev) => ({ ...prev, [orderId]: true }));
@@ -1114,21 +1178,13 @@ const OrderHistory = () => {
     const order = orders.find(o => o.OrderID === orderId);
     if (!order) return;
 
-    // Check if order is within return timeframe
-    const orderDate = new Date(order.OrderDate);
-    const deliveryDate = order.Status === 'Completed' || order.Status === 'Delivered' 
-      ? (order.EstimatedDeliveryDate ? new Date(order.EstimatedDeliveryDate) : orderDate)
-      : orderDate;
-    
-    const daysSinceDelivery = Math.floor((new Date() - deliveryDate) / (1000 * 60 * 60 * 24));
-    const isWithinTimeframe = daysSinceDelivery <= RETURN_POLICY.timeframeDays;
-
-    if (!isWithinTimeframe) {
-      alert(`This order cannot be returned. The return window of ${RETURN_POLICY.timeframeDays} days has expired. The order was delivered ${daysSinceDelivery} days ago.`);
+    const isPreReceive = isReceiveStatus(order.Status);
+    if (!isPreReceive) {
+      alert('Returns must be filed while the order is still in To Receive status. If you already marked the order as received, contact support.');
       return;
     }
 
-    setReturnModal({ open: true, orderId, order });
+    setReturnModal({ open: true, orderId, order, isPreReceive: true });
     setReturnReason('');
     setReturnType('');
     setActionType('');
@@ -1177,7 +1233,9 @@ const OrderHistory = () => {
 
   const closeReturnModal = () => {
     returnOverlayClickAt.current = 0;
-    setReturnModal({ open: false, orderId: null, order: null });
+    setReturnSubmitConfirmModal({ open: false });
+    pendingReturnSubmitRef.current = null;
+    setReturnModal({ open: false, orderId: null, order: null, isPreReceive: false });
     setReturnReason('');
     setReturnType('');
     setActionType('');
@@ -1261,78 +1319,114 @@ const OrderHistory = () => {
     }));
   };
 
-  const confirmReturn = async () => {
-    const orderId = returnModal.orderId;
+  const validateReturnForm = () => {
     const order = returnModal.order;
-    
+
     if (!actionType) {
-      alert('Please select whether you want a refund or replacement.');
-      return;
+      alert('Please select Refund or Replacement under "What would you like?"');
+      return false;
     }
     if (!returnType) {
       alert('Please select a return reason.');
-      return;
+      return false;
     }
     if (!returnReason.trim()) {
       alert('Please provide a reason for returning the order.');
-      return;
+      return false;
     }
 
-    // Validate proof of purchase (required)
+    const returnItems = Object.values(selectedItems).filter((item) => item.returnQuantity > 0);
+    if (!returnItems.length) {
+      alert('Please select at least one item to return and enter a quantity greater than 0.');
+      return false;
+    }
+
     if (!returnConditions.proofOfPurchase) {
       alert('Please confirm that you have proof of purchase (order receipt).');
-      return;
+      return false;
     }
     if (!proofOfPurchaseImage) {
       alert('Please upload proof of purchase image (order receipt).');
-      return;
-    }
-    
-    // Refund policy (reviewed on approval):
-    // - All 4 conditions met → full product refund (delivery fee not refunded)
-    // - 1–2 conditions unchecked → 50% of product price deducted
-    
-    // Note: Evidence upload is optional - admin will review request regardless
-
-    // Validate return timeframe
-    if (order) {
-      const orderDate = new Date(order.OrderDate);
-      const deliveryDate = order.Status === 'Completed' || order.Status === 'Delivered' 
-        ? (order.EstimatedDeliveryDate ? new Date(order.EstimatedDeliveryDate) : orderDate)
-        : orderDate;
-      
-      const daysSinceDelivery = Math.floor((new Date() - deliveryDate) / (1000 * 60 * 60 * 24));
-      if (daysSinceDelivery > RETURN_POLICY.timeframeDays) {
-        alert(`This order cannot be returned. The return window of ${RETURN_POLICY.timeframeDays} days has expired.`);
-        return;
-      }
+      return false;
     }
 
-    // Require at least one evidence file (image or video)
+    const isPreReceive = returnModal.isPreReceive || isReceiveStatus(order?.Status);
+    if (!isPreReceive) {
+      alert('Returns must be filed while the order is still in To Receive status.');
+      return false;
+    }
     if (!returnImage && !returnVideo) {
       alert('Please upload at least one image or video as evidence for your return request.');
+      return false;
+    }
+
+    return true;
+  };
+
+  const requestReturnSubmit = () => {
+    if (!validateReturnForm()) return;
+
+    const order = returnModal.order;
+    const isPreReceive = returnModal.isPreReceive || isReceiveStatus(order?.Status);
+    const returnItems = Object.values(selectedItems)
+      .filter((item) => item.returnQuantity > 0)
+      .map((item) => ({
+        productId: item.productId,
+        variationId: item.variationId,
+        quantity: item.returnQuantity
+      }));
+
+    pendingReturnSubmitRef.current = {
+      orderId: returnModal.orderId,
+      order,
+      actionType,
+      returnType,
+      returnReason: returnReason.trim(),
+      isPreReceive,
+      returnItems
+    };
+
+    setReturnSubmitConfirmModal({ open: true, actionType });
+  };
+
+  const closeReturnSubmitConfirmModal = () => {
+    setReturnSubmitConfirmModal({ open: false });
+    pendingReturnSubmitRef.current = null;
+  };
+
+  const confirmReturn = async () => {
+    const pending = pendingReturnSubmitRef.current;
+    if (!pending?.actionType) {
+      alert('Please select whether you want a refund or replacement under "What would you like?"');
       return;
     }
+
+    const {
+      orderId,
+      order,
+      actionType: submitActionType,
+      returnType: submitReturnType,
+      returnReason: submitReturnReason,
+      isPreReceive,
+      returnItems
+    } = pending;
+
+    closeReturnSubmitConfirmModal();
 
     setReturning((prev) => ({ ...prev, [orderId]: true }));
     try {
       const formData = new FormData();
-      formData.append('actionType', actionType); // 'refund' or 'replacement'
-      formData.append('returnType', returnType); // 'damage' or 'other' - reason
-      formData.append('returnReason', returnReason.trim());
+      formData.append('actionType', submitActionType);
+      formData.append('returnType', submitReturnType);
+      formData.append('returnReason', submitReturnReason);
+      if (isPreReceive) {
+        formData.append('returnPhase', 'pre_receive');
+      }
       formData.append('originalPackaging', returnConditions.originalPackaging);
       formData.append('allParts', returnConditions.allParts);
       formData.append('unused', returnConditions.unused);
       formData.append('proofOfPurchase', returnConditions.proofOfPurchase);
       
-      // Prepare return items array for partial returns
-      const returnItems = Object.values(selectedItems)
-        .filter(item => item.returnQuantity > 0)
-        .map(item => ({
-          productId: item.productId,
-          variationId: item.variationId,
-          quantity: item.returnQuantity
-        }));
       formData.append('returnItems', JSON.stringify(returnItems));
       
       if (returnImage) {
@@ -1358,7 +1452,7 @@ const OrderHistory = () => {
       if (data.success) {
         setOrders((prev) => prev.map(order => order.OrderID === orderId ? { ...order, Status: 'Returned' } : order));
         closeReturnModal();
-        setSuccessModal({ open: true, message: 'Order return request submitted successfully. We will process your return shortly.', navigateTo: null, modalType: 'return', isSuccess: true });
+        setSuccessModal({ open: true, message: 'Return request submitted successfully. We will review your request and notify you when it is processed.', navigateTo: null, modalType: 'return', isSuccess: true });
       } else {
         alert(data.message || 'Failed to submit return request.');
       }
@@ -1694,7 +1788,7 @@ const OrderHistory = () => {
   if (activeTab === 'completed') {
     filteredOrders = orders.filter(order => order.Status === 'Completed' || order.Status === 'Delivered');
   } else if (activeTab === 'returned') {
-    filteredOrders = orders.filter(order => order.Status === 'Returned');
+    filteredOrders = orders.filter(order => RETURN_RELATED_STATUSES.includes(order.Status));
   } else if (activeTab === 'cancelled') {
     filteredOrders = orders.filter(order => order.Status === 'Cancelled');
   } else if (activeTab === 'pending') {
@@ -2046,7 +2140,7 @@ const OrderHistory = () => {
                   border: `1px solid ${statusBorderColor(order.Status)}40`
                 }}>
                   {statusIcon(order.Status)}
-                  {normalizeStatusDisplay(order.Status)}
+                  {normalizeReturnWorkflowStatus(order.Status, order) || normalizeStatusDisplay(order.Status)}
                 </span>
               </div>
             </div>
@@ -2363,54 +2457,6 @@ const OrderHistory = () => {
                       <StarIcon size={14} color="#ffffff" />
                       Review
                     </button>
-                    {(() => {
-                      const orderDate = new Date(order.OrderDate);
-                      const deliveryDate = order.Status === 'Completed' || order.Status === 'Delivered' 
-                        ? (order.EstimatedDeliveryDate ? new Date(order.EstimatedDeliveryDate) : orderDate)
-                        : orderDate;
-                      const daysSinceDelivery = Math.floor((new Date() - deliveryDate) / (1000 * 60 * 60 * 24));
-                      const daysRemaining = RETURN_POLICY.timeframeDays - daysSinceDelivery;
-                      const isWithinTimeframe = daysSinceDelivery <= RETURN_POLICY.timeframeDays;
-                      const isReturned = order.Status === 'Returned';
-                      
-                      return (
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => handleReturnOrder(order.OrderID)}
-                          disabled={returning[order.OrderID] || isReturned || !isWithinTimeframe}
-                          style={{
-                            padding: '8px 12px',
-                            borderRadius: '6px',
-                            border: 'none',
-                            background: isReturned ? '#9ca3af' : !isWithinTimeframe ? '#d1d5db' : '#f59e0b',
-                            color: '#ffffff',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            cursor: (isReturned || !isWithinTimeframe) ? 'not-allowed' : 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            transition: 'all 0.2s ease',
-                            whiteSpace: 'nowrap',
-                            position: 'relative'
-                          }}
-                          title={!isWithinTimeframe ? `Return window expired (${daysSinceDelivery} days ago)` : isReturned ? 'Already returned' : daysRemaining > 0 ? `${daysRemaining} days left to return` : 'Last day to return'}
-                        >
-                          {returning[order.OrderID] ? 'Processing...' : isReturned ? 'Returned' : !isWithinTimeframe ? 'Return Expired' : 'Return'}
-                          {isWithinTimeframe && !isReturned && daysRemaining <= 7 && daysRemaining > 0 && (
-                            <span style={{ 
-                              marginLeft: '4px', 
-                              fontSize: '10px', 
-                              backgroundColor: 'rgba(255,255,255,0.3)', 
-                              padding: '2px 4px', 
-                              borderRadius: '4px' 
-                            }}>
-                              {daysRemaining}d left
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })()}
                     <button
                       className="btn btn-primary"
                       onClick={() => handleBuyAgain(order)}
@@ -2460,26 +2506,52 @@ const OrderHistory = () => {
                 )}
                 
                 {(order.Status === 'Receive' || order.Status === 'Received' || order.Status === 'To Receive') && (
-                  <button
-                    className="btn btn-success"
-                    disabled={receiving[order.OrderID]}
-                    onClick={() => handleReceiveOrder(order.OrderID)}
-                    style={{
-                      padding: '8px 12px',
-                      borderRadius: '6px',
-                      border: 'none',
-                      background: '#10b981',
-                      color: '#ffffff',
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    <CheckCircleIcon size={14} color="#ffffff" style={{ marginRight: '4px' }} />
-                    {receiving[order.OrderID] ? 'Processing...' : 'Receive'}
-                  </button>
+                  <>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => handleReturnOrder(order.OrderID)}
+                      disabled={returning[order.OrderID] || order.Status === 'Returned'}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: order.Status === 'Returned' ? '#9ca3af' : '#f59e0b',
+                        color: '#ffffff',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        cursor: order.Status === 'Returned' ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        transition: 'all 0.2s ease',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title="Refund or replacement — seller pays return shipping"
+                    >
+                      {returning[order.OrderID] ? 'Processing...' : RETURN_RELATED_STATUSES.includes(order.Status) ? normalizeStatusDisplay(order.Status) : 'Return Items'}
+                    </button>
+                    <button
+                      className="btn btn-success"
+                      disabled={receiving[order.OrderID]}
+                      onClick={() => openReceiveConfirmModal(order)}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: '#10b981',
+                        color: '#ffffff',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title="Only confirm if items are correct and undamaged"
+                    >
+                      <CheckCircleIcon size={14} color="#ffffff" style={{ marginRight: '4px' }} />
+                      {receiving[order.OrderID] ? 'Processing...' : 'Order Received'}
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -2492,6 +2564,59 @@ const OrderHistory = () => {
         onConfirm={confirmCancel}
         countdown={countdown}
         order={orders.find((o) => o.OrderID === modal.orderId)}
+      />
+      <ConfirmationModal
+        isOpen={returnSubmitConfirmModal.open}
+        onClose={closeReturnSubmitConfirmModal}
+        onConfirm={confirmReturn}
+        title="Submit Return Request?"
+        type="warning"
+        overlayZIndex={3000}
+        confirmText="Yes, Submit Return"
+        cancelText="Go Back"
+        message={
+          <div style={{ textAlign: 'left', lineHeight: 1.6, fontSize: '0.95rem', color: '#374151' }}>
+            <p style={{ margin: '0 0 12px 0' }}>
+              You are about to submit a <strong>{returnSubmitConfirmModal.actionType === 'replacement' ? 'replacement' : 'refund'}</strong> request for this order.
+            </p>
+            <p style={{ margin: '0 0 12px 0' }}>
+              Make sure your selected items, quantities, evidence, and proof of purchase are correct. This request will be reviewed by our team.
+            </p>
+            {returnModal.order && (
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>
+                Order #{returnModal.order.ReferenceNumber || returnModal.orderId}
+              </p>
+            )}
+          </div>
+        }
+      />
+      <ConfirmationModal
+        isOpen={receiveConfirmModal.open}
+        onClose={closeReceiveConfirmModal}
+        onConfirm={confirmReceiveOrder}
+        title="Confirm Order Received?"
+        type="warning"
+        confirmText="Yes, Order Received"
+        cancelText="Go Back"
+        message={
+          <div style={{ textAlign: 'left', lineHeight: 1.6, fontSize: '0.95rem', color: '#374151' }}>
+            <p style={{ margin: '0 0 12px 0' }}>
+              Only confirm if you have inspected your items and everything is correct, undamaged, and complete.
+            </p>
+            <p style={{ margin: '0 0 12px 0' }}>
+              <strong>Damaged or wrong item?</strong> Do not confirm. Use <strong>Return / Refund</strong> instead while this order is still in To Receive status.
+            </p>
+            <p style={{ margin: 0, padding: '10px 12px', background: '#fef3c7', borderRadius: '6px', fontSize: '0.875rem', color: '#92400e' }}>
+              If you accidentally confirm, you cannot return the product through your account. Please contact customer service at{' '}
+              <strong>designexcellence1@gmail.com</strong> or <strong>(02) 413-6682</strong>.
+            </p>
+            {receiveConfirmModal.order && (
+              <p style={{ margin: '12px 0 0 0', fontSize: '0.875rem', color: '#6b7280' }}>
+                Order #{receiveConfirmModal.order.ReferenceNumber || receiveConfirmModal.orderId}
+              </p>
+            )}
+          </div>
+        }
       />
       <DetailsModal
         open={detailsModal.open}
@@ -2520,16 +2645,27 @@ const OrderHistory = () => {
       />
       {/* Return Order Modal */}
       {returnModal.open && (
-        <div className="modal-overlay order-details-overlay" onClick={handleReturnOverlayClick} style={{ zIndex: 2000 }}>
+        <div
+          className="modal-overlay order-details-overlay"
+          onClick={returnSubmitConfirmModal.open ? undefined : handleReturnOverlayClick}
+          style={{
+            zIndex: 2000,
+            pointerEvents: returnSubmitConfirmModal.open ? 'none' : 'auto',
+            opacity: returnSubmitConfirmModal.open ? 0.45 : 1
+          }}
+          aria-hidden={returnSubmitConfirmModal.open}
+        >
           <div className="modal-content order-details-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px', width: '95vw', maxHeight: '95vh', overflowY: 'auto', overflowX: 'hidden' }}>
             <div className="order-details-header">
               <div className="order-details-title-section">
-                <h2 className="order-details-title">Return Order</h2>
+                <h2 className="order-details-title">
+                  {returnModal.isPreReceive ? 'Return Items' : 'Return Order'}
+                </h2>
                 <p className="order-details-subtitle">
                   Order #{returnModal.order?.ReferenceNumber || returnModal.orderId}
-                  {returnModal.order && (
+                  {returnModal.isPreReceive && (
                     <span style={{ display: 'block', fontSize: '0.85rem', color: '#6b7280', marginTop: '4px' }}>
-                      Return window: {RETURN_POLICY.timeframeDays} days from delivery
+                      Full refund including delivery fee — seller shoulders return shipping
                     </span>
                   )}
                 </p>
@@ -2545,6 +2681,19 @@ const OrderHistory = () => {
               </button>
             </div>
             <div className="order-details-body" style={{ padding: '24px', overflow: 'visible', minHeight: 'auto' }}>
+              {returnModal.isPreReceive && (
+                <div style={{
+                  marginBottom: '16px',
+                  padding: '12px',
+                  backgroundColor: '#fef2f2',
+                  border: '1px solid #fca5a5',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  color: '#991b1b'
+                }}>
+                  <strong>Do not click &quot;Order Received&quot; prematurely.</strong> If you received a damaged or wrong item, file Return/Refund or Replacement here first. If you accidentally confirm receipt, you cannot return through your account — contact customer service at <strong>designexcellence1@gmail.com</strong> or <strong>(02) 413-6682</strong>.
+                </div>
+              )}
               {/* Return Policy Notice */}
               <div style={{ 
                 marginBottom: '20px', 
@@ -2555,17 +2704,74 @@ const OrderHistory = () => {
                 fontSize: '0.875rem'
               }}>
                 <div style={{ fontWeight: '600', color: '#92400e', marginBottom: '6px' }}>
-                  Return Policy Requirements:
+                  {returnModal.isPreReceive ? 'Pre-Receipt Return Policy:' : 'Return Policy Requirements:'}
                 </div>
                 <ul style={{ margin: 0, paddingLeft: '20px', color: '#78350f' }}>
-                  <li>Items must be returned within {RETURN_POLICY.timeframeDays} days of delivery</li>
-                  <li>Items must be unused, unmodified, and in original packaging</li>
-                  <li>All parts, accessories, and documentation must be included</li>
-                  <li>Original receipt or proof of purchase required</li>
+                  {returnModal.isPreReceive ? (
+                    <>
+                      <li>Eligible only while the order is in <strong>To Receive</strong> status</li>
+                      <li><strong>Full refund</strong> of returned items plus original delivery fees</li>
+                      <li>Return shipping is paid by the seller</li>
+                      <li>Choose <strong>Refund</strong> (full refund including delivery) or <strong>Replacement</strong> (free replacement delivery)</li>
+                      <li>Upload evidence of damage or wrong item</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>Items must be returned within {RETURN_POLICY.timeframeDays} days of delivery</li>
+                      <li>Items must be unused, unmodified, and in original packaging</li>
+                      <li>All parts, accessories, and documentation must be included</li>
+                      <li>Original receipt or proof of purchase required</li>
+                    </>
+                  )}
                 </ul>
               </div>
 
-              {/* Items Selection Section - MUST BE FIRST - DROPDOWN */}
+              {/* Refund or Replacement — choose before selecting items */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#111827' }}>
+                  What would you like? *
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', transition: 'all 0.2s', backgroundColor: actionType === 'refund' ? '#fef3c7' : '#ffffff' }}>
+                    <input
+                      type="radio"
+                      name="returnActionType"
+                      value="refund"
+                      checked={actionType === 'refund'}
+                      onChange={(e) => setActionType(e.target.value)}
+                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontWeight: '600', color: '#111827', display: 'block' }}>Refund</span>
+                      <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                        {returnModal.isPreReceive
+                          ? 'Full refund including delivery fees. Seller pays return shipping.'
+                          : 'Get your money back via original payment method'}
+                      </span>
+                    </div>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', transition: 'all 0.2s', backgroundColor: actionType === 'replacement' ? '#fef3c7' : '#ffffff' }}>
+                    <input
+                      type="radio"
+                      name="returnActionType"
+                      value="replacement"
+                      checked={actionType === 'replacement'}
+                      onChange={(e) => setActionType(e.target.value)}
+                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontWeight: '600', color: '#111827', display: 'block' }}>Replacement</span>
+                      <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                        {returnModal.isPreReceive
+                          ? 'Receive a replacement item. Seller pays return shipping; replacement delivery is free.'
+                          : 'Receive a replacement item for the defective product'}
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Items Selection Section - DROPDOWN */}
               {returnModal.order && returnModal.order.items && returnModal.order.items.length > 0 && (
                 <div style={{ 
                   marginBottom: '20px',
@@ -2598,7 +2804,7 @@ const OrderHistory = () => {
                         color: '#ffffff',
                         margin: 0
                       }}>
-                        Select Items to Return
+                        Select Items to Return <span style={{ color: '#fef2f2' }}>*</span>
                         <span style={{ fontSize: '14px', fontWeight: '400', color: 'rgba(255,255,255,0.9)', marginLeft: '8px' }}>
                           ({returnModal.order.items.length} {returnModal.order.items.length === 1 ? 'item' : 'items'})
                         </span>
@@ -2692,43 +2898,6 @@ const OrderHistory = () => {
                 </div>
               )}
 
-              {/* Action Type Selection */}
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#111827' }}>
-                  What would you like? *
-                </label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', transition: 'all 0.2s', backgroundColor: actionType === 'refund' ? '#fef3c7' : '#ffffff' }}>
-                    <input
-                      type="radio"
-                      name="actionType"
-                      value="refund"
-                      checked={actionType === 'refund'}
-                      onChange={(e) => setActionType(e.target.value)}
-                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontWeight: '600', color: '#111827', display: 'block' }}>Refund</span>
-                      <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>Get your money back via original payment method</span>
-                    </div>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', transition: 'all 0.2s', backgroundColor: actionType === 'replacement' ? '#fef3c7' : '#ffffff' }}>
-                    <input
-                      type="radio"
-                      name="actionType"
-                      value="replacement"
-                      checked={actionType === 'replacement'}
-                      onChange={(e) => setActionType(e.target.value)}
-                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontWeight: '600', color: '#111827', display: 'block' }}>Replacement</span>
-                      <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>Receive a replacement item for the defective product</span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
               {/* Return Conditions Checklist */}
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', marginBottom: '12px', fontWeight: '600', color: '#111827' }}>
@@ -2737,14 +2906,21 @@ const OrderHistory = () => {
                 <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px', lineHeight: 1.55 }}>
                   These conditions will be reviewed by our team.
                 </p>
-                <ul style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px 1.1rem', padding: 0, lineHeight: 1.55 }}>
-                  <li style={{ marginBottom: '6px' }}>
-                    Meeting <strong>all</strong> requirements may result in a <strong>full refund of the product price</strong>. Delivery fees are <strong>not</strong> included in the refund.
-                  </li>
-                  <li>
-                    If you leave <strong>1 or 2</strong> requirements unchecked, <strong>50% of the product price</strong> will be deducted from your refund.
-                  </li>
-                </ul>
+                {!returnModal.isPreReceive && (
+                  <ul style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px 1.1rem', padding: 0, lineHeight: 1.55 }}>
+                    <li style={{ marginBottom: '6px' }}>
+                      Meeting <strong>all</strong> requirements may result in a <strong>full refund of the product price</strong>. Delivery fees are <strong>not</strong> included in the refund.
+                    </li>
+                    <li>
+                      If you leave <strong>1 or 2</strong> requirements unchecked, <strong>50% of the product price</strong> will be deducted from your refund.
+                    </li>
+                  </ul>
+                )}
+                {returnModal.isPreReceive && (
+                  <p style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px 0', lineHeight: 1.55 }}>
+                    Approved pre-receipt <strong>refunds</strong> include delivery fees; <strong>replacements</strong> ship at no extra delivery charge. The seller pays return shipping in both cases.
+                  </p>
+                )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '10px', border: '1px solid #e5e7eb', borderRadius: '6px', backgroundColor: returnConditions.originalPackaging ? '#f0fdf4' : '#ffffff', transition: 'all 0.2s' }}>
                     <input
@@ -2809,6 +2985,17 @@ const OrderHistory = () => {
                       style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                     />
                     <span style={{ fontWeight: '500', color: '#111827' }}>Item is Damaged</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', transition: 'all 0.2s', backgroundColor: returnType === 'wrong_item' ? '#fef3c7' : '#ffffff' }}>
+                    <input
+                      type="radio"
+                      name="returnType"
+                      value="wrong_item"
+                      checked={returnType === 'wrong_item'}
+                      onChange={(e) => setReturnType(e.target.value)}
+                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                    />
+                    <span style={{ fontWeight: '500', color: '#111827' }}>Wrong Item</span>
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', transition: 'all 0.2s', backgroundColor: returnType === 'other' ? '#fef3c7' : '#ffffff' }}>
                     <input
@@ -3028,7 +3215,7 @@ const OrderHistory = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={confirmReturn}
+                  onClick={requestReturnSubmit}
                   disabled={
                     returning[returnModal.orderId] || 
                     !actionType ||

@@ -14,11 +14,14 @@
     const _typeClass = typeof returnedOrderTypeClass === 'function'
         ? returnedOrderTypeClass(order)
         : '';
-    const returnReason = order.ReturnReason || order.ReturnDescription;
+    const rawReturnReason = order.ReturnReason || order.ReturnDescription;
+    const returnReason = typeof stripReturnReasonPrefix === 'function'
+        ? stripReturnReasonPrefix(rawReturnReason)
+        : rawReturnReason;
     const actionType = order.ActionType;
     const returnType = order.ReturnType;
-    const isDeclined = returnReason && String(returnReason).startsWith('DECLINED:');
-    const declineReason = isDeclined ? String(returnReason).replace('DECLINED:', '').trim() : null;
+    const isDeclined = rawReturnReason && String(rawReturnReason).startsWith('DECLINED:');
+    const declineReason = isDeclined ? String(rawReturnReason).replace('DECLINED:', '').trim() : null;
     const statusLabel = _statusLabel;
     const typeLabel = _typeLabel;
     const typeClass = _typeClass;
@@ -43,7 +46,7 @@
     <% if (returnType) { %>
     <div class="od-section" style="margin-bottom: 0.65rem;">
         <div class="od-section-title">Return Reason Type</div>
-        <div class="od-section-body"><strong><%= returnType === 'damage' ? 'Damaged Item' : 'Other Reason' %></strong></div>
+        <div class="od-section-body"><strong><%= typeof returnReasonTypeLabel === 'function' ? returnReasonTypeLabel(returnType) : (returnType === 'damage' ? 'Damaged Item' : returnType === 'wrong_item' ? 'Wrong Item' : 'Other Reason') %></strong></div>
     </div>
     <% } %>
     <% if (returnReason && !isDeclined) { %>
@@ -135,24 +138,29 @@
             <button type="button" onclick="openApproveModal(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Approve Return</button>
             <button type="button" onclick="openDeclineModal(<%= order.OrderID %>)" class="btn-action btn-decline table-action-btn">Decline Return</button>
         <% } else if (order.Status === 'Processing (Pickup)' || (order.Status === 'Processing' && actionType)) { %>
-            <button type="button" onclick="confirmReturnReceivingProceed(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Proceed</button>
-            <span class="od-return-status-msg" style="color:#6b7280;font-size:0.85em;">Waiting for receiving item.</span>
+            <button type="button" onclick="openReturnReceiveConfirmModal(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Receive Item</button>
+            <span class="od-return-status-msg" style="color:#6b7280;font-size:0.85em;">Process pickup, then mark items received at warehouse.</span>
         <% } else if (order.Status === 'Awaiting Inspection') { %>
-            <button type="button" onclick="openReturnInspectModal(<%= order.OrderID %>)" class="btn-action table-action-btn" style="background:#0ea5e9;color:#fff;">Inspect Items</button>
-        <% } else if (order.Status === 'Inspection Complete') { %>
-            <button type="button" onclick="confirmReturnPickup(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Confirm Pickup</button>
+            <button type="button" onclick="openReturnInspectStartConfirm(<%= order.OrderID %>)" class="btn-action table-action-btn" style="background:#0ea5e9;color:#fff;">Inspect Items</button>
+        <% } else if (order.Status === 'Inspection Complete' && actionType) { %>
+            <button type="button" onclick="openReturnPickupProceedModal(<%= order.OrderID %>, '<%= (actionType || '').toLowerCase() %>')" class="btn-action btn-approve table-action-btn"><%=
+                (function () {
+                    const a = String(actionType || '').toLowerCase();
+                    if (a === 'refund') return 'Process Refund';
+                    if (a === 'replacement') return 'Process Replacement';
+                    return 'Proceed';
+                })()
+            %></button>
         <% } else if (order.Status === 'Pickup Received' && actionType === 'refund') { %>
             <button type="button" onclick="openRefundModal(<%= order.OrderID %>)" class="btn-action btn-refund table-action-btn">Process Refund</button>
         <% } else if (order.Status === 'Pickup Received' && actionType === 'replacement') { %>
             <button type="button" onclick="openReplacementModal(<%= order.OrderID %>)" class="btn-action btn-replacement table-action-btn">Process Replacement</button>
         <% } else if (order.Status === 'Refunded') { %>
             <span class="od-return-status-msg od-return-status-msg--success">Refunded</span>
-            <a href="/Employee/Admin/ProductReturns" class="btn-action table-action-btn" style="background:#6366f1;color:#fff;text-decoration:none;">Product Returns</a>
         <% } else if (order.Status === 'Declined') { %>
             <span class="od-return-status-msg od-return-status-msg--declined">Return declined</span>
         <% } else if (order.Status === 'Completed Returned') { %>
             <span class="od-return-status-msg od-return-status-msg--success">Replaced</span>
-            <a href="/Employee/Admin/ProductReturns" class="btn-action table-action-btn" style="background:#6366f1;color:#fff;text-decoration:none;">Product Returns</a>
         <% } %>
     </div>
 </div>

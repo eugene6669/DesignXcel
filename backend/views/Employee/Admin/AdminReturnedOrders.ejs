@@ -499,6 +499,14 @@
             padding: 20px;
         }
         .return-inspect-overlay.show { display: flex; }
+        #returnInspectConfirmModal,
+        #returnInspectStartModal,
+        #returnPickupProceedModal,
+        #returnReceiveConfirmModal,
+        #refundConfirmModal,
+        #replacementConfirmModal {
+            z-index: 10060;
+        }
         .return-inspect-panel {
             background: #fff;
             border-radius: 12px;
@@ -1453,7 +1461,10 @@
                                     </div>
 
                                     <% 
-                                        const returnReason = order.ReturnReason || order.ReturnDescription;
+                                        const rawReturnReason = order.ReturnReason || order.ReturnDescription;
+                                        const returnReason = typeof stripReturnReasonPrefix === 'function'
+                                            ? stripReturnReasonPrefix(rawReturnReason)
+                                            : rawReturnReason;
                                         const actionType = order.ActionType;
                                         const returnType = order.ReturnType;
                                     %>
@@ -1476,7 +1487,7 @@
                                     <% if (returnType) { %>
                                         <div class="order-section">
                                             <span class="order-section-title">Return Reason Type</span>
-                                            <div class="order-section-body"><strong><%= returnType === 'damage' ? 'Damaged Item' : 'Other Reason' %></strong></div>
+                                            <div class="order-section-body"><strong><%= typeof returnReasonTypeLabel === 'function' ? returnReasonTypeLabel(returnType) : (returnType === 'damage' ? 'Damaged Item' : returnType === 'wrong_item' ? 'Wrong Item' : 'Other Reason') %></strong></div>
                                         </div>
                                     <% } %>
                                     <% if (returnReason) { %>
@@ -1624,44 +1635,47 @@
                                         </div>
                                     <% } else if (order.Status === 'Processing (Pickup)' || (order.Status === 'Processing' && actionType)) { %>
                                         <div class="order-section">
-                                            <span class="order-section-title">Step 2 — Waiting for Receiving Item</span>
+                                            <span class="order-section-title">Step 2 — Process Pickup</span>
                                             <div class="order-section-body return-workflow-step">
-                                                <strong>Items are expected back at the warehouse</strong>
-                                                <p>When the returned package has arrived, click Proceed to start inspection.</p>
-                                                <button type="button" onclick="confirmReturnReceivingProceed(<%= order.OrderID %>)" class="btn-action btn-approve">Proceed</button>
+                                                <strong>Arrange customer return pickup</strong>
+                                                <p>When returned items arrive at the warehouse, click Receive Item to start inspection.</p>
+                                                <button type="button" onclick="openReturnReceiveConfirmModal(<%= order.OrderID %>)" class="btn-action btn-approve">Receive Item</button>
                                             </div>
                                         </div>
                                     <% } else if (order.Status === 'Awaiting Inspection') { %>
                                         <div class="order-section">
-                                            <span class="order-section-title">Step 3 — Inspect Item</span>
+                                            <span class="order-section-title">Step 3 — Waiting for Inspection</span>
                                             <div class="order-section-body return-workflow-step">
-                                                <strong>Classify each returned variant</strong>
-                                                <p>Record how many units are damaged vs wrong item before confirming pickup.</p>
-                                                <button type="button" onclick="openReturnInspectModal(<%= order.OrderID %>)" class="btn-action" style="background:#0ea5e9;color:#fff;">Inspect Items</button>
+                                                <strong>Inspect returned items</strong>
+                                                <p>Record damaged vs wrong item quantities. Product Returns inventory updates only when you complete inspection.</p>
+                                                <button type="button" onclick="openReturnInspectStartConfirm(<%= order.OrderID %>)" class="btn-action" style="background:#0ea5e9;color:#fff;">Inspect Items</button>
                                             </div>
                                         </div>
-                                    <% } else if (order.Status === 'Inspection Complete') { %>
+                                    <% } else if (order.Status === 'Inspection Complete' && actionType) { %>
                                         <div class="order-section">
-                                            <span class="order-section-title">Step 4 — Confirm Pickup</span>
+                                            <span class="order-section-title">Step 4 — <%= (actionType || '').toLowerCase() === 'refund' ? 'Process Refund' : (actionType || '').toLowerCase() === 'replacement' ? 'Process Replacement' : 'Next Step' %></span>
                                             <div class="order-section-body return-workflow-step">
-                                                <strong>Inspection saved</strong>
-                                                <p>Confirm pickup, then process <%= actionType === 'refund' ? 'refund' : 'replacement' %>.</p>
-                                                <button type="button" onclick="confirmReturnPickup(<%= order.OrderID %>)" class="btn-action btn-approve">Confirm Pickup</button>
+                                                <strong>Inspection complete</strong>
+                                                <p>Stock has been applied to Product Returns. Confirm pickup and proceed.</p>
+                                                <button type="button" onclick="openReturnPickupProceedModal(<%= order.OrderID %>, '<%= (actionType || '').toLowerCase() %>')" class="btn-action btn-approve"><%=
+                                                    (actionType || '').toLowerCase() === 'refund' ? 'Process Refund' :
+                                                    (actionType || '').toLowerCase() === 'replacement' ? 'Process Replacement' : 'Proceed'
+                                                %></button>
                                             </div>
                                         </div>
                                     <% } else if (order.Status === 'Pickup Received' && actionType === 'refund') { %>
                                         <div class="order-section">
-                                            <span class="order-section-title">Refund</span>
+                                            <span class="order-section-title">Step 5 — Process Refund</span>
                                             <div class="order-section-body" style="display: flex; gap: 12px; flex-wrap: wrap; flex-direction: column; align-items: flex-start;">
-                                                <p style="margin: 0; color: #6b7280; font-size: 14px;">Pickup received. Process refund, then manage stock in Product Returns.</p>
+                                                <p style="margin: 0; color: #6b7280; font-size: 14px;">Pickup received. Process the customer refund.</p>
                                                 <button type="button" onclick="openRefundModal(<%= order.OrderID %>)" class="btn-action btn-refund">Process Refund</button>
                                             </div>
                                         </div>
                                     <% } else if (order.Status === 'Pickup Received' && actionType === 'replacement') { %>
                                         <div class="order-section">
-                                            <span class="order-section-title">Replacement</span>
+                                            <span class="order-section-title">Step 5 — Process Replacement</span>
                                             <div class="order-section-body" style="display: flex; gap: 12px; flex-wrap: wrap; flex-direction: column; align-items: flex-start;">
-                                                <p style="margin: 0; color: #6b7280; font-size: 14px;">Pickup received. Process replacement, then manage stock in Product Returns.</p>
+                                                <p style="margin: 0; color: #6b7280; font-size: 14px;">Pickup received. Process the replacement order.</p>
                                                 <button type="button" onclick="openReplacementModal(<%= order.OrderID %>)" class="btn-action btn-replacement">Process Replacement</button>
                                             </div>
                                         </div>
@@ -1669,16 +1683,14 @@
                                         <div class="order-section">
                                             <span class="order-section-title">Refund Status</span>
                                             <div class="order-section-body" style="padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
-                                                <p style="margin: 0 0 10px 0; color: #059669; font-weight: 600; font-size: 14px;">Refunded. Manage returned stock in Product Returns.</p>
-                                                <a href="/Employee/Admin/ProductReturns" class="btn-action" style="background:#6366f1;color:#fff;text-decoration:none;padding:8px 14px;border-radius:6px;display:inline-block;font-weight:600;">Open Product Returns</a>
+                                                <p style="margin: 0; color: #059669; font-weight: 600; font-size: 14px;">Refunded.</p>
                                             </div>
                                         </div>
                                     <% } else if (order.Status === 'Completed Returned') { %>
                                         <div class="order-section">
                                             <span class="order-section-title">Replacement Status</span>
                                             <div class="order-section-body" style="padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
-                                                <p style="margin: 0 0 10px 0; color: #059669; font-weight: 600; font-size: 14px;">Replaced. Manage returned stock in Product Returns.</p>
-                                                <a href="/Employee/Admin/ProductReturns" class="btn-action" style="background:#6366f1;color:#fff;text-decoration:none;padding:8px 14px;border-radius:6px;display:inline-block;font-weight:600;">Open Product Returns</a>
+                                                <p style="margin: 0; color: #059669; font-weight: 600; font-size: 14px;">Replaced.</p>
                                             </div>
                                         </div>
                                     <% } else if (order.Status === 'Declined') { %>
@@ -1826,6 +1838,77 @@
                         </div>
                     </div>
 
+                    <!-- Return receive confirmation -->
+                    <div id="returnReceiveConfirmModal" class="modal-overlay">
+                        <div class="modal-content">
+                            <div class="modal-icon approve">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </div>
+                            <h3>Receive Returned Items</h3>
+                            <p>Mark returned items as received? The order will move to <strong>Waiting for Inspection</strong>.</p>
+                            <div class="modal-buttons">
+                                <button type="button" class="modal-button cancel" onclick="closeReturnReceiveConfirmModal()">Cancel</button>
+                                <button type="button" class="modal-button confirm approve-btn" id="returnReceiveConfirmBtn" onclick="executeReturnReceivingProceed()">Receive Item</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Return inspection apply confirmation -->
+                    <div id="returnInspectConfirmModal" class="modal-overlay">
+                        <div class="modal-content">
+                            <div class="modal-icon approve" style="background:#e0f2fe;color:#0284c7;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 11l3 3L22 4"></path>
+                                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                                </svg>
+                            </div>
+                            <h3>Apply Inspection Results</h3>
+                            <p>Apply inspection results to inventory? Damaged units go to damaged stock; wrong items are restored to available.</p>
+                            <div class="modal-buttons">
+                                <button type="button" class="modal-button cancel" onclick="closeReturnInspectConfirmModal()">Cancel</button>
+                                <button type="button" class="modal-button confirm approve-btn" id="returnInspectConfirmBtn" onclick="executeReturnInspectProceed()">Apply &amp; Complete</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Proceed to refund/replacement after inspection -->
+                    <div id="returnPickupProceedModal" class="modal-overlay">
+                        <div class="modal-content">
+                            <div class="modal-icon approve" style="background:#fef3c7;color:#d97706;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                </svg>
+                            </div>
+                            <h3 id="returnPickupProceedTitle">Proceed</h3>
+                            <p id="returnPickupProceedMessage">Confirm and proceed?</p>
+                            <div class="modal-buttons">
+                                <button type="button" class="modal-button cancel" onclick="closeReturnPickupProceedModal()">Cancel</button>
+                                <button type="button" class="modal-button confirm approve-btn" id="returnPickupProceedBtn" onclick="executeReturnPickupProceed()">Proceed</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Confirm before opening inspection (Waiting for Inspection) -->
+                    <div id="returnInspectStartModal" class="modal-overlay">
+                        <div class="modal-content">
+                            <div class="modal-icon approve" style="background:#e0f2fe;color:#0369a1;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 11l3 3L22 4"></path>
+                                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                                </svg>
+                            </div>
+                            <h3>Start Inspection?</h3>
+                            <p>Items are at the warehouse and waiting for inspection. Record damaged vs wrong-item quantities for each returned variant.</p>
+                            <div class="modal-buttons">
+                                <button type="button" class="modal-button cancel" onclick="closeReturnInspectStartModal()">Cancel</button>
+                                <button type="button" class="modal-button confirm approve-btn" onclick="confirmReturnInspectStart()">Start Inspection</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Return inspection modal (Step 3) -->
                     <div id="returnInspectModal" class="return-inspect-overlay" role="dialog" aria-modal="true" aria-labelledby="returnInspectTitle">
                         <div class="return-inspect-panel">
@@ -1834,8 +1917,9 @@
                                 <button type="button" onclick="closeReturnInspectModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;line-height:1;">&times;</button>
                             </div>
                             <div class="return-inspect-body">
+                                <div id="returnInspectCustomerReason" style="display:none;margin:0 0 16px;padding:12px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:0.9em;color:#0c4a6e;"></div>
                                 <p id="returnInspectHint" style="margin:0 0 16px;color:#64748b;font-size:0.9em;">
-                                    Select each variant and enter how many units are <strong>damaged</strong> vs <strong>wrong item</strong>. Totals must match the returned quantity. Click <strong>Proceed</strong> to apply changes to inventory.
+                                    Review the customer <strong>return reason type</strong> above. Select each variant and enter how many units are <strong>damaged</strong> vs <strong>wrong item (restock to available)</strong>. Totals must match the returned quantity. Click <strong>Proceed</strong> to save inspection and update inventory.
                                 </p>
                                 <div id="returnInspectHero" class="return-inspect-hero"></div>
                                 <div id="returnInspectVariants"></div>
@@ -1843,7 +1927,7 @@
                             </div>
                             <div class="return-inspect-actions">
                                 <button type="button" class="modal-button cancel" onclick="closeReturnInspectModal()">Cancel</button>
-                                <button type="button" class="modal-button confirm approve-btn" id="returnInspectProceedBtn" onclick="confirmReturnInspectProceed()">Proceed</button>
+                                <button type="button" class="modal-button confirm approve-btn" id="returnInspectProceedBtn" onclick="proceedReturnInspectDirect()">Proceed</button>
                             </div>
                         </div>
                     </div>
@@ -2020,17 +2104,22 @@
                                                     <button type="button" onclick="openApproveModal(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Approve</button>
                                                     <button type="button" onclick="openDeclineModal(<%= order.OrderID %>)" class="btn-action btn-decline table-action-btn">Decline</button>
                                                 <% } else if (order.Status === 'Processing (Pickup)' || (order.Status === 'Processing' && order.ActionType)) { %>
-                                                    <button type="button" onclick="confirmReturnReceivingProceed(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Proceed</button>
+                                                    <button type="button" onclick="openReturnReceiveConfirmModal(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Receive Item</button>
                                                 <% } else if (order.Status === 'Awaiting Inspection') { %>
-                                                    <button type="button" onclick="openReturnInspectModal(<%= order.OrderID %>)" class="btn-action table-action-btn" style="background:#0ea5e9;color:#fff;">Inspect</button>
+                                                    <button type="button" onclick="openReturnInspectStartConfirm(<%= order.OrderID %>)" class="btn-action table-action-btn" style="background:#0ea5e9;color:#fff;">Inspect</button>
                                                 <% } else if (order.Status === 'Inspection Complete') { %>
-                                                    <button type="button" onclick="confirmReturnPickup(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Confirm Pickup</button>
+                                                    <button type="button" onclick="openReturnPickupProceedModal(<%= order.OrderID %>, '<%= (order.ActionType || '').toLowerCase() %>')" class="btn-action btn-approve table-action-btn"><%=
+                                                        (order.ActionType || '').toLowerCase() === 'refund' ? 'Process Refund' :
+                                                        (order.ActionType || '').toLowerCase() === 'replacement' ? 'Process Replacement' : 'Proceed'
+                                                    %></button>
                                                 <% } else if (order.Status === 'Pickup Received' && (order.ActionType || '').toLowerCase() === 'refund') { %>
-                                                    <button type="button" onclick="openRefundModal(<%= order.OrderID %>)" class="btn-action btn-refund table-action-btn">Refund</button>
+                                                    <button type="button" onclick="openRefundModal(<%= order.OrderID %>)" class="btn-action btn-refund table-action-btn">Process Refund</button>
                                                 <% } else if (order.Status === 'Pickup Received' && (order.ActionType || '').toLowerCase() === 'replacement') { %>
                                                     <button type="button" onclick="openReplacementModal(<%= order.OrderID %>)" class="btn-action btn-replacement table-action-btn">Replace</button>
-                                                <% } else if (order.Status === 'Refunded' || order.Status === 'Completed Returned') { %>
-                                                    <a href="/Employee/Admin/ProductReturns" class="btn-action table-action-btn" style="background:#6366f1;color:#fff;text-decoration:none;">Product Returns</a>
+                                                <% } else if (order.Status === 'Refunded') { %>
+                                                    <span class="od-return-status-msg od-return-status-msg--success">Refunded</span>
+                                                <% } else if (order.Status === 'Completed Returned') { %>
+                                                    <span class="od-return-status-msg od-return-status-msg--success">Replaced</span>
                                                 <% } %>
                                             </div>
                                         </td>
@@ -2180,17 +2269,7 @@
                                                     </div>
                                                 </div>
 
-                                                <%- include('partials/admin-returned-order-actions', {
-                                                    order: order,
-                                                    returnedOrderStatusLabel: returnedOrderStatusLabel,
-                                                    returnedOrderStatusClass: returnedOrderStatusClass,
-                                                    returnedOrderTypeLabel: returnedOrderTypeLabel,
-                                                    returnedOrderTypeClass: returnedOrderTypeClass,
-                                                    computeRefundAmountForOrder: computeRefundAmountForOrder,
-                                                    refundPolicySummary: refundPolicySummary,
-                                                    returnConditionsUnmetCount: returnConditionsUnmetCount,
-                                                    conditionMet: conditionMet
-                                                }) %>
+                                                <%- include('partials/admin-returned-order-actions', { order: order }) %>
                                             </div>
                                         </td>
                                     </tr>
@@ -3108,6 +3187,23 @@
             }
         }
 
+        function closeAllReturnModals() {
+            document.querySelectorAll('.modal-overlay.show').forEach(function (el) {
+                el.classList.remove('show');
+            });
+            const inspectOverlay = document.getElementById('returnInspectModal');
+            if (inspectOverlay) inspectOverlay.classList.remove('show');
+            if (typeof closeRefundModal === 'function') closeRefundModal();
+            if (typeof closeReplacementModal === 'function') closeReplacementModal();
+            if (typeof closeReturnInspectModal === 'function') closeReturnInspectModal();
+            if (typeof closeReturnPickupProceedModal === 'function') closeReturnPickupProceedModal();
+        }
+
+        function reloadReturnedOrdersPage() {
+            closeAllReturnModals();
+            window.location.reload();
+        }
+
         // Success Modal Functions
         function showSuccessModal(message, detailsHtml = '', type = 'approve') {
             const modal = document.getElementById('successModal');
@@ -3185,6 +3281,10 @@
             const approveModal = document.getElementById('approveReturnModal');
             const refundModal = document.getElementById('refundConfirmModal');
             const replacementModal = document.getElementById('replacementConfirmModal');
+            const returnReceiveModal = document.getElementById('returnReceiveConfirmModal');
+            const returnInspectConfirmModal = document.getElementById('returnInspectConfirmModal');
+            const returnInspectStartModal = document.getElementById('returnInspectStartModal');
+            const returnPickupProceedModal = document.getElementById('returnPickupProceedModal');
             const successModal = document.getElementById('successModal');
             if (declineModal && event.target === declineModal) {
                 closeDeclineModal();
@@ -3198,32 +3298,22 @@
             if (replacementModal && event.target === replacementModal) {
                 closeReplacementModal();
             }
+            if (returnReceiveModal && event.target === returnReceiveModal) {
+                closeReturnReceiveConfirmModal();
+            }
+            if (returnInspectConfirmModal && event.target === returnInspectConfirmModal) {
+                closeReturnInspectConfirmModal();
+            }
+            if (returnInspectStartModal && event.target === returnInspectStartModal) {
+                if (typeof closeReturnInspectStartModal === 'function') closeReturnInspectStartModal();
+            }
+            if (returnPickupProceedModal && event.target === returnPickupProceedModal) {
+                closeReturnPickupProceedModal();
+            }
             if (successModal && event.target === successModal) {
                 closeSuccessModal();
             }
         });
-
-        async function confirmReturnPickup(orderId) {
-            if (!orderId) return;
-            if (!confirm('Confirm pickup is complete and proceed to refund or replacement processing?')) return;
-            try {
-                const response = await fetch('/api/admin/orders/' + orderId + '/return/pickup-complete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include'
-                });
-                const result = await response.json();
-                if (result.success) {
-                    showSuccessModal(result.message || 'Pickup confirmed.', '', 'approve');
-                    setTimeout(function () { window.location.reload(); }, 1200);
-                } else {
-                    alert(result.message || 'Failed to confirm pickup.');
-                }
-            } catch (err) {
-                console.error('Error confirming pickup:', err);
-                alert('Failed to confirm pickup. Please try again.');
-            }
-        }
 
         // Replacement Handler (after pickup confirmed)
         let currentReplacementOrderId = null;
@@ -3268,11 +3358,8 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    showSuccessModal('Replacement processed. Returned items were added to inventory. Manage stock in Product Returns.', '', 'replacement');
                     closeReplacementModal();
-                    setTimeout(() => {
-                        window.location.href = '/Employee/Admin/ProductReturns';
-                    }, 1500);
+                    reloadReturnedOrdersPage();
                 } else {
                     alert(result.message || 'Failed to process replacement.');
                     if (confirmBtn) {
@@ -3338,18 +3425,8 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    let message = 'Refund processed successfully. The money has been refunded to the customer.';
-                    if (result.refundAmount) {
-                        message += ` Refund Amount: ₱${Number(result.refundAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-                    }
-                    if (result.stripeRefundId) {
-                        message += ` Stripe Refund ID: ${result.stripeRefundId}`;
-                    }
-                    showSuccessModal(message, '', 'refund');
                     closeRefundModal();
-                    setTimeout(() => {
-                        window.location.href = '/Employee/Admin/ProductReturns';
-                    }, 1500);
+                    reloadReturnedOrdersPage();
                 } else {
                     alert(result.message || 'Failed to process refund.');
                     if (confirmBtn) {
@@ -3372,7 +3449,7 @@
             openRefundModal(orderId);
         }
     </script>
-    <script src="/js/Employee/Admin/return-order-workflow.js?v=20260521a" defer></script>
+    <script src="/js/Employee/Admin/return-order-workflow.js?v=20260522b" defer></script>
 
 </body>
 </html> 
