@@ -1,14 +1,20 @@
 'use strict';
 
 const PRE_RECEIVE_RETURN_PREFIX = '[PRE_RECEIVE]';
+const APPEALED_RETURN_PREFIX = 'APPEALED:';
 
 function isPreReceiveReturn(order) {
     return String(order?.ReturnReason || '').trim().startsWith(PRE_RECEIVE_RETURN_PREFIX);
 }
 
+function isAppealedReturn(order) {
+    return String(order?.ReturnReason || '').trim().startsWith(APPEALED_RETURN_PREFIX);
+}
+
 function stripReturnReasonPrefix(reason) {
     const s = String(reason || '').trim();
     if (s.startsWith('DECLINED:')) return s.replace(/^DECLINED:\s*/, '');
+    if (s.startsWith(APPEALED_RETURN_PREFIX)) return s.replace(/^APPEALED:\s*/, '');
     if (s.startsWith(PRE_RECEIVE_RETURN_PREFIX)) {
         return s.slice(PRE_RECEIVE_RETURN_PREFIX.length).trim();
     }
@@ -30,7 +36,9 @@ function returnedOrderStatusLabel(order) {
     if (status === 'Processing (Pickup)' || (status === 'Processing' && order?.ActionType)) {
         return 'Process Pickup';
     }
-    if (status === 'Returned') return 'Return';
+    if (status === 'Returned') {
+        return isAppealedReturn(order) ? 'Appealed' : 'Return';
+    }
     if (status === 'Declined') return 'Declined';
     return status || 'Returned';
 }
@@ -44,6 +52,7 @@ function returnedOrderStatusClass(order) {
     if (label === 'Waiting for Inspection') return 'status-awaiting-inspection';
     if (label === 'Waiting for Receiving Item') return 'status-processing';
     if (label === 'Declined') return 'status-declined';
+    if (label === 'Appealed') return 'status-appealed';
     return 'status-returned';
 }
 
@@ -143,7 +152,9 @@ function refundPolicySummary(order) {
 
 module.exports = {
     PRE_RECEIVE_RETURN_PREFIX,
+    APPEALED_RETURN_PREFIX,
     isPreReceiveReturn,
+    isAppealedReturn,
     stripReturnReasonPrefix,
     returnedOrderStatusLabel,
     returnedOrderStatusClass,

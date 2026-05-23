@@ -28967,7 +28967,8 @@ module.exports = function (sql, pool, getStripe = null) {
     ]), async (req, res) => {
         const orderId = req.params.orderId;
         const customerId = req.session.user && req.session.user.id;
-        let { actionType, returnType, returnReason, originalPackaging, allParts, unused, proofOfPurchase, returnItems, returnPhase } = req.body;
+        let { actionType, returnType, returnReason, originalPackaging, allParts, unused, proofOfPurchase, returnItems, returnPhase, isAppeal } = req.body;
+        const isAppealRequest = isAppeal === 'true' || isAppeal === true;
 
         // Parse returnItems if it's a string (JSON)
         if (typeof returnItems === 'string') {
@@ -29069,9 +29070,19 @@ module.exports = function (sql, pool, getStripe = null) {
 
             const order = orderResult.recordset[0];
             const receiveStatuses = ['Receive', 'Received', 'To Receive'];
-            const isPreReceiveReturn = returnPhase === 'pre_receive'
-                || receiveStatuses.includes(order.Status);
-            if (!isPreReceiveReturn) {
+            const isPreReceiveReturn = !isAppealRequest && (
+                returnPhase === 'pre_receive' || receiveStatuses.includes(order.Status)
+            );
+
+            if (isAppealRequest) {
+                if (order.Status !== 'Declined') {
+                    await transaction.rollback();
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Only declined return requests can be appealed.'
+                    });
+                }
+            } else if (!isPreReceiveReturn) {
                 await transaction.rollback();
                 return res.status(400).json({
                     success: false,
@@ -29080,9 +29091,14 @@ module.exports = function (sql, pool, getStripe = null) {
             }
 
             const trimmedReason = String(returnReason || '').trim();
-            const storedReturnReason = isPreReceiveReturn
-                ? `${returnedOrderDisplay.PRE_RECEIVE_RETURN_PREFIX} ${trimmedReason}`
-                : trimmedReason;
+            let storedReturnReason;
+            if (isAppealRequest) {
+                storedReturnReason = `${returnedOrderDisplay.APPEALED_RETURN_PREFIX} ${trimmedReason}`;
+            } else if (isPreReceiveReturn) {
+                storedReturnReason = `${returnedOrderDisplay.PRE_RECEIVE_RETURN_PREFIX} ${trimmedReason}`;
+            } else {
+                storedReturnReason = trimmedReason;
+            }
 
             // Note: Evidence upload is optional - admin will review request regardless
 

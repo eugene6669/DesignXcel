@@ -472,6 +472,25 @@
             color: #d97706;
         }
 
+        .status-appealed {
+            background: rgba(139, 92, 246, 0.18);
+            color: #6d28d9;
+        }
+
+        .appealed-label {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: rgba(139, 92, 246, 0.15);
+            color: #6d28d9;
+            border: 1px solid rgba(139, 92, 246, 0.35);
+        }
+
         .status-replaced {
             background: rgba(16, 185, 129, 0.15);
             color: #047857;
@@ -1329,6 +1348,9 @@
                                             <span class="order-card-status <%= returnedOrderStatusClass(order) %>">
                                                 <%= returnedOrderStatusLabel(order) %>
                                             </span>
+                                            <% if (order.ReturnReason && String(order.ReturnReason).trim().startsWith('APPEALED:')) { %>
+                                            <span class="appealed-label">Appealed</span>
+                                            <% } %>
                                             <% if (returnedOrderTypeClass(order)) { %>
                                             <span class="return-type-label <%= returnedOrderTypeClass(order) %>"><%= returnedOrderTypeLabel(order) %></span>
                                             <% } %>
@@ -1498,8 +1520,10 @@
                                     <% } %>
                                     
                                     <% 
-                                        const isDeclined = returnReason && returnReason.startsWith('DECLINED:');
-                                        const declineReason = isDeclined ? returnReason.replace('DECLINED:', '').trim() : null;
+                                        const isDeclined = order.Status === 'Declined' || (rawReturnReason && String(rawReturnReason).trim().startsWith('DECLINED:'));
+                                        const declineReason = isDeclined && rawReturnReason
+                                            ? String(rawReturnReason).replace(/^DECLINED:\s*/, '').trim()
+                                            : null;
                                     %>
                                     
                                     <% if (isDeclined) { %>
@@ -2082,6 +2106,9 @@
                                         </td>
                                         <td style="padding: 1rem;">
                                             <span class="order-card-status <%= returnedOrderStatusClass(order) %>" style="display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;"><%= returnedOrderStatusLabel(order) %></span>
+                                            <% if (order.ReturnReason && String(order.ReturnReason).trim().startsWith('APPEALED:')) { %>
+                                            <span class="appealed-label">Appealed</span>
+                                            <% } %>
                                         </td>
                                         <td style="padding: 1rem;">
                                             <% if (returnedOrderTypeClass(order)) { %>
