@@ -1,4 +1,8 @@
 module.exports = {
+  // Allow webpack-dev-server when accessed via ngrok (Host header is *.ngrok-free.app)
+  devServer: {
+    allowedHosts: 'all',
+  },
   webpack: {
     configure: (webpackConfig) => {
       webpackConfig.resolve.fallback = {

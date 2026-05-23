@@ -1,0 +1,12 @@
+# DesignXcel local dev tunnels (ngrok v3)
+# Usage: ngrok start --config ngrok.yml designxcel-api designxcel-web
+# Auth (once): ngrok config add-authtoken YOUR_TOKEN  (from https://dashboard.ngrok.com/get-started/your-authtoken)
+
+version: "2"
+tunnels:
+  designxcel-api:
+    addr: 5000
+    proto: http
+  designxcel-web:
+    addr: 3000
+    proto: http
