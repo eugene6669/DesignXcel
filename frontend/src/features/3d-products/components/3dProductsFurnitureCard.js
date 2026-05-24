@@ -5,22 +5,21 @@ import { useCurrency } from '../../../shared/contexts/CurrencyContext';
 import QuickViewModal from '../../../shared/components/ui/QuickViewModal';
 import { getPrimaryImageUrl } from '../../../shared/utils/imageUtils';
 import { useAvailableStock } from '../../../shared/hooks/useAvailableStock';
+import { getProductCardDisplayPricing } from '../../../shared/utils/discountUtils';
 import '../../products/components/product-card.css';
 
 const ThreeDProductsFurnitureCard = ({ product }) => {
   const { 
     id, 
     name, 
-    price, 
     rating = 0,
-    hasDiscount = false,
-    discountInfo = null,
     categoryName,
     stockQuantity = 0,
     stock = 0,
     availableStock = null,
     soldQuantity = 0,
     hasVariations = false,
+    requiresVariationSelection = false,
     variationStockSum = null
   } = product || {
     id: 1,
@@ -58,12 +57,15 @@ const ThreeDProductsFurnitureCard = ({ product }) => {
     }
   }, [soldQuantity, product?.sold]);
 
-  // Calculate display price and discount info from real data
-  const displayPrice = hasDiscount && discountInfo ? discountInfo.discountedPrice : price;
-  const originalPrice = hasDiscount && discountInfo ? price : null;
-  const discountPercentage = hasDiscount && discountInfo && discountInfo.discountType === 'percentage' 
-    ? discountInfo.discountValue 
-    : null;
+  const {
+    displayPrice,
+    originalPrice,
+    showDiscount,
+    showFromPrefix,
+    discountBadgeLabel,
+  } = getProductCardDisplayPricing(product);
+
+  const has3DModelData = true;
 
   const currentStock =
     currentAvailableStock !== null && currentAvailableStock !== undefined
@@ -107,14 +109,15 @@ const ThreeDProductsFurnitureCard = ({ product }) => {
   return (
     <div className="product-card-redesigned" onClick={handleCardClick}>
       <div className="product-card-image-container">
-        {/* 3D Model badge - top right */}
-        <div className="model3d-badge-top-right">3D</div>
-        
-        {/* Discount badge - top left */}
-        {hasDiscount && originalPrice && (
-          <div className="discount-badge">{discountPercentage ? `${discountPercentage}% off` : 'Sale'}</div>
+        {has3DModelData && (
+          <div className="product-card-badges product-card-badges--left">
+            <div className="model3d-badge">3D</div>
+          </div>
         )}
-        
+        {discountBadgeLabel && (
+          <div className="discount-badge discount-badge--top-right">{discountBadgeLabel}</div>
+        )}
+
         {/* Product image */}
         <img className="product-image" src={imageUrl} alt={name} />
         
@@ -162,8 +165,12 @@ const ThreeDProductsFurnitureCard = ({ product }) => {
         
         {/* Price section */}
         <div className="product-price-section">
-          <span className="current-price" style={{ fontWeight: 'bold' }}>{formatPrice(displayPrice)}</span>
-          {originalPrice && <span className="original-price" style={{ fontWeight: 'bold' }}>{formatPrice(originalPrice)}</span>}
+          <span className="current-price">
+            {showFromPrefix ? `From ${formatPrice(displayPrice)}` : formatPrice(displayPrice)}
+          </span>
+          {originalPrice != null && originalPrice > displayPrice && (
+            <span className="original-price">{formatPrice(originalPrice)}</span>
+          )}
         </div>
         
         {/* Stock indicator */}

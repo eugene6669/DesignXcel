@@ -8,7 +8,7 @@ import QuickViewModal from '../../../shared/components/ui/QuickViewModal';
 import AudioLoader from '../../../shared/components/ui/AudioLoader';
 import { getPrimaryImageUrl } from '../../../shared/utils/imageUtils';
 import { getSellableStock } from '../../../shared/utils/productUtils';
-import { resolveDiscountedDisplayPrice } from '../../../shared/utils/discountUtils';
+import { getProductCardDisplayPricing } from '../../../shared/utils/discountUtils';
 import { useAvailableStock } from '../../../shared/hooks/useAvailableStock';
 import './product-card.css';
 
@@ -59,11 +59,10 @@ const ProductCard = ({ product }) => {
   const {
     displayPrice,
     originalPrice,
-    hasDiscount: showDiscount,
-  } = resolveDiscountedDisplayPrice(price, hasDiscount ? discountInfo : null);
-  const discountPercentage = showDiscount && discountInfo && discountInfo.discountType === 'percentage'
-    ? discountInfo.discountValue
-    : null;
+    showDiscount,
+    showFromPrefix,
+    discountBadgeLabel,
+  } = getProductCardDisplayPricing(product);
 
   // Stock status logic - use available stock if available, otherwise use regular stock
   const currentStock = currentAvailableStock !== null ? currentAvailableStock : getSellableStock(product);
@@ -136,17 +135,15 @@ const ProductCard = ({ product }) => {
         </div>
       )}
       <div className="product-card-image-container">
-        {/* 3D Model badge - top left (only show if product has 3D model) */}
         {has3DModelData && (
-          <div className="model3d-badge">3D</div>
+          <div className="product-card-badges product-card-badges--left">
+            <div className="model3d-badge">3D</div>
+          </div>
         )}
-        
-        {/* Discount badge - top left (only show if there's a discount) */}
-        {showDiscount && originalPrice && discountPercentage && (
-          <div className="discount-badge">{discountPercentage}% off</div>
+        {discountBadgeLabel && (
+          <div className="discount-badge discount-badge--top-right">{discountBadgeLabel}</div>
         )}
-        
-        
+
         {/* Product image */}
         <img className="product-image" src={imageUrl} alt={name} />
         
@@ -235,8 +232,12 @@ const ProductCard = ({ product }) => {
         
         {/* Price section */}
         <div className="product-price-section">
-          <span className="current-price" style={{ fontWeight: 'bold' }}>{formatPrice(displayPrice)}</span>
-          {originalPrice && <span className="original-price" style={{ fontWeight: 'bold' }}>{formatPrice(originalPrice)}</span>}
+          <span className="current-price">
+            {showFromPrefix ? `From ${formatPrice(displayPrice)}` : formatPrice(displayPrice)}
+          </span>
+          {originalPrice != null && originalPrice > displayPrice && (
+            <span className="original-price">{formatPrice(originalPrice)}</span>
+          )}
         </div>
         
         {/* Stock indicator */}

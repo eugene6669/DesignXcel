@@ -52,6 +52,60 @@
             return '<div class="return-qty-cell">' + formatReturnQtyHtml(repairedQty, 'repaired') + '</div>';
         }
 
+        function computeVariationDiscountedPrice(listPrice, discountType, discountValue) {
+            const price = Number(listPrice) || 0;
+            const value = Number(discountValue) || 0;
+            if (!discountType || value <= 0 || price <= 0) return null;
+            if (discountType === 'percentage') {
+                return Math.max(0, price - price * (value / 100));
+            }
+            if (discountType === 'fixed') {
+                return Math.max(0, price - value);
+            }
+            return null;
+        }
+
+        function getParentDiscountMetaFromContainer(container) {
+            if (!container || container.getAttribute('data-show-discount') !== '1') {
+                return null;
+            }
+            const discountId = container.getAttribute('data-discount-id');
+            if (!discountId) return null;
+            return {
+                discountId: discountId,
+                discountType: container.getAttribute('data-discount-type') || '',
+                discountValue: container.getAttribute('data-discount-value') || ''
+            };
+        }
+
+        function buildVariationDiscountCellHtml(variationPrice, discountMeta) {
+            if (!discountMeta || !discountMeta.discountId) {
+                return '<span style="color:#999;font-size:0.85em;">—</span>';
+            }
+            const listPrice = Number(variationPrice) || 0;
+            if (listPrice <= 0) {
+                return '<span style="color:#999;font-size:0.85em;">—</span>';
+            }
+            const discounted = computeVariationDiscountedPrice(
+                listPrice,
+                discountMeta.discountType,
+                discountMeta.discountValue
+            );
+            if (discounted == null || discounted >= listPrice) {
+                return '<span style="color:#999;font-size:0.85em;">—</span>';
+            }
+            const type = discountMeta.discountType;
+            const val = Number(discountMeta.discountValue) || 0;
+            const offLabel = type === 'percentage'
+                ? val + '% OFF'
+                : '₱' + val.toFixed(2) + ' OFF';
+            return '<div style="font-size:0.85em;">' +
+                '<div style="text-decoration:line-through;color:#888;">₱' + listPrice.toFixed(2) + '</div>' +
+                '<strong style="color:#AF0B21;">₱' + discounted.toFixed(2) + '</strong>' +
+                '<div style="color:#666;">' + offLabel + '</div>' +
+                '</div>';
+        }
+
         function buildDamagedQtyCellHtml(damagedQty) {
             return '<div class="return-qty-cell">' + formatReturnQtyHtml(damagedQty, 'damaged') + '</div>';
         }
@@ -718,6 +772,15 @@ const urlParams = new URLSearchParams(window.location.search);
                     { className: 'var-col-image', style: 'text-align:center', html: imageHtml }
                 );
 
+                if (isProductsListingPage && rowFlags.showDisc) {
+                    const variationListPrice = Number(variation.Price) || 0;
+                    cells.push({
+                        className: 'var-col-discount discount-cell',
+                        style: 'text-align:center',
+                        html: buildVariationDiscountCellHtml(variationListPrice, rowFlags.discountMeta)
+                    });
+                }
+
                 if (isProductReturnsPage) {
                     const qtySnap = {
                         available: availableQty,
@@ -1210,7 +1273,9 @@ const urlParams = new URLSearchParams(window.location.search);
             return {
                 showReturnCols: !!(container && container.getAttribute('data-show-return-columns') === '1'),
                 showSf: !!(container && container.getAttribute('data-show-storefront') === '1'),
-                showVarAct: !!(container && container.getAttribute('data-show-variation-actions') === '1')
+                showVarAct: !!(container && container.getAttribute('data-show-variation-actions') === '1'),
+                showDisc: !!(container && container.getAttribute('data-show-discount') === '1'),
+                discountMeta: getParentDiscountMetaFromContainer(container)
             };
         }
 

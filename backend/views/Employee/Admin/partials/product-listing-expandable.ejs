@@ -175,7 +175,7 @@
             </tr>
             <tr class="variations-row" data-inventory-product-id="<%= productId %>" style="display:none;">
                 <td colspan="<%= productColspan %>" style="padding:16px 20px;background:#f8f9fa;border-top:2px solid #dee2e6;">
-                    <div class="variations-container" data-inventory-product-id="<%= productId %>" data-show-return-columns="<%= showReturnCols ? '1' : '0' %>" data-show-storefront="<%= showSf ? '1' : '0' %>" data-show-variation-actions="<%= showVarAct ? '1' : '0' %>">
+                    <div class="variations-container" data-inventory-product-id="<%= productId %>" data-show-return-columns="<%= showReturnCols ? '1' : '0' %>" data-show-storefront="<%= showSf ? '1' : '0' %>" data-show-variation-actions="<%= showVarAct ? '1' : '0' %>" data-show-discount="<%= showDisc ? '1' : '0' %>" data-discount-id="<%= item.DiscountID || '' %>" data-discount-type="<%= item.DiscountType || '' %>" data-discount-value="<%= item.DiscountValue != null ? item.DiscountValue : '' %>" data-discounted-price="<%= item.DiscountedPrice != null ? item.DiscountedPrice : '' %>">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
                             <h4 style="margin:0;color:#333;font-size:0.95em;">Product Variations</h4>
                             <button type="button" class="refresh-variations-btn pi-btn pi-btn-sm" data-inventory-product-id="<%= productId %>" style="background:#28a745;color:#fff;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:0.85em;">Refresh</button>
@@ -200,6 +200,7 @@
                                         <% } %>
                                         <th class="var-col-price">Price</th>
                                         <th class="var-col-image">Image</th>
+                                        <% if (showDisc) { %><th class="var-col-discount">Discount</th><% } %>
                                         <% if (showSf) { %>
                                         <th class="var-col-action">Storefront</th>
                                         <% } %>

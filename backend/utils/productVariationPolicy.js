@@ -473,19 +473,30 @@ async function enrichProductsCatalogPricingFromInventory(pool, products) {
                 ip.ProductID,
                 ISNULL(ip.Price, 0) AS ParentPrice,
                 (
-                    SELECT MIN(
-                        CASE
-                            WHEN COALESCE(NULLIF(ipv.Price, 0), 0) > 0 THEN ipv.Price
-                            WHEN COALESCE(NULLIF(ip.Price, 0), 0) > 0 THEN ip.Price
-                            ELSE NULL
-                        END
-                    )
-                    FROM InventoryProductVariations ipv
-                    WHERE ipv.InventoryProductID = ip.InventoryProductID AND ipv.IsActive = 1
+                    SELECT MIN(vpr.unitPrice)
+                    FROM (
+                        SELECT
+                            COALESCE(
+                                NULLIF(ipv.Price, 0),
+                                NULLIF(pv.Price, 0)
+                            ) AS unitPrice
+                        FROM InventoryProductVariations ipv
+                        LEFT JOIN ProductVariations pv
+                            ON pv.VariationID = ipv.VariationID AND pv.IsActive = 1
+                        WHERE ipv.InventoryProductID = ip.InventoryProductID AND ipv.IsActive = 1
+                        UNION ALL
+                        SELECT NULLIF(pv2.Price, 0) AS unitPrice
+                        FROM ProductVariations pv2
+                        WHERE pv2.ProductID = ip.ProductID AND pv2.IsActive = 1
+                    ) vpr
+                    WHERE vpr.unitPrice IS NOT NULL AND vpr.unitPrice > 0
                 ) AS MinVariationPrice,
                 CASE WHEN EXISTS (
                     SELECT 1 FROM InventoryProductVariations ipv2
                     WHERE ipv2.InventoryProductID = ip.InventoryProductID AND ipv2.IsActive = 1
+                ) OR EXISTS (
+                    SELECT 1 FROM ProductVariations pv3
+                    WHERE pv3.ProductID = ip.ProductID AND pv3.IsActive = 1
                 ) THEN 1 ELSE 0 END AS HasVariations
             FROM InventoryProducts ip
             WHERE ip.IsActive = 1 AND ip.ProductID IN (${inList})
@@ -497,22 +508,40 @@ async function enrichProductsCatalogPricingFromInventory(pool, products) {
     }
 
     const priceByProduct = new Map();
+    const hasVariationsByProduct = new Map();
     for (const row of priceRows) {
         const parent = Number(row.ParentPrice) || 0;
         const minVar = Number(row.MinVariationPrice) || 0;
-        const catalogPrice = row.HasVariations
-            ? (minVar > 0 ? minVar : parent)
-            : (parent > 0 ? parent : minVar);
-        if (catalogPrice > 0) {
-            priceByProduct.set(row.ProductID, catalogPrice);
+        const hasVariations = !!row.HasVariations;
+        hasVariationsByProduct.set(row.ProductID, hasVariations);
+        let catalogPrice = 0;
+        if (hasVariations) {
+            catalogPrice = minVar > 0 ? minVar : 0;
+        } else {
+            catalogPrice = parent > 0 ? parent : minVar;
+        }
+        if (catalogPrice > 0 || parent > 0) {
+            priceByProduct.set(row.ProductID, {
+                catalogPrice: catalogPrice > 0 ? catalogPrice : parent,
+                parentListPrice: parent > 0 ? parent : catalogPrice,
+                hasVariations
+            });
         }
     }
 
     return products.map((product, i) => {
         const pid = idByIndex[i];
-        const catalogPrice = pid ? priceByProduct.get(pid) : null;
-        if (!catalogPrice) return product;
-        return applyDiscountToProductRecord(product, catalogPrice);
+        const pricing = pid ? priceByProduct.get(pid) : null;
+        if (!pricing) return product;
+        const { catalogPrice, parentListPrice, hasVariations } = pricing;
+        const enriched = applyDiscountToProductRecord(product, catalogPrice);
+        return {
+            ...enriched,
+            variationMinPrice: catalogPrice,
+            catalogListPrice: catalogPrice,
+            parentListPrice: parentListPrice || catalogPrice,
+            hasVariations: enriched.hasVariations || hasVariations || false
+        };
     });
 }
 

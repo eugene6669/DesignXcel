@@ -487,7 +487,11 @@ const ProductDetail = () => {
 
   const discountInfoForDisplay = product.hasDiscount ? product.discountInfo : null;
 
-  const { displayPrice, originalPrice, hasDiscount: showDiscount } = selectedVariation?.hasDiscount
+  const showProductPrice = !hasVariations || Boolean(selectedVariation);
+
+  const { displayPrice, originalPrice, hasDiscount: showDiscount } = !showProductPrice
+    ? { displayPrice: null, originalPrice: null, hasDiscount: false }
+    : selectedVariation?.hasDiscount
     ? {
         displayPrice: selectedVariation.price,
         originalPrice: selectedVariation.originalPrice || basePrice,
@@ -604,7 +608,7 @@ const ProductDetail = () => {
       "@type": "Offer",
       "url": window.location.href,
       "priceCurrency": "PHP",
-      "price": displayPrice,
+      "price": displayPrice != null ? displayPrice : undefined,
       "availability": isInStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
       "seller": {
         "@type": "Organization",
@@ -753,15 +757,17 @@ const ProductDetail = () => {
               </div>
             )}
 
-            {/* Pricing */}
+            {/* Pricing — variation products show price only after an option is selected */}
+            {showProductPrice && displayPrice != null && (
             <div className="pdp-pricing">
               <div className="price-main">
                 <span className="price-current">{formatPrice(displayPrice)}</span>
-                {originalPrice && (
+                {originalPrice != null && originalPrice !== displayPrice && (
                   <span className="price-original">{formatPrice(originalPrice)}</span>
                 )}
               </div>
             </div>
+            )}
 
             {productDescriptionText && (
               <div className="pdp-description">
@@ -1100,14 +1106,18 @@ const ProductDetail = () => {
                     <td>Price</td>
                     <td>
                       {product ? (
-                        <>
-                          {formatPrice(displayPrice)}
-                          {originalPrice != null && originalPrice !== displayPrice && (
-                            <span style={{ marginLeft: '8px', textDecoration: 'line-through', opacity: 0.65 }}>
-                              {formatPrice(originalPrice)}
-                            </span>
-                          )}
-                        </>
+                        hasVariations && !selectedVariation ? (
+                          'Select a variation'
+                        ) : displayPrice != null ? (
+                          <>
+                            {formatPrice(displayPrice)}
+                            {originalPrice != null && originalPrice !== displayPrice && (
+                              <span style={{ marginLeft: '8px', textDecoration: 'line-through', opacity: 0.65 }}>
+                                {formatPrice(originalPrice)}
+                              </span>
+                            )}
+                          </>
+                        ) : 'N/A'
                       ) : 'N/A'}
                     </td>
                   </tr>

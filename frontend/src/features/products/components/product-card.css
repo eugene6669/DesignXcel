@@ -220,11 +220,30 @@
   border: 1px solid #e5e7eb !important;
 }
 
-/* Discount Badge - Top Left */
-.discount-badge {
+/* Top-left: 3D badge */
+.product-card-badges,
+.product-card-badges--left {
   position: absolute;
   top: 12px;
   left: 12px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.product-card-badges .model3d-badge {
+  position: static;
+  top: auto;
+  left: auto;
+  right: auto;
+}
+
+/* Discount badge - top right, mustard yellow */
+.product-card-redesigned .discount-badge,
+.discount-badge {
   background: #F0B21B !important;
   color: #ffffff !important;
   padding: 4px 8px;
@@ -232,52 +251,32 @@
   font-size: 12px;
   font-weight: 700 !important;
   letter-spacing: 0.3px;
-  z-index: 3;
-  box-shadow: 0 2px 4px rgba(240, 178, 27, 0.3);
-  border: 1px solid #F0B21B !important;
+  box-shadow: 0 2px 4px rgba(240, 178, 27, 0.35);
+  border: 1px solid #d9a019 !important;
 }
 
-/* 3D Model Badge - Top Left (Mustard Yellow) */
+.product-card-redesigned .discount-badge--top-right,
+.discount-badge--top-right {
+  position: absolute !important;
+  top: 12px !important;
+  right: 12px !important;
+  left: auto !important;
+  z-index: 4;
+  pointer-events: none;
+}
+
+/* 3D Model Badge - top left, mustard yellow */
+.product-card-redesigned .model3d-badge,
 .model3d-badge {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  background: #FFC107 !important;
-  color: #333333 !important;
+  background: #F0B21B !important;
+  color: #ffffff !important;
   padding: 4px 8px;
   border-radius: 6px;
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 800 !important;
   letter-spacing: 0.3px;
-  z-index: 3;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  border: 1px solid #e0ac06 !important;
-}
-
-/* 3D Model Badge - Top Right (Mustard Yellow) */
-.model3d-badge-top-right {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: #FFC107 !important;
-  color: #333333 !important;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.3px;
-  z-index: 3;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  border: 1px solid #e0ac06 !important;
-}
-
-/* When both discount and 3D badges are present, stack them */
-.model3d-badge + .discount-badge {
-  top: 40px;
-}
-
-.discount-badge + .model3d-badge {
-  top: 40px;
+  box-shadow: 0 2px 4px rgba(240, 178, 27, 0.35);
+  border: 1px solid #d9a019 !important;
 }
 
 
@@ -370,7 +369,34 @@
   line-height: 1.2;
 }
 
-/* Redesigned Card Specific Price Styles */
+/* Redesigned card price block — overrides generic .product-price-section rules */
+.product-card-redesigned .product-price-section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+}
+
+.product-card-redesigned .product-price-section .current-price {
+  font-size: 18px;
+  font-weight: 700;
+  color: #F0B21B;
+  line-height: 1.2;
+  order: 1;
+}
+
+.product-card-redesigned .product-price-section .original-price {
+  font-size: 13px;
+  font-weight: 500;
+  color: #9ca3af;
+  text-decoration: line-through;
+  line-height: 1.2;
+  order: 2;
+}
+
+/* Legacy selectors (kept for any markup without .product-price-section wrapper) */
 .product-card-redesigned .current-price {
   font-size: 18px;
   font-weight: 700;
@@ -379,8 +405,8 @@
 }
 
 .product-card-redesigned .original-price {
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 13px;
+  font-weight: 500;
   color: #9ca3af;
   text-decoration: line-through;
   line-height: 1.2;
@@ -528,11 +554,22 @@
     background-size: clamp(60px, 15vw, 80px) clamp(60px, 15vw, 80px);
   }
   
-  .discount-badge {
-    font-size: 10px;
-    padding: 2px 5px;
+  .product-card-badges,
+  .product-card-badges--left {
     top: 8px;
     left: 8px;
+    gap: 4px;
+  }
+
+  .product-card-badges .model3d-badge,
+  .discount-badge--top-right {
+    font-size: 10px;
+    padding: 2px 5px;
+  }
+
+  .discount-badge--top-right {
+    top: 8px;
+    right: 8px;
   }
   
   .product-card-content {
@@ -554,12 +591,14 @@
   }
   
   /* Redesigned Card Mobile Price Styles */
+  .product-card-redesigned .product-price-section .current-price,
   .product-card-redesigned .current-price {
     font-size: 16px;
     font-weight: 700;
     color: #F0B21B;
   }
   
+  .product-card-redesigned .product-price-section .original-price,
   .product-card-redesigned .original-price {
     font-size: 11px;
   }
@@ -637,12 +676,14 @@
   }
   
   /* Redesigned Card Small Mobile Price Styles */
+  .product-card-redesigned .product-price-section .current-price,
   .product-card-redesigned .current-price {
     font-size: 15px;
     font-weight: 700;
     color: #F0B21B;
   }
   
+  .product-card-redesigned .product-price-section .original-price,
   .product-card-redesigned .original-price {
     font-size: 10px;
   }
