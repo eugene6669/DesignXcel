@@ -8,6 +8,7 @@ import QuickViewModal from '../../../shared/components/ui/QuickViewModal';
 import AudioLoader from '../../../shared/components/ui/AudioLoader';
 import { getPrimaryImageUrl } from '../../../shared/utils/imageUtils';
 import { getSellableStock } from '../../../shared/utils/productUtils';
+import { resolveDiscountedDisplayPrice } from '../../../shared/utils/discountUtils';
 import { useAvailableStock } from '../../../shared/hooks/useAvailableStock';
 import './product-card.css';
 
@@ -55,11 +56,13 @@ const ProductCard = ({ product }) => {
     }
   }, [soldQuantity, product?.sold]);
 
-  // Calculate display price and discount info from real data
-  const displayPrice = hasDiscount && discountInfo ? discountInfo.discountedPrice : price;
-  const originalPrice = hasDiscount && discountInfo ? price : null;
-  const discountPercentage = hasDiscount && discountInfo && discountInfo.discountType === 'percentage' 
-    ? discountInfo.discountValue 
+  const {
+    displayPrice,
+    originalPrice,
+    hasDiscount: showDiscount,
+  } = resolveDiscountedDisplayPrice(price, hasDiscount ? discountInfo : null);
+  const discountPercentage = showDiscount && discountInfo && discountInfo.discountType === 'percentage'
+    ? discountInfo.discountValue
     : null;
 
   // Stock status logic - use available stock if available, otherwise use regular stock
@@ -139,7 +142,7 @@ const ProductCard = ({ product }) => {
         )}
         
         {/* Discount badge - top left (only show if there's a discount) */}
-        {hasDiscount && originalPrice && discountPercentage && (
+        {showDiscount && originalPrice && discountPercentage && (
           <div className="discount-badge">{discountPercentage}% off</div>
         )}
         

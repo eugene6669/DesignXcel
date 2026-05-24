@@ -4025,10 +4025,12 @@ app.get('/api/products', async (req, res) => {
 
         const {
             enrichProductsWithVariationPolicy,
-            enrichProductsAssetsFromInventory
+            enrichProductsAssetsFromInventory,
+            enrichProductsCatalogPricingFromInventory
         } = require('./utils/productVariationPolicy');
         let productsForClient = await enrichProductsWithVariationPolicy(pool, products);
         productsForClient = await enrichProductsAssetsFromInventory(pool, productsForClient);
+        productsForClient = await enrichProductsCatalogPricingFromInventory(pool, productsForClient);
 
         console.log('Products API: Returning', productsForClient.length, 'products');
         res.json({
@@ -4470,9 +4472,14 @@ app.get('/api/products/:id', async (req, res) => {
 
         const mapped = mapProductRecordAssetUrls(product);
 
+        const { ensureVariationMediaColumns } = require('./utils/inventoryCatalogSync');
+        const { enrichProductDetailFromInventory } = require('./utils/productVariationPolicy');
+        await ensureVariationMediaColumns(pool);
+        const productForClient = await enrichProductDetailFromInventory(pool, mapped);
+
         res.json({
             success: true,
-            product: mapped
+            product: productForClient
         });
     } catch (err) {
         console.error('Error fetching product:', err);

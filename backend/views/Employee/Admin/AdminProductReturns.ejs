@@ -907,6 +907,22 @@
             background: #b45309;
             color: #fff;
         }
+        .make-available-variation-btn {
+            font-size: 0.72em;
+            line-height: 1.2;
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid #15803d;
+            background: #f0fdf4;
+            color: #15803d;
+            cursor: pointer;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .make-available-variation-btn:hover {
+            background: #15803d;
+            color: #fff;
+        }
     </style>
 </head>
 <body class="page-product-returns">
@@ -1017,8 +1033,9 @@
                     formatListDate: function(v) { return fmtDate(v, 'N/A'); },
                     showReturnColumns: true,
                     showActions: false,
-                    showVariationActions: true,
+                    showVariationActions: false,
                     showStorefront: false,
+                    showDiscount: false,
                     emptyListMessage: 'No products have active variations with returned, damaged, or repaired stock.'
                 }) %>
 
@@ -1043,11 +1060,11 @@
                         <% } %>
                     </nav>
                 <% } %>
+
             </div>
         </div>
     </div>
-    <%- include('partials/edit-variation-status-modal') %>
     <%- include('partials/repair-variation-modal') %>
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260524c" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260524l" defer></script>
 </body>
 </html>

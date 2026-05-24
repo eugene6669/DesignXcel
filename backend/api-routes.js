@@ -10,10 +10,12 @@ const {
     enrichProductWithVariationPolicy,
     enrichProductsWithVariationPolicy,
     enrichProductsAssetsFromInventory,
+    enrichProductsCatalogPricingFromInventory,
     enrichProductAssetsFromInventory,
     enrichProductDetailFromInventory,
     parseThumbnailUrlsField
 } = require('./utils/productVariationPolicy');
+const { computeDiscountedPrice } = require('./utils/productDiscountHelpers');
 const { ORDER_ITEMS_CATALOG_CROSS_APPLY } = require('./utils/orderItemCatalogResolveSql');
 
 const UUID_IDENTIFIER_RE =
@@ -3152,6 +3154,7 @@ module.exports = function(sql, pool) {
 
             let productsWithPolicy = await enrichProductsWithVariationPolicy(pool, products);
             productsWithPolicy = await enrichProductsAssetsFromInventory(pool, productsWithPolicy);
+            productsWithPolicy = await enrichProductsCatalogPricingFromInventory(pool, productsWithPolicy);
 
             res.setHeader('Cache-Control', 'private, max-age=15');
             res.json({
@@ -3955,6 +3958,22 @@ module.exports = function(sql, pool) {
             }
             
             const actualProductID = productResult.recordset[0].ProductID;
+
+            let activeDiscount = null;
+            try {
+                const discountResult = await pool.request()
+                    .input('productId', sql.Int, actualProductID)
+                    .query(`
+                        SELECT DiscountID, DiscountType, DiscountValue, StartDate, EndDate
+                        FROM ProductDiscounts
+                        WHERE ProductID = @productId
+                          AND IsActive = 1
+                          AND GETDATE() BETWEEN StartDate AND EndDate
+                    `);
+                activeDiscount = discountResult.recordset[0] || null;
+            } catch (discountErr) {
+                console.warn('[variations] discount lookup:', discountErr.message);
+            }
             
             // Now fetch variations using the ProductID
             const result = await pool.request()
@@ -3976,7 +3995,10 @@ module.exports = function(sql, pool) {
                             0
                         ) as quantity,
                         ISNULL(NULLIF(ipv.Price, 0), ISNULL(pv.Price, 0)) as price,
-                        COALESCE(ipv.VariationImageURL, pv.VariationImageURL) as imageUrl,
+                        COALESCE(
+                            NULLIF(LTRIM(RTRIM(ipv.VariationImageURL)), ''),
+                            NULLIF(LTRIM(RTRIM(pv.VariationImageURL)), '')
+                        ) as imageUrl,
                         COALESCE(ipv.ThumbnailURLs, pv.ThumbnailURLs) as thumbnails,
                         COALESCE(ipv.Model3D, pv.Model3D) as model3d,
                         pv.CreatedAt as createdAt,
@@ -3994,16 +4016,40 @@ module.exports = function(sql, pool) {
             
             
             // Process variations data (keep imageUrl relative so frontend/proxy can resolve)
-            const variations = result.recordset.map((variation) => ({
-                ...variation,
-                imageUrl: variation.imageUrl
+            const variations = result.recordset.map((variation) => {
+                const imageUrl = variation.imageUrl
                     ? normalizeProductAssetUrl(variation.imageUrl)
-                    : null,
-                thumbnails: parseThumbnailUrlsField(variation.thumbnails),
-                model3d: variation.model3d
-                    ? normalizeProductAssetUrl(variation.model3d)
-                    : null
-            }));
+                    : null;
+                let thumbnails = parseThumbnailUrlsField(variation.thumbnails);
+                thumbnails = thumbnails.filter((url) => url && url !== imageUrl);
+                const basePrice = Number(variation.price) || 0;
+                let price = basePrice;
+                let originalPrice = null;
+                let hasDiscount = false;
+                if (activeDiscount && basePrice > 0) {
+                    const { discountedPrice } = computeDiscountedPrice(
+                        basePrice,
+                        activeDiscount.DiscountType,
+                        activeDiscount.DiscountValue
+                    );
+                    if (discountedPrice < basePrice) {
+                        hasDiscount = true;
+                        originalPrice = basePrice;
+                        price = discountedPrice;
+                    }
+                }
+                return {
+                    ...variation,
+                    price,
+                    originalPrice,
+                    hasDiscount,
+                    imageUrl,
+                    thumbnails,
+                    model3d: variation.model3d
+                        ? normalizeProductAssetUrl(variation.model3d)
+                        : null
+                };
+            });
             
             res.json({
                 success: true,

@@ -25,3 +25,32 @@
         </form>
     </div>
 </div>
+
+<!-- Move repaired → available stock (Product Returns) -->
+<div id="makeAvailableVariationModal" class="modal pi-modal-compact" style="display: none;">
+    <div class="modal-content">
+        <span class="close-button" id="closeMakeAvailableVariationModal" aria-label="Close">&times;</span>
+        <h3>Move to available stock</h3>
+        <p id="makeAvailableVariationSubtitle" style="margin: 0 0 12px; color: #555; font-size: 0.9em;"></p>
+        <form id="makeAvailableVariationForm" onsubmit="return false;">
+            <input type="hidden" id="makeAvailableVariationId" value="">
+            <input type="hidden" id="makeAvailableVariationInventoryProductId" value="">
+            <input type="hidden" id="makeAvailableVariationAvailableQty" value="0">
+            <input type="hidden" id="makeAvailableVariationReturnedQty" value="0">
+            <input type="hidden" id="makeAvailableVariationDamagedQty" value="0">
+            <input type="hidden" id="makeAvailableVariationRepairedQty" value="0">
+            <input type="hidden" id="makeAvailableVariationDisposedQty" value="0">
+            <input type="hidden" id="makeAvailableVariationMaxRepaired" value="0">
+            <div class="form-group">
+                <label for="makeAvailableVariationQtyInput">Quantity to make available</label>
+                <input type="number" id="makeAvailableVariationQtyInput" min="1" value="1" required
+                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 1em;">
+                <p id="makeAvailableVariationHint" style="margin: 8px 0 0; font-size: 0.85em; color: #666;"></p>
+            </div>
+            <div class="pi-form-actions">
+                <button type="button" id="cancelMakeAvailableVariation" class="pi-btn pi-btn-secondary">Cancel</button>
+                <button type="button" id="confirmMakeAvailableVariation" class="pi-btn pi-btn-primary">Make available</button>
+            </div>
+        </form>
+    </div>
+</div>

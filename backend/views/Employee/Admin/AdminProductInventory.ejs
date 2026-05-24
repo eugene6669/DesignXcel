@@ -223,23 +223,79 @@
 
         .edit-inventory-btn,
         .edit-inventory-product-btn,
-        .edit-variation-status-btn {
+        .edit-inventory-product-quick-btn,
+        .edit-variation-status-btn,
+        .pi-icon-edit-btn {
             background-color: #FFC107;
             color: #333;
             border: none;
-            border-radius: 5px;
-            padding: 5px 10px;
+            border-radius: 6px;
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            margin: 0 2px;
             cursor: pointer;
-            margin-right: 5px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            transition: background 0.2s, transform 0.15s;
         }
 
         .edit-inventory-btn:hover,
         .edit-inventory-product-btn:hover,
-        .edit-variation-status-btn:hover {
+        .edit-inventory-product-quick-btn:hover,
+        .edit-variation-status-btn:hover,
+        .pi-icon-edit-btn:hover {
             background-color: #e0ac06;
+            transform: translateY(-1px);
+        }
+
+        .edit-inventory-product-quick-btn svg,
+        .edit-variation-status-btn svg,
+        .pi-icon-edit-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .pi-media-preview-main img {
+            max-width: 100px;
+            max-height: 100px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+        }
+
+        .pi-media-preview-thumbs {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .pi-media-preview-thumbs img {
+            width: 44px;
+            height: 44px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+
+        .pi-media-preview-label {
+            margin: 0 0 4px;
+            font-weight: 600;
+            font-size: 0.85em;
+            color: #495057;
+        }
+
+        .pi-model3d-badge {
+            display: inline-block;
+            margin-top: 4px;
+            padding: 4px 8px;
+            background: #fff8e1;
+            border: 1px solid #FFC107;
+            border-radius: 4px;
+            font-size: 0.8em;
+            color: #856404;
+            word-break: break-all;
         }
 
         .delete-inventory-btn {
@@ -1200,6 +1256,22 @@
                                 <label for="description">Description</label>
                                 <textarea id="description" name="description" rows="2" placeholder="Optional"></textarea>
                             </div>
+
+                            <div class="form-group pi-section">
+                                <h4>Product Images</h4>
+                                <p style="font-size:0.85em;color:#666;margin:0 0 8px;">Parent catalog images (variations have their own media below).</p>
+                                <div class="pi-form-grid">
+                                    <div>
+                                        <label for="createProductMainImage">Main Image</label>
+                                        <input type="file" id="createProductMainImage" name="productMainImage" accept="image/*">
+                                    </div>
+                                    <div>
+                                        <label for="createProductThumbnails">Thumbnails (up to 4)</label>
+                                        <input type="file" id="createProductThumbnails" name="productThumbnail" accept="image/*" multiple>
+                                    </div>
+                                </div>
+                            </div>
+
 <div class="form-group pi-section" style="display: none;">
                                 <h4>Dimensions</h4>
                                 <div class="pi-form-grid">
@@ -1272,7 +1344,7 @@
                     <div class="modal-content">
                         <span class="close-button" id="piCloseManageCategories">&times;</span>
                         <h3>Manage Categories</h3>
-                        <p class="pi-modal-hint">Used in product forms. Synced from inventory when you open this dialog.</p>
+                        <p class="pi-modal-hint">Add or remove categories saved for product forms. Categories used by active products cannot be deleted.</p>
                         <div class="pi-add-category-row">
                             <input type="text" id="piNewCategoryName" placeholder="New category" maxlength="120">
                             <button type="button" class="pi-btn pi-btn-primary pi-btn-sm" id="piAddCategoryBtn">Add</button>
@@ -1296,7 +1368,6 @@
                             <tr>
                                 <th>Product Name</th>
                                 <th>Category</th>
-                                <th>Status</th>
                                 <th class="qty-col" title="Sum of quantity across all product variations">Total Qty</th>
                                 <th>Image</th>
                                 <th>Last Added</th>
@@ -1321,21 +1392,29 @@
                                 const normalizedForFilenameCheck = productImageNormalized.replace(/^\/+/, '');
                                 let productImage = ensureLeadingSlash(productImageNormalized);
                                 if (normalizedForFilenameCheck && looksLikeFilename(normalizedForFilenameCheck) && !normalizedForFilenameCheck.includes('/')) {
-                                    productImage = `/uploads/products/images/${normalizedForFilenameCheck}`;
+                                    productImage = `/uploads/Inventory/Main/Product Parent/${normalizedForFilenameCheck}`;
                                 }
 
+                                const invImagePrefixes = [
+                                    'Inventory/Main/Product Parent',
+                                    'Inventory/thumbnails/Product Parent',
+                                    'products/inventory',
+                                    'products/images',
+                                    'products'
+                                ];
+                                const imgFilename = productImage ? productImage.split('/').pop() : '';
                                 let productImagePrimary = productImage || '';
                                 let productImageFallback = '';
                                 let productImageFallback2 = '';
-                                if (productImage && productImage.startsWith('/uploads/products/') && !productImage.startsWith('/uploads/products/images/')) {
-                                    productImagePrimary = productImage.replace('/uploads/products/', '/uploads/products/images/');
-                                    productImageFallback = productImage;
-                                } else if (productImage && productImage.startsWith('/uploads/products/images/')) {
-                                    productImageFallback = productImage.replace('/uploads/products/images/', '/uploads/products/');
-                                } else if (productImage && productImage.startsWith('/uploads/products/inventory/')) {
-                                    // Inventory images sometimes exist under /images instead.
-                                    productImageFallback = productImage.replace('/uploads/products/inventory/', '/uploads/products/images/');
-                                    productImageFallback2 = productImage.replace('/uploads/products/inventory/', '/uploads/products/');
+                                if (imgFilename) {
+                                    const candidates = [productImage];
+                                    invImagePrefixes.forEach((prefix) => {
+                                        const c = `/uploads/${prefix}/${imgFilename}`;
+                                        if (candidates.indexOf(c) === -1) candidates.push(c);
+                                    });
+                                    productImagePrimary = candidates[0] || '';
+                                    productImageFallback = candidates[1] || '';
+                                    productImageFallback2 = candidates[2] || '';
                                 }
                                 const availableQty = item.AvailableQuantity || 0;
                                 const totalQty = item.TotalQuantity || 0;
@@ -1358,28 +1437,23 @@
                                         </div>
                                     </td>
                                     <td><%= productCategory %></td>
-                                    <td>
-                                        <% 
-                                            const primaryStatus = item.InventoryStatus || (hasInventory ? 'available' : 'no_stock');
-                                            const statusClass = primaryStatus === 'available' ? 'status-available' : 
-                                                               primaryStatus === 'damaged' ? 'status-damaged' : 
-                                                               primaryStatus === 'returned' ? 'status-returned' : 
-                                                               primaryStatus === 'repaired' ? 'status-repaired' : 
-                                                               primaryStatus === 'no_stock' ? 'status-disposed' : 'status-disposed';
-                                        %>
-                                        <span class="status-badge <%= statusClass %>">
-                                            <%= primaryStatus === 'no_stock' ? 'No Stock' : primaryStatus.charAt(0).toUpperCase() + primaryStatus.slice(1) %>
-                                        </span>
-                                    </td>
                                     <td class="qty-col"><span class="stock-qty"><%= totalQty %></span></td>
                                     <td>
-                                        <% if (productImagePrimary) { %>
+                                        <% if (productImagePrimary) {
+                                            const encodeInvImgPath = (p) => String(p || '').split('/').map((seg, i) => {
+                                                if (!seg || i === 0) return seg;
+                                                try { return encodeURIComponent(decodeURIComponent(seg)); } catch (e) { return encodeURIComponent(seg); }
+                                            }).join('/');
+                                            const imgSrc = encodeInvImgPath(productImagePrimary);
+                                            const imgFb1 = encodeInvImgPath(productImageFallback);
+                                            const imgFb2 = encodeInvImgPath(productImageFallback2);
+                                        %>
                                             <img
-                                                src="<%= productImagePrimary %>"
+                                                src="<%= imgSrc %>"
                                                 alt="Product Image"
                                                 class="image-preview"
-                                                data-fallback-src="<%= productImageFallback %>"
-                                                data-fallback-src2="<%= productImageFallback2 %>"
+                                                data-fallback-src="<%= imgFb1 %>"
+                                                data-fallback-src2="<%= imgFb2 %>"
                                                 onerror="if(this.dataset.fallbackSrc && this.src.indexOf(this.dataset.fallbackSrc) === -1){this.src=this.dataset.fallbackSrc;}else if(this.dataset.fallbackSrc2 && this.src.indexOf(this.dataset.fallbackSrc2) === -1){this.src=this.dataset.fallbackSrc2;}else{this.onerror=null;this.src='/images/placeholder-no-image.svg';}"
                                             >
                                         <% } else { %>
@@ -1398,7 +1472,7 @@
                                             <% } else { %>
                                                 <span style="color: #999; font-size: 0.9em; margin-right: 5px;">No inventory yet</span>
                                             <% } %>
-                                            <button type="button" class="edit-inventory-product-btn" data-product-id="<%= productId %>" title="Edit product" aria-label="Edit product">
+                                            <button type="button" class="edit-inventory-product-quick-btn pi-icon-edit-btn" data-product-id="<%= productId %>" title="Edit product" aria-label="Edit product">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                                             </button>
                                             <button type="button" class="delete-inventory-btn" 
@@ -1413,8 +1487,8 @@
                                     </td>
                                 </tr>
                                 <tr class="variations-row" data-inventory-product-id="<%= productId %>" style="display: none;">
-                                    <td colspan="7" style="padding: 20px; background-color: #f8f9fa; border-top: 2px solid #dee2e6;">
-                                        <div class="variations-container" data-inventory-product-id="<%= productId %>">
+                                    <td colspan="6" style="padding: 20px; background-color: #f8f9fa; border-top: 2px solid #dee2e6;">
+                                        <div class="variations-container" data-inventory-product-id="<%= productId %>" data-show-return-columns="0" data-show-storefront="0" data-show-variation-actions="1">
                                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                                                 <h4 style="margin: 0; color: #333;">Product Variations</h4>
                                                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -1426,17 +1500,16 @@
                                                 <p>Expand to load variations, or click Refresh.</p>
                                             </div>
                                             <div class="variations-table-container" style="display: none;">
-                                                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                                                <table class="variations-nested-table" style="width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed;">
                                                     <thead>
                                                         <tr style="background-color: #e9ecef;">
-                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">Variation Name</th>
-                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">SKU</th>
-                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">Color</th>
-                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Qty</th>
-                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Price</th>
-                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Image</th>
-                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Status</th>
-                                                            <th style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Actions</th>
+                                                            <th class="var-col-name" style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">Variation Name</th>
+                                                            <th class="var-col-sku" style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">SKU</th>
+                                                            <th class="var-col-color" style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">Color</th>
+                                                            <th class="var-col-qty qty-col" style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Qty</th>
+                                                            <th class="var-col-price" style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Price</th>
+                                                            <th class="var-col-image" style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Image</th>
+                                                            <th class="var-col-action" style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Actions</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody class="variations-table-body"></tbody>
@@ -1567,7 +1640,7 @@
         </div>
     </div>
 
-    <%- include('partials/edit-inventory-product-modal') %>
+    <%- include('partials/edit-inventory-product-quick-modal') %>
     <%- include('partials/edit-variation-status-modal') %>
 
     <!-- Inventory Changes Confirmation Modal -->
@@ -1583,7 +1656,20 @@
         </div>
     </div>
 
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260524a" defer></script>
+    <!-- Restock Confirmation Modal -->
+    <div id="restockConfirmModal" class="inventory-confirmation-modal">
+        <div class="inventory-confirmation-content">
+            <h3>Confirm Restock</h3>
+            <p id="restockConfirmText" style="text-align:center;margin:12px 0 8px;font-size:1.05em;font-weight:600;color:#333;"></p>
+            <p style="text-align:center;margin:0 0 16px;color:#64748b;font-size:0.9em;">This adds available quantity and deducts raw materials per item.</p>
+            <div class="inventory-confirmation-buttons">
+                <button type="button" class="inventory-cancel-btn" id="cancelRestockConfirm">Cancel</button>
+                <button type="button" class="inventory-confirm-btn" id="confirmRestockConfirm">Restock</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260524k" defer></script>
     <script src="/js/Employee/Admin/product-inventory-tabs.js?v=20260522c" defer></script>
     <script src="/js/Employee/Admin/raw-materials-tab.js"></script>
     <script src="/js/Employee/Admin/bom-bundles-tab.js?v=20260522b" defer></script>

@@ -34,6 +34,20 @@ const ReturnRefundPolicy = () => {
           </section>
 
           <section className="policy-section">
+            <h2>7-Day Return Window</h2>
+            <p>
+              You have <strong>7 days</strong> from when your order is marked <strong>To Receive</strong> to file a return
+              for damaged, wrong, or defective items — and only before you click <strong>Order Received</strong>.
+            </p>
+            <div className="policy-highlight">
+              <p>
+                <strong>Missed the 7-day window?</strong> Self-service returns will no longer be available in your account.
+                Please contact customer service at <strong>designexcellence1@gmail.com</strong> or <strong>(02) 413-6682</strong> — we will review your case.
+              </p>
+            </div>
+          </section>
+
+          <section className="policy-section">
             <h2>When You Can Request a Return</h2>
             <p>
               Self-service returns (Refund or Replacement) are available only when your order shows 
@@ -45,7 +59,7 @@ const ReturnRefundPolicy = () => {
                 <strong>Eligible reasons:</strong> Damaged item, wrong item, or other defect-related issues (not change of mind)
               </li>
               <li>
-                <strong>Time limit:</strong> You must submit your request before clicking <strong>Order Received</strong>
+                <strong>Time limit:</strong> Submit your request within <strong>7 days</strong> of To Receive status and before clicking <strong>Order Received</strong>
               </li>
               <li>
                 <strong>After you confirm receipt:</strong> The order moves to Completed and the Return / Refund option 
@@ -53,7 +67,7 @@ const ReturnRefundPolicy = () => {
               </li>
             </ul>
             <p>
-              If you accidentally clicked Order Received, contact customer service as soon as possible. 
+              If you accidentally clicked Order Received, or the 7-day window has passed, contact customer service as soon as possible. 
               We will review your case, but online self-service returns will not be available for that order.
             </p>
           </section>

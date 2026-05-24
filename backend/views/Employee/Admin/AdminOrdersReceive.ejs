@@ -1355,13 +1355,18 @@
                                     <% } %>
 
                                     <div class="order-card-footer">
+                                        <% const canAutoConfirm = !!order.CanAutoConfirmReceive; const daysLeft = order.DaysUntilAutoConfirm || 0; %>
                                         <button
-                                            class="order-card-action proceed js-open-order-modal"
+                                            class="order-card-action proceed js-open-order-modal<%= canAutoConfirm ? '' : ' is-disabled' %>"
                                             type="button"
                                             data-order-id="<%= order.OrderID %>"
                                             data-action="proceed"
+                                            data-can-auto-confirm="<%= canAutoConfirm ? '1' : '0' %>"
+                                            data-days-left="<%= daysLeft %>"
+                                            <%= canAutoConfirm ? '' : 'disabled' %>
+                                            title="<%= canAutoConfirm ? 'Confirm after the 7-day customer return window' : ('Available in ' + daysLeft + ' day(s)') %>"
                                         >
-                                            Receive
+                                            <%= canAutoConfirm ? 'Receive' : ('Wait ' + daysLeft + 'd') %>
                                         </button>
                                     </div>
                                 </div>
@@ -1372,17 +1377,35 @@
 
                     <!-- Modals (Outside grid for table view access) -->
                     <% orders.forEach(function(order) { %>
+                        <% const modalCanAutoConfirm = !!order.CanAutoConfirmReceive; const modalDaysLeft = order.DaysUntilAutoConfirm || 0; const confirmDays = typeof autoConfirmReceiveDays !== 'undefined' ? autoConfirmReceiveDays : 7; %>
                         <div id="modal-<%= order.OrderID %>-proceed" class="order-modal-overlay">
                             <div class="order-modal-content">
-                                <h4>Receive Order?</h4>
-                                <p>Confirm order <strong><%= order.ReferenceNumber || order.OrderID %></strong> as received and mark it <strong>Completed</strong>?<br>This action cannot be undone.</p>
+                                <% if (modalCanAutoConfirm) { %>
+                                <h4>Auto-confirm order received?</h4>
+                                <p>
+                                    The customer <strong><%= confirmDays %>-day</strong> return window has passed for order
+                                    <strong><%= order.ReferenceNumber || order.OrderID %></strong>.
+                                    Confirm this order as received and mark it <strong>Completed</strong>?
+                                </p>
+                                <p style="font-size:0.875rem;color:#6b7280;margin-top:0.75rem;">This action cannot be undone.</p>
+                                <% } else { %>
+                                <h4>Not eligible yet</h4>
+                                <p>
+                                    Order <strong><%= order.ReferenceNumber || order.OrderID %></strong> can be auto-confirmed after
+                                    <strong><%= confirmDays %> days</strong> in To Receive status.
+                                    <strong><%= modalDaysLeft %> day(s)</strong> remaining in the customer return window.
+                                </p>
+                                <% } %>
                                 <div class="modal-btns">
                                     <button class="btn-filter btn-filter-secondary js-close-order-modal"
                                         data-order-id="<%= order.OrderID %>"
                                         data-action="proceed">Cancel</button>
+                                    <% if (modalCanAutoConfirm) { %>
                                     <button class="btn-filter btn-filter-primary confirm-btn js-confirm-order-action"
                                         data-order-id="<%= order.OrderID %>"
-                                        data-action="proceed">Receive</button>
+                                        data-action="proceed"
+                                        data-can-auto-confirm="1">Confirm Received</button>
+                                    <% } %>
                                 </div>
                             </div>
                         </div>
@@ -1501,7 +1524,8 @@
                                         </td>
                                         <td style="padding: 1rem; text-align: center;">
                                             <button class="order-card-toggle" type="button" data-toggle-target="<%= order.OrderID %>" style="background: #F0B21B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; margin-right: 0.5rem;" onclick="toggleOrderDetails(<%= order.OrderID %>)">View</button>
-                                            <button class="order-card-action proceed js-open-order-modal" type="button" data-order-id="<%= order.OrderID %>" data-action="proceed" style="background: #10b981; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem;">Receive</button>
+                                            <% const tableCanAutoConfirm = !!order.CanAutoConfirmReceive; const tableDaysLeft = order.DaysUntilAutoConfirm || 0; %>
+                                            <button class="order-card-action proceed js-open-order-modal" type="button" data-order-id="<%= order.OrderID %>" data-action="proceed" data-can-auto-confirm="<%= tableCanAutoConfirm ? '1' : '0' %>" data-days-left="<%= tableDaysLeft %>" <%= tableCanAutoConfirm ? '' : 'disabled' %> title="<%= tableCanAutoConfirm ? 'Confirm after the 7-day customer return window' : ('Available in ' + tableDaysLeft + ' day(s)') %>" style="background: <%= tableCanAutoConfirm ? '#10b981' : '#9ca3af' %>; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: <%= tableCanAutoConfirm ? 'pointer' : 'not-allowed' %>; font-weight: 600; font-size: 0.875rem;"><%= tableCanAutoConfirm ? 'Receive' : ('Wait ' + tableDaysLeft + 'd') %></button>
                                         </td>
                                     </tr>
                                     <!-- Order Details Row (Hidden by default) -->
@@ -2078,6 +2102,12 @@
             if (openTrigger) {
                 const orderId = openTrigger.getAttribute('data-order-id');
                 const action = openTrigger.getAttribute('data-action');
+                const canAutoConfirm = openTrigger.getAttribute('data-can-auto-confirm') === '1';
+                const daysLeft = parseInt(openTrigger.getAttribute('data-days-left') || '0', 10);
+                if (!canAutoConfirm) {
+                    alert(`This order can be confirmed after the 7-day customer return window (${daysLeft} day(s) remaining).`);
+                    return;
+                }
                 if (orderId && action) {
                     showModal(orderId, action);
                 }
@@ -2293,8 +2323,8 @@
                         closeModal(orderId, action);
                         const dest = '/Employee/Admin/Orders?tab=completed';
                         showOrderSuccess(data.status === 'Completed Returned'
-                            ? 'Replacement order received and completed!'
-                            : 'Order received and completed!');
+                            ? 'Replacement order auto-confirmed and completed!'
+                            : 'Order auto-confirmed after 7-day return window!');
                         setTimeout(() => {
                             window.location.href = dest;
                         }, 1500);

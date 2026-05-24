@@ -13,6 +13,21 @@ const getBackendUrl = () => {
    * @param {string} imagePath - Relative or absolute image path
    * @returns {string} - Full image URL
    */
+  /**
+   * Encode each path segment so filenames with spaces work in browsers.
+   */
+  const encodeUploadPath = (pathStr) => {
+    if (!pathStr || !pathStr.startsWith('/')) return pathStr;
+    return pathStr.split('/').map((seg, i) => {
+      if (!seg || i === 0) return seg;
+      try {
+        return encodeURIComponent(decodeURIComponent(seg));
+      } catch (e) {
+        return encodeURIComponent(seg);
+      }
+    }).join('/');
+  };
+
   export const getImageUrl = (imagePath) => {
     if (!imagePath) return '';
     
@@ -31,11 +46,11 @@ const getBackendUrl = () => {
     
     // If relative path starting with /, prepend backend URL
     if (trimmed.startsWith('/')) {
-      return `${getBackendUrl()}${trimmed}`;
+      return `${getBackendUrl()}${encodeUploadPath(trimmed)}`;
     }
     
     // If relative path without /, assume it's in uploads folder
-    return `${getBackendUrl()}/uploads/${trimmed}`;
+    return `${getBackendUrl()}/uploads/${encodeURIComponent(trimmed)}`;
   };
 
   // Normalize and repair legacy 3D model path formats
@@ -59,13 +74,14 @@ const getBackendUrl = () => {
     // Normalize slashes from Windows-style paths
     value = value.replace(/\\/g, '/');
 
-    // Legacy typo path: /uploads/products/3dmodels/* -> /uploads/products/models/*
-    value = value.replace('/uploads/products/3dmodels/', '/uploads/products/models/');
+    // Legacy typo path: /uploads/products/3dmodels/* -> canonical model folders
+    value = value.replace('/uploads/products/3dmodels/', '/uploads/Inventory/Model/');
+    value = value.replace('/uploads/products/models/', '/uploads/Inventory/Model/');
 
-    // Relative model path should resolve from /uploads/products/models
+    // Relative model path should resolve from inventory model folder first
     if (!value.startsWith('/') && !value.startsWith('http://') && !value.startsWith('https://')) {
       if (value.includes('.glb') || value.includes('.gltf')) {
-        value = `/uploads/products/models/${value}`;
+        value = `/uploads/Inventory/Model/${value}`;
       }
     }
 
@@ -130,8 +146,16 @@ const getBackendUrl = () => {
   export const getModel3dUrl = (product) => {
     if (!product) return null;
     
+  const variationModel = product.selectedVariation?.model3d
+    || product.selectedVariation?.model3D
+    || (Array.isArray(product.variations)
+      ? product.variations.find((v) => v?.model3d || v?.model3D)?.model3d
+        || product.variations.find((v) => v?.model3d || v?.model3D)?.model3D
+      : null);
+
     // Try different 3D model fields
     const modelFields = [
+      variationModel,
       product.model3d,
       product.model3DURL,
       product.Model3DURL,
@@ -150,7 +174,6 @@ const getBackendUrl = () => {
       }
     }
     
-    console.warn('No 3D model found for product');
     return null;
   };
 

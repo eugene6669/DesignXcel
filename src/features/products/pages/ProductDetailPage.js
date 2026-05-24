@@ -220,6 +220,7 @@ const ProductDetail = () => {
   // Calculate pricing
   const hasDiscount = product.hasDiscount && product.discountInfo;
   const displayPrice = hasDiscount ? product.discountInfo.discountedPrice : product.price;
+  const productDescriptionText = (product?.description || product?.longDescription || '').trim();
   const originalPrice = hasDiscount ? product.price : null;
   const discountPercentage = hasDiscount && product.discountInfo.discountType === 'percentage' 
     ? product.discountInfo.discountValue 
@@ -435,10 +436,11 @@ const ProductDetail = () => {
               </div>
             </div>
 
-            {/* Description */}
-            <div className="pdp-description">
-              <p>{product.description || 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna'}</p>
-            </div>
+            {productDescriptionText && (
+              <div className="pdp-description">
+                <p>{productDescriptionText}</p>
+              </div>
+            )}
 
             {/* Product Variations */}
             {variations.length > 0 && (
@@ -605,25 +607,10 @@ const ProductDetail = () => {
           {activeTab === 'description' && (
             <div className="description-content">
               <div className="description-text">
-                {product?.description || product?.longDescription || (
-                  <div>
-                    <p>Experience the perfect blend of comfort and style with our premium furniture collection. This exceptional piece combines modern design with superior craftsmanship to create a timeless addition to your space.</p>
-                    
-                    <h4>Key Features:</h4>
-                    <ul>
-                      <li>Premium quality materials for lasting durability</li>
-                      <li>Ergonomic design for maximum comfort</li>
-                      <li>Modern aesthetic that complements any decor</li>
-                      <li>Easy assembly with detailed instructions</li>
-                      <li>Professional finish with attention to detail</li>
-                    </ul>
-                    
-                    <h4>Perfect For:</h4>
-                    <p>Whether you're furnishing your home office, living room, or bedroom, this piece offers versatile functionality and timeless appeal. Its neutral design ensures it will remain stylish for years to come.</p>
-                    
-                    <h4>Care Instructions:</h4>
-                    <p>Clean with a soft, dry cloth. Avoid harsh chemicals and direct sunlight to maintain the finish. Regular dusting will keep your furniture looking its best.</p>
-                  </div>
+                {productDescriptionText ? (
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{productDescriptionText}</p>
+                ) : (
+                  <p className="description-empty">No description available.</p>
                 )}
               </div>
             </div>

@@ -47,19 +47,27 @@
                 const normalizedForFilenameCheck = productImageNormalized.replace(/^\/+/, '');
                 let productImage = ensureLeadingSlash(productImageNormalized);
                 if (normalizedForFilenameCheck && looksLikeFilename(normalizedForFilenameCheck) && !normalizedForFilenameCheck.includes('/')) {
-                    productImage = '/uploads/products/images/' + normalizedForFilenameCheck;
+                    productImage = '/uploads/ProductListing/Main/Product Parent/' + normalizedForFilenameCheck;
                 }
                 let productImagePrimary = productImage || '';
                 let productImageFallback = '';
                 let productImageFallback2 = '';
-                if (productImage && productImage.startsWith('/uploads/products/') && !productImage.startsWith('/uploads/products/images/')) {
-                    productImagePrimary = productImage.replace('/uploads/products/', '/uploads/products/images/');
-                    productImageFallback = productImage;
-                } else if (productImage && productImage.startsWith('/uploads/products/images/')) {
-                    productImageFallback = productImage.replace('/uploads/products/images/', '/uploads/products/');
-                } else if (productImage && productImage.startsWith('/uploads/products/inventory/')) {
-                    productImageFallback = productImage.replace('/uploads/products/inventory/', '/uploads/products/images/');
-                    productImageFallback2 = productImage.replace('/uploads/products/inventory/', '/uploads/products/');
+                const listingPrefixes = [
+                    'ProductListing/Main/Product Parent',
+                    'ProductListing/thumbnails/Product Parent',
+                    'products/images',
+                    'products'
+                ];
+                const listFilename = productImage ? productImage.split('/').pop() : '';
+                if (listFilename) {
+                    const candidates = [productImage];
+                    listingPrefixes.forEach(function(prefix) {
+                        const c = '/uploads/' + prefix + '/' + listFilename;
+                        if (candidates.indexOf(c) === -1) candidates.push(c);
+                    });
+                    productImagePrimary = candidates[0] || '';
+                    productImageFallback = candidates[1] || '';
+                    productImageFallback2 = candidates[2] || '';
                 }
                 const totalQuantity = item.TotalQuantity || 0;
                 const availableQty = item.AvailableQuantity || 0;

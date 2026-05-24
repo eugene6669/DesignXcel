@@ -8,7 +8,7 @@ import {
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { LoadingManager } from 'three';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { getProductById } from '../../products/services/productService';
+import { getProductById, getProductVariations } from '../../products/services/productService';
 import { useCart } from '../../../shared/contexts/CartContext';
 import { useCurrency } from '../../../shared/contexts/CurrencyContext';
 import PageHeader from '../../../shared/components/layout/PageHeader';
@@ -650,6 +650,8 @@ const ThreeDProducts = () => {
   const { slug } = useParams(); // Changed from 'id' to 'slug' to match route param
   const navigate = useNavigate();
   const [product, setProduct] = useState(null);
+  const [variations, setVariations] = useState([]);
+  const [selectedVariation, setSelectedVariation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [quantity, setQuantity] = useState(1);
@@ -792,9 +794,56 @@ const ThreeDProducts = () => {
     };
 
     if (slug) {
+      setLoading(true);
+      setVariations([]);
+      setSelectedVariation(null);
       loadProduct();
     }
   }, [slug]);
+
+  useEffect(() => {
+    const loadVariations = async () => {
+      if (!product?.id && !slug) return;
+      try {
+        const response = await getProductVariations(slug || product.id);
+        const loaded = Array.isArray(response.variations) ? response.variations : [];
+        setVariations(loaded);
+        if (loaded.length > 0) {
+          const withModel = loaded.find((v) => v.model3d || v.model3D);
+          setSelectedVariation(withModel || loaded[0]);
+        } else {
+          setSelectedVariation(null);
+        }
+      } catch (err) {
+        console.error('Error loading variations for 3D product:', err);
+        setVariations([]);
+        setSelectedVariation(null);
+      }
+    };
+
+    if (product) {
+      loadVariations();
+    }
+  }, [product, slug]);
+
+  const hasVariations = variations.length > 0 || Boolean(product?.hasVariations || product?.requiresVariationSelection);
+
+  const displayProduct = React.useMemo(() => {
+    if (!product) return null;
+    if (!selectedVariation) return product;
+    const itemPrice = selectedVariation.price > 0
+      ? selectedVariation.price
+      : (product.price || product.Price || 0);
+    return {
+      ...product,
+      price: itemPrice,
+      sku: selectedVariation.sku || selectedVariation.SKU || product.sku || product.SKU,
+      stockQuantity: selectedVariation.quantity ?? product.stockQuantity,
+      selectedVariation,
+      model3d: selectedVariation.model3d || selectedVariation.model3D || product.model3d,
+      variations
+    };
+  }, [product, selectedVariation, variations]);
 
   // Auto-open AR viewer if URL has ?ar=true and user is on mobile
   useEffect(() => {
@@ -818,7 +867,7 @@ const ThreeDProducts = () => {
   const cameraRef = useRef();
 
   // Use the uploaded 3D model from the product, or show placeholder
-  const modelPath = getModel3dUrl(product);
+  const modelPath = getModel3dUrl(displayProduct || product);
   const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
   const loadableModelPath = React.useMemo(() => {
     if (!modelPath) return null;
@@ -928,10 +977,11 @@ const ThreeDProducts = () => {
   };
 
   // Calculate pricing from real product data
-  const basePrice = product?.price || 0;
+  const basePrice = displayProduct?.price || product?.price || 0;
   const hasDiscount = product?.hasDiscount && product?.discountInfo;
   const currentPrice = hasDiscount ? product.discountInfo.discountedPrice : basePrice;
   const originalPrice = hasDiscount ? basePrice : null;
+  const activeStock = displayProduct?.stockQuantity ?? product?.stockQuantity ?? product?.availableStock ?? 0;
 
   // Handle adding product to bulk order and navigating
   const handleAddToBulkOrder = () => {
@@ -985,10 +1035,15 @@ const ThreeDProducts = () => {
 
   // Handle add to cart - exactly like product detail page
   const handleAddToCart = () => {
-    if (product && quantity > 0) {
+    const cartProduct = displayProduct || product;
+    if (hasVariations && !selectedVariation?.id) {
+      alert('Please wait for product variation details to load, then try again.');
+      return;
+    }
+    if (cartProduct && quantity > 0) {
       // If quantity >= 10, check if product can accommodate bulk order
       if (quantity >= 10) {
-        const productStock = product.stockQuantity || product.stock || 0;
+        const productStock = activeStock || cartProduct.stock || 0;
         // Check if product has enough stock for bulk order (minimum 10)
         if (productStock < 10) {
           setInsufficientStockMessage(`This product does not have enough stock for bulk orders. Available stock: ${productStock}. Minimum required: 10 items.`);
@@ -1002,9 +1057,20 @@ const ThreeDProducts = () => {
       // Limit quantity to MAX_REGULAR_CHECKOUT_QUANTITY for regular checkout
       const limitedQuantity = Math.min(quantity, MAX_REGULAR_CHECKOUT_QUANTITY);
       
+      const itemPrice = selectedVariation && selectedVariation.price > 0
+        ? selectedVariation.price
+        : (cartProduct.price || cartProduct.Price || 0);
+
       // Create product object with customization data
       const productWithCustomization = {
-        ...product,
+        ...cartProduct,
+        price: itemPrice,
+        sku: hasVariations
+          ? (selectedVariation?.sku || selectedVariation?.SKU || cartProduct.sku || cartProduct.SKU)
+          : (cartProduct.sku || cartProduct.SKU),
+        useOriginalProduct: !hasVariations,
+        selectedVariation: hasVariations ? selectedVariation : null,
+        hasVariations,
         customizations: {
           width: customizations.width,
           height: customizations.height,
@@ -1394,13 +1460,13 @@ const ThreeDProducts = () => {
                       className="qty-btn qty-plus"
                       onClick={() => {
                         const maxAllowed = Math.min(
-                          product?.stockQuantity || 999,
+                          activeStock || product?.stockQuantity || 999,
                           MAX_REGULAR_CHECKOUT_QUANTITY
                         );
                         
                         // If quantity is already at max (9), check stock before showing bulk order modal
                         if (quantity >= MAX_REGULAR_CHECKOUT_QUANTITY) {
-                          const productStock = product?.stockQuantity || product?.stock || 0;
+                          const productStock = activeStock || product?.stockQuantity || product?.stock || 0;
                           // Check if product has enough stock for bulk order (minimum 10)
                           if (productStock < 10) {
                             setInsufficientStockMessage(`This product does not have enough stock for bulk orders. Available stock: ${productStock}. Minimum required: 10 items.`);
@@ -1434,7 +1500,7 @@ const ThreeDProducts = () => {
               <button 
                 className="add-to-cart-btn"
                 onClick={handleAddToCart}
-                disabled={!product || quantity <= 0 || (product?.stockQuantity && quantity > product.stockQuantity)}
+                disabled={!product || quantity <= 0 || (activeStock > 0 && quantity > activeStock) || (hasVariations && !selectedVariation?.id)}
               >
                 ADD TO CART
               </button>

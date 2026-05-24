@@ -1178,11 +1178,22 @@ const OrderHistory = () => {
   // Handle return order
   // Return policy configuration
   const RETURN_POLICY = {
-    timeframeDays: 30, // 30 days return window
+    timeframeDays: 7,
     requireOriginalPackaging: true,
     requireAllParts: true,
     requireUnused: true
   };
+
+  const getDaysInReceiveWindow = (order) => {
+    if (!order) return 0;
+    const startDate = order.ReceivedAt || order.MovedToReceiveAt || order.OrderDate;
+    if (!startDate) return 0;
+    const start = new Date(startDate);
+    if (Number.isNaN(start.getTime())) return 0;
+    return Math.max(0, Math.floor((Date.now() - start.getTime()) / (24 * 60 * 60 * 1000)));
+  };
+
+  const isWithinReturnWindow = (order) => getDaysInReceiveWindow(order) <= RETURN_POLICY.timeframeDays;
 
   const buildSelectedItemsFromOrder = (order, prefillFromReturnItems = false) => {
     const initialItems = {};
@@ -1283,7 +1294,12 @@ const OrderHistory = () => {
 
     const isPreReceive = isReceiveStatus(order.Status);
     if (!isPreReceive) {
-      alert('Returns must be filed while the order is still in To Receive status. If you already marked the order as received, contact support.');
+      alert('Returns must be filed while the order is still in To Receive status. If you already marked the order as received, contact customer service at designexcellence1@gmail.com or (02) 413-6682.');
+      return;
+    }
+
+    if (!isWithinReturnWindow(order)) {
+      alert(`The ${RETURN_POLICY.timeframeDays}-day return window has passed. Please contact customer service at designexcellence1@gmail.com or (02) 413-6682.`);
       return;
     }
 
@@ -2650,7 +2666,7 @@ const OrderHistory = () => {
                     <button
                       className="btn btn-primary"
                       onClick={() => handleReturnOrder(order.OrderID)}
-                      disabled={returning[order.OrderID] || order.Status === 'Returned'}
+                      disabled={returning[order.OrderID] || order.Status === 'Returned' || !isWithinReturnWindow(order)}
                       style={{
                         padding: '8px 12px',
                         borderRadius: '6px',
@@ -2666,7 +2682,9 @@ const OrderHistory = () => {
                         transition: 'all 0.2s ease',
                         whiteSpace: 'nowrap'
                       }}
-                      title="Refund or replacement — seller pays return shipping"
+                      title={isWithinReturnWindow(order)
+                        ? `Refund or replacement within ${RETURN_POLICY.timeframeDays}-day window — seller pays return shipping`
+                        : `${RETURN_POLICY.timeframeDays}-day return window ended — contact customer service`}
                     >
                       {returning[order.OrderID] ? 'Processing...' : RETURN_RELATED_STATUSES.includes(order.Status) ? normalizeStatusDisplay(order.Status) : 'Return Items'}
                     </button>
@@ -2852,7 +2870,8 @@ const OrderHistory = () => {
                   fontSize: '0.875rem',
                   color: '#991b1b'
                 }}>
-                  <strong>Do not click &quot;Order Received&quot; prematurely.</strong> If you received a damaged or wrong item, file Return/Refund or Replacement here first. If you accidentally confirm receipt, you cannot return through your account — contact customer service at <strong>designexcellence1@gmail.com</strong> or <strong>(02) 413-6682</strong>.
+                  <strong>7-day return window:</strong> File Return Items within {RETURN_POLICY.timeframeDays} days while the order is <strong>To Receive</strong> and before you click Order Received.
+                  {' '}If the window has passed or you confirmed receipt by mistake, contact customer service at <strong>designexcellence1@gmail.com</strong> or <strong>(02) 413-6682</strong>.
                 </div>
               )}
               {/* Return Policy Notice */}
@@ -2870,7 +2889,7 @@ const OrderHistory = () => {
                 <ul style={{ margin: 0, paddingLeft: '20px', color: '#78350f' }}>
                   {returnModal.isPreReceive ? (
                     <>
-                      <li>Eligible only while the order is in <strong>To Receive</strong> status</li>
+                      <li>Eligible only while the order is in <strong>To Receive</strong> status (within <strong>{RETURN_POLICY.timeframeDays} days</strong>)</li>
                       <li><strong>Full refund</strong> of returned items plus original delivery fees</li>
                       <li>Return shipping is paid by the seller</li>
                       <li>Choose <strong>Refund</strong> (full refund including delivery) or <strong>Replacement</strong> (free replacement delivery)</li>
@@ -2878,7 +2897,7 @@ const OrderHistory = () => {
                     </>
                   ) : (
                     <>
-                      <li>Items must be returned within {RETURN_POLICY.timeframeDays} days of delivery</li>
+                      <li>Items must be returned within {RETURN_POLICY.timeframeDays} days of To Receive status (before Order Received)</li>
                       <li>Items must be unused, unmodified, and in original packaging</li>
                       <li>All parts, accessories, and documentation must be included</li>
                       <li>Original receipt or proof of purchase required</li>

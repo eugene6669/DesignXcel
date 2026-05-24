@@ -2,6 +2,10 @@
 
 const sql = require('mssql');
 const { getOrLoad } = require('./adminPageCache');
+const {
+    resolveExistingLocalProductAssetPath,
+    encodeUploadPathForHtml
+} = require('./productAssetUrls');
 
 const INVENTORY_LIST_PAGE_SIZE = 25;
 
@@ -101,10 +105,10 @@ const INVENTORY_PRODUCT_LIST_CORE = `
         ip.Category as InventoryProductCategory,
         ip.Price as InventoryProductPrice,
         COALESCE(
-            vimg.VariationImageURL,
-            vimg.FirstThumb,
+            NULLIF(ip.ImageURL, ''),
             NULLIF(pLinked.ImageURL, ''),
-            NULLIF(ip.ImageURL, '')
+            vimg.VariationImageURL,
+            vimg.FirstThumb
         ) as InventoryProductImageURL,
         ip.DateAdded,
         COALESCE(vlast.LastVariationAdded, ip.DateAdded) AS LastDateAdded,
@@ -128,9 +132,28 @@ const INVENTORY_PRODUCT_LIST_CORE = `
             WHEN COALESCE(ip.DisposedQuantity, 0) > 0 THEN 'disposed'
             ELSE COALESCE(ip.InventoryStatus, 'available')
         END as InventoryStatus,
+        CASE
+            WHEN ip.ProductID IS NULL THEN 0
+            WHEN CAST(ISNULL(pLinked.IsActive, 0) AS INT) = 1 THEN 1
+            ELSE 0
+        END AS ShowOnStorefront,
         ip.Dimensions,
         ip.InventoryNotes as Notes,
-        ip.DateUpdated
+        ip.DateUpdated,
+        ip.ProductID as LinkedProductID,
+        pd.DiscountID,
+        pd.DiscountType,
+        pd.DiscountValue,
+        pd.StartDate as DiscountStartDate,
+        pd.EndDate as DiscountEndDate,
+        CASE
+            WHEN pd.DiscountID IS NULL THEN NULL
+            WHEN pd.DiscountType = 'percentage' THEN
+                pLinked.Price - (pLinked.Price * pd.DiscountValue / 100)
+            WHEN pd.DiscountType = 'fixed' THEN
+                CASE WHEN pLinked.Price - pd.DiscountValue < 0 THEN 0 ELSE pLinked.Price - pd.DiscountValue END
+            ELSE pLinked.Price
+        END as DiscountedPrice
     FROM InventoryProducts ip
     CROSS APPLY (
         SELECT
@@ -185,6 +208,9 @@ const INVENTORY_PRODUCT_LIST_CORE = `
         ORDER BY ipv.VariationID
     ) vimg
     LEFT JOIN Products pLinked ON pLinked.ProductID = ip.ProductID AND pLinked.IsActive = 1
+    LEFT JOIN ProductDiscounts pd ON pLinked.ProductID = pd.ProductID
+        AND pd.IsActive = 1
+        AND GETDATE() BETWEEN pd.StartDate AND pd.EndDate
     OUTER APPLY (
         SELECT MAX(iv.CreatedAt) AS LastVariationAdded
         FROM InventoryProductVariations iv
@@ -219,7 +245,7 @@ function applyInventoryListFilters(request, filters = {}) {
     return clause;
 }
 
-/** Products with post-inspection stock only (damaged / repaired / disposed — not pending ReturnedQuantity). */
+/** Products with return stock, items in inspection, or post-inspection damaged/repaired/disposed. */
 function applyReturnsListFilters(request, filters = {}) {
     let clause = applyInventoryListFilters(request, filters);
     clause += ` AND EXISTS (
@@ -230,8 +256,91 @@ function applyReturnsListFilters(request, filters = {}) {
                 OR COALESCE(iv.RepairedQuantity, 0) > 0
                 OR COALESCE(iv.DisposedQuantity, 0) > 0
             )
+        )
+        OR EXISTS (
+            SELECT 1
+            FROM Orders o
+            CROSS APPLY OPENJSON(o.ReturnItems) AS ri
+            INNER JOIN InventoryProductVariations ipv ON ipv.VariationID = TRY_CAST(
+                COALESCE(JSON_VALUE(ri.value, '$.variationId'), JSON_VALUE(ri.value, '$.VariationID')) AS INT
+            )
+            WHERE o.Status = 'Awaiting Inspection'
+              AND o.ReturnItems IS NOT NULL
+              AND ipv.InventoryProductID = ip.InventoryProductID
+              AND ipv.IsActive = 1
+              AND TRY_CAST(COALESCE(JSON_VALUE(ri.value, '$.quantity'), JSON_VALUE(ri.value, '$.Quantity')) AS INT) > 0
         )`;
     return clause;
+}
+
+async function fetchPendingInspectionQtyByVariation(pool) {
+    const pendingMap = new Map();
+    try {
+        const ordersSchema = await getOrdersSchemaFlags(pool);
+        if (!ordersSchema.hasReturnItems) return pendingMap;
+        const ordersResult = await pool.request().query(`
+            SELECT ReturnItems FROM Orders WHERE Status = 'Awaiting Inspection' AND ReturnItems IS NOT NULL
+        `);
+        for (const row of ordersResult.recordset || []) {
+            let items = [];
+            try {
+                items = typeof row.ReturnItems === 'string' ? JSON.parse(row.ReturnItems) : row.ReturnItems;
+            } catch (e) { continue; }
+            if (!Array.isArray(items)) continue;
+            items.forEach(function (item) {
+                const vid = parseInt(item.variationId || item.VariationID, 10);
+                const qty = parseInt(item.quantity || item.Quantity, 10) || 0;
+                if (!vid || qty <= 0) return;
+                pendingMap.set(vid, (pendingMap.get(vid) || 0) + qty);
+            });
+        }
+    } catch (err) {
+        console.warn('[fetchPendingInspectionQtyByVariation]', err.message);
+    }
+    return pendingMap;
+}
+
+async function sumVariationReturnAggregatesForProducts(pool, inventoryProductIds) {
+    const map = new Map();
+    const ids = [...new Set((inventoryProductIds || []).map((id) => parseInt(id, 10)).filter(Boolean))];
+    if (!ids.length) return map;
+
+    const pendingMap = await fetchPendingInspectionQtyByVariation(pool);
+    const request = pool.request();
+    ids.forEach((id, idx) => request.input(`ipid${idx}`, sql.Int, id));
+    const placeholders = ids.map((_, idx) => `@ipid${idx}`).join(', ');
+    const result = await request.query(`
+        SELECT
+            ipv.InventoryProductID,
+            ipv.VariationID,
+            COALESCE(ipv.ReturnedQuantity, 0) AS ReturnedQuantity,
+            COALESCE(ipv.DamagedQuantity, 0) AS DamagedQuantity,
+            COALESCE(ipv.RepairedQuantity, 0) AS RepairedQuantity
+        FROM InventoryProductVariations ipv
+        WHERE ipv.InventoryProductID IN (${placeholders}) AND ipv.IsActive = 1
+    `);
+
+    for (const row of result.recordset || []) {
+        const pid = row.InventoryProductID;
+        if (!map.has(pid)) {
+            map.set(pid, { returned: 0, damaged: 0, repaired: 0 });
+        }
+        const agg = map.get(pid);
+        agg.returned += pendingMap.get(row.VariationID) || 0;
+        agg.damaged += Number(row.DamagedQuantity) || 0;
+        agg.repaired += Number(row.RepairedQuantity) || 0;
+    }
+    return map;
+}
+
+function applyReturnAggregatesToRow(row, agg) {
+    if (!row || !agg) return row;
+    return {
+        ...row,
+        ReturnedQuantity: agg.returned,
+        DamagedQuantity: agg.damaged,
+        RepairedQuantity: agg.repaired
+    };
 }
 
 async function countInventoryProducts(pool, filters = {}, options = {}) {
@@ -268,8 +377,17 @@ async function fetchInventoryProductsPage(pool, filters = {}, options = {}) {
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 
+    const rows = (result.recordset || []).map((row) => {
+        if (!row.InventoryProductImageURL) return row;
+        const resolved = resolveExistingLocalProductAssetPath(row.InventoryProductImageURL);
+        return {
+            ...row,
+            InventoryProductImageURL: encodeUploadPathForHtml(resolved)
+        };
+    });
+
     return {
-        rows: result.recordset || [],
+        rows,
         page,
         limit,
         offset
@@ -338,15 +456,7 @@ async function loadProductInventoryPageData(pool, options = {}) {
                 SELECT UnitID, UnitName FROM MeasurementUnits WHERE IsActive = 1 ORDER BY UnitName
             `).then((r) => r.recordset || [])
         ),
-        cacheLoad('admin:productCategories', () =>
-            pool.request().query(`
-                SELECT DISTINCT Category FROM (
-                    SELECT Category FROM Products WHERE IsActive = 1 AND Category IS NOT NULL AND Category != ''
-                    UNION
-                    SELECT Category FROM InventoryProducts WHERE IsActive = 1 AND Category IS NOT NULL AND Category != ''
-                ) c ORDER BY Category
-            `).then((r) => r.recordset.map((row) => row.Category))
-        ),
+        fetchProductCategoriesList(pool),
         countInventoryProducts(pool, filters),
         fetchInventoryProductsPage(pool, filters),
         loadActiveBomBundles(pool)
@@ -396,11 +506,16 @@ async function loadProductReturnsPageData(pool, options = {}) {
         countInventoryProducts(pool, filters, returnsOpt),
         fetchInventoryProductsPage(pool, filters, returnsOpt)
     ]);
+    const inventoryIds = (pageResult.rows || []).map((r) => r.InventoryProductID).filter(Boolean);
+    const returnAggMap = await sumVariationReturnAggregatesForProducts(pool, inventoryIds);
+    const enrichedRows = (pageResult.rows || []).map((row) =>
+        applyReturnAggregatesToRow(row, returnAggMap.get(row.InventoryProductID))
+    );
     const totalPages = Math.max(1, Math.ceil(totalCount / pageResult.limit));
     const page = Math.min(pageResult.page, totalPages);
     return {
         categories,
-        allInventoryProducts: pageResult.rows,
+        allInventoryProducts: enrichedRows,
         pagination: {
             page,
             limit: pageResult.limit,
@@ -427,13 +542,16 @@ async function fetchInventoryProductSummary(pool, inventoryProductId) {
     const row = result.recordset[0];
     if (!row) return null;
 
+    const aggMap = await sumVariationReturnAggregatesForProducts(pool, [id]);
+    const agg = aggMap.get(id);
+
     return {
         inventoryProductId: row.InventoryProductID,
         totalQuantity: Number(row.TotalQuantity) || 0,
         availableQuantity: Number(row.AvailableQuantity) || 0,
-        damagedQuantity: Number(row.DamagedQuantity) || 0,
-        returnedQuantity: Number(row.ReturnedQuantity) || 0,
-        repairedQuantity: Number(row.RepairedQuantity) || 0,
+        damagedQuantity: agg ? agg.damaged : (Number(row.DamagedQuantity) || 0),
+        returnedQuantity: agg ? agg.returned : (Number(row.ReturnedQuantity) || 0),
+        repairedQuantity: agg ? agg.repaired : (Number(row.RepairedQuantity) || 0),
         disposedQuantity: Number(row.DisposedQuantity) || 0,
         inventoryStatus: row.InventoryStatus || 'available'
     };
@@ -459,17 +577,114 @@ async function fetchActiveRawMaterialsList(pool) {
     return result.recordset || [];
 }
 
-async function fetchProductCategoriesList(pool) {
-    const { getOrLoad: cacheLoad } = require('./adminPageCache');
+async function ensureProductCategoriesSchema(pool) {
+    await pool.request().query(`
+        IF OBJECT_ID('dbo.Categories', 'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.Categories (
+                CategoryID INT IDENTITY(1,1) PRIMARY KEY,
+                CategoryName NVARCHAR(120) NOT NULL,
+                Description NVARCHAR(500) NULL,
+                IsActive BIT NOT NULL DEFAULT 1,
+                CreatedAt DATETIME2(0) NOT NULL DEFAULT SYSUTCDATETIME()
+            );
+            CREATE UNIQUE INDEX UX_Categories_CategoryName ON dbo.Categories (CategoryName);
+        END
+    `);
+}
+
+async function fetchProductCategoriesList(pool, options = {}) {
+    const { getOrLoad: cacheLoad, invalidateAdminPageCache } = require('./adminPageCache');
+    if (options.skipCache) {
+        invalidateAdminPageCache('admin:productCategories');
+    }
+    await ensureProductCategoriesSchema(pool);
     return cacheLoad('admin:productCategories', () =>
         pool.request().query(`
             SELECT DISTINCT Category FROM (
-                SELECT Category FROM Products WHERE IsActive = 1 AND Category IS NOT NULL AND Category != ''
+                SELECT LTRIM(RTRIM(CategoryName)) AS Category
+                FROM Categories
+                WHERE IsActive = 1 AND CategoryName IS NOT NULL AND LTRIM(RTRIM(CategoryName)) <> ''
                 UNION
-                SELECT Category FROM InventoryProducts WHERE IsActive = 1 AND Category IS NOT NULL AND Category != ''
-            ) c ORDER BY Category
+                SELECT LTRIM(RTRIM(Category)) AS Category
+                FROM Products
+                WHERE IsActive = 1 AND Category IS NOT NULL AND LTRIM(RTRIM(Category)) <> ''
+                UNION
+                SELECT LTRIM(RTRIM(Category)) AS Category
+                FROM InventoryProducts
+                WHERE IsActive = 1 AND Category IS NOT NULL AND LTRIM(RTRIM(Category)) <> ''
+            ) c
+            ORDER BY Category
         `).then((r) => (r.recordset || []).map((row) => row.Category).filter(Boolean))
     );
+}
+
+async function isProductCategoryInUse(pool, categoryName) {
+    const name = String(categoryName || '').trim();
+    if (!name) return false;
+    const result = await pool.request()
+        .input('name', sql.NVarChar, name)
+        .query(`
+            SELECT TOP 1 1 AS inUse FROM (
+                SELECT Category FROM Products WHERE IsActive = 1 AND Category = @name
+                UNION ALL
+                SELECT Category FROM InventoryProducts WHERE IsActive = 1 AND Category = @name
+            ) x
+        `);
+    return result.recordset.length > 0;
+}
+
+async function addProductCategory(pool, categoryName) {
+    const name = String(categoryName || '').trim();
+    if (!name) {
+        return { success: false, message: 'Category name is required.' };
+    }
+    if (name.length > 120) {
+        return { success: false, message: 'Category name must be 120 characters or less.' };
+    }
+    await ensureProductCategoriesSchema(pool);
+    const existing = await pool.request()
+        .input('name', sql.NVarChar, name)
+        .query(`
+            SELECT TOP 1 CategoryID, IsActive FROM Categories WHERE CategoryName = @name
+        `);
+    if (existing.recordset.length > 0) {
+        const row = existing.recordset[0];
+        if (row.IsActive === 1 || row.IsActive === true) {
+            return { success: false, message: 'This category already exists.' };
+        }
+        await pool.request()
+            .input('id', sql.Int, row.CategoryID)
+            .query(`UPDATE Categories SET IsActive = 1 WHERE CategoryID = @id`);
+        return { success: true, message: 'Category restored.', category: name };
+    }
+    await pool.request()
+        .input('name', sql.NVarChar, name)
+        .query(`
+            INSERT INTO Categories (CategoryName, IsActive, CreatedAt)
+            VALUES (@name, 1, SYSUTCDATETIME())
+        `);
+    return { success: true, message: 'Category added.', category: name };
+}
+
+async function removeProductCategory(pool, categoryName) {
+    const name = String(categoryName || '').trim();
+    if (!name) {
+        return { success: false, message: 'Category name is required.' };
+    }
+    if (await isProductCategoryInUse(pool, name)) {
+        return { success: false, message: 'Cannot delete "' + name + '". It is used by one or more products.' };
+    }
+    await ensureProductCategoriesSchema(pool);
+    const result = await pool.request()
+        .input('name', sql.NVarChar, name)
+        .query(`
+            UPDATE Categories SET IsActive = 0 WHERE CategoryName = @name AND IsActive = 1
+        `);
+    if (result.rowsAffected[0] > 0) {
+        return { success: true, message: 'Category removed.' };
+    }
+    return { success: true, message: 'Category removed from list.' };
 }
 
 async function buildInventoryStockRefreshPayload(pool, inventoryProductId) {
@@ -572,6 +787,213 @@ async function buildInventoryAlertsPayload(pool, maxQuantity = 20) {
     return { success: true, products, rawMaterials };
 }
 
+function mapInventoryReportStatus(availableQty, totalQty) {
+    if (availableQty === 0 && totalQty === 0) return 'Out of Stock';
+    if (availableQty > 0 && availableQty <= 10) return 'Low Stock';
+    if (availableQty === 0 && totalQty > 0) return 'No Available Stock';
+    return 'Active';
+}
+
+function inventoryReportRowMatchesFilters(row, filters = {}) {
+    const avail = Number(row.AvailableQuantity) || 0;
+    const total = Number(row.StockQuantity) || 0;
+    const status = String(filters.status || '').trim().toLowerCase();
+    const stockMin = filters.stockMin !== undefined && filters.stockMin !== ''
+        ? parseInt(filters.stockMin, 10) : null;
+    const stockMax = filters.stockMax !== undefined && filters.stockMax !== ''
+        ? parseInt(filters.stockMax, 10) : null;
+    if (stockMin !== null && !Number.isNaN(stockMin) && avail < stockMin) return false;
+    if (stockMax !== null && !Number.isNaN(stockMax) && avail > stockMax) return false;
+    if (!status) return true;
+    if (status === 'low-stock') return avail > 0 && avail <= 10;
+    if (status === 'out-of-stock') return avail === 0 && total === 0;
+    if (status === 'no-available-stock') return avail === 0 && total > 0;
+    if (status === 'active') return avail > 0;
+    return true;
+}
+
+function filterInventoryReportRows(rows, filters = {}) {
+    const hasRowFilter = !!(String(filters.status || '').trim()
+        || (filters.stockMin !== undefined && filters.stockMin !== '')
+        || (filters.stockMax !== undefined && filters.stockMax !== ''));
+    if (!hasRowFilter) return rows;
+
+    const out = [];
+    const parents = rows.filter((r) => r.RowType === 'Parent');
+    for (const parent of parents) {
+        const variations = rows.filter(
+            (r) => r.RowType === 'Variation' && r.InventoryProductID === parent.InventoryProductID
+        );
+        if (parent.HasVariations) {
+            const matching = variations.filter((v) => inventoryReportRowMatchesFilters(v, filters));
+            if (matching.length) {
+                out.push(parent);
+                matching.forEach((v) => out.push(v));
+            }
+        } else if (inventoryReportRowMatchesFilters(parent, filters)) {
+            out.push(parent);
+        }
+    }
+    return out;
+}
+
+function mapParentInventoryReportRow(row, hasVariations) {
+    const totalQty = Number(row.TotalQuantity) || 0;
+    const availableQty = Number(row.AvailableQuantity) || 0;
+    return {
+        RowType: 'Parent',
+        HasVariations: !!hasVariations,
+        InventoryProductID: row.InventoryProductID,
+        VariationID: null,
+        Name: row.InventoryProductName || 'N/A',
+        SKU: '',
+        CategoryName: row.InventoryProductCategory || 'Uncategorized',
+        StockQuantity: totalQty,
+        AvailableQuantity: availableQty,
+        DamagedQuantity: Number(row.DamagedQuantity) || 0,
+        RepairedQuantity: Number(row.RepairedQuantity) || 0,
+        ReturnedQuantity: Number(row.ReturnedQuantity) || 0,
+        Price: null,
+        IsActive: availableQty > 0 || totalQty > 0,
+        Status: mapInventoryReportStatus(availableQty, totalQty),
+        LastUpdated: row.DateUpdated || row.LastDateAdded || row.DateAdded
+    };
+}
+
+function mapVariationInventoryReportRow(parentRow, variationRow) {
+    const sellable = Number(variationRow.AvailableQuantity) || 0;
+    const damaged = Number(variationRow.DamagedQuantity) || 0;
+    const totalQty = Number(variationRow.TotalQuantity) || (sellable + damaged);
+    return {
+        RowType: 'Variation',
+        HasVariations: false,
+        InventoryProductID: variationRow.InventoryProductID,
+        VariationID: variationRow.VariationID,
+        Name: variationRow.VariationName || 'N/A',
+        ParentName: parentRow.InventoryProductName || 'N/A',
+        SKU: variationRow.SKU || '',
+        CategoryName: parentRow.InventoryProductCategory || 'Uncategorized',
+        StockQuantity: totalQty,
+        AvailableQuantity: sellable,
+        DamagedQuantity: damaged,
+        RepairedQuantity: 0,
+        ReturnedQuantity: 0,
+        Price: Number(variationRow.VariationPrice) || Number(parentRow.InventoryProductPrice) || 0,
+        IsActive: sellable > 0 || totalQty > 0,
+        Status: mapInventoryReportStatus(sellable, totalQty),
+        LastUpdated: variationRow.UpdatedAt || variationRow.CreatedAt || parentRow.DateUpdated
+    };
+}
+
+/** Inventory report rows: product parent + variation lines (aligned with Product Inventory). */
+async function fetchInventoryReportProducts(pool, filters = {}) {
+    const request = pool.request();
+    const filterClause = applyInventoryListFilters(request, filters);
+    const parentResult = await request.query(`
+        ${INVENTORY_PRODUCT_LIST_CORE}
+        WHERE ip.IsActive = 1
+        ${filterClause}
+        ORDER BY ip.Name ASC
+    `);
+    const parents = parentResult.recordset || [];
+    if (!parents.length) return [];
+
+    const sellableSql = variationSellableQtySql('ipv');
+    const varRequest = pool.request();
+    const idParams = parents.map((row, idx) => {
+        const key = `invPid${idx}`;
+        varRequest.input(key, sql.Int, row.InventoryProductID);
+        return `@${key}`;
+    });
+    const varResult = await varRequest.query(`
+        SELECT
+            ipv.InventoryProductID,
+            ipv.VariationID,
+            ipv.VariationName,
+            ipv.SKU,
+            COALESCE(NULLIF(ipv.Price, 0), ip.Price, 0) AS VariationPrice,
+            ${sellableSql} AS AvailableQuantity,
+            (${sellableSql}) + ISNULL(ipv.DamagedQuantity, 0) AS TotalQuantity,
+            ISNULL(ipv.DamagedQuantity, 0) AS DamagedQuantity,
+            ipv.UpdatedAt,
+            ipv.CreatedAt
+        FROM InventoryProductVariations ipv
+        INNER JOIN InventoryProducts ip ON ip.InventoryProductID = ipv.InventoryProductID
+        WHERE ipv.IsActive = 1
+          AND ip.IsActive = 1
+          AND ipv.InventoryProductID IN (${idParams.join(', ')})
+        ORDER BY ip.Name ASC, ipv.VariationName ASC
+    `);
+
+    const variationsByParent = new Map();
+    for (const v of varResult.recordset || []) {
+        if (!variationsByParent.has(v.InventoryProductID)) {
+            variationsByParent.set(v.InventoryProductID, []);
+        }
+        variationsByParent.get(v.InventoryProductID).push(v);
+    }
+
+    const rows = [];
+    for (const parent of parents) {
+        const variations = variationsByParent.get(parent.InventoryProductID) || [];
+        rows.push(mapParentInventoryReportRow(parent, variations.length > 0));
+        for (const variation of variations) {
+            rows.push(mapVariationInventoryReportRow(parent, variation));
+        }
+    }
+    return filterInventoryReportRows(rows, filters);
+}
+
+/** Raw materials rows aligned with Product Inventory raw-materials tab. */
+async function fetchInventoryReportRawMaterials(pool, filters = {}) {
+    const { search, status, stockMin, stockMax } = filters;
+    let query = `
+        SELECT
+            rm.Name,
+            ISNULL(rm.SKU, '') AS SKU,
+            ISNULL(rm.Unit, '') AS Unit,
+            ISNULL(rm.QuantityAvailable, 0) AS QuantityAvailable,
+            ISNULL(rm.IsActive, 0) AS IsActive,
+            ISNULL(rm.LastUpdated, GETDATE()) AS LastUpdated
+        FROM RawMaterials rm
+        WHERE 1=1
+    `;
+    const request = pool.request();
+    if (search && String(search).trim()) {
+        query += ` AND (rm.Name LIKE @searchMaterials OR ISNULL(rm.SKU, '') LIKE @searchMaterials)`;
+        request.input('searchMaterials', sql.NVarChar, `%${String(search).trim()}%`);
+    }
+    if (status === 'active') {
+        query += ` AND rm.IsActive = 1`;
+    } else if (status === 'inactive') {
+        query += ` AND rm.IsActive = 0`;
+    } else if (status === 'low-stock') {
+        query += ` AND rm.IsActive = 1 AND ISNULL(rm.QuantityAvailable, 0) < 10 AND ISNULL(rm.QuantityAvailable, 0) > 0`;
+    } else if (status === 'out-of-stock') {
+        query += ` AND rm.IsActive = 1 AND ISNULL(rm.QuantityAvailable, 0) = 0`;
+    } else {
+        query += ` AND rm.IsActive = 1`;
+    }
+    if (stockMin !== undefined && stockMin !== '') {
+        query += ` AND ISNULL(rm.QuantityAvailable, 0) >= @stockMinMaterials`;
+        request.input('stockMinMaterials', sql.Int, parseInt(stockMin, 10));
+    }
+    if (stockMax !== undefined && stockMax !== '') {
+        query += ` AND ISNULL(rm.QuantityAvailable, 0) <= @stockMaxMaterials`;
+        request.input('stockMaxMaterials', sql.Int, parseInt(stockMax, 10));
+    }
+    query += ` ORDER BY rm.Name ASC`;
+    const result = await request.query(query);
+    return (result.recordset || []).map((row) => ({
+        Name: row.Name,
+        SKU: row.SKU || '',
+        Unit: row.Unit,
+        QuantityAvailable: Number(row.QuantityAvailable) || 0,
+        IsActive: row.IsActive === 1 || row.IsActive === true,
+        LastUpdated: row.LastUpdated
+    }));
+}
+
 module.exports = {
     getOrdersSchemaFlags,
     attachOrderItemsBatch,
@@ -584,9 +1006,15 @@ module.exports = {
     fetchActiveRawMaterialsList,
     buildInventoryStockRefreshPayload,
     fetchProductCategoriesList,
+    ensureProductCategoriesSchema,
+    isProductCategoryInUse,
+    addProductCategory,
+    removeProductCategory,
     variationSellableQtySql,
     mapVariationStockFields,
     fetchLowStockVariationAlerts,
     fetchLowStockRawMaterials,
-    buildInventoryAlertsPayload
+    buildInventoryAlertsPayload,
+    fetchInventoryReportProducts,
+    fetchInventoryReportRawMaterials
 };

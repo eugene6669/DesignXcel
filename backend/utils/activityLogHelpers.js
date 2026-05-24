@@ -18,6 +18,7 @@ function serializeActivityLogChanges(changes) {
 async function fetchActivityLogs(pool, queryParams = {}) {
     const {
         action,
+        actions,
         tableAffected,
         userRole,
         dateFrom,
@@ -50,6 +51,13 @@ async function fetchActivityLogs(pool, queryParams = {}) {
     if (action) {
         query += ` AND al.Action = @action`;
         request.input('action', sql.NVarChar, action);
+    }
+    if (actions && Array.isArray(actions) && actions.length) {
+        const placeholders = actions.map((_, idx) => `@actionList${idx}`).join(', ');
+        query += ` AND al.Action IN (${placeholders})`;
+        actions.forEach((act, idx) => {
+            request.input(`actionList${idx}`, sql.NVarChar, act);
+        });
     }
     if (tableAffected) {
         query += ` AND al.TableAffected = @tableAffected`;

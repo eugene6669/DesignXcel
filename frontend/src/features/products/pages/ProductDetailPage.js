@@ -15,6 +15,7 @@ import {
   fetchAvailableStock,
   subscribeStockRefresh
 } from '../../../shared/services/availableStockService';
+import { resolveDiscountedDisplayPrice } from '../../../shared/utils/discountUtils';
 import './product-detail.css';
 
 const ProductDetail = () => {
@@ -271,41 +272,42 @@ const ProductDetail = () => {
     return [];
   }, [product?.thumbnails]);
 
+  const isSameAssetUrl = (a, b) => {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const base = (url) => String(url).split('?')[0].split('/').pop()?.toLowerCase() || '';
+    const baseA = base(a);
+    const baseB = base(b);
+    return baseA.length > 0 && baseA === baseB;
+  };
+
   const galleryImages = useMemo(() => {
     if (!product) return [];
 
-    const rawImages = [
-      product.image,
-      ...(Array.isArray(product.images) ? product.images : (product.images ? [product.images] : [])),
-      ...normalizedThumbnails
-    ].filter(Boolean);
+    const productMain =
+      (Array.isArray(product.images) && product.images[0]) ||
+      product.image ||
+      null;
 
-    const productMainImage = rawImages[0] || null;
-    const extraFromProduct = [...new Set(rawImages.slice(1).concat(normalizedThumbnails))].filter(
-      (img) => img && img !== productMainImage
+    const parentThumbs = normalizedThumbnails.filter(
+      (url) => url && !isSameAssetUrl(url, productMain)
     );
 
     if (selectedVariation) {
-      const variationThumbList = Array.isArray(selectedVariation.thumbnails)
-        ? selectedVariation.thumbnails.filter(Boolean)
-        : [];
-      const main =
-        selectedVariation.imageUrl ||
-        variationThumbList[0] ||
-        productMainImage;
-      if (variationThumbList.length >= 4) {
-        return [main, ...variationThumbList.slice(0, 4)].filter(Boolean);
-      }
-      const variationExtras = variationThumbList.filter((url) => url !== main);
-      const strip = [...new Set([...variationExtras, ...extraFromProduct].filter((url) => url !== main))].slice(
-        0,
-        4
-      );
-      return [main, ...strip].filter(Boolean);
+      const variationMain = selectedVariation.imageUrl || null;
+      const main = variationMain || productMain;
+      const varThumbs = (Array.isArray(selectedVariation.thumbnails)
+        ? selectedVariation.thumbnails
+        : []
+      ).filter((url) => url && !isSameAssetUrl(url, main));
+      const strip = [...new Set([...varThumbs, ...parentThumbs])]
+        .filter((url) => !isSameAssetUrl(url, main))
+        .slice(0, 4);
+      return main ? [main, ...strip] : strip;
     }
 
-    const strip = extraFromProduct.slice(0, 4);
-    return productMainImage ? [productMainImage, ...strip] : strip;
+    const strip = parentThumbs.slice(0, 4);
+    return productMain ? [productMain, ...strip] : strip;
   }, [product, normalizedThumbnails, selectedVariation]);
 
   const handleImageNavigation = (direction) => {
@@ -476,13 +478,23 @@ const ProductDetail = () => {
   const imageUrl = getImageUrl(currentImage);
 
   // Calculate pricing - use variation price if selected, otherwise use product price
-  const basePrice = selectedVariation && selectedVariation.price > 0 
-    ? selectedVariation.price 
+  const variationBase = selectedVariation
+    ? (selectedVariation.originalPrice > 0 ? selectedVariation.originalPrice : selectedVariation.price)
+    : 0;
+  const basePrice = selectedVariation && variationBase > 0
+    ? variationBase
     : (product.price || product.Price || 0);
-  
-  const hasDiscount = product.hasDiscount && product.discountInfo;
-  const displayPrice = hasDiscount ? product.discountInfo.discountedPrice : basePrice;
-  const originalPrice = hasDiscount ? basePrice : null;
+
+  const discountInfoForDisplay = product.hasDiscount ? product.discountInfo : null;
+
+  const { displayPrice, originalPrice, hasDiscount: showDiscount } = selectedVariation?.hasDiscount
+    ? {
+        displayPrice: selectedVariation.price,
+        originalPrice: selectedVariation.originalPrice || basePrice,
+        hasDiscount: true,
+      }
+    : resolveDiscountedDisplayPrice(basePrice, discountInfoForDisplay);
+  const productDescriptionText = (product?.description || product?.longDescription || '').trim();
   const variationStockSum = variations.length
     ? variations.reduce((sum, v) => {
         const q =
@@ -751,10 +763,11 @@ const ProductDetail = () => {
               </div>
             </div>
 
-            {/* Description */}
-            <div className="pdp-description">
-              <p>{product.description || 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna'}</p>
-            </div>
+            {productDescriptionText && (
+              <div className="pdp-description">
+                <p>{productDescriptionText}</p>
+              </div>
+            )}
 
             {hasVariations && (
               <section className="pdp-variations-section" aria-label="Product options">
@@ -1031,25 +1044,10 @@ const ProductDetail = () => {
           {activeTab === 'description' && (
             <div className="description-content">
               <div className="description-text">
-                {product?.description || product?.longDescription || (
-                  <div>
-                    <p>Experience the perfect blend of comfort and style with our premium furniture collection. This exceptional piece combines modern design with superior craftsmanship to create a timeless addition to your space.</p>
-                    
-                    <h4>Key Features:</h4>
-                    <ul>
-                      <li>Premium quality materials for lasting durability</li>
-                      <li>Ergonomic design for maximum comfort</li>
-                      <li>Modern aesthetic that complements any decor</li>
-                      <li>Easy assembly with detailed instructions</li>
-                      <li>Professional finish with attention to detail</li>
-                    </ul>
-                    
-                    <h4>Perfect For:</h4>
-                    <p>Whether you're furnishing your home office, living room, or bedroom, this piece offers versatile functionality and timeless appeal. Its neutral design ensures it will remain stylish for years to come.</p>
-                    
-                    <h4>Care Instructions:</h4>
-                    <p>Clean with a soft, dry cloth. Avoid harsh chemicals and direct sunlight to maintain the finish. Regular dusting will keep your furniture looking its best.</p>
-                  </div>
+                {productDescriptionText ? (
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{productDescriptionText}</p>
+                ) : (
+                  <p className="description-empty">No description available.</p>
                 )}
               </div>
             </div>

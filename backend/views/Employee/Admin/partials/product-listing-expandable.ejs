@@ -5,17 +5,21 @@
     showActions (boolean, default false)
     showVariationActions (boolean, optional — defaults true when showReturnColumns)
     showStorefront (boolean, default false)
+    showDiscount (boolean, default false)
     emptyListMessage (optional string)
 %>
 <%
-    const showReturnCols = !!showReturnColumns;
-    const showAct = !!showActions;
+    const showReturnCols = typeof showReturnColumns !== 'undefined' ? !!showReturnColumns : false;
+    const showAct = typeof showActions !== 'undefined' ? !!showActions : false;
     const showVarAct = typeof showVariationActions !== 'undefined' ? !!showVariationActions : showReturnCols;
-    const showSf = !!showStorefront;
-    const productColspan = showReturnCols ? 7 : (5 + (showAct ? 1 : 0));
+    const showSf = typeof showStorefront !== 'undefined' ? !!showStorefront : false;
+    const showDisc = typeof showDiscount !== 'undefined' ? !!showDiscount : false;
+    const productColspan = showReturnCols ? 6 : (6 + (showDisc ? 1 : 0) + (showSf ? 2 : 0) + (showAct ? 1 : 0));
     const fmtDate = typeof formatListDate === 'function'
         ? formatListDate
         : function(v) { return v ? String(v) : 'N/A'; };
+    const parentQtyLabel = typeof qtyParentLabel !== 'undefined' ? qtyParentLabel : 'Qty';
+    const varQtyLabel = typeof variationQtyLabel !== 'undefined' ? variationQtyLabel : 'Qty';
 %>
 <% if (allProductsList && allProductsList.length > 0) { %>
     <% if (!showReturnCols) { %>
@@ -30,14 +34,17 @@
             <tr>
                 <th>Product Name</th>
                 <th>Category</th>
-                <% if (!showReturnCols) { %><th class="qty-col" title="Sum of available quantity across all variations">Total Qty</th><% } %>
+                <% if (!showReturnCols) { %><th class="qty-col" title="Sum of available quantity across all variations"><%= parentQtyLabel %></th><% } %>
                 <% if (showReturnCols) { %>
-                <th class="qty-col return-qty-th return-qty-th-damaged">Damaged</th>
                 <th class="qty-col return-qty-th return-qty-th-returned">Returned</th>
+                <th class="qty-col return-qty-th return-qty-th-damaged">Damaged</th>
                 <th class="qty-col return-qty-th return-qty-th-repaired">Repaired</th>
                 <% } %>
                 <th>Image</th>
+                <% if (!showReturnCols && showDisc) { %><th>Discount</th><% } %>
+                <% if (!showReturnCols && showSf) { %><th>Storefront</th><% } %>
                 <% if (!showReturnCols) { %><th>Last Added</th><% } %>
+                <% if (!showReturnCols && showSf) { %><th>Status</th><% } %>
                 <% if (showAct && !showReturnCols) { %><th>Actions</th><% } %>
             </tr>
         </thead>
@@ -57,28 +64,47 @@
                 const normalizedForFilenameCheck = productImageNormalized.replace(/^\/+/, '');
                 let productImage = ensureLeadingSlash(productImageNormalized);
                 if (normalizedForFilenameCheck && looksLikeFilename(normalizedForFilenameCheck) && normalizedForFilenameCheck.indexOf('/') === -1) {
-                    productImage = '/uploads/products/images/' + normalizedForFilenameCheck;
+                    productImage = '/uploads/ProductListing/Main/Product Parent/' + normalizedForFilenameCheck;
                 }
                 let productImagePrimary = productImage || '';
                 let productImageFallback = '';
                 let productImageFallback2 = '';
-                if (productImage && productImage.startsWith('/uploads/products/') && productImage.indexOf('/uploads/products/images/') !== 0) {
-                    productImagePrimary = productImage.replace('/uploads/products/', '/uploads/products/images/');
-                    productImageFallback = productImage;
-                } else if (productImage && productImage.startsWith('/uploads/products/images/')) {
-                    productImageFallback = productImage.replace('/uploads/products/images/', '/uploads/products/');
-                } else if (productImage && productImage.startsWith('/uploads/products/inventory/')) {
-                    productImageFallback = productImage.replace('/uploads/products/inventory/', '/uploads/products/images/');
-                    productImageFallback2 = productImage.replace('/uploads/products/inventory/', '/uploads/products/');
+                const listingPrefixes = [
+                    'ProductListing/Main/Product Parent',
+                    'ProductListing/thumbnails/Product Parent',
+                    'products/images',
+                    'products'
+                ];
+                const listFilename = productImage ? productImage.split('/').pop() : '';
+                if (listFilename) {
+                    const candidates = [productImage];
+                    listingPrefixes.forEach(function(prefix) {
+                        const c = '/uploads/' + prefix + '/' + listFilename;
+                        if (candidates.indexOf(c) === -1) candidates.push(c);
+                    });
+                    productImagePrimary = candidates[0] || '';
+                    productImageFallback = candidates[1] || '';
+                    productImageFallback2 = candidates[2] || '';
                 }
                 const availableQty = item.AvailableQuantity || 0;
                 const damagedQty = item.DamagedQuantity || 0;
                 const returnedQty = item.ReturnedQuantity || 0;
                 const repairedQty = item.RepairedQuantity || 0;
                 const productId = item.InventoryProductID;
+                const inventoryStatus = item.InventoryStatus || (availableQty > 0 ? 'available' : 'no_stock');
+                const statusClass = inventoryStatus === 'available' ? 'status-available' :
+                    inventoryStatus === 'damaged' ? 'status-damaged' :
+                    inventoryStatus === 'returned' ? 'status-returned' :
+                    inventoryStatus === 'repaired' ? 'status-repaired' : 'status-disposed';
+                const statusLabel = inventoryStatus === 'no_stock' ? 'No Stock' :
+                    inventoryStatus.charAt(0).toUpperCase() + inventoryStatus.slice(1);
+                const showOnStorefront = item.ShowOnStorefront !== false && item.ShowOnStorefront !== 0 && item.ShowOnStorefront !== '0';
+                const linkedProductId = item.LinkedProductID || item.ProductID || null;
+                const productPrice = Number(item.InventoryProductPrice) || 0;
+                const hasDiscount = item.DiscountID && item.DiscountedPrice != null;
                 const lastAddedDisplay = item.LastDateAddedLabel || fmtDate(item.LastDateAdded);
             %>
-            <tr class="product-listing-row" data-inventory-product-id="<%= productId %>" data-product-name="<%= productName.replace(/"/g, '&quot;') %>">
+            <tr class="product-listing-row" data-inventory-product-id="<%= productId %>" data-product-name="<%= productName.replace(/"/g, '&quot;') %>" data-linked-product-id="<%= linkedProductId || '' %>" data-product-price="<%= productPrice %>">
                 <td>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <button type="button" class="toggle-variations-btn" data-inventory-product-id="<%= productId %>" style="background:none;border:none;cursor:pointer;padding:4px;color:#666;" title="Show variations" aria-expanded="false">
@@ -94,8 +120,8 @@
                 <td class="qty-col"><span class="stock-qty <%= stockQtyClass(availableQty) %>"><%= availableQty %></span></td>
                 <% } %>
                 <% if (showReturnCols) { %>
-                <td class="qty-col"><span class="return-qty return-qty-damaged<%= damagedQty > 0 ? ' has-stock' : '' %>"><%= damagedQty %></span></td>
                 <td class="qty-col"><span class="return-qty return-qty-returned<%= returnedQty > 0 ? ' has-stock' : '' %>"><%= returnedQty %></span></td>
+                <td class="qty-col"><span class="return-qty return-qty-damaged<%= damagedQty > 0 ? ' has-stock' : '' %>"><%= damagedQty %></span></td>
                 <td class="qty-col"><span class="return-qty return-qty-repaired<%= repairedQty > 0 ? ' has-stock' : '' %>"><%= repairedQty %></span></td>
                 <% } %>
                 <td>
@@ -108,15 +134,50 @@
                         <span style="color:#999;">—</span>
                     <% } %>
                 </td>
+                <% if (!showReturnCols && showDisc) { %>
+                <td class="discount-cell">
+                    <% if (!linkedProductId) { %>
+                        <span style="color:#999;font-size:0.85em;">Storefront required</span>
+                    <% } else if (hasDiscount) { %>
+                        <div style="font-size:0.85em;">
+                            <div style="text-decoration:line-through;color:#888;">₱<%= productPrice.toFixed(2) %></div>
+                            <strong style="color:#AF0B21;">₱<%= Number(item.DiscountedPrice).toFixed(2) %></strong>
+                            <div style="color:#666;">
+                                <% if (item.DiscountType === 'percentage') { %><%= item.DiscountValue %>% OFF<% } else { %>₱<%= Number(item.DiscountValue).toFixed(2) %> OFF<% } %>
+                            </div>
+                        </div>
+                        <button type="button" class="pi-btn pi-btn-sm remove-inventory-discount-btn" data-inventory-product-id="<%= productId %>" data-product-name="<%= productName.replace(/"/g, '&quot;') %>" style="margin-top:4px;">Remove</button>
+                    <% } else { %>
+                        <button type="button" class="add-inventory-discount-btn" data-inventory-product-id="<%= productId %>" data-product-name="<%= productName.replace(/"/g, '&quot;') %>" data-product-price="<%= productPrice %>">Add discount</button>
+                    <% } %>
+                </td>
+                <% } %>
+                <% if (!showReturnCols && showSf) { %>
+                <td style="text-align:center;">
+                    <label class="storefront-toggle-label" title="Show parent on customer storefront">
+                        <input type="checkbox" class="product-storefront-toggle" data-inventory-product-id="<%= productId %>"<%= showOnStorefront ? ' checked' : '' %>> Storefront
+                    </label>
+                </td>
+                <% } %>
                 <% if (!showReturnCols) { %>
                 <td class="last-added-cell"><%= lastAddedDisplay %></td>
+                <% } %>
+                <% if (!showReturnCols && showSf) { %>
+                <td><span class="status-badge <%= statusClass %>"><%= statusLabel %></span></td>
+                <% } %>
+                <% if (showAct && !showReturnCols) { %>
+                <td>
+                    <button type="button" class="edit-inventory-product-btn pi-icon-edit-btn" data-product-id="<%= productId %>" title="Edit product catalog" aria-label="Edit product catalog">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    </button>
+                </td>
                 <% } %>
             </tr>
             <tr class="variations-row" data-inventory-product-id="<%= productId %>" style="display:none;">
                 <td colspan="<%= productColspan %>" style="padding:16px 20px;background:#f8f9fa;border-top:2px solid #dee2e6;">
                     <div class="variations-container" data-inventory-product-id="<%= productId %>" data-show-return-columns="<%= showReturnCols ? '1' : '0' %>" data-show-storefront="<%= showSf ? '1' : '0' %>" data-show-variation-actions="<%= showVarAct ? '1' : '0' %>">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-                            <h4 style="margin:0;color:#333;font-size:0.95em;">Variations</h4>
+                            <h4 style="margin:0;color:#333;font-size:0.95em;">Product Variations</h4>
                             <button type="button" class="refresh-variations-btn pi-btn pi-btn-sm" data-inventory-product-id="<%= productId %>" style="background:#28a745;color:#fff;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:0.85em;">Refresh</button>
                         </div>
                         <div class="variations-loading" style="text-align:center;padding:16px;color:#666;">
@@ -130,11 +191,11 @@
                                         <th class="var-col-sku">SKU</th>
                                         <th class="var-col-color">Color</th>
                                         <% if (!showReturnCols) { %>
-                                        <th class="var-col-qty">Total Qty</th>
+                                        <th class="var-col-qty"><%= varQtyLabel %></th>
                                         <% } %>
                                         <% if (showReturnCols) { %>
-                                        <th class="var-col-qty return-qty-th return-qty-th-damaged">Damaged</th>
                                         <th class="var-col-qty return-qty-th return-qty-th-returned">Returned</th>
+                                        <th class="var-col-qty return-qty-th return-qty-th-damaged">Damaged</th>
                                         <th class="var-col-qty return-qty-th return-qty-th-repaired">Repaired</th>
                                         <% } %>
                                         <th class="var-col-price">Price</th>
@@ -145,6 +206,7 @@
                                         <% if (!showReturnCols) { %>
                                         <th class="var-col-date">Last Added</th>
                                         <% } %>
+                                        <% if (!showReturnCols && showSf) { %><th class="var-col-status">Status</th><% } %>
                                         <% if (showVarAct) { %>
                                         <th class="var-col-action">Actions</th>
                                         <% } %>

@@ -1,16 +1,44 @@
 'use strict';
 
-const { isAzureBlobConfigured, getBlobPublicUrl } = require('./azureBlobStorage');
+const fs = require('fs');
+const path = require('path');
+const { isAzureBlobConfigured, getBlobPublicUrl, deleteBlobFromAzure, blobPathFromAssetUrl } = require('./azureBlobStorage');
+
+const UPLOADS_ROOT = path.join(__dirname, '..', 'public', 'uploads');
+
+/** @type {Record<string, string>} */
+const INVENTORY_STORAGE_PATHS = {
+    parentMain: 'Inventory/Main/Product Parent',
+    variationMain: 'Inventory/Main/Product Variations',
+    parentThumb: 'Inventory/thumbnails/Product Parent',
+    variationThumb: 'Inventory/thumbnails/Product Variations',
+    model: 'Inventory/Model'
+};
+
+/** @type {Record<string, string>} */
+const PRODUCT_LISTING_STORAGE_PATHS = {
+    parentMain: 'ProductListing/Main/Product Parent',
+    variationMain: 'ProductListing/Main/Product Variations',
+    parentThumb: 'ProductListing/thumbnails/Product Parent',
+    variationThumb: 'ProductListing/thumbnails/Product Variation',
+    model: 'ProductListing/Model'
+};
+
+/** All known relative prefixes (for legacy file resolution / delete). */
+const ALL_PRODUCT_ASSET_PREFIXES = [
+    ...Object.values(INVENTORY_STORAGE_PATHS),
+    ...Object.values(PRODUCT_LISTING_STORAGE_PATHS),
+    'products/images',
+    'products/thumbnails',
+    'products/models',
+    'products/inventory',
+    'products/3dmodels',
+    'products',
+    'variations'
+];
 
 /**
  * When true: new product files go to Azure Blob; API rewrites /uploads/... to public blob URLs.
- * When false: files go to backend/public/uploads (disk); API keeps /uploads/... for the Express static route.
- *
- * Rules:
- * - Azure not configured → always local disk.
- * - USE_LOCAL_PRODUCT_ASSETS=true → force local disk + /uploads URLs (even if Azure env vars exist).
- * - USE_AZURE_BLOB_FOR_PRODUCTS=true → force Azure when configured (e.g. staging tests).
- * - Else NODE_ENV === 'production' → Azure when configured.
  */
 function isAzureProductAssetMode() {
     if (!isAzureBlobConfigured()) return false;
@@ -21,9 +49,22 @@ function isAzureProductAssetMode() {
     return process.env.NODE_ENV === 'production';
 }
 
-/**
- * Strip accidental "public" prefix and normalize slashes.
- */
+function encodeUploadPathForHtml(pathStr) {
+    if (!pathStr || typeof pathStr !== 'string') return pathStr;
+    const trimmed = pathStr.trim();
+    if (!trimmed || /^https?:\/\//i.test(trimmed) || trimmed.startsWith('data:')) {
+        return trimmed;
+    }
+    return trimmed.split('/').map((seg, i) => {
+        if (!seg || i === 0) return seg;
+        try {
+            return encodeURIComponent(decodeURIComponent(seg));
+        } catch (_) {
+            return encodeURIComponent(seg);
+        }
+    }).join('/');
+}
+
 function sanitizeRelativeUploadPath(url) {
     if (!url || typeof url !== 'string') return url;
     let u = url.trim();
@@ -40,59 +81,223 @@ function sanitizeRelativeUploadPath(url) {
 }
 
 /**
- * Legacy bug: some rows store /uploads/products/<file>.jpg while files live under products/images/.
+ * inventory = Product Inventory page; productListing = Admin Products (CMS catalog).
  */
-function fixLegacyFlatProductUploadPath(u) {
-    if (!u || typeof u !== 'string') return u;
-    if (/^\/uploads\/products\/[^/]+\.(jpe?g|png|gif|webp|svg)$/i.test(u)) {
-        return u.replace(/^\/uploads\/products\//, '/uploads/products/images/');
+function getUploadContext(req) {
+    const p = String(req?.originalUrl || req?.url || '').toLowerCase();
+
+    if (p.includes('/inventory-product-variations')) {
+        const catalogOnly = req?.body?.catalogOnly === '1' || req?.body?.catalogOnly === true;
+        return catalogOnly ? 'productListing' : 'inventory';
     }
-    return u;
+
+    if (
+        p.includes('/productinventory') ||
+        p.includes('/inventory-products') ||
+        p.includes('/inventoryproducts') ||
+        p.includes('/inventoryvariations') ||
+        p.includes('/addinventory') ||
+        p.includes('update-inventory-quantity')
+    ) {
+        return 'inventory';
+    }
+
+    if (
+        p.includes('/employee/admin/products') ||
+        p.includes('/employee/admin/variations') ||
+        p.includes('/transactionproducts') ||
+        p.includes('/transactionvariations') ||
+        p.includes('/userproducts') ||
+        p.includes('/uservariations') ||
+        p.includes('/orderproducts') ||
+        p.includes('/ordervariations')
+    ) {
+        return 'productListing';
+    }
+
+    return 'inventory';
+}
+
+function getStoragePathsForContext(context) {
+    return context === 'productListing' ? PRODUCT_LISTING_STORAGE_PATHS : INVENTORY_STORAGE_PATHS;
 }
 
 /**
- * Public URL for a multer file (disk or Azure custom storage).
- * @param {import('multer').File} file
+ * Relative path under uploads/ (no leading slash), e.g. Inventory/Main/Product Parent
  */
-function publicUrlFromMulterVariationFile(file) {
+function getProductRelativeStoragePath(fieldname, req) {
+    const field = String(fieldname || '');
+    const paths = getStoragePathsForContext(getUploadContext(req));
+
+    if (field === 'variationMainImage' || field === 'variationImage') {
+        return paths.variationMain;
+    }
+    if (field === 'variationThumbnail' || field === 'variationThumbnails') {
+        return paths.variationThumb;
+    }
+    if (
+        field.startsWith('thumbnail') ||
+        field === 'thumbnails' ||
+        field === 'productThumbnail'
+    ) {
+        return paths.parentThumb;
+    }
+    if (field === 'model3d' || field === 'variationModel3d') {
+        return paths.model;
+    }
+    if (
+        field === 'productMainImage' ||
+        field === 'productImage' ||
+        field === 'inventoryImage' ||
+        field === 'image'
+    ) {
+        return paths.parentMain;
+    }
+    return paths.parentMain;
+}
+
+function getProductAzureBlobPath(fieldname, finalName, req) {
+    const rel = getProductRelativeStoragePath(fieldname, req);
+    return `${rel}/${finalName}`;
+}
+
+function getProductMulterAbsoluteDir(fieldname, req) {
+    const rel = getProductRelativeStoragePath(fieldname, req);
+    return path.join(UPLOADS_ROOT, ...rel.split('/'));
+}
+
+function productUploadDiskPath(relativeUrl) {
+    const publicRoot = path.join(__dirname, '..', 'public');
+    return path.join(publicRoot, String(relativeUrl).replace(/^\//, '').replace(/\//g, path.sep));
+}
+
+function publicUrlFromMulterFile(file) {
     if (!file) return null;
     if (file.azureUrl) return file.azureUrl;
+
     if (file.destination === 'azure-blob' && file.path) {
-        return getBlobPublicUrl(String(file.path).replace(/\\/g, '/')) || null;
+        const blobPath = String(file.path).replace(/\\/g, '/');
+        return getBlobPublicUrl(blobPath) || `/uploads/${blobPath}`;
     }
-    const field = file.fieldname || '';
-    if (field === 'variationMainImage' || field === 'variationImage') {
-        return `/uploads/variations/${file.filename}`;
-    }
-    if (field === 'variationModel3d') {
-        return `/uploads/products/models/${file.filename}`;
-    }
-    if (field === 'variationThumbnail') {
-        return `/uploads/products/thumbnails/${file.filename}`;
-    }
-    if (file.filename) {
-        return `/uploads/variations/${file.filename}`;
+
+    if (file.destination && file.filename) {
+        const abs = path.join(file.destination, file.filename);
+        const rel = path.relative(UPLOADS_ROOT, abs).replace(/\\/g, '/');
+        if (rel && !rel.startsWith('..')) {
+            return `/uploads/${rel}`;
+        }
     }
     return null;
 }
 
-function publicUrlFromMulterProductFile(file) {
-    if (!file) return null;
-    if (file.destination === 'azure-blob' && file.path) {
-        return getBlobPublicUrl(String(file.path).replace(/\\/g, '/')) || null;
-    }
-    const field = file.fieldname || '';
-    let sub = 'images';
-    if (field.startsWith('thumbnail') || field === 'thumbnails' || field === 'variationThumbnail') sub = 'thumbnails';
-    else if (field === 'model3d' || field === 'variationModel3d') sub = 'models';
-    else if (field === 'inventoryImage' || field === 'productImage') sub = 'inventory';
-    else if (field === 'image') sub = 'images';
-    return `/uploads/products/${sub}/${file.filename}`;
+function publicUrlFromMulterVariationFile(file) {
+    return publicUrlFromMulterFile(file);
 }
 
-/**
- * Normalize a single stored image/model URL for API consumers (catalog, detail, etc.).
- */
+function publicUrlFromMulterProductFile(file) {
+    return publicUrlFromMulterFile(file);
+}
+
+function fixLegacyFlatProductUploadPath(u) {
+    if (!u || typeof u !== 'string') return u;
+    if (/^\/uploads\/products\/[^/]+\.(jpe?g|png|gif|webp|svg|glb|gltf)$/i.test(u)) {
+        return u.replace(/^\/uploads\/products\//, `/uploads/${INVENTORY_STORAGE_PATHS.parentMain}/`);
+    }
+    return u;
+}
+
+function buildProductAssetUrlCandidates(u) {
+    if (!u || typeof u !== 'string') return [];
+    const candidates = [sanitizeRelativeUploadPath(u)];
+    const filename = u.split('/').pop();
+    if (!filename) return candidates;
+
+    const add = (candidate) => {
+        const normalized = sanitizeRelativeUploadPath(candidate);
+        if (normalized && candidates.indexOf(normalized) === -1) {
+            candidates.push(normalized);
+        }
+    };
+
+    for (const prefix of ALL_PRODUCT_ASSET_PREFIXES) {
+        add(`/uploads/${prefix}/${filename}`);
+    }
+
+    return candidates;
+}
+
+function uploadUrlToBlobCandidates(url) {
+    if (!url) return [];
+    const relative = sanitizeRelativeUploadPath(String(url).trim());
+    const fromAzure = blobPathFromAssetUrl(url);
+    const seen = new Set();
+    const out = [];
+
+    const add = (blobPath) => {
+        if (blobPath && !seen.has(blobPath)) {
+            seen.add(blobPath);
+            out.push(blobPath);
+        }
+    };
+
+    if (fromAzure) add(fromAzure);
+    for (const candidate of buildProductAssetUrlCandidates(relative || url)) {
+        add(candidate.replace(/^\/uploads\//, ''));
+    }
+    if (relative && relative.startsWith('/uploads/')) {
+        add(relative.replace(/^\/uploads\//, ''));
+    }
+    return out;
+}
+
+async function deleteProductAssetFile(imageUrl) {
+    if (!imageUrl) return;
+
+    try {
+        const blobCandidates = uploadUrlToBlobCandidates(imageUrl);
+        if (isAzureBlobConfigured()) {
+            for (const blobPath of blobCandidates) {
+                const deleted = await deleteBlobFromAzure(blobPath);
+                if (deleted) {
+                    console.log(`Deleted Azure blob: ${blobPath}`);
+                    return;
+                }
+            }
+        }
+
+        if (!isAzureProductAssetMode()) {
+            const relative = sanitizeRelativeUploadPath(String(imageUrl).trim());
+            for (const candidate of buildProductAssetUrlCandidates(relative || imageUrl)) {
+                const filePath = productUploadDiskPath(candidate);
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath);
+                    console.log(`Deleted local file: ${filePath}`);
+                    return;
+                }
+            }
+        }
+    } catch (error) {
+        console.error(`Error deleting product asset ${imageUrl}:`, error);
+    }
+}
+
+function resolveExistingLocalProductAssetPath(u) {
+    if (!u || typeof u !== 'string') return u;
+    if (u.startsWith('http://') || u.startsWith('https://') || isAzureProductAssetMode()) {
+        return u;
+    }
+    for (const candidate of buildProductAssetUrlCandidates(u)) {
+        try {
+            if (fs.existsSync(productUploadDiskPath(candidate))) {
+                return candidate;
+            }
+        } catch (_) {
+            /* ignore */
+        }
+    }
+    return u;
+}
+
 function normalizeProductAssetUrl(url) {
     if (url == null || url === '') return url;
     let u = sanitizeRelativeUploadPath(String(url).trim());
@@ -102,15 +307,14 @@ function normalizeProductAssetUrl(url) {
         return u;
     }
 
-    u = fixLegacyFlatProductUploadPath(u);
-
-    if (u.startsWith('/uploads/') && isAzureProductAssetMode()) {
-        const blobPath = u.replace(/^\/uploads\//, '');
-        const azureUrl = getBlobPublicUrl(blobPath);
-        if (azureUrl) return azureUrl;
+    if (!isAzureProductAssetMode()) {
+        return resolveExistingLocalProductAssetPath(u);
     }
 
-    return u;
+    u = fixLegacyFlatProductUploadPath(u);
+    const blobPath = u.replace(/^\/uploads\//, '');
+    const azureUrl = getBlobPublicUrl(blobPath);
+    return azureUrl || u;
 }
 
 function normalizeThumbnailList(raw) {
@@ -130,9 +334,6 @@ function normalizeThumbnailList(raw) {
     return arr.map((t) => normalizeProductAssetUrl(t)).filter(Boolean);
 }
 
-/**
- * Apply URL normalization to product-shaped objects from SQL (images, thumbnails, model3d).
- */
 function mapProductRecordAssetUrls(product) {
     if (!product) return product;
     const next = { ...product };
@@ -181,5 +382,15 @@ module.exports = {
     publicUrlFromMulterProductFile,
     publicUrlFromMulterVariationFile,
     sanitizeRelativeUploadPath,
-    fixLegacyFlatProductUploadPath
+    encodeUploadPathForHtml,
+    fixLegacyFlatProductUploadPath,
+    getUploadContext,
+    getProductRelativeStoragePath,
+    getProductAzureBlobPath,
+    getProductMulterAbsoluteDir,
+    deleteProductAssetFile,
+    buildProductAssetUrlCandidates,
+    resolveExistingLocalProductAssetPath,
+    INVENTORY_STORAGE_PATHS,
+    PRODUCT_LISTING_STORAGE_PATHS
 };

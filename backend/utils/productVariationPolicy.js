@@ -3,6 +3,7 @@
  * Stock for checkout/display comes from variations (inventory source of truth).
  */
 const sql = require('mssql');
+const { applyDiscountToProductRecord } = require('./productDiscountHelpers');
 const { normalizeProductAssetUrl, normalizeThumbnailList } = require('./productAssetUrls');
 
 function parseThumbnailUrlsField(raw) {
@@ -297,6 +298,89 @@ async function enrichProductsWithVariationPolicy(pool, products) {
     return resolved;
 }
 
+function dedupeThumbsExcludingMain(thumbSources, mainImage) {
+    const thumbnails = [];
+    const seen = new Set();
+    const mainKey = assetBasenameKey(mainImage);
+    if (mainImage) seen.add(String(mainImage).trim());
+    if (mainKey) seen.add(mainKey);
+    for (const raw of thumbSources || []) {
+        const url = normalizeProductAssetUrl(raw);
+        if (!url) continue;
+        const baseKey = assetBasenameKey(url);
+        if (seen.has(url) || (baseKey && seen.has(baseKey))) continue;
+        seen.add(url);
+        if (baseKey) seen.add(baseKey);
+        thumbnails.push(url);
+        if (thumbnails.length >= 4) break;
+    }
+    return thumbnails;
+}
+
+function assetBasenameKey(url) {
+    if (!url) return '';
+    const path = String(url).trim().replace(/\\/g, '/').split('?')[0];
+    const parts = path.split('/').filter(Boolean);
+    return (parts[parts.length - 1] || '').toLowerCase();
+}
+
+/**
+ * Parent product media for storefront detail (main image + thumbnail strip).
+ */
+function buildParentStorefrontMedia(product, parentImage, parentThumbnails, parentModel3d, catalogImage, catalogThumbnails) {
+    const parentMain = parentImage ? normalizeProductAssetUrl(parentImage) : null;
+    const catalogMain = catalogImage ? normalizeProductAssetUrl(catalogImage) : null;
+    const existingMain = product.images?.[0] ? normalizeProductAssetUrl(product.images[0]) : null;
+    const mainImage = parentMain || catalogMain || existingMain || null;
+
+    const thumbSources = [
+        ...parseThumbnailUrlsField(parentThumbnails),
+        ...parseThumbnailUrlsField(catalogThumbnails),
+        ...(Array.isArray(product.thumbnails) ? product.thumbnails : [])
+    ];
+    const thumbnails = dedupeThumbsExcludingMain(thumbSources, mainImage);
+    const parentModel = parentModel3d ? normalizeProductAssetUrl(parentModel3d) : null;
+
+    return {
+        images: mainImage ? [mainImage] : (product.images || []),
+        thumbnails,
+        model3d: parentModel || product.model3d,
+        has3dModel: !!(parentModel || product.model3d || product.has3dModel)
+    };
+}
+
+/**
+ * Catalog card / list media — main image never comes from thumbnail URLs.
+ */
+function buildCatalogCardMedia(product, assets) {
+    const parentMain = assets.parentImage ? normalizeProductAssetUrl(assets.parentImage) : null;
+    const varMain = assets.mainImage ? normalizeProductAssetUrl(assets.mainImage) : null;
+    const existingMain = product.images?.[0] ? normalizeProductAssetUrl(product.images[0]) : null;
+    const mainImage = parentMain || varMain || existingMain || null;
+
+    const parentThumbs = parseThumbnailUrlsField(assets.parentThumbnails);
+    const varThumbs = parseThumbnailUrlsField(assets.thumbnails);
+    const existingThumbs = Array.isArray(product.thumbnails) ? product.thumbnails : [];
+    const hasParentLevelThumbs = parentThumbs.length > 0 || existingThumbs.length > 0;
+    const thumbSources = [
+        ...parentThumbs,
+        ...existingThumbs,
+        ...(hasParentLevelThumbs ? [] : varThumbs)
+    ];
+    const thumbnails = dedupeThumbsExcludingMain(thumbSources, mainImage);
+
+    const parentModel = assets.parentModel3d ? normalizeProductAssetUrl(assets.parentModel3d) : null;
+    const varModel = assets.model3d ? normalizeProductAssetUrl(assets.model3d) : null;
+    const model3d = parentModel || varModel || product.model3d;
+
+    return {
+        images: mainImage ? [mainImage] : (product.images || []),
+        thumbnails,
+        model3d: model3d || product.model3d,
+        has3dModel: !!(model3d || product.has3dModel)
+    };
+}
+
 /**
  * Prefer first active inventory variation media for storefront catalog cards.
  */
@@ -318,15 +402,26 @@ async function enrichProductsAssetsFromInventory(pool, products) {
     try {
         const result = await pool.request().query(`
             SELECT ip.ProductID,
-                ipv.VariationImageURL as mainImage,
-                ipv.ThumbnailURLs as thumbnails,
-                ipv.Model3D as model3d,
-                ipv.VariationID
+                ip.ImageURL as parentImage,
+                ip.ThumbnailURLs as parentThumbnails,
+                ip.Model3D as parentModel3d,
+                firstVar.VariationImageURL as mainImage,
+                firstVar.ThumbnailURLs as thumbnails,
+                firstVar.Model3D as model3d,
+                firstVar.VariationID
             FROM InventoryProducts ip
-            INNER JOIN InventoryProductVariations ipv
-                ON ipv.InventoryProductID = ip.InventoryProductID AND ipv.IsActive = 1
+            OUTER APPLY (
+                SELECT TOP 1
+                    ipv.VariationImageURL,
+                    ipv.ThumbnailURLs,
+                    ipv.Model3D,
+                    ipv.VariationID
+                FROM InventoryProductVariations ipv
+                WHERE ipv.InventoryProductID = ip.InventoryProductID AND ipv.IsActive = 1
+                ORDER BY ipv.VariationID
+            ) firstVar
             WHERE ip.IsActive = 1 AND ip.ProductID IN (${inList})
-            ORDER BY ip.ProductID, ipv.VariationID
+            ORDER BY ip.ProductID
         `);
         assetRows = result.recordset || [];
     } catch (err) {
@@ -346,19 +441,78 @@ async function enrichProductsAssetsFromInventory(pool, products) {
         const assets = pid ? firstByProduct.get(pid) : null;
         if (!assets) return product;
 
-        const thumbs = parseThumbnailUrlsField(assets.thumbnails);
-        const mainImage = assets.mainImage
-            ? normalizeProductAssetUrl(assets.mainImage)
-            : (thumbs[0] || product.images?.[0]);
-        const model3d = assets.model3d ? normalizeProductAssetUrl(assets.model3d) : product.model3d;
-
+        const media = buildCatalogCardMedia(product, assets);
         return {
             ...product,
-            images: mainImage ? [mainImage] : (product.images || []),
-            thumbnails: thumbs.length ? thumbs : (product.thumbnails || []),
-            model3d: model3d || product.model3d,
-            has3dModel: !!(model3d || product.has3dModel)
+            ...media
         };
+    });
+}
+
+/**
+ * Use inventory parent / min-variation price as catalog list price and recalculate discounts.
+ */
+async function enrichProductsCatalogPricingFromInventory(pool, products) {
+    if (!Array.isArray(products) || products.length === 0) return products;
+
+    const ids = [];
+    const idByIndex = [];
+    for (let i = 0; i < products.length; i++) {
+        const pid = await resolveCatalogProductId(pool, products[i]);
+        idByIndex[i] = pid;
+        if (pid) ids.push(pid);
+    }
+    if (!ids.length) return products;
+
+    const uniqueIds = [...new Set(ids)];
+    const inList = uniqueIds.join(',');
+    let priceRows = [];
+    try {
+        const result = await pool.request().query(`
+            SELECT
+                ip.ProductID,
+                ISNULL(ip.Price, 0) AS ParentPrice,
+                (
+                    SELECT MIN(
+                        CASE
+                            WHEN COALESCE(NULLIF(ipv.Price, 0), 0) > 0 THEN ipv.Price
+                            WHEN COALESCE(NULLIF(ip.Price, 0), 0) > 0 THEN ip.Price
+                            ELSE NULL
+                        END
+                    )
+                    FROM InventoryProductVariations ipv
+                    WHERE ipv.InventoryProductID = ip.InventoryProductID AND ipv.IsActive = 1
+                ) AS MinVariationPrice,
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM InventoryProductVariations ipv2
+                    WHERE ipv2.InventoryProductID = ip.InventoryProductID AND ipv2.IsActive = 1
+                ) THEN 1 ELSE 0 END AS HasVariations
+            FROM InventoryProducts ip
+            WHERE ip.IsActive = 1 AND ip.ProductID IN (${inList})
+        `);
+        priceRows = result.recordset || [];
+    } catch (err) {
+        console.warn('[enrichProductsCatalogPricingFromInventory]', err.message);
+        return products;
+    }
+
+    const priceByProduct = new Map();
+    for (const row of priceRows) {
+        const parent = Number(row.ParentPrice) || 0;
+        const minVar = Number(row.MinVariationPrice) || 0;
+        const catalogPrice = row.HasVariations
+            ? (minVar > 0 ? minVar : parent)
+            : (parent > 0 ? parent : minVar);
+        if (catalogPrice > 0) {
+            priceByProduct.set(row.ProductID, catalogPrice);
+        }
+    }
+
+    return products.map((product, i) => {
+        const pid = idByIndex[i];
+        const catalogPrice = pid ? priceByProduct.get(pid) : null;
+        if (!catalogPrice) return product;
+        return applyDiscountToProductRecord(product, catalogPrice);
     });
 }
 
@@ -422,6 +576,9 @@ async function enrichProductDetailFromInventory(pool, product) {
                     ip.Category,
                     ip.Price,
                     ip.Dimensions,
+                    ip.ImageURL,
+                    ip.ThumbnailURLs,
+                    ip.Model3D,
                     COALESCE(ip.AvailableQuantity, 0) AS AvailableQuantity,
                     (COALESCE(ip.AvailableQuantity, 0) + COALESCE(ip.DamagedQuantity, 0)) AS TotalQuantity,
                     ip.InventoryStatus
@@ -442,6 +599,9 @@ async function enrichProductDetailFromInventory(pool, product) {
                         ip.Category,
                         ip.Price,
                         ip.Dimensions,
+                        ip.ImageURL,
+                        ip.ThumbnailURLs,
+                        ip.Model3D,
                         COALESCE(ip.AvailableQuantity, 0) AS AvailableQuantity,
                         (COALESCE(ip.AvailableQuantity, 0) + COALESCE(ip.DamagedQuantity, 0)) AS TotalQuantity,
                         ip.InventoryStatus
@@ -456,12 +616,29 @@ async function enrichProductDetailFromInventory(pool, product) {
         return product;
     }
 
-    if (!invRow) return product;
+    if (!invRow) {
+        invRow = {};
+    }
+
+    let catalogRow = {};
+    try {
+        const catalogResult = await pool.request()
+            .input('productId', sql.Int, productId)
+            .query(`
+                SELECT ImageURL, ThumbnailURLs, Model3DURL
+                FROM Products
+                WHERE ProductID = @productId AND IsActive = 1
+            `);
+        catalogRow = catalogResult.recordset[0] || {};
+    } catch (err) {
+        console.warn('[enrichProductDetailFromInventory] catalog media:', err.message);
+    }
 
     const inventoryProductId = invRow.InventoryProductID;
     let materialNames = [];
     let colorOptions = [];
 
+    if (inventoryProductId) {
     try {
         const matResult = await pool.request()
             .input('invId', sql.Int, inventoryProductId)
@@ -491,6 +668,7 @@ async function enrichProductDetailFromInventory(pool, product) {
     } catch (err) {
         console.warn('[enrichProductDetailFromInventory] colors:', err.message);
     }
+    }
 
     const inventoryDims = parseInventoryDimensionsJson(invRow.Dimensions);
     const specifications = mergeSpecificationsFromInventory(product.specifications, inventoryDims);
@@ -498,12 +676,53 @@ async function enrichProductDetailFromInventory(pool, product) {
         ? materialNames.join(', ')
         : (product.material || null);
 
-    return {
+    const parentMedia = buildParentStorefrontMedia(
+        product,
+        invRow.ImageURL,
+        invRow.ThumbnailURLs,
+        invRow.Model3D,
+        catalogRow.ImageURL,
+        catalogRow.ThumbnailURLs
+    );
+
+    let detailModel3d = parentMedia.model3d;
+    if (!detailModel3d && inventoryProductId) {
+        try {
+            const varModelResult = await pool.request()
+                .input('invId', sql.Int, inventoryProductId)
+                .query(`
+                    SELECT TOP 1 COALESCE(ipv.Model3D, pv.Model3D) AS Model3D
+                    FROM InventoryProductVariations ipv
+                    INNER JOIN ProductVariations pv
+                        ON pv.VariationID = ipv.VariationID AND pv.IsActive = 1
+                    WHERE ipv.InventoryProductID = @invId AND ipv.IsActive = 1
+                      AND COALESCE(ipv.Model3D, pv.Model3D) IS NOT NULL
+                      AND LTRIM(RTRIM(COALESCE(ipv.Model3D, pv.Model3D))) <> ''
+                    ORDER BY ipv.VariationID
+                `);
+            const varModelRaw = varModelResult.recordset[0]?.Model3D;
+            if (varModelRaw) {
+                detailModel3d = normalizeProductAssetUrl(varModelRaw);
+            }
+        } catch (err) {
+            console.warn('[enrichProductDetailFromInventory] variation model:', err.message);
+        }
+    }
+
+    const resolvedMedia = {
+        ...parentMedia,
+        model3d: detailModel3d || parentMedia.model3d,
+        has3dModel: !!(detailModel3d || parentMedia.model3d || parentMedia.has3dModel)
+    };
+
+    const catalogPrice = parseFloat(invRow.Price) || product.price;
+    const merged = {
         ...product,
+        ...resolvedMedia,
         name: invRow.Name || product.name,
         categoryName: invRow.Category || product.categoryName,
         description: invRow.Description || product.description,
-        price: parseFloat(invRow.Price) || product.price,
+        price: catalogPrice,
         inventoryProductId,
         specifications,
         material: materialLabel,
@@ -514,6 +733,7 @@ async function enrichProductDetailFromInventory(pool, product) {
         inventoryTotalQuantity: invRow.TotalQuantity,
         inventoryStatus: invRow.InventoryStatus
     };
+    return applyDiscountToProductRecord(merged, catalogPrice);
 }
 
 module.exports = {
@@ -526,6 +746,7 @@ module.exports = {
     enrichProductWithVariationPolicy,
     enrichProductsWithVariationPolicy,
     enrichProductsAssetsFromInventory,
+    enrichProductsCatalogPricingFromInventory,
     enrichProductAssetsFromInventory,
     enrichProductDetailFromInventory,
     parseThumbnailUrlsField

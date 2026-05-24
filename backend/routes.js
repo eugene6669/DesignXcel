@@ -22,7 +22,11 @@ const {
     isAzureProductAssetMode,
     publicUrlFromMulterProductFile,
     publicUrlFromMulterVariationFile,
-    normalizeProductAssetUrl
+    normalizeProductAssetUrl,
+    normalizeThumbnailList,
+    getProductAzureBlobPath,
+    getProductMulterAbsoluteDir,
+    deleteProductAssetFile
 } = require('./utils/productAssetUrls');
 const {
     ensureVariationMediaColumns,
@@ -44,7 +48,11 @@ const {
     buildInventoryStockRefreshPayload,
     fetchInventoryProductSummary,
     fetchProductCategoriesList,
-    buildInventoryAlertsPayload
+    addProductCategory,
+    removeProductCategory,
+    buildInventoryAlertsPayload,
+    fetchInventoryReportProducts,
+    fetchInventoryReportRawMaterials
 } = require('./utils/adminQueryHelpers');
 const { serializeActivityLogChanges, fetchActivityLogs } = require('./utils/activityLogHelpers');
 const { invalidateAdminPageCache } = require('./utils/adminPageCache');
@@ -342,6 +350,83 @@ module.exports = function (sql, pool, getStripe = null) {
             console.error(`[VARIATION SYNC] Error stack:`, err.stack);
             return false;
         }
+    }
+
+    /**
+     * Mirror catalog fields from InventoryProducts to linked Products (storefront CMS).
+     */
+    async function syncInventoryProductCatalogToProducts(inventoryProductId, transaction = null) {
+        const invId = parseInt(inventoryProductId, 10);
+        if (!invId || Number.isNaN(invId)) return false;
+
+        const linkRequest = transaction ? transaction.request() : pool.request();
+        const linkResult = await linkRequest
+            .input('inventoryProductId', sql.Int, invId)
+            .query(`
+                SELECT
+                    ProductID,
+                    Name,
+                    Description,
+                    Category,
+                    Price,
+                    ImageURL,
+                    ThumbnailURLs,
+                    Model3D AS Model3DURL
+                FROM InventoryProducts
+                WHERE InventoryProductID = @inventoryProductId AND IsActive = 1
+            `);
+
+        if (!linkResult.recordset.length) return false;
+
+        const row = linkResult.recordset[0];
+        let productId = row.ProductID || null;
+
+        if (!productId) {
+            const legacyRequest = transaction ? transaction.request() : pool.request();
+            const legacyResult = await legacyRequest
+                .input('inventoryProductId', sql.Int, invId)
+                .query(`
+                    SELECT TOP 1 ProductID
+                    FROM Products
+                    WHERE ProductID = @inventoryProductId AND IsActive = 1
+                `);
+            productId = legacyResult.recordset[0]?.ProductID || null;
+        }
+
+        if (!productId) {
+            console.log(`[CATALOG SYNC] No linked Products row for InventoryProductID ${invId}`);
+            return false;
+        }
+
+        const updateRequest = transaction ? transaction.request() : pool.request();
+        await updateRequest
+            .input('productId', sql.Int, productId)
+            .input('name', sql.NVarChar, row.Name || '')
+            .input('description', sql.NVarChar, row.Description != null ? String(row.Description) : '')
+            .input('category', sql.NVarChar, row.Category || '')
+            .input('price', sql.Decimal(18, 2), row.Price != null ? Number(row.Price) : 0)
+            .input('imageUrl', sql.NVarChar, row.ImageURL || null)
+            .input('thumbJson', sql.NVarChar, row.ThumbnailURLs || null)
+            .input('model3dUrl', sql.NVarChar, row.Model3DURL || null)
+            .query(`
+                UPDATE Products
+                SET Name = @name,
+                    Description = @description,
+                    Category = @category,
+                    Price = @price,
+                    ImageURL = @imageUrl,
+                    ThumbnailURLs = @thumbJson,
+                    Model3DURL = @model3dUrl,
+                    Has3DModel = CASE
+                        WHEN @model3dUrl IS NOT NULL AND LTRIM(RTRIM(@model3dUrl)) <> '' THEN 1
+                        ELSE Has3DModel
+                    END,
+                    UpdatedAt = GETDATE()
+                WHERE ProductID = @productId AND IsActive = 1
+            `);
+
+        console.log(`[CATALOG SYNC] Synced InventoryProductID ${invId} -> Products.ProductID ${productId}`);
+        return true;
     }
 
     /**
@@ -1245,21 +1330,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
     // Helper function to safely delete old image files
     async function deleteOldImageFile(imageUrl) {
-        if (!imageUrl) return;
-
-        try {
-            // Convert URL path to file system path
-            const filePath = path.join(__dirname, 'public', imageUrl);
-
-            // Check if file exists and delete it
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-                console.log(`Deleted old image file: ${filePath}`);
-            }
-        } catch (error) {
-            console.error(`Error deleting old image file ${imageUrl}:`, error);
-            // Don't throw error - file deletion failure shouldn't break the update
-        }
+        await deleteProductAssetFile(imageUrl);
     }
 
     // Helper function to delete old thumbnail files
@@ -1986,18 +2057,6 @@ module.exports = function (sql, pool, getStripe = null) {
 
     // Configure multer for product uploads
     // If Azure Blob is configured, files are uploaded directly to blob storage.
-    const getProductSubdirectory = (fieldname = '') => {
-        if (fieldname === 'image') return 'images';
-        if (fieldname === 'thumbnails') return 'thumbnails';
-        if (fieldname.startsWith('thumbnail')) return 'thumbnails';
-        if (fieldname === 'model3d') return 'models';
-        if (fieldname === 'inventoryImage' || fieldname === 'productImage') return 'inventory';
-        if (fieldname === 'variationImage' || fieldname === 'variationMainImage') return 'variations';
-        if (fieldname === 'variationModel3d') return 'models';
-        if (fieldname === 'variationThumbnail' || fieldname === 'variationThumbnails') return 'thumbnails';
-        return '';
-    };
-
     const sanitizeFileName = (name = 'file') => {
         return String(name).replace(/[^a-zA-Z0-9._-]/g, '_');
     };
@@ -2009,16 +2068,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
                     const safeOriginalName = sanitizeFileName(file.originalname || 'upload.bin');
                     const finalName = `${uniqueSuffix}-${safeOriginalName}`;
-                    const subdirectory = getProductSubdirectory(file.fieldname);
-                    const blobPath = (file.fieldname === 'variationImage' || file.fieldname === 'variationMainImage')
-                        ? `variations/${finalName}`
-                        : file.fieldname === 'variationModel3d'
-                            ? `products/models/${finalName}`
-                            : (file.fieldname === 'variationThumbnail' || file.fieldname === 'variationThumbnails')
-                                ? `products/thumbnails/${finalName}`
-                                : (subdirectory
-                            ? `products/${subdirectory}/${finalName}`
-                            : `products/${finalName}`);
+                    const blobPath = getProductAzureBlobPath(file.fieldname, finalName, req);
 
                     const chunks = [];
                     file.stream.on('data', (chunk) => chunks.push(chunk));
@@ -2027,11 +2077,6 @@ module.exports = function (sql, pool, getStripe = null) {
                         try {
                             const buffer = Buffer.concat(chunks);
                             await uploadBufferToAzureBlob(blobPath, buffer, file.mimetype);
-
-                            // Backward compatibility for legacy routes that save `/uploads/products/<filename>`
-                            if (file.fieldname === 'image') {
-                                await uploadBufferToAzureBlob(`products/${finalName}`, buffer, file.mimetype);
-                            }
 
                             cb(null, {
                                 filename: finalName,
@@ -2051,25 +2096,7 @@ module.exports = function (sql, pool, getStripe = null) {
         }
         : multer.diskStorage({
             destination: function (req, file, cb) {
-                let dest;
-                if (file.fieldname === 'image') {
-                    dest = path.join(__dirname, 'public', 'uploads', 'products', 'images');
-                } else if (file.fieldname.startsWith('thumbnail')) {
-                    dest = path.join(__dirname, 'public', 'uploads', 'products', 'thumbnails');
-                } else if (file.fieldname === 'model3d') {
-                    dest = path.join(__dirname, 'public', 'uploads', 'products', 'models');
-                } else if (file.fieldname === 'inventoryImage' || file.fieldname === 'productImage') {
-                    dest = path.join(__dirname, 'public', 'uploads', 'products', 'inventory');
-                } else if (file.fieldname === 'variationImage' || file.fieldname === 'variationMainImage') {
-                    dest = path.join(__dirname, 'public', 'uploads', 'variations');
-                } else if (file.fieldname === 'variationModel3d') {
-                    dest = path.join(__dirname, 'public', 'uploads', 'products', 'models');
-                } else if (file.fieldname === 'variationThumbnail' || file.fieldname === 'variationThumbnails') {
-                    dest = path.join(__dirname, 'public', 'uploads', 'products', 'thumbnails');
-                } else {
-                    dest = path.join(__dirname, 'public', 'uploads', 'products');
-                }
-
+                const dest = getProductMulterAbsoluteDir(file.fieldname, req);
                 if (!fs.existsSync(dest)) {
                     fs.mkdirSync(dest, { recursive: true });
                 }
@@ -2084,13 +2111,9 @@ module.exports = function (sql, pool, getStripe = null) {
     const productUpload = multer({
         storage: productStorage,
         limits: {
-            fileSize: function (req, file) {
-                // 30MB limit for 3D models, 10MB for other files
-                if (file.fieldname === 'model3d' || file.fieldname === 'variationModel3d') {
-                    return 30 * 1024 * 1024; // 30MB for 3D models
-                }
-                return 10 * 1024 * 1024; // 10MB for images and other files
-            }
+            fileSize: 30 * 1024 * 1024,
+            files: 260,
+            parts: 500
         },
         fileFilter: function (req, file, cb) {
             if (file.fieldname === 'model3d' || file.fieldname === 'variationModel3d') {
@@ -2115,8 +2138,9 @@ module.exports = function (sql, pool, getStripe = null) {
             _handleFile: async (req, file, cb) => {
                 try {
                     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-                    const ext = path.extname(file.originalname) || '.jpg';
-                    const blobPath = `variations/variation-${uniqueSuffix}${ext}`;
+                    const safeOriginalName = sanitizeFileName(file.originalname || 'upload.bin');
+                    const finalName = `${uniqueSuffix}-${safeOriginalName}`;
+                    const blobPath = getProductAzureBlobPath('variationImage', finalName, req);
                     const chunks = [];
                     file.stream.on('data', (c) => chunks.push(c));
                     file.stream.on('error', cb);
@@ -2125,7 +2149,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             const buffer = Buffer.concat(chunks);
                             const url = await uploadBufferToAzureBlob(blobPath, buffer, file.mimetype);
                             cb(null, {
-                                filename: `variation-${uniqueSuffix}${ext}`,
+                                filename: finalName,
                                 destination: 'azure-blob',
                                 size: buffer.length,
                                 path: blobPath,
@@ -2143,15 +2167,15 @@ module.exports = function (sql, pool, getStripe = null) {
         }
         : multer.diskStorage({
             destination: function (req, file, cb) {
-                const uploadDir = path.join(__dirname, 'public', 'uploads');
-                const variationsDir = path.join(uploadDir, 'variations');
-                if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-                if (!fs.existsSync(variationsDir)) fs.mkdirSync(variationsDir, { recursive: true });
-                cb(null, variationsDir);
+                const dest = getProductMulterAbsoluteDir('variationImage', req);
+                if (!fs.existsSync(dest)) {
+                    fs.mkdirSync(dest, { recursive: true });
+                }
+                cb(null, dest);
             },
             filename: function (req, file, cb) {
                 const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-                cb(null, 'variation-' + uniqueSuffix + path.extname(file.originalname));
+                cb(null, uniqueSuffix + '-' + file.originalname);
             }
         });
 
@@ -4125,7 +4149,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 // Delete old variation image
                 await deleteOldImageFile(currentImageUrl);
 
-                const imageUrl = `/uploads/variations/${req.file.filename}`;
+                const imageUrl = publicUrlFromMulterVariationFile(req.file);
                 updateQuery += `, VariationImageURL = @imageUrl`;
                 request.input('imageUrl', sql.NVarChar, imageUrl);
             }
@@ -10096,6 +10120,38 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
+    router.post('/api/admin/product-categories', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const name = req.body && (req.body.name || req.body.categoryName);
+            const result = await addProductCategory(pool, name);
+            if (result.success) {
+                invalidateAdminPageCache('admin:productCategories');
+                invalidateAdminPageCache('admin:');
+            }
+            res.status(result.success ? 200 : 400).json(result);
+        } catch (err) {
+            console.error('Error adding product category:', err);
+            res.status(500).json({ success: false, message: 'Failed to add category.' });
+        }
+    });
+
+    router.delete('/api/admin/product-categories/:name', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const name = decodeURIComponent(req.params.name || '');
+            const result = await removeProductCategory(pool, name);
+            if (result.success) {
+                invalidateAdminPageCache('admin:productCategories');
+                invalidateAdminPageCache('admin:');
+            }
+            res.status(result.success ? 200 : 400).json(result);
+        } catch (err) {
+            console.error('Error removing product category:', err);
+            res.status(500).json({ success: false, message: 'Failed to remove category.' });
+        }
+    });
+
 
     // =============================================================================
     // REGION-BASED DELIVERY RATES API ENDPOINTS
@@ -15405,179 +15461,55 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
-    // Inventory Report Data
+    // Inventory Report Data (aligned with Product Inventory products + raw materials tabs)
     router.get('/Employee/Admin/Reports/Inventory/Data', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
-            // Catalog parent products have no SKU; sellable units use variation SKUs only
-            await pool.request().query(`
-                UPDATE p
-                SET p.SKU = NULL, p.UpdatedAt = GETDATE()
-                FROM Products p
-                INNER JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
-                WHERE p.SKU IS NOT NULL
-            `);
-            const { search, category, status, stockMin, stockMax, dateFrom, dateTo } = req.query;
+            const { search, category, status, stockMin, stockMax } = req.query;
+            const filters = { search, category, status, stockMin, stockMax };
 
-            let query = `
-                SELECT 
-                    p.Name,
-                    -- Use the same deterministic SKU mapping as Admin Products page
-                    ISNULL(COALESCE(linkedIp.SKU, linkedIpById.SKU), ISNULL(p.SKU, '')) AS SKU,
-                    ISNULL(p.Category, 'Uncategorized') AS CategoryName,
-                    ISNULL(p.StockQuantity, 0) AS StockQuantity,
-                    ISNULL(p.Price, 0) AS Price,
-                    ISNULL(p.IsActive, 0) AS IsActive,
-                    ISNULL(p.UpdatedAt, p.DateAdded) AS LastUpdated,
-                    p.DateAdded AS CreatedAt
-                FROM Products p
-                OUTER APPLY (
-                    SELECT TOP 1
-                        ip.SKU
-                    FROM InventoryProducts ip
-                    WHERE ip.ProductID = p.ProductID
-                      AND ip.IsActive = 1
-                    ORDER BY ip.DateUpdated DESC, ip.DateAdded DESC, ip.InventoryProductID DESC
-                ) linkedIp
-                OUTER APPLY (
-                    SELECT TOP 1
-                        ip.SKU
-                    FROM InventoryProducts ip
-                    WHERE ip.InventoryProductID = p.ProductID
-                      AND ip.IsActive = 1
-                ) linkedIpById
-                WHERE 1=1
-            `;
+            const [productsData, rawMaterialsData, categories] = await Promise.all([
+                fetchInventoryReportProducts(pool, filters),
+                fetchInventoryReportRawMaterials(pool, filters),
+                fetchProductCategoriesList(pool)
+            ]);
 
-            const request = pool.request();
-
-            if (search && search.trim() !== '') {
-                query += ` AND (p.Name LIKE @search OR ISNULL(COALESCE(linkedIp.SKU, linkedIpById.SKU), ISNULL(p.SKU, '')) LIKE @search)`;
-                request.input('search', sql.NVarChar, `%${search.trim()}%`);
-            }
-
-            if (category && category.trim() !== '') {
-                query += ` AND ISNULL(p.Category, '') = @category`;
-                request.input('category', sql.NVarChar, category.trim());
-            }
-
-            if (status === 'active') {
-                query += ` AND p.IsActive = 1`;
-            } else if (status === 'inactive') {
-                query += ` AND p.IsActive = 0`;
-            } else if (status === 'low-stock') {
-                query += ` AND ISNULL(p.StockQuantity, 0) < 10 AND ISNULL(p.StockQuantity, 0) > 0`;
-            } else if (status === 'out-of-stock') {
-                query += ` AND ISNULL(p.StockQuantity, 0) = 0`;
-            }
-
-            if (stockMin && stockMin !== '') {
-                query += ` AND ISNULL(p.StockQuantity, 0) >= @stockMin`;
-                request.input('stockMin', sql.Int, parseInt(stockMin));
-            }
-
-            if (stockMax && stockMax !== '') {
-                query += ` AND ISNULL(p.StockQuantity, 0) <= @stockMax`;
-                request.input('stockMax', sql.Int, parseInt(stockMax));
-            }
-
-            if (dateFrom && dateFrom.trim() !== '') {
-                query += ` AND CAST(p.DateAdded AS DATE) >= @dateFrom`;
-                request.input('dateFrom', sql.Date, dateFrom);
-            }
-
-            if (dateTo && dateTo.trim() !== '') {
-                query += ` AND CAST(p.DateAdded AS DATE) <= @dateTo`;
-                request.input('dateTo', sql.Date, dateTo);
-            }
-
-            query += ` ORDER BY p.ProductID DESC`;
-
-            const productsResult = await request.query(query);
-
-            // Fetch raw materials data
-            let rawMaterialsQuery = `
-                SELECT 
-                    rm.MaterialID,
-                    rm.Name,
-                    ISNULL(rm.Unit, '') AS Unit,
-                    ISNULL(rm.QuantityAvailable, 0) AS QuantityAvailable,
-                    ISNULL(rm.IsActive, 0) AS IsActive,
-                    ISNULL(rm.LastUpdated, GETDATE()) AS LastUpdated
-                FROM RawMaterials rm
-                WHERE 1=1
-            `;
-
-            const rawMaterialsRequest = pool.request();
-
-            if (search && search.trim() !== '') {
-                rawMaterialsQuery += ` AND rm.Name LIKE @searchMaterials`;
-                rawMaterialsRequest.input('searchMaterials', sql.NVarChar, `%${search.trim()}%`);
-            }
-
-            // Apply status filter - if no status is specified, show all (active and inactive)
-            if (status === 'active') {
-                rawMaterialsQuery += ` AND rm.IsActive = 1`;
-            } else if (status === 'inactive') {
-                rawMaterialsQuery += ` AND rm.IsActive = 0`;
-            } else if (status === 'low-stock') {
-                rawMaterialsQuery += ` AND rm.IsActive = 1 AND ISNULL(rm.QuantityAvailable, 0) < 10 AND ISNULL(rm.QuantityAvailable, 0) > 0`;
-            } else if (status === 'out-of-stock') {
-                rawMaterialsQuery += ` AND rm.IsActive = 1 AND ISNULL(rm.QuantityAvailable, 0) = 0`;
-            } else {
-                // If no status filter, show all active materials by default (matching the RawMaterials page behavior)
-                rawMaterialsQuery += ` AND rm.IsActive = 1`;
-            }
-
-            if (stockMin && stockMin !== '') {
-                rawMaterialsQuery += ` AND ISNULL(rm.QuantityAvailable, 0) >= @stockMinMaterials`;
-                rawMaterialsRequest.input('stockMinMaterials', sql.Int, parseInt(stockMin));
-            }
-
-            if (stockMax && stockMax !== '') {
-                rawMaterialsQuery += ` AND ISNULL(rm.QuantityAvailable, 0) <= @stockMaxMaterials`;
-                rawMaterialsRequest.input('stockMaxMaterials', sql.Int, parseInt(stockMax));
-            }
-
-            rawMaterialsQuery += ` ORDER BY rm.MaterialID DESC`;
-
-            let rawMaterialsResult;
-            try {
-                rawMaterialsResult = await rawMaterialsRequest.query(rawMaterialsQuery);
-            } catch (rawMaterialsErr) {
-                console.error('Error fetching raw materials in inventory report:', rawMaterialsErr);
-                // Return empty raw materials if query fails
-                rawMaterialsResult = { recordset: [] };
-            }
-
-            // Calculate stats
+            const countReportStockValue = (rows) => rows.reduce((sum, p) => {
+                const avail = p.AvailableQuantity || 0;
+                const price = p.Price || 0;
+                if (p.RowType === 'Variation') {
+                    return sum + (avail * price);
+                }
+                if (p.RowType === 'Parent' && !p.HasVariations) {
+                    return sum + (avail * price);
+                }
+                return sum;
+            }, 0);
+            const countReportLowStock = (rows) => rows.filter((p) => {
+                const avail = p.AvailableQuantity || 0;
+                if (p.RowType === 'Parent' && p.HasVariations) return false;
+                return avail > 0 && avail <= 10;
+            }).length;
+            const parentRows = productsData.filter((p) => p.RowType === 'Parent');
             const stats = {
-                totalProducts: productsResult.recordset.length,
-                activeProducts: productsResult.recordset.filter(p => p.IsActive === 1 || p.IsActive === true).length,
-                lowStock: productsResult.recordset.filter(p => {
-                    const stock = p.StockQuantity || 0;
-                    return stock < 10 && stock > 0;
-                }).length,
-                totalValue: productsResult.recordset.reduce((sum, p) => {
-                    const stock = p.StockQuantity || 0;
-                    const price = p.Price || 0;
-                    return sum + (stock * price);
-                }, 0),
-                totalRawMaterials: rawMaterialsResult.recordset.length,
-                activeRawMaterials: rawMaterialsResult.recordset.filter(rm => rm.IsActive === 1 || rm.IsActive === true).length,
-                lowStockRawMaterials: rawMaterialsResult.recordset.filter(rm => {
+                totalProducts: parentRows.length,
+                activeProducts: parentRows.filter((p) => (p.AvailableQuantity || 0) > 0).length,
+                lowStock: countReportLowStock(productsData),
+                totalValue: countReportStockValue(productsData),
+                totalRawMaterials: rawMaterialsData.length,
+                activeRawMaterials: rawMaterialsData.filter((rm) => rm.IsActive).length,
+                lowStockRawMaterials: rawMaterialsData.filter((rm) => {
                     const stock = rm.QuantityAvailable || 0;
-                    return stock < 10 && stock > 0;
+                    return rm.IsActive && stock > 0 && stock <= 10;
                 }).length,
-                totalRawMaterialsQuantity: rawMaterialsResult.recordset.reduce((sum, rm) => {
-                    return sum + (rm.QuantityAvailable || 0);
-                }, 0)
+                totalRawMaterialsQuantity: rawMaterialsData.reduce((sum, rm) => sum + (rm.QuantityAvailable || 0), 0)
             };
 
             res.json({
                 success: true,
-                data: productsResult.recordset,
-                rawMaterials: rawMaterialsResult.recordset,
+                data: productsData,
+                rawMaterials: rawMaterialsData,
+                categories: categories || [],
                 stats
             });
         } catch (err) {
@@ -15592,120 +15524,46 @@ module.exports = function (sql, pool, getStripe = null) {
             await pool.connect();
             const { search, category, status, stockMin, stockMax, dateFrom, dateTo } = req.query;
 
-            let query = `
-                SELECT 
-                    p.Name,
-                    ISNULL(p.SKU, '') AS SKU,
-                    ISNULL(p.Category, 'Uncategorized') AS CategoryName,
-                    ISNULL(p.StockQuantity, 0) AS StockQuantity,
-                    ISNULL(p.Price, 0) AS Price,
-                    CASE WHEN p.IsActive = 1 THEN 'Active' ELSE 'Inactive' END AS Status,
-                    ISNULL(p.UpdatedAt, p.DateAdded) AS LastUpdated,
-                    p.DateAdded AS CreatedAt
-                FROM Products p
-                WHERE 1=1
-            `;
-
-            const request = pool.request();
-
-            if (search && search.trim() !== '') {
-                query += ` AND (p.Name LIKE @search OR ISNULL(p.SKU, '') LIKE @search)`;
-                request.input('search', sql.NVarChar, `%${search.trim()}%`);
-            }
-
-            if (category && category.trim() !== '') {
-                query += ` AND ISNULL(p.Category, '') = @category`;
-                request.input('category', sql.NVarChar, category.trim());
-            }
-
-            if (status === 'active') {
-                query += ` AND p.IsActive = 1`;
-            } else if (status === 'inactive') {
-                query += ` AND p.IsActive = 0`;
-            } else if (status === 'low-stock') {
-                query += ` AND ISNULL(p.StockQuantity, 0) < 10 AND ISNULL(p.StockQuantity, 0) > 0`;
-            } else if (status === 'out-of-stock') {
-                query += ` AND ISNULL(p.StockQuantity, 0) = 0`;
-            }
-
-            if (stockMin && stockMin !== '') {
-                query += ` AND ISNULL(p.StockQuantity, 0) >= @stockMin`;
-                request.input('stockMin', sql.Int, parseInt(stockMin));
-            }
-
-            if (stockMax && stockMax !== '') {
-                query += ` AND ISNULL(p.StockQuantity, 0) <= @stockMax`;
-                request.input('stockMax', sql.Int, parseInt(stockMax));
-            }
-
-            if (dateFrom && dateFrom.trim() !== '') {
-                query += ` AND CAST(p.DateAdded AS DATE) >= @dateFrom`;
-                request.input('dateFrom', sql.Date, dateFrom);
-            }
-
-            if (dateTo && dateTo.trim() !== '') {
-                query += ` AND CAST(p.DateAdded AS DATE) <= @dateTo`;
-                request.input('dateTo', sql.Date, dateTo);
-            }
-
-            query += ` ORDER BY p.ProductID DESC`;
-
-            const productsResult = await request.query(query);
-
-            // Fetch raw materials for export
-            let rawMaterialsQuery = `
-                SELECT 
-                    rm.Name,
-                    ISNULL(rm.Unit, '') AS Unit,
-                    ISNULL(rm.QuantityAvailable, 0) AS QuantityAvailable,
-                    CASE WHEN rm.IsActive = 1 THEN 'Active' ELSE 'Inactive' END AS Status,
-                    ISNULL(rm.LastUpdated, GETDATE()) AS LastUpdated
-                FROM RawMaterials rm
-                WHERE 1=1
-            `;
-
-            const rawMaterialsRequest = pool.request();
-
-            if (search && search.trim() !== '') {
-                rawMaterialsQuery += ` AND rm.Name LIKE @searchMaterials`;
-                rawMaterialsRequest.input('searchMaterials', sql.NVarChar, `%${search.trim()}%`);
-            }
-
-            // Apply status filter - if no status is specified, show all active materials by default
-            if (status === 'active') {
-                rawMaterialsQuery += ` AND rm.IsActive = 1`;
-            } else if (status === 'inactive') {
-                rawMaterialsQuery += ` AND rm.IsActive = 0`;
-            } else if (status === 'low-stock') {
-                rawMaterialsQuery += ` AND rm.IsActive = 1 AND ISNULL(rm.QuantityAvailable, 0) < 10 AND ISNULL(rm.QuantityAvailable, 0) > 0`;
-            } else if (status === 'out-of-stock') {
-                rawMaterialsQuery += ` AND rm.IsActive = 1 AND ISNULL(rm.QuantityAvailable, 0) = 0`;
-            } else {
-                // If no status filter, show all active materials by default (matching the RawMaterials page behavior)
-                rawMaterialsQuery += ` AND rm.IsActive = 1`;
-            }
-
-            if (stockMin && stockMin !== '') {
-                rawMaterialsQuery += ` AND ISNULL(rm.QuantityAvailable, 0) >= @stockMinMaterials`;
-                rawMaterialsRequest.input('stockMinMaterials', sql.Int, parseInt(stockMin));
-            }
-
-            if (stockMax && stockMax !== '') {
-                rawMaterialsQuery += ` AND ISNULL(rm.QuantityAvailable, 0) <= @stockMaxMaterials`;
-                rawMaterialsRequest.input('stockMaxMaterials', sql.Int, parseInt(stockMax));
-            }
-
-            rawMaterialsQuery += ` ORDER BY rm.MaterialID DESC`;
-
-            const rawMaterialsResult = await rawMaterialsRequest.query(rawMaterialsQuery);
+            const filters = { search, category, status, stockMin, stockMax };
+            const [productsData, rawMaterialsData] = await Promise.all([
+                fetchInventoryReportProducts(pool, filters),
+                fetchInventoryReportRawMaterials(pool, filters)
+            ]);
+            const productsResult = {
+                recordset: productsData.map((p) => ({
+                    ...p,
+                    Status: p.Status || (p.IsActive ? 'Active' : 'Inactive')
+                }))
+            };
+            const rawMaterialsResult = {
+                recordset: rawMaterialsData.map((rm) => ({
+                    ...rm,
+                    Status: rm.IsActive ? 'Active' : 'Inactive'
+                }))
+            };
 
             // Calculate summary statistics
-            const totalProducts = productsResult.recordset.length;
-            const activeProducts = productsResult.recordset.filter(p => p.Status === 'Active').length;
-            const inactiveProducts = productsResult.recordset.filter(p => p.Status === 'Inactive').length;
-            const totalStock = productsResult.recordset.reduce((sum, p) => sum + (parseFloat(p.StockQuantity) || 0), 0);
-            const lowStockProducts = productsResult.recordset.filter(p => parseFloat(p.StockQuantity || 0) <= 10).length;
-            const totalValue = productsResult.recordset.reduce((sum, p) => sum + (parseFloat(p.Price || 0) * parseFloat(p.StockQuantity || 0)), 0);
+            const exportParentRows = productsResult.recordset.filter((p) => p.RowType === 'Parent');
+            const totalProducts = exportParentRows.length;
+            const activeProducts = exportParentRows.filter((p) => (p.AvailableQuantity || 0) > 0).length;
+            const inactiveProducts = exportParentRows.filter((p) => (p.AvailableQuantity || 0) === 0 && (p.StockQuantity || 0) === 0).length;
+            const totalStock = productsResult.recordset.reduce((sum, p) => {
+                if (p.RowType === 'Variation') return sum + (parseFloat(p.StockQuantity) || 0);
+                if (p.RowType === 'Parent' && !p.HasVariations) return sum + (parseFloat(p.StockQuantity) || 0);
+                return sum;
+            }, 0);
+            const lowStockProducts = productsResult.recordset.filter((p) => {
+                const stock = parseFloat(p.AvailableQuantity || 0);
+                if (p.RowType === 'Parent' && p.HasVariations) return false;
+                return stock > 0 && stock <= 10;
+            }).length;
+            const totalValue = productsResult.recordset.reduce((sum, p) => {
+                const avail = parseFloat(p.AvailableQuantity || 0);
+                const price = parseFloat(p.Price || 0);
+                if (p.RowType === 'Variation') return sum + (avail * price);
+                if (p.RowType === 'Parent' && !p.HasVariations) return sum + (avail * price);
+                return sum;
+            }, 0);
 
             const totalRawMaterials = rawMaterialsResult.recordset.length;
             const activeRawMaterials = rawMaterialsResult.recordset.filter(rm => rm.Status === 'Active').length;
@@ -15749,14 +15607,27 @@ module.exports = function (sql, pool, getStripe = null) {
 
             // Calculate category breakdown for charts
             const categoryBreakdown = {};
-            productsResult.recordset.forEach(row => {
+            exportParentRows.forEach((row) => {
                 const cat = row.CategoryName || 'Uncategorized';
                 if (!categoryBreakdown[cat]) {
                     categoryBreakdown[cat] = { count: 0, stock: 0, value: 0 };
                 }
                 categoryBreakdown[cat].count++;
-                categoryBreakdown[cat].stock += parseFloat(row.StockQuantity || 0);
-                categoryBreakdown[cat].value += parseFloat(row.Price || 0) * parseFloat(row.StockQuantity || 0);
+            });
+            productsResult.recordset.forEach((row) => {
+                const cat = row.CategoryName || 'Uncategorized';
+                if (!categoryBreakdown[cat]) {
+                    categoryBreakdown[cat] = { count: 0, stock: 0, value: 0 };
+                }
+                if (row.RowType === 'Variation') {
+                    const avail = parseFloat(row.AvailableQuantity || 0);
+                    categoryBreakdown[cat].stock += avail;
+                    categoryBreakdown[cat].value += parseFloat(row.Price || 0) * avail;
+                } else if (row.RowType === 'Parent' && !row.HasVariations) {
+                    const avail = parseFloat(row.AvailableQuantity || 0);
+                    categoryBreakdown[cat].stock += avail;
+                    categoryBreakdown[cat].value += parseFloat(row.Price || 0) * avail;
+                }
             });
 
             // Summary Statistics with better formatting
@@ -15865,30 +15736,33 @@ module.exports = function (sql, pool, getStripe = null) {
             // Products section
             createExcelSectionHeader(worksheet, productsSectionStartRow++, 'PRODUCTS INVENTORY', 9);
             currentRow = productsSectionStartRow;
-            createExcelHeaderRow(worksheet, currentRow++, ['Product Name', 'SKU', 'Category', 'Stock Quantity', 'Unit Price', 'Total Value', 'Status', 'Last Updated', 'Created At'], 1);
+            createExcelHeaderRow(worksheet, currentRow++, ['Type', 'Product Name', 'SKU', 'Category', 'Available Stock', 'Total Stock', 'Unit Price', 'Line Value', 'Status', 'Last Updated'], 1);
 
             productsResult.recordset.forEach(row => {
-                const unitPrice = parseFloat(row.Price || 0);
+                const isParent = row.RowType === 'Parent';
+                const unitPrice = isParent ? 0 : parseFloat(row.Price || 0);
+                const availQty = parseFloat(row.AvailableQuantity || 0);
                 const stockQty = parseFloat(row.StockQuantity || 0);
-                const totalValue = unitPrice * stockQty;
+                const lineValue = isParent ? 0 : (unitPrice * availQty);
                 const dataRow = worksheet.getRow(currentRow++);
-                dataRow.getCell(1).value = row.Name || '';
-                dataRow.getCell(2).value = row.SKU || '';
-                dataRow.getCell(3).value = row.CategoryName || '';
-                dataRow.getCell(4).value = stockQty;
-                dataRow.getCell(4).numFmt = '#,##0';
-                dataRow.getCell(5).value = unitPrice;
-                dataRow.getCell(5).numFmt = '₱#,##0.00';
-                dataRow.getCell(6).value = totalValue;
-                dataRow.getCell(6).numFmt = '₱#,##0.00';
-                dataRow.getCell(7).value = row.Status || '';
-                dataRow.getCell(8).value = row.LastUpdated ? new Date(row.LastUpdated) : '';
-                dataRow.getCell(8).numFmt = 'mm/dd/yyyy hh:mm AM/PM';
-                dataRow.getCell(9).value = row.CreatedAt ? new Date(row.CreatedAt) : '';
-                dataRow.getCell(9).numFmt = 'mm/dd/yyyy hh:mm AM/PM';
+                dataRow.getCell(1).value = row.RowType || 'Parent';
+                dataRow.getCell(2).value = row.RowType === 'Variation' ? `  ${row.Name || ''}` : (row.Name || '');
+                dataRow.getCell(3).value = isParent ? '' : (row.SKU || '');
+                dataRow.getCell(4).value = row.CategoryName || '';
+                dataRow.getCell(5).value = availQty;
+                dataRow.getCell(5).numFmt = '#,##0';
+                dataRow.getCell(6).value = stockQty;
+                dataRow.getCell(6).numFmt = '#,##0';
+                dataRow.getCell(7).value = isParent ? '' : unitPrice;
+                if (!isParent) dataRow.getCell(7).numFmt = '₱#,##0.00';
+                dataRow.getCell(8).value = isParent ? '' : lineValue;
+                if (!isParent) dataRow.getCell(8).numFmt = '₱#,##0.00';
+                dataRow.getCell(9).value = row.Status || '';
+                dataRow.getCell(10).value = row.LastUpdated ? new Date(row.LastUpdated) : '';
+                dataRow.getCell(10).numFmt = 'mm/dd/yyyy hh:mm AM/PM';
 
                 // Apply borders
-                for (let i = 1; i <= 9; i++) {
+                for (let i = 1; i <= 10; i++) {
                     const cell = dataRow.getCell(i);
                     cell.border = {
                         top: { style: 'thin' },
@@ -15901,21 +15775,22 @@ module.exports = function (sql, pool, getStripe = null) {
             currentRow++;
 
             // Raw Materials section
-            createExcelSectionHeader(worksheet, currentRow++, 'RAW MATERIALS INVENTORY', 5);
-            createExcelHeaderRow(worksheet, currentRow++, ['Material Name', 'Unit', 'Available Quantity', 'Status', 'Last Updated'], 1);
+            createExcelSectionHeader(worksheet, currentRow++, 'RAW MATERIALS INVENTORY', 6);
+            createExcelHeaderRow(worksheet, currentRow++, ['Material Name', 'SKU', 'Unit', 'Available Quantity', 'Status', 'Last Updated'], 1);
 
             rawMaterialsResult.recordset.forEach(row => {
                 const dataRow = worksheet.getRow(currentRow++);
                 dataRow.getCell(1).value = row.Name || '';
-                dataRow.getCell(2).value = row.Unit || '';
-                dataRow.getCell(3).value = row.QuantityAvailable || 0;
-                dataRow.getCell(3).numFmt = '#,##0';
-                dataRow.getCell(4).value = row.Status || '';
-                dataRow.getCell(5).value = row.LastUpdated ? new Date(row.LastUpdated) : '';
-                dataRow.getCell(5).numFmt = 'mm/dd/yyyy hh:mm AM/PM';
+                dataRow.getCell(2).value = row.SKU || '';
+                dataRow.getCell(3).value = row.Unit || '';
+                dataRow.getCell(4).value = row.QuantityAvailable || 0;
+                dataRow.getCell(4).numFmt = '#,##0';
+                dataRow.getCell(5).value = row.Status || '';
+                dataRow.getCell(6).value = row.LastUpdated ? new Date(row.LastUpdated) : '';
+                dataRow.getCell(6).numFmt = 'mm/dd/yyyy hh:mm AM/PM';
 
                 // Apply borders
-                for (let i = 1; i <= 5; i++) {
+                for (let i = 1; i <= 6; i++) {
                     const cell = dataRow.getCell(i);
                     cell.border = {
                         top: { style: 'thin' },
@@ -20436,6 +20311,136 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
+    async function resolveStorefrontProductIdForInventory(pool, inventoryProductId) {
+        const result = await pool.request()
+            .input('inventoryProductId', sql.Int, inventoryProductId)
+            .query(`
+                SELECT ip.ProductID, ip.Name, ip.Price
+                FROM InventoryProducts ip
+                WHERE ip.InventoryProductID = @inventoryProductId AND ip.IsActive = 1
+            `);
+        if (!result.recordset.length) {
+            return { error: 'Inventory product not found.' };
+        }
+        const row = result.recordset[0];
+        if (!row.ProductID) {
+            return { error: 'This product is not linked to a storefront listing. Turn on Storefront for the parent product first.' };
+        }
+        return { productId: row.ProductID, name: row.Name, price: row.Price };
+    }
+
+    router.post('/api/admin/inventory-products/:id/discount', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const inventoryProductId = parseInt(req.params.id, 10);
+            const resolved = await resolveStorefrontProductIdForInventory(pool, inventoryProductId);
+            if (resolved.error) {
+                return res.json({ success: false, error: resolved.error });
+            }
+            req.params.id = String(resolved.productId);
+            req.body._inventoryProductName = resolved.name;
+            const { discountType, discountValue, startDate, endDate } = req.body;
+            if (!discountType || !discountValue || !startDate || !endDate) {
+                return res.json({ success: false, error: 'All discount fields are required.' });
+            }
+            if (discountValue <= 0) {
+                return res.json({ success: false, error: 'Discount value must be greater than 0.' });
+            }
+            const productCheck = await pool.request()
+                .input('productId', sql.Int, resolved.productId)
+                .query('SELECT ProductID, Name, Price FROM Products WHERE ProductID = @productId AND IsActive = 1');
+            if (!productCheck.recordset.length) {
+                return res.json({ success: false, error: 'Storefront product not found.' });
+            }
+            const product = productCheck.recordset[0];
+            const catalogPrice = Number(resolved.price) || Number(product.Price) || 0;
+            if (discountType === 'percentage' && discountValue > 50) {
+                return res.json({ success: false, error: 'Percentage discount cannot exceed 50%.' });
+            }
+            if (discountType === 'fixed') {
+                const maxFixedDiscount = catalogPrice * 0.5;
+                if (discountValue > maxFixedDiscount) {
+                    return res.json({ success: false, error: `Fixed discount cannot exceed 50% of product price (₱${maxFixedDiscount.toFixed(2)}).` });
+                }
+            }
+            await cleanupExpiredDiscountsSafe(pool);
+            const existingDiscount = await pool.request()
+                .input('productId', sql.Int, resolved.productId)
+                .query('SELECT DiscountID FROM ProductDiscounts WHERE ProductID = @productId AND IsActive = 1');
+            if (existingDiscount.recordset.length > 0) {
+                return res.json({ success: false, error: 'Product already has an active discount. Please remove it first.' });
+            }
+            await pool.request()
+                .input('productId', sql.Int, resolved.productId)
+                .input('discountType', sql.NVarChar, discountType)
+                .input('discountValue', sql.Decimal(10, 2), discountValue)
+                .input('startDate', sql.DateTime2, new Date(startDate))
+                .input('endDate', sql.DateTime2, new Date(endDate))
+                .query(`
+                    INSERT INTO ProductDiscounts (ProductID, DiscountType, DiscountValue, StartDate, EndDate, IsActive)
+                    VALUES (@productId, @discountType, @discountValue, @startDate, @endDate, 1)
+                `);
+            const invPrice = catalogPrice;
+            if (invPrice > 0) {
+                await pool.request()
+                    .input('productId', sql.Int, resolved.productId)
+                    .input('price', sql.Decimal(18, 2), invPrice)
+                    .query(`
+                        UPDATE Products SET Price = @price, UpdatedAt = GETDATE()
+                        WHERE ProductID = @productId AND IsActive = 1
+                    `);
+            }
+            invalidateAdminPageCache('admin:productCategories');
+            if (req.session?.user?.id) {
+                await logActivity(
+                    req.session.user.id,
+                    'CREATE',
+                    'ProductDiscounts',
+                    String(resolved.productId),
+                    `Added discount for inventory product "${resolved.name}"`
+                );
+            }
+            res.json({ success: true, message: 'Discount added successfully!' });
+        } catch (err) {
+            console.error('Error adding inventory product discount:', err);
+            res.json({ success: false, error: 'Failed to add discount: ' + err.message });
+        }
+    });
+
+    router.delete('/api/admin/inventory-products/:id/discount', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const inventoryProductId = parseInt(req.params.id, 10);
+            const resolved = await resolveStorefrontProductIdForInventory(pool, inventoryProductId);
+            if (resolved.error) {
+                return res.json({ success: false, error: resolved.error });
+            }
+            const discountCheck = await pool.request()
+                .input('productId', sql.Int, resolved.productId)
+                .query('SELECT DiscountID FROM ProductDiscounts WHERE ProductID = @productId AND IsActive = 1');
+            if (discountCheck.recordset.length === 0) {
+                return res.json({ success: false, error: 'No active discount found for this product.' });
+            }
+            await pool.request()
+                .input('productId', sql.Int, resolved.productId)
+                .query('UPDATE ProductDiscounts SET IsActive = 0 WHERE ProductID = @productId AND IsActive = 1');
+            invalidateAdminPageCache('admin:productCategories');
+            if (req.session?.user?.id) {
+                await logActivity(
+                    req.session.user.id,
+                    'DELETE',
+                    'ProductDiscounts',
+                    String(resolved.productId),
+                    `Removed discount for inventory product "${resolved.name}"`
+                );
+            }
+            res.json({ success: true, message: 'Discount removed successfully!' });
+        } catch (err) {
+            console.error('Error removing inventory product discount:', err);
+            res.json({ success: false, error: 'Failed to remove discount: ' + err.message });
+        }
+    });
+
     // Testimonials Management API (sourced from approved product reviews)
     router.get('/api/cms/testimonials', isAuthenticated, async (req, res) => {
         try {
@@ -22274,12 +22279,52 @@ module.exports = function (sql, pool, getStripe = null) {
                     order.PaymentMethodDisplay = paymentMethodDisplayForOrder(order);
                 }
 
+                if (tab === 'receive' && orders.length > 0) {
+                    const AUTO_CONFIRM_RECEIVE_DAYS = 7;
+                    const orderIds = orders.map((o) => o.OrderID).filter(Boolean);
+                    const receiveAtByOrderId = new Map();
+                    if (orderIds.length > 0) {
+                        try {
+                            const logRequest = pool.request();
+                            orderIds.forEach((id, idx) => {
+                                logRequest.input(`oid${idx}`, sql.Int, id);
+                            });
+                            const idPlaceholders = orderIds.map((_, idx) => `@oid${idx}`).join(', ');
+                            const receiveLogResult = await logRequest.query(`
+                                SELECT CAST(al.RecordID AS INT) AS OrderID, MAX(al.Timestamp) AS MovedToReceiveAt
+                                FROM ActivityLogs al
+                                WHERE al.TableAffected = N'Orders'
+                                  AND al.Description LIKE N'%status changed to Received%'
+                                  AND CAST(al.RecordID AS INT) IN (${idPlaceholders})
+                                GROUP BY CAST(al.RecordID AS INT)
+                            `);
+                            (receiveLogResult.recordset || []).forEach((row) => {
+                                receiveAtByOrderId.set(row.OrderID, row.MovedToReceiveAt);
+                            });
+                        } catch (receiveLogErr) {
+                            console.warn('[ADMIN ORDERS] Could not load receive timestamps:', receiveLogErr.message);
+                        }
+                    }
+                    const nowMs = Date.now();
+                    for (const order of orders) {
+                        const movedAt = receiveAtByOrderId.get(order.OrderID) || order.OrderDate;
+                        const daysInReceive = Math.max(
+                            0,
+                            Math.floor((nowMs - new Date(movedAt).getTime()) / (24 * 60 * 60 * 1000))
+                        );
+                        order.DaysInReceiveStatus = daysInReceive;
+                        order.CanAutoConfirmReceive = daysInReceive >= AUTO_CONFIRM_RECEIVE_DAYS;
+                        order.DaysUntilAutoConfirm = Math.max(0, AUTO_CONFIRM_RECEIVE_DAYS - daysInReceive);
+                    }
+                }
+
                 const returnedOrdersLocals = route === 'ReturnedOrders' ? returnedOrderDisplay : {};
 
                 res.render(`Employee/Admin/Admin${route}`, {
                     user: req.session.user,
                     orders: orders,
                     ordersTab: tab || null,
+                    autoConfirmReceiveDays: tab === 'receive' ? 7 : null,
                     activePage: route === 'ReturnedOrders' ? 'orders-returned' : 'orders',
                     pagination: {
                         currentPage: page,
@@ -23094,10 +23139,38 @@ module.exports = function (sql, pool, getStripe = null) {
     router.post('/Employee/Admin/OrdersReceive/Proceed/:orderId', isAuthenticated, async (req, res) => {
         try {
             const orderId = parseInt(req.params.orderId);
+            const AUTO_CONFIRM_RECEIVE_DAYS = 7;
 
             const orderMeta = await pool.request()
                 .input('orderId', sql.Int, orderId)
-                .query(`SELECT ActionType FROM Orders WHERE OrderID = @orderId`);
+                .query(`SELECT ActionType, OrderDate FROM Orders WHERE OrderID = @orderId`);
+
+            if (!orderMeta.recordset.length) {
+                return res.json({ success: false, message: 'Order not found.' });
+            }
+
+            const receiveLog = await pool.request()
+                .input('orderId', sql.Int, orderId)
+                .query(`
+                    SELECT TOP 1 Timestamp AS MovedToReceiveAt
+                    FROM ActivityLogs
+                    WHERE TableAffected = N'Orders'
+                      AND RecordID = CAST(@orderId AS NVARCHAR(20))
+                      AND Description LIKE N'%status changed to Received%'
+                    ORDER BY Timestamp DESC
+                `);
+            const movedAt = receiveLog.recordset[0]?.MovedToReceiveAt || orderMeta.recordset[0].OrderDate;
+            const daysInReceive = Math.max(
+                0,
+                Math.floor((Date.now() - new Date(movedAt).getTime()) / (24 * 60 * 60 * 1000))
+            );
+            if (daysInReceive < AUTO_CONFIRM_RECEIVE_DAYS) {
+                const daysLeft = AUTO_CONFIRM_RECEIVE_DAYS - daysInReceive;
+                return res.json({
+                    success: false,
+                    message: `This order can be confirmed after the ${AUTO_CONFIRM_RECEIVE_DAYS}-day customer return window (${daysLeft} day(s) remaining).`
+                });
+            }
 
             const actionType = orderMeta.recordset[0]?.ActionType;
             const newStatus = actionType === 'replacement' ? 'Completed Returned' : 'Completed';
@@ -23107,7 +23180,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 .input('newStatus', sql.NVarChar, newStatus)
                 .query(`UPDATE Orders SET Status = @newStatus WHERE OrderID = @orderId`);
 
-            res.json({ success: true, status: newStatus });
+            res.json({ success: true, status: newStatus, autoConfirmedAfterWindow: true });
 
             Promise.all([
                 updateBulkOrderStatus(orderId, newStatus).catch(err => console.error('[BULK ORDER UPDATE ERROR]', err)),
@@ -23118,7 +23191,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     'COMPLETE',
                     'Orders',
                     orderId,
-                    `Order #${orderId} completed by Admin`
+                    `Order #${orderId} auto-confirmed after ${AUTO_CONFIRM_RECEIVE_DAYS}-day return window by Admin`
                 ).catch(err => console.error('[ACTIVITY LOG ERROR]', err))
             ]).catch(err => console.error('[ASYNC OPERATIONS ERROR]', err));
 
@@ -24319,6 +24392,8 @@ module.exports = function (sql, pool, getStripe = null) {
 
             // Admin - Create New Product (from ProductInventory page) - Uses InventoryProducts table
             router.post('/Employee/Admin/ProductInventory/Add', isAuthenticated, productUpload.fields([
+                { name: 'productMainImage', maxCount: 1 },
+                { name: 'productThumbnail', maxCount: 4 },
                 { name: 'variationMainImage', maxCount: 50 },
                 { name: 'variationModel3d', maxCount: 50 },
                 { name: 'variationThumbnail', maxCount: 200 },
@@ -24481,6 +24556,34 @@ module.exports = function (sql, pool, getStripe = null) {
                                 SET PublicId = CAST(@publicId AS UNIQUEIDENTIFIER), Slug = @slug
                                 WHERE InventoryProductID = @inventoryProductId
                             `);
+
+                        let parentImageUrl = null;
+                        let parentThumbJson = null;
+                        if (req.files && req.files.productMainImage && req.files.productMainImage[0]) {
+                            parentImageUrl = publicUrlFromMulterProductFile(req.files.productMainImage[0]);
+                        }
+                        const parentThumbs = [];
+                        if (req.files && req.files.productThumbnail) {
+                            req.files.productThumbnail.slice(0, 4).forEach((file) => {
+                                parentThumbs.push(publicUrlFromMulterProductFile(file));
+                            });
+                        }
+                        if (parentThumbs.length) {
+                            parentThumbJson = JSON.stringify(parentThumbs);
+                        }
+                        if (parentImageUrl || parentThumbJson) {
+                            await transaction.request()
+                                .input('inventoryProductId', sql.Int, inventoryProductId)
+                                .input('imageUrl', sql.NVarChar, parentImageUrl)
+                                .input('thumbJson', sql.NVarChar, parentThumbJson)
+                                .query(`
+                                    UPDATE InventoryProducts
+                                    SET ImageURL = COALESCE(@imageUrl, ImageURL),
+                                        ThumbnailURLs = COALESCE(@thumbJson, ThumbnailURLs),
+                                        DateUpdated = GETDATE()
+                                    WHERE InventoryProductID = @inventoryProductId
+                                `);
+                        }
 
                         let materialsCollected = [];
                         await saveInventoryProductMaterials(transaction, inventoryProductId, validMaterials);
@@ -24873,11 +24976,46 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             });
 
-            router.post('/api/admin/inventory-products/:id/update-basic', isAuthenticated, productUpload.single('productImage'), async (req, res) => {
+            router.post('/api/admin/inventory-products/:id/storefront', isAuthenticated, async (req, res) => {
                 try {
                     await pool.connect();
                     const id = parseInt(req.params.id, 10);
-                    const { name, category, currentImageURL } = req.body;
+                    const showOnStorefront = req.body.showOnStorefront === true
+                        || req.body.showOnStorefront === 1
+                        || req.body.showOnStorefront === '1'
+                        || req.body.showOnStorefront === 'true';
+                    if (!id) return res.json({ success: false, message: 'Invalid product id.' });
+                    const rowResult = await pool.request()
+                        .input('id', sql.Int, id)
+                        .query(`SELECT InventoryProductID, ProductID FROM InventoryProducts WHERE InventoryProductID = @id AND IsActive = 1`);
+                    if (!rowResult.recordset.length) return res.json({ success: false, message: 'Product not found.' });
+                    const productId = rowResult.recordset[0].ProductID;
+                    if (!productId) return res.json({ success: false, message: 'Publish this product to the storefront catalog first.' });
+                    await pool.request()
+                        .input('productId', sql.Int, productId)
+                        .input('isActive', sql.Bit, showOnStorefront ? 1 : 0)
+                        .query(`UPDATE Products SET IsActive = @isActive, UpdatedAt = GETDATE() WHERE ProductID = @productId`);
+                    invalidateAdminPageCache('admin:');
+                    return res.json({
+                        success: true,
+                        message: showOnStorefront ? 'Product is visible on the storefront.' : 'Product hidden from the storefront.',
+                        showOnStorefront
+                    });
+                } catch (err) {
+                    console.error('Error updating product storefront:', err);
+                    return res.json({ success: false, message: 'Failed to update storefront visibility.' });
+                }
+            });
+
+            router.post('/api/admin/inventory-products/:id/update-basic', isAuthenticated, productUpload.fields([
+                { name: 'productImage', maxCount: 1 },
+                { name: 'productThumbnail', maxCount: 4 }
+            ]), async (req, res) => {
+                try {
+                    await pool.connect();
+                    await ensureVariationMediaColumns(pool);
+                    const id = parseInt(req.params.id, 10);
+                    const { name, category, description, currentImageURL, currentThumbnailURLs } = req.body;
                     if (!id || Number.isNaN(id)) {
                         return res.status(400).json({ success: false, message: 'Invalid product id.' });
                     }
@@ -24888,24 +25026,45 @@ module.exports = function (sql, pool, getStripe = null) {
                         return res.status(400).json({ success: false, message: 'Category is required.' });
                     }
                     let imageUrl = currentImageURL || null;
-                    if (req.file) {
-                        imageUrl = publicUrlFromMulterProductFile(req.file);
+                    if (req.files && req.files.productImage && req.files.productImage[0]) {
+                        imageUrl = publicUrlFromMulterProductFile(req.files.productImage[0]);
+                    }
+                    let thumbJson = currentThumbnailURLs || null;
+                    try {
+                        const parsed = typeof thumbJson === 'string' ? JSON.parse(thumbJson) : thumbJson;
+                        thumbJson = Array.isArray(parsed) ? JSON.stringify(parsed) : null;
+                    } catch (e) {
+                        thumbJson = null;
+                    }
+                    const newThumbs = [];
+                    if (req.files && req.files.productThumbnail) {
+                        req.files.productThumbnail.slice(0, 4).forEach((file) => {
+                            newThumbs.push(publicUrlFromMulterProductFile(file));
+                        });
+                    }
+                    if (newThumbs.length) {
+                        thumbJson = JSON.stringify(newThumbs);
                     }
                     await pool.request()
                         .input('id', sql.Int, id)
                         .input('name', sql.NVarChar, String(name).trim())
+                        .input('description', sql.NVarChar, description != null ? String(description) : '')
                         .input('category', sql.NVarChar, String(category).trim())
                         .input('imageUrl', sql.NVarChar, imageUrl)
+                        .input('thumbJson', sql.NVarChar, thumbJson)
                         .query(`
                             UPDATE InventoryProducts
                             SET Name = @name,
+                                Description = @description,
                                 Category = @category,
                                 ImageURL = COALESCE(@imageUrl, ImageURL),
-                                UpdatedAt = GETDATE()
+                                ThumbnailURLs = COALESCE(@thumbJson, ThumbnailURLs),
+                                DateUpdated = GETDATE()
                             WHERE InventoryProductID = @id AND IsActive = 1
                         `);
+                    await syncInventoryProductCatalogToProducts(id);
                     invalidateAdminPageCache('admin:');
-                    return res.json({ success: true, message: 'Product updated successfully.', imageUrl });
+                    return res.json({ success: true, message: 'Product catalog updated successfully.', imageUrl });
                 } catch (err) {
                     console.error('Error updating inventory product:', err);
                     return res.status(500).json({ success: false, message: 'Failed to update product: ' + err.message });
@@ -25147,6 +25306,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                     NULLIF(LTRIM(RTRIM(ISNULL(v.VariationImageURL, N''))), N''),
                                     pv.VariationImageURL
                                 ) AS VariationImageURL,
+                                v.ThumbnailURLs,
                                 v.IsActive,
                                 v.CreatedAt,
                                 CASE
@@ -25197,10 +25357,19 @@ module.exports = function (sql, pool, getStripe = null) {
                         if (!sku || !String(sku).trim()) {
                             sku = await assignVariationSku(pool, row.VariationID, row.VariationName);
                         }
+                        const thumbUrls = normalizeThumbnailList(row.ThumbnailURLs);
                         variations.push({
                             ...row,
                             SKU: sku,
+                            ThumbnailURLs: thumbUrls.length ? thumbUrls : null,
                             VariationImageURL: normalizeProductAssetUrl(row.VariationImageURL) || row.VariationImageURL || null
+                        });
+                    }
+
+                    if (req.query.includePendingInspection === '1' && variations.length) {
+                        const pendingMap = await fetchPendingInspectionQtyByVariation(pool);
+                        variations.forEach(function(v) {
+                            v.PendingInspectionQty = pendingMap.get(v.VariationID) || 0;
                         });
                     }
 
@@ -25791,6 +25960,8 @@ module.exports = function (sql, pool, getStripe = null) {
                                 COALESCE(RepairedQuantity, 0) as RepairedQuantity,
                                 COALESCE(DisposedQuantity, 0) as DisposedQuantity,
                                 COALESCE(Notes, '') as Notes,
+                                COALESCE(SKU, '') as SKU,
+                                COALESCE(Color, '') as Color,
                                 COALESCE(VariationImageURL, '') as VariationImageURL,
                                 ThumbnailURLs,
                                 Model3D
@@ -25838,6 +26009,13 @@ module.exports = function (sql, pool, getStripe = null) {
                     const repairedQuantity = req.body.repairedQuantity;
                     const disposedQuantity = req.body.disposedQuantity;
                     const notes = req.body.notes;
+                    const catalogOnly = req.body.catalogOnly === '1' || req.body.catalogOnly === true;
+                    const inventoryEdit = req.body.inventoryEdit === '1' || req.body.inventoryEdit === true;
+                    const variationNameUpdate = req.body.variationName
+                        ? String(req.body.variationName).trim()
+                        : null;
+                    const colorUpdate = req.body.color != null ? String(req.body.color).trim() : null;
+                    const skuUpdate = req.body.sku != null ? String(req.body.sku).trim() : null;
 
                     const parsedVariationID = parseInt(variationID);
                     const availableQty = parseInt(availableQuantity) || 0;
@@ -25911,7 +26089,21 @@ module.exports = function (sql, pool, getStripe = null) {
                     const variationBefore = variationCheck.recordset[0];
                     const inventoryProductId = variationBefore.InventoryProductID;
                     const oldQuantity = variationBefore.Quantity || 0;
-                    const stockDelta = totalQty - oldQuantity;
+                    const stockDelta = (catalogOnly || inventoryEdit) ? 0 : (totalQty - oldQuantity);
+
+                    if (catalogOnly && !variationNameUpdate && !hasNewThumbs && !hasNewModel && !hasNewMain) {
+                        return res.json({
+                            success: false,
+                            message: 'No catalog changes to save.'
+                        });
+                    }
+
+                    if (inventoryEdit && !hasNewMain && req.body.sku == null && req.body.color == null) {
+                        return res.json({
+                            success: false,
+                            message: 'No variation changes to save.'
+                        });
+                    }
                     console.log('Old quantity:', oldQuantity, 'New quantity:', totalQty, 'Stock delta:', stockDelta);
 
                     const currentMediaResult = await pool.request()
@@ -25941,6 +26133,9 @@ module.exports = function (sql, pool, getStripe = null) {
                                 DisposedQuantity = @disposedQuantity,
                                 Quantity = @totalQuantity,
                                 Notes = @notes,
+                                VariationName = COALESCE(@variationName, VariationName),
+                                Color = COALESCE(@color, Color),
+                                SKU = COALESCE(@sku, SKU),
                                 VariationImageURL = @variationImageUrl,
                                 ThumbnailURLs = @thumbJson,
                                 Model3D = @model3d,
@@ -25976,16 +26171,19 @@ module.exports = function (sql, pool, getStripe = null) {
                             .input('disposedQuantity', sql.Int, disposedQty)
                             .input('totalQuantity', sql.Int, totalQty)
                             .input('notes', sql.NVarChar, notes || null)
+                            .input('variationName', sql.NVarChar, variationNameUpdate || null)
+                            .input('color', sql.NVarChar, colorUpdate)
+                            .input('sku', sql.NVarChar, skuUpdate)
                             .input('variationImageUrl', sql.NVarChar, finalVariationImageUrl)
                             .input('thumbJson', sql.NVarChar, finalThumbJson)
                             .input('model3d', sql.NVarChar, finalModel3d)
                             .query(updateQuery);
 
-                        if (stockDelta !== 0 && inventoryProductId) {
+                        if (!catalogOnly && !inventoryEdit && stockDelta !== 0 && inventoryProductId) {
                             await applyMaterialsDeltaForInventoryProduct(variationTransaction, inventoryProductId, stockDelta);
                         }
 
-                        if (req.body.recipeMaterials !== undefined && req.body.recipeMaterials !== null && inventoryProductId) {
+                        if (!catalogOnly && !inventoryEdit && req.body.recipeMaterials !== undefined && req.body.recipeMaterials !== null && inventoryProductId) {
                             let recipeData = [];
                             try {
                                 recipeData = typeof req.body.recipeMaterials === 'string'
@@ -26002,12 +26200,16 @@ module.exports = function (sql, pool, getStripe = null) {
 
                         await variationTransaction.request()
                             .input('variationID', sql.Int, parsedVariationID)
+                            .input('variationName', sql.NVarChar, variationNameUpdate || null)
+                            .input('color', sql.NVarChar, colorUpdate)
                             .input('variationImageUrl', sql.NVarChar, finalVariationImageUrl)
                             .input('thumbJson', sql.NVarChar, finalThumbJson)
                             .input('model3d', sql.NVarChar, finalModel3d)
                             .query(`
                                 UPDATE ProductVariations 
-                                SET VariationImageURL = @variationImageUrl,
+                                SET VariationName = COALESCE(@variationName, VariationName),
+                                    Color = COALESCE(@color, Color),
+                                    VariationImageURL = @variationImageUrl,
                                     ThumbnailURLs = @thumbJson,
                                     Model3D = @model3d,
                                     UpdatedAt = GETDATE()
@@ -26085,16 +26287,30 @@ module.exports = function (sql, pool, getStripe = null) {
                         ? await buildInventoryStockRefreshPayload(pool, inventoryProductId)
                         : {};
                     const vLabel = variationBefore.VariationName || `Variation #${parsedVariationID}`;
+                    const notesStr = String(notes || '');
+                    let logAction = 'UPDATE';
+                    let logDescription = `Updated stock for "${vLabel}" (Variation #${parsedVariationID}): available ${availableQty}, total ${totalQty}`;
+                    if (!catalogOnly && !inventoryEdit) {
+                        if (/Repair from damaged/i.test(notesStr)) {
+                            logAction = 'Product Return Repair';
+                            logDescription = `Repaired ${Math.max(0, repairedQty - (variationBefore.RepairedQuantity || 0))} unit(s) from damaged for "${vLabel}" (Variation #${parsedVariationID})`;
+                        } else if (/Repaired → available/i.test(notesStr)) {
+                            logAction = 'Product Return Available';
+                            logDescription = `Moved ${Math.max(0, availableQty - (variationBefore.AvailableQuantity ?? variationBefore.Quantity ?? 0))} repaired unit(s) to available for "${vLabel}" (Variation #${parsedVariationID})`;
+                        }
+                    }
                     await logActivity(
                         req.session.user.id,
-                        'UPDATE',
+                        logAction,
                         'InventoryProductVariations',
                         String(parsedVariationID),
-                        `Updated stock for "${vLabel}" (Variation #${parsedVariationID}): available ${availableQty}, total ${totalQty}`,
+                        logDescription,
                         {
                             AvailableQuantity: { old: variationBefore.AvailableQuantity, new: availableQty },
                             DamagedQuantity: { old: variationBefore.DamagedQuantity, new: damagedQty },
-                            Quantity: { old: oldQuantity, new: totalQty }
+                            RepairedQuantity: { old: variationBefore.RepairedQuantity, new: repairedQty },
+                            Quantity: { old: oldQuantity, new: totalQty },
+                            Notes: notesStr || null
                         }
                     );
                     res.json(Object.assign(
@@ -29090,6 +29306,32 @@ module.exports = function (sql, pool, getStripe = null) {
                 });
             }
 
+            if (isPreReceiveReturn && !isAppealRequest) {
+                const RETURN_WINDOW_DAYS = 7;
+                const receiveLog = await transaction.request()
+                    .input('orderId', sql.Int, orderId)
+                    .query(`
+                        SELECT TOP 1 Timestamp AS MovedToReceiveAt
+                        FROM ActivityLogs
+                        WHERE TableAffected = N'Orders'
+                          AND RecordID = CAST(@orderId AS NVARCHAR(20))
+                          AND Description LIKE N'%status changed to Received%'
+                        ORDER BY Timestamp DESC
+                    `);
+                const movedAt = receiveLog.recordset[0]?.MovedToReceiveAt || order.OrderDate;
+                const daysInWindow = Math.max(
+                    0,
+                    Math.floor((Date.now() - new Date(movedAt).getTime()) / (24 * 60 * 60 * 1000))
+                );
+                if (daysInWindow > RETURN_WINDOW_DAYS) {
+                    await transaction.rollback();
+                    return res.status(400).json({
+                        success: false,
+                        message: `The ${RETURN_WINDOW_DAYS}-day return window has passed. Please contact customer service at designexcellence1@gmail.com or (02) 413-6682.`
+                    });
+                }
+            }
+
             const trimmedReason = String(returnReason || '').trim();
             let storedReturnReason;
             if (isAppealRequest) {
@@ -29353,6 +29595,33 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
+    async function fetchPendingInspectionQtyByVariation(pool) {
+        const pendingMap = new Map();
+        try {
+            const ordersSchema = await getOrdersSchemaFlags(pool);
+            if (!ordersSchema.hasReturnItems) return pendingMap;
+            const ordersResult = await pool.request().query(`
+                SELECT ReturnItems FROM Orders WHERE Status = 'Awaiting Inspection' AND ReturnItems IS NOT NULL
+            `);
+            for (const row of ordersResult.recordset || []) {
+                let items = [];
+                try {
+                    items = typeof row.ReturnItems === 'string' ? JSON.parse(row.ReturnItems) : row.ReturnItems;
+                } catch (e) { continue; }
+                if (!Array.isArray(items)) continue;
+                items.forEach(function(item) {
+                    const vid = parseInt(item.variationId || item.VariationID, 10);
+                    const qty = parseInt(item.quantity || item.Quantity, 10) || 0;
+                    if (!vid || qty <= 0) return;
+                    pendingMap.set(vid, (pendingMap.get(vid) || 0) + qty);
+                });
+            }
+        } catch (err) {
+            console.error('[PENDING INSPECTION] count error:', err.message);
+        }
+        return pendingMap;
+    }
+
     function buildReturnedLineItemsFromOrder(orderRow, allOrderItems) {
         let returnedItems = [];
         if (orderRow.ReturnItems) {
@@ -29454,8 +29723,8 @@ module.exports = function (sql, pool, getStripe = null) {
     }
 
     /**
-     * Apply inspection split: damaged → DamagedQuantity + ReturnedQuantity;
-     * wrong item → AvailableQuantity + Quantity + ReturnedQuantity.
+     * Apply inspection split: damaged → DamagedQuantity; good item → AvailableQuantity.
+     * Returned qty is shown only while the order is Awaiting Inspection (not stored here).
      */
     async function applyReturnInspectionInventory(transaction, lineItems) {
         for (const item of lineItems) {
@@ -29491,7 +29760,6 @@ module.exports = function (sql, pool, getStripe = null) {
                     .query(`
                         UPDATE InventoryProductVariations
                         SET DamagedQuantity = DamagedQuantity + @damagedQty,
-                            ReturnedQuantity = ReturnedQuantity + @qty,
                             AvailableQuantity = AvailableQuantity + @wrongItemQty,
                             Quantity = (AvailableQuantity + @wrongItemQty) + (DamagedQuantity + @damagedQty),
                             UpdatedAt = GETDATE()
@@ -29512,7 +29780,6 @@ module.exports = function (sql, pool, getStripe = null) {
                     .query(`
                         UPDATE InventoryProducts
                         SET DamagedQuantity = DamagedQuantity + @damagedQty,
-                            ReturnedQuantity = ReturnedQuantity + @qty,
                             AvailableQuantity = AvailableQuantity + @wrongItemQty
                         WHERE InventoryProductID = @inventoryProductId
                     `);
@@ -29680,6 +29947,25 @@ module.exports = function (sql, pool, getStripe = null) {
                 .input('orderId', sql.Int, orderId)
                 .query(`UPDATE Orders SET Status = 'Inspection Complete' WHERE OrderID = @orderId`);
             await transaction.commit();
+
+            if (req.session?.user?.id) {
+                const inspectSummary = normalizedInspection.map((line) => ({
+                    productId: line.productId,
+                    variationId: line.variationId,
+                    quantity: line.quantity,
+                    damagedQty: line.damagedQty,
+                    goodQty: line.wrongItemQty
+                }));
+                await logActivity(
+                    req.session.user.id,
+                    'Return Inspection Applied',
+                    'Orders',
+                    String(orderId),
+                    `Return inspection completed for order #${orderId}`,
+                    inspectSummary
+                );
+            }
+
             return res.json({
                 success: true,
                 message: 'Inspection saved. Damaged and wrong-item quantities have been applied to inventory.'
@@ -29729,7 +30015,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
             return res.json({
                 success: true,
-                message: 'Pickup confirmed. Process refund or replacement as needed.'
+                message: 'Success!\nProcess refund'
             });
         } catch (err) {
             console.error('Error confirming return pickup:', err);
@@ -30827,6 +31113,38 @@ module.exports = function (sql, pool, getStripe = null) {
                 `);
 
             const orders = result.recordset;
+
+            if (orders.length > 0) {
+                try {
+                    const receiveRequest = pool.request();
+                    orders.forEach((order, idx) => {
+                        receiveRequest.input(`oid${idx}`, sql.Int, order.OrderID);
+                    });
+                    const idPlaceholders = orders.map((_, idx) => `@oid${idx}`).join(', ');
+                    const receiveLogResult = await receiveRequest.query(`
+                        SELECT CAST(al.RecordID AS INT) AS OrderID, MAX(al.Timestamp) AS MovedToReceiveAt
+                        FROM ActivityLogs al
+                        WHERE al.TableAffected = N'Orders'
+                          AND al.Description LIKE N'%status changed to Received%'
+                          AND CAST(al.RecordID AS INT) IN (${idPlaceholders})
+                        GROUP BY CAST(al.RecordID AS INT)
+                    `);
+                    const receiveAtByOrderId = new Map(
+                        (receiveLogResult.recordset || []).map((row) => [row.OrderID, row.MovedToReceiveAt])
+                    );
+                    for (const order of orders) {
+                        const movedAt = receiveAtByOrderId.get(order.OrderID) || order.OrderDate;
+                        order.ReceivedAt = movedAt;
+                        order.MovedToReceiveAt = movedAt;
+                        order.DaysInReceiveWindow = Math.max(
+                            0,
+                            Math.floor((Date.now() - new Date(movedAt).getTime()) / (24 * 60 * 60 * 1000))
+                        );
+                    }
+                } catch (receiveMetaErr) {
+                    console.warn('[CUSTOMER ORDERS] Could not load receive window metadata:', receiveMetaErr.message);
+                }
+            }
 
             // Fetch items for each order
             for (let order of orders) {

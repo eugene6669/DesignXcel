@@ -40,6 +40,43 @@ const getBlobPublicUrl = (blobPath) => {
     return `https://${AZURE_ACCOUNT_NAME}.blob.core.windows.net/${AZURE_CONTAINER_NAME}/${blobPath}`;
 };
 
+const blobPathFromAssetUrl = (url) => {
+    if (!url || typeof url !== 'string') return null;
+    const s = url.trim();
+    if (s.startsWith('/uploads/')) {
+        return s.replace(/^\/uploads\//, '');
+    }
+    if (AZURE_PUBLIC_BASE_URL) {
+        const base = AZURE_PUBLIC_BASE_URL.replace(/\/+$/, '');
+        if (s.startsWith(`${base}/`)) {
+            return s.slice(base.length + 1);
+        }
+    }
+    const marker = '.blob.core.windows.net/';
+    const idx = s.indexOf(marker);
+    if (idx !== -1 && AZURE_CONTAINER_NAME) {
+        const afterHost = s.slice(idx + marker.length);
+        const prefix = `${AZURE_CONTAINER_NAME}/`;
+        if (afterHost.startsWith(prefix)) {
+            return afterHost.slice(prefix.length);
+        }
+    }
+    return null;
+};
+
+const deleteBlobFromAzure = async (blobPath) => {
+    const client = getContainerClient();
+    if (!client || !blobPath) return false;
+    try {
+        const blockBlobClient = client.getBlockBlobClient(blobPath);
+        const result = await blockBlobClient.deleteIfExists();
+        return result.succeeded;
+    } catch (err) {
+        console.error(`Failed to delete blob ${blobPath}:`, err.message);
+        return false;
+    }
+};
+
 const uploadBufferToAzureBlob = async (blobPath, buffer, mimetype) => {
     const client = getContainerClient();
     if (!client) {
@@ -61,5 +98,7 @@ const uploadBufferToAzureBlob = async (blobPath, buffer, mimetype) => {
 module.exports = {
     isAzureBlobConfigured,
     uploadBufferToAzureBlob,
-    getBlobPublicUrl
+    getBlobPublicUrl,
+    blobPathFromAssetUrl,
+    deleteBlobFromAzure
 };

@@ -236,6 +236,87 @@
             background-color: #e0ac06;
         }
 
+        /* Mustard icon edit buttons — consistent across Products & Inventory */
+        .pi-icon-edit-btn,
+        .edit-inventory-product-btn,
+        .edit-inventory-product-quick-btn,
+        .edit-variation-status-btn {
+            background-color: #FFC107;
+            color: #333;
+            border: none;
+            border-radius: 6px;
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            margin: 0 2px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, transform 0.15s;
+            vertical-align: middle;
+        }
+
+        .pi-icon-edit-btn:hover,
+        .edit-inventory-product-btn:hover,
+        .edit-inventory-product-quick-btn:hover,
+        .edit-variation-status-btn:hover {
+            background-color: #e0ac06;
+            transform: translateY(-1px);
+        }
+
+        .pi-icon-edit-btn svg,
+        .edit-inventory-product-btn svg,
+        .edit-inventory-product-quick-btn svg,
+        .edit-variation-status-btn svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            flex-shrink: 0;
+        }
+
+        .pi-media-preview-main img {
+            max-width: 100px;
+            max-height: 100px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+        }
+
+        .pi-media-preview-thumbs {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+
+        .pi-media-preview-thumbs img {
+            width: 44px;
+            height: 44px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+
+        .pi-media-preview-label {
+            margin: 0 0 4px;
+            font-weight: 600;
+            font-size: 0.85em;
+            color: #495057;
+        }
+
+        .pi-model3d-badge {
+            display: inline-block;
+            margin-top: 4px;
+            padding: 4px 8px;
+            background: #fff8e1;
+            border: 1px solid #FFC107;
+            border-radius: 4px;
+            font-size: 0.8em;
+            color: #856404;
+            word-break: break-all;
+        }
+
         .delete-inventory-btn {
             background-color: #DC3545;
             color: #fff;
@@ -846,6 +927,33 @@
         .storefront-toggle-label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82em; cursor: pointer; user-select: none; }
         .storefront-toggle-label input { width: 16px; height: 16px; cursor: pointer; }
         .toggle-variations-btn.expanded .toggle-icon { transform: rotate(90deg); }
+        .add-inventory-discount-btn {
+            background: #F0B21B;
+            color: #1a1a1a;
+            border: 1px solid #c89410;
+            font-weight: 600;
+            border-radius: 4px;
+            padding: 5px 12px;
+            font-size: 0.82em;
+            cursor: pointer;
+            transition: background 0.2s ease, box-shadow 0.2s ease;
+        }
+        .add-inventory-discount-btn:hover {
+            background: #e0a518;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+        }
+        .remove-inventory-discount-btn {
+            background: #fff;
+            color: #333;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.8em;
+            cursor: pointer;
+        }
+        .remove-inventory-discount-btn:hover {
+            background: #f5f5f5;
+        }
     </style>
 </head>
 <body class="page-products-listing">
@@ -862,7 +970,7 @@
         <div class="main-content">
             <div class="header">
                 <h2>Products</h2>
-                <p class="products-list-hint">All products and variations. Manage returns and stock status on <a href="/Employee/Admin/ProductReturns">Product Returns</a>.</p>
+                <p class="products-list-hint">Catalog: edit product name, category, description, and images via the row action. Edit variation name, thumbnails, and 3D model from each variation. Stock and restock are on <a href="/Employee/Admin/ProductInventory">Product Inventory</a>; returns on <a href="/Employee/Admin/ProductReturns">Product Returns</a>.</p>
             </div>
             <div id="productsListingPanel" class="content-area">
 
@@ -892,6 +1000,14 @@
                             RepairedQuantity: product.RepairedQuantity || 0,
                             DisposedQuantity: product.DisposedQuantity || 0,
                             InventoryStatus: product.InventoryStatus || 'no_stock',
+                            ShowOnStorefront: product.ShowOnStorefront,
+                            LinkedProductID: product.LinkedProductID || null,
+                            DiscountID: product.DiscountID || null,
+                            DiscountType: product.DiscountType || null,
+                            DiscountValue: product.DiscountValue != null ? product.DiscountValue : null,
+                            DiscountStartDate: product.DiscountStartDate || null,
+                            DiscountEndDate: product.DiscountEndDate || null,
+                            DiscountedPrice: product.DiscountedPrice != null ? product.DiscountedPrice : null,
                             Notes: product.Notes || '',
                             hasInventory: (product.TotalQuantity || 0) > 0
                         }))
@@ -958,8 +1074,12 @@
                     stockQtyClass: stockQtyClass,
                     formatListDate: formatListDate,
                     showReturnColumns: false,
-                    showActions: false,
-                    showStorefront: true
+                    showActions: true,
+                    showVariationActions: true,
+                    showStorefront: true,
+                    showDiscount: true,
+                    qtyParentLabel: 'Total Available Stock',
+                    variationQtyLabel: 'Available Stock'
                 }) %>
 
                 <% if (invPag.totalPages > 1) { %>
@@ -986,6 +1106,175 @@
             </div>
         </div>
     </div>
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260524b" defer></script>
+    <script>
+        window.__adminProductCategories = <%- JSON.stringify(invCategories || []) %>;
+    </script>
+    <%- include('partials/edit-inventory-product-modal') %>
+    <%- include('partials/edit-variation-status-modal') %>
+
+    <div id="inventory-discount-modal" class="modal">
+        <div class="modal-content" style="max-width:480px;">
+            <span class="close-button" id="closeInventoryDiscountModal">&times;</span>
+            <h3>Set product discount</h3>
+            <p id="inventoryDiscountProductLabel" style="margin:0 0 12px;color:#555;font-size:0.9em;"></p>
+            <form id="inventory-discount-form">
+                <input type="hidden" id="inventory-discount-product-id">
+                <div style="margin-bottom:1em;">
+                    <label for="inventory-discount-type">Discount type</label><br>
+                    <select id="inventory-discount-type" style="width:100%;padding:0.5em;margin-top:0.5em;">
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="fixed">Fixed amount (₱)</option>
+                    </select>
+                </div>
+                <div style="margin-bottom:1em;">
+                    <label for="inventory-discount-value">Discount value</label><br>
+                    <input type="number" id="inventory-discount-value" step="0.01" min="0" style="width:100%;padding:0.5em;margin-top:0.5em;" required>
+                    <div id="inventory-discount-max-hint" style="font-size:0.85em;color:#6b7280;margin-top:0.25em;"></div>
+                </div>
+                <div style="margin-bottom:1em;">
+                    <label for="inventory-discount-start">Start</label><br>
+                    <input type="datetime-local" id="inventory-discount-start" style="width:100%;padding:0.5em;margin-top:0.5em;" required>
+                </div>
+                <div style="margin-bottom:1em;">
+                    <label for="inventory-discount-end">End</label><br>
+                    <input type="datetime-local" id="inventory-discount-end" style="width:100%;padding:0.5em;margin-top:0.5em;" required>
+                </div>
+                <div style="text-align:right;">
+                    <button type="button" id="cancelInventoryDiscountBtn" class="pi-btn pi-btn-secondary" style="margin-right:8px;">Cancel</button>
+                    <button type="submit" class="add-inventory-discount-btn" style="border:none;">Save discount</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            let inventoryDiscountProductPrice = 0;
+            const modal = document.getElementById('inventory-discount-modal');
+            const form = document.getElementById('inventory-discount-form');
+            const typeEl = document.getElementById('inventory-discount-type');
+            const hintEl = document.getElementById('inventory-discount-max-hint');
+
+            function showPopup(msg, isError) {
+                const el = document.getElementById('customPopup');
+                if (!el) { alert(msg); return; }
+                el.querySelector('.custom-popup-message').textContent = msg;
+                el.classList.toggle('error', !!isError);
+                el.classList.add('show');
+                setTimeout(function() { el.classList.remove('show'); }, 3500);
+            }
+
+            function updateDiscountHint() {
+                if (!typeEl || !hintEl) return;
+                if (typeEl.value === 'percentage') {
+                    hintEl.textContent = 'Maximum: 50%';
+                } else {
+                    const maxFixed = inventoryDiscountProductPrice * 0.5;
+                    hintEl.textContent = 'Maximum: ₱' + maxFixed.toFixed(2) + ' (50% of list price)';
+                }
+            }
+
+            function openInventoryDiscountModal(inventoryProductId, productName, productPrice) {
+                document.getElementById('inventory-discount-product-id').value = inventoryProductId;
+                document.getElementById('inventoryDiscountProductLabel').textContent = productName || '';
+                inventoryDiscountProductPrice = parseFloat(productPrice) || 0;
+                const now = new Date();
+                const end = new Date();
+                end.setDate(end.getDate() + 30);
+                document.getElementById('inventory-discount-start').value = now.toISOString().slice(0, 16);
+                document.getElementById('inventory-discount-end').value = end.toISOString().slice(0, 16);
+                updateDiscountHint();
+                if (modal) modal.style.display = 'block';
+            }
+
+            function closeInventoryDiscountModal() {
+                if (modal) modal.style.display = 'none';
+                if (form) form.reset();
+            }
+
+            async function removeInventoryDiscount(inventoryProductId, productName) {
+                if (!confirm('Remove discount for "' + productName + '"?')) return;
+                try {
+                    const res = await fetch('/api/admin/inventory-products/' + inventoryProductId + '/discount', { method: 'DELETE' });
+                    const data = await res.json();
+                    if (data.success) {
+                        showPopup(data.message || 'Discount removed.');
+                        window.location.reload();
+                    } else {
+                        showPopup(data.error || 'Failed to remove discount.', true);
+                    }
+                } catch (e) {
+                    showPopup('Failed to remove discount.', true);
+                }
+            }
+
+            if (typeEl) typeEl.addEventListener('change', updateDiscountHint);
+            document.getElementById('closeInventoryDiscountModal')?.addEventListener('click', closeInventoryDiscountModal);
+            document.getElementById('cancelInventoryDiscountBtn')?.addEventListener('click', closeInventoryDiscountModal);
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) closeInventoryDiscountModal();
+                });
+            }
+
+            document.addEventListener('click', function(e) {
+                const addBtn = e.target.closest('.add-inventory-discount-btn');
+                if (addBtn) {
+                    openInventoryDiscountModal(
+                        addBtn.dataset.inventoryProductId,
+                        addBtn.dataset.productName,
+                        addBtn.dataset.productPrice
+                    );
+                    return;
+                }
+                const remBtn = e.target.closest('.remove-inventory-discount-btn');
+                if (remBtn) {
+                    removeInventoryDiscount(remBtn.dataset.inventoryProductId, remBtn.dataset.productName);
+                }
+            });
+
+            if (form) {
+                form.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    const inventoryProductId = document.getElementById('inventory-discount-product-id').value;
+                    const discountType = typeEl.value;
+                    const discountValue = parseFloat(document.getElementById('inventory-discount-value').value);
+                    const startDate = document.getElementById('inventory-discount-start').value;
+                    const endDate = document.getElementById('inventory-discount-end').value;
+                    if (!discountValue || discountValue <= 0) {
+                        showPopup('Discount value must be greater than 0.', true);
+                        return;
+                    }
+                    if (discountType === 'percentage' && discountValue > 50) {
+                        showPopup('Percentage discount cannot exceed 50%.', true);
+                        return;
+                    }
+                    if (discountType === 'fixed' && discountValue > inventoryDiscountProductPrice * 0.5) {
+                        showPopup('Fixed discount cannot exceed 50% of list price.', true);
+                        return;
+                    }
+                    try {
+                        const res = await fetch('/api/admin/inventory-products/' + inventoryProductId + '/discount', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ discountType, discountValue, startDate, endDate })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            closeInventoryDiscountModal();
+                            showPopup(data.message || 'Discount saved.');
+                            window.location.reload();
+                        } else {
+                            showPopup(data.error || 'Failed to save discount.', true);
+                        }
+                    } catch (err) {
+                        showPopup('Failed to save discount.', true);
+                    }
+                });
+            }
+        })();
+    </script>
+
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260524l" defer></script>
 </body>
 </html>

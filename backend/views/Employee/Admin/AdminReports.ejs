@@ -846,9 +846,9 @@
                             <select id="inv-status">
                                 <option value="">All Status</option>
                                 <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
                                 <option value="low-stock">Low Stock</option>
                                 <option value="out-of-stock">Out of Stock</option>
+                                <option value="no-available-stock">No Available Stock</option>
                             </select>
                         </div>
                         <div class="filter-group">
@@ -924,10 +924,12 @@
                             <table id="inventory-table">
                                 <thead>
                                     <tr>
+                                        <th>Type</th>
                                         <th>Product Name</th>
                                         <th>SKU</th>
                                         <th>Category</th>
-                                        <th>Stock Quantity</th>
+                                        <th>Available Stock</th>
+                                        <th>Total Stock</th>
                                         <th>Price</th>
                                         <th>Status</th>
                                         <th>Last Updated</th>
@@ -935,7 +937,7 @@
                                 </thead>
                                 <tbody id="inventory-tbody">
                                     <tr>
-                                        <td colspan="7" class="loading">Loading inventory data...</td>
+                                        <td colspan="9" class="loading">Loading inventory data...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -956,6 +958,7 @@
                                 <thead>
                                     <tr>
                                         <th>Material Name</th>
+                                        <th>SKU</th>
                                         <th>Unit</th>
                                         <th>Available Quantity</th>
                                         <th>Status</th>
@@ -964,7 +967,7 @@
                                 </thead>
                                 <tbody id="raw-materials-tbody">
                                     <tr>
-                                        <td colspan="5" class="loading">Loading raw materials data...</td>
+                                        <td colspan="6" class="loading">Loading raw materials data...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1383,43 +1386,70 @@
                 const data = await response.json();
                 
                 if (data.success) {
+                    populateInventoryCategoryFilter(data.categories || []);
                     renderInventoryTable(data.data);
                     renderRawMaterialsTable(data.rawMaterials || []);
                     renderInventoryStats(data.stats);
                     renderInventoryChart(data.stats);
                 } else {
                     document.getElementById('inventory-tbody').innerHTML = 
-                        `<tr><td colspan="7" class="empty-state">${data.error || 'Error loading inventory data'}</td></tr>`;
+                        `<tr><td colspan="9" class="empty-state">${data.error || 'Error loading inventory data'}</td></tr>`;
                 }
             } catch (error) {
                 console.error('Error loading inventory:', error);
                 document.getElementById('inventory-tbody').innerHTML = 
-                    `<tr><td colspan="7" class="empty-state">Error loading inventory data</td></tr>`;
+                    `<tr><td colspan="9" class="empty-state">Error loading inventory data</td></tr>`;
             }
+        }
+
+        function populateInventoryCategoryFilter(categories) {
+            const select = document.getElementById('inv-category');
+            if (!select) return;
+            const current = select.value;
+            select.innerHTML = '<option value="">All Categories</option>';
+            (categories || []).forEach(function(cat) {
+                if (!cat) return;
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = cat;
+                select.appendChild(opt);
+            });
+            if (current) select.value = current;
         }
 
         function renderInventoryTable(data) {
             const tbody = document.getElementById('inventory-tbody');
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No inventory data found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No inventory data found</td></tr>';
                 return;
             }
 
             tbody.innerHTML = data.map(item => {
-                const statusClass = item.StockQuantity === 0 ? 'badge-danger' : 
-                                   item.StockQuantity < 10 ? 'badge-warning' : 
-                                   item.IsActive ? 'badge-success' : 'badge-info';
-                const statusText = item.StockQuantity === 0 ? 'Out of Stock' : 
-                                  item.StockQuantity < 10 ? 'Low Stock' : 
-                                  item.IsActive ? 'Active' : 'Inactive';
+                const normalizedStatus = String(item.Status || '').toLowerCase();
+                const statusClass = normalizedStatus.includes('out') ? 'badge-danger'
+                    : normalizedStatus.includes('low') ? 'badge-warning'
+                    : normalizedStatus.includes('no available') ? 'badge-info'
+                    : 'badge-success';
+                const statusText = item.Status || 'Active';
                 
+                const rowType = item.RowType || 'Parent';
+                const isParent = rowType === 'Parent';
+                const nameCell = rowType === 'Variation'
+                    ? `<span style="padding-left:12px;color:#555;">↳ ${item.Name || 'N/A'}</span>`
+                    : `<strong>${item.Name || 'N/A'}</strong>`;
+                const skuCell = isParent ? '—' : (item.SKU || '—');
+                const priceCell = isParent
+                    ? '—'
+                    : `₱${Number(item.Price || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
                 return `
                     <tr>
-                        <td>${item.Name || 'N/A'}</td>
-                        <td>${item.SKU || 'N/A'}</td>
+                        <td><span class="badge ${rowType === 'Variation' ? 'badge-info' : 'badge-success'}">${rowType}</span></td>
+                        <td>${nameCell}</td>
+                        <td>${skuCell}</td>
                         <td>${item.CategoryName || 'N/A'}</td>
+                        <td>${item.AvailableQuantity ?? 0}</td>
                         <td>${item.StockQuantity || 0}</td>
-                        <td>₱${Number(item.Price || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td>${priceCell}</td>
                         <td><span class="badge ${statusClass}">${statusText}</span></td>
                         <td>${item.LastUpdated ? new Date(item.LastUpdated).toLocaleDateString() : 'N/A'}</td>
                     </tr>
@@ -1430,7 +1460,7 @@
         function renderRawMaterialsTable(data) {
             const tbody = document.getElementById('raw-materials-tbody');
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No raw materials data found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No raw materials data found</td></tr>';
                 return;
             }
 
@@ -1445,6 +1475,7 @@
                 return `
                     <tr>
                         <td>${item.Name || 'N/A'}</td>
+                        <td>${item.SKU || '—'}</td>
                         <td>${item.Unit || 'N/A'}</td>
                         <td>${item.QuantityAvailable || 0}</td>
                         <td><span class="badge ${statusClass}">${statusText}</span></td>

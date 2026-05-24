@@ -80,18 +80,41 @@
 
 
 
+    function inspectReturnTypeNorm() {
+        return String(inspectReturnType || '').toLowerCase().trim();
+    }
+
+    function isWrongItemReturnType() {
+        return inspectReturnTypeNorm() === 'wrong_item';
+    }
+
+    function isDamageReturnType() {
+        const t = inspectReturnTypeNorm();
+        return t === 'damage' || t === 'damaged';
+    }
+
+    function updateInspectHintText() {
+        const hint = document.getElementById('returnInspectHint');
+        if (!hint) return;
+        if (isWrongItemReturnType()) {
+            hint.innerHTML = 'Wrong item return: classify each unit as <strong>Good Item</strong> (restock to available) or <strong>Bad Item</strong> (damaged stock). Totals must match returned quantity.';
+        } else if (isDamageReturnType()) {
+            hint.innerHTML = 'Damaged item return: mark units as <strong>Damaged</strong>. They will go to damaged stock on Product Returns.';
+        } else {
+            hint.innerHTML = 'Enter how many units are damaged vs good (restock). Totals must match returned quantity.';
+        }
+    }
+
     function prefillInspectFromCustomerReason() {
-
-        const t = String(inspectReturnType || '').toLowerCase().trim();
-
-        if (t !== 'wrong_item') return;
-
-        inspectItems.forEach(function (item, index) {
-
-            setInspectVariantDisposition(index, 'wrong');
-
-        });
-
+        if (isWrongItemReturnType()) {
+            inspectItems.forEach(function (item, index) {
+                setInspectVariantDisposition(index, 'good');
+            });
+        } else if (isDamageReturnType()) {
+            inspectItems.forEach(function (item, index) {
+                setInspectVariantDisposition(index, 'damaged');
+            });
+        }
     }
 
 
@@ -164,6 +187,26 @@
 
             const wrongInput = row.querySelector('.inspect-wrong-qty');
 
+            const goodInput = row.querySelector('.inspect-good-qty');
+
+            const badInput = row.querySelector('.inspect-bad-qty');
+
+            let damagedQty = parseInt(damagedInput?.value, 10) || 0;
+
+            let wrongItemQty = parseInt(wrongInput?.value, 10) || 0;
+
+            if (isWrongItemReturnType()) {
+
+                wrongItemQty = parseInt(goodInput?.value, 10) || 0;
+
+                damagedQty = parseInt(badInput?.value, 10) || 0;
+
+            } else if (isDamageReturnType()) {
+
+                wrongItemQty = 0;
+
+            }
+
             items.push({
 
                 productId: base.productId,
@@ -172,9 +215,9 @@
 
                 quantity: base.quantity,
 
-                damagedQty: parseInt(damagedInput?.value, 10) || 0,
+                damagedQty: damagedQty,
 
-                wrongItemQty: parseInt(wrongInput?.value, 10) || 0
+                wrongItemQty: wrongItemQty
 
             });
 
@@ -200,7 +243,25 @@
 
             if (it.damagedQty + it.wrongItemQty !== it.quantity) {
 
-                return 'For each variant, damaged + wrong item must equal returned quantity (' + it.quantity + ').';
+                if (isWrongItemReturnType()) {
+
+                    return 'For each variant, good item + bad item must equal returned quantity (' + it.quantity + ').';
+
+                }
+
+                if (isDamageReturnType()) {
+
+                    return 'For each variant, damaged quantity must equal returned quantity (' + it.quantity + ').';
+
+                }
+
+                return 'For each variant, damaged + good item must equal returned quantity (' + it.quantity + ').';
+
+            }
+
+            if (isDamageReturnType() && it.wrongItemQty !== 0) {
+
+                return 'Damaged returns cannot include good-item quantities.';
 
             }
 
@@ -242,6 +303,27 @@
 
 
 
+    function buildInspectQtyRow(item, index) {
+        const q = item.quantity;
+        if (isWrongItemReturnType()) {
+            return '<div class="return-inspect-qty-row">' +
+                '<div><label>Good item qty</label><input type="number" class="inspect-good-qty" min="0" max="' + q + '" value="0"></div>' +
+                '<div><label>Bad item qty</label><input type="number" class="inspect-bad-qty" min="0" max="' + q + '" value="0"></div>' +
+                '</div>';
+        }
+        if (isDamageReturnType()) {
+            return '<div class="return-inspect-qty-row">' +
+                '<div><label>Damaged qty</label><input type="number" class="inspect-damaged-qty" min="0" max="' + q + '" value="0"></div>' +
+                '</div>';
+        }
+        return '<div class="return-inspect-qty-row">' +
+            '<div><label>Damaged qty</label><input type="number" class="inspect-damaged-qty" min="0" max="' + q + '" value="0"></div>' +
+            '<div><label>Good item qty</label><input type="number" class="inspect-wrong-qty inspect-good-qty" min="0" max="' + q + '" value="0"></div>' +
+            '</div>';
+    }
+
+
+
     function renderInspectVariants() {
 
         const container = document.getElementById('returnInspectVariants');
@@ -278,19 +360,7 @@
 
                 '</div>' +
 
-                '<div class="return-inspect-qty-row">' +
-
-                '<div><label>Damaged qty</label><input type="number" class="inspect-damaged-qty" min="0" max="' + item.quantity + '" value="0" data-index="' + index + '"></div>' +
-
-                '<div><label>Wrong item qty</label><input type="number" class="inspect-wrong-qty" min="0" max="' + item.quantity + '" value="0" data-index="' + index + '"></div>' +
-
-                '<div style="display:flex;gap:6px;align-items:flex-end;padding-bottom:2px;">' +
-
-                '<button type="button" class="btn-inspect-damaged" onclick="setInspectVariantDisposition(' + index + ', \'damaged\')">All Damaged</button>' +
-
-                '<button type="button" class="btn-inspect-wrong" onclick="setInspectVariantDisposition(' + index + ', \'wrong\')">All Wrong Item</button>' +
-
-                '</div></div></div>'
+                buildInspectQtyRow(item, index) + '</div>'
 
             );
 
@@ -298,7 +368,7 @@
 
 
 
-        container.querySelectorAll('.inspect-damaged-qty, .inspect-wrong-qty').forEach(function (input) {
+        container.querySelectorAll('.inspect-damaged-qty, .inspect-wrong-qty, .inspect-good-qty, .inspect-bad-qty').forEach(function (input) {
 
             input.addEventListener('input', function () {
 
@@ -348,17 +418,49 @@
 
         const wrongInput = row.querySelector('.inspect-wrong-qty');
 
+        const goodInput = row.querySelector('.inspect-good-qty');
+
+        const badInput = row.querySelector('.inspect-bad-qty');
+
         if (type === 'damaged') {
 
             if (damagedInput) damagedInput.value = String(item.quantity);
 
             if (wrongInput) wrongInput.value = '0';
 
-        } else {
+            if (goodInput) goodInput.value = '0';
+
+            if (badInput) badInput.value = '0';
+
+        } else if (type === 'good') {
+
+            if (goodInput) goodInput.value = String(item.quantity);
+
+            if (wrongInput) wrongInput.value = String(item.quantity);
+
+            if (badInput) badInput.value = '0';
 
             if (damagedInput) damagedInput.value = '0';
 
+        } else if (type === 'bad') {
+
+            if (badInput) badInput.value = String(item.quantity);
+
+            if (damagedInput) damagedInput.value = String(item.quantity);
+
+            if (goodInput) goodInput.value = '0';
+
+            if (wrongInput) wrongInput.value = '0';
+
+        } else if (type === 'wrong') {
+
             if (wrongInput) wrongInput.value = String(item.quantity);
+
+            if (damagedInput) damagedInput.value = '0';
+
+            if (goodInput) goodInput.value = String(item.quantity);
+
+            if (badInput) badInput.value = '0';
 
         }
 
@@ -382,13 +484,43 @@
 
         const wrongInput = row.querySelector('.inspect-wrong-qty');
 
+        const goodInput = row.querySelector('.inspect-good-qty');
+
+        const badInput = row.querySelector('.inspect-bad-qty');
+
         let d = parseInt(damagedInput?.value, 10) || 0;
 
         let w = parseInt(wrongInput?.value, 10) || 0;
 
+        let g = parseInt(goodInput?.value, 10) || 0;
+
+        let b = parseInt(badInput?.value, 10) || 0;
+
+        const active = document.activeElement;
+
+        if (isWrongItemReturnType()) {
+
+            if (active === goodInput && g + b > item.quantity) {
+
+                b = Math.max(0, item.quantity - g);
+
+                if (badInput) badInput.value = String(b);
+
+            } else if (active === badInput && g + b > item.quantity) {
+
+                g = Math.max(0, item.quantity - b);
+
+                if (goodInput) goodInput.value = String(g);
+
+            }
+
+            return;
+
+        }
+
         if (d + w > item.quantity) {
 
-            if (document.activeElement === damagedInput) {
+            if (active === damagedInput) {
 
                 w = Math.max(0, item.quantity - d);
 
@@ -463,6 +595,8 @@
             inspectReturnReason = result.returnReason || '';
 
             renderInspectCustomerReason();
+
+            updateInspectHintText();
 
             renderInspectVariants();
 
@@ -599,11 +733,8 @@
                 closeReturnInspectModal();
 
                 if (typeof showSuccessModal === 'function') {
-
+                    window.__pendingSuccessReload = true;
                     showSuccessModal(result.message || 'Inspection saved.', '', 'approve');
-
-                    setTimeout(function () { window.location.reload(); }, 1200);
-
                 } else {
 
                     alert(result.message || 'Inspection saved.');
@@ -712,9 +843,8 @@
 
                 if (typeof showSuccessModal === 'function') {
 
+                    window.__pendingSuccessReload = true;
                     showSuccessModal(result.message || 'Ready for inspection.', '', 'approve');
-
-                    setTimeout(function () { window.location.reload(); }, 1200);
 
                 } else {
 
@@ -782,7 +912,7 @@
 
         if (pendingPickupActionType === 'refund') {
             if (title) title.textContent = 'Process Refund';
-            if (message) message.textContent = 'Confirm pickup is complete and proceed to process the customer refund?';
+            if (message) message.textContent = 'Confirm process the customer refund?';
             if (btn) btn.textContent = 'Process Refund';
         } else if (pendingPickupActionType === 'replacement') {
             if (title) title.textContent = 'Process Replacement';
@@ -849,9 +979,8 @@
 
                 if (typeof showSuccessModal === 'function') {
 
-                    showSuccessModal(result.message || 'Ready for refund or replacement.', '', 'approve');
-
-                    setTimeout(function () { window.location.reload(); }, 1200);
+                    window.__pendingSuccessReload = true;
+                    showSuccessModal('Success!\nProcess refund', '', 'approve');
 
                 } else {
 
