@@ -12,7 +12,7 @@
     const showAct = !!showActions;
     const showVarAct = typeof showVariationActions !== 'undefined' ? !!showVariationActions : showReturnCols;
     const showSf = !!showStorefront;
-    const productColspan = showReturnCols ? 7 : (6 + (showAct ? 1 : 0));
+    const productColspan = showReturnCols ? 7 : (5 + (showAct ? 1 : 0));
     const fmtDate = typeof formatListDate === 'function'
         ? formatListDate
         : function(v) { return v ? String(v) : 'N/A'; };
@@ -30,8 +30,7 @@
             <tr>
                 <th>Product Name</th>
                 <th>Category</th>
-                <th class="qty-col" title="Sum of all variation quantities">Total Qty</th>
-                <% if (!showReturnCols) { %><th class="qty-col" title="Sum of available quantity across all variations">Total Available</th><% } %>
+                <% if (!showReturnCols) { %><th class="qty-col" title="Sum of available quantity across all variations">Total Qty</th><% } %>
                 <% if (showReturnCols) { %>
                 <th class="qty-col return-qty-th return-qty-th-damaged">Damaged</th>
                 <th class="qty-col return-qty-th return-qty-th-returned">Returned</th>
@@ -72,7 +71,6 @@
                     productImageFallback = productImage.replace('/uploads/products/inventory/', '/uploads/products/images/');
                     productImageFallback2 = productImage.replace('/uploads/products/inventory/', '/uploads/products/');
                 }
-                const totalQuantity = item.TotalQuantity || 0;
                 const availableQty = item.AvailableQuantity || 0;
                 const damagedQty = item.DamagedQuantity || 0;
                 const returnedQty = item.ReturnedQuantity || 0;
@@ -92,9 +90,8 @@
                     </div>
                 </td>
                 <td><%= productCategory %></td>
-                <td class="qty-col"><span class="stock-qty <%= stockQtyClass(totalQuantity) %>"><%= totalQuantity %></span></td>
                 <% if (!showReturnCols) { %>
-                <td class="qty-col"><span class="stock-qty stock-qty-available"><%= availableQty %></span></td>
+                <td class="qty-col"><span class="stock-qty <%= stockQtyClass(availableQty) %>"><%= availableQty %></span></td>
                 <% } %>
                 <% if (showReturnCols) { %>
                 <td class="qty-col"><span class="return-qty return-qty-damaged<%= damagedQty > 0 ? ' has-stock' : '' %>"><%= damagedQty %></span></td>
@@ -133,8 +130,7 @@
                                         <th class="var-col-sku">SKU</th>
                                         <th class="var-col-color">Color</th>
                                         <% if (!showReturnCols) { %>
-                                        <th class="var-col-qty">Qty</th>
-                                        <th class="var-col-qty">Available</th>
+                                        <th class="var-col-qty">Total Qty</th>
                                         <% } %>
                                         <% if (showReturnCols) { %>
                                         <th class="var-col-qty return-qty-th return-qty-th-damaged">Damaged</th>

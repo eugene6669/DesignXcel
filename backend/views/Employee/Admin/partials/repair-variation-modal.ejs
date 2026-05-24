@@ -1,0 +1,27 @@
+<!-- Repair damaged → repaired (Product Returns) -->
+<div id="repairVariationModal" class="modal pi-modal-compact" style="display: none;">
+    <div class="modal-content">
+        <span class="close-button" id="closeRepairVariationModal" aria-label="Close">&times;</span>
+        <h3>Repair damaged items</h3>
+        <p id="repairVariationSubtitle" style="margin: 0 0 12px; color: #555; font-size: 0.9em;"></p>
+        <form id="repairVariationForm" onsubmit="return false;">
+            <input type="hidden" id="repairVariationId" value="">
+            <input type="hidden" id="repairVariationInventoryProductId" value="">
+            <input type="hidden" id="repairVariationAvailableQty" value="0">
+            <input type="hidden" id="repairVariationReturnedQty" value="0">
+            <input type="hidden" id="repairVariationRepairedQty" value="0">
+            <input type="hidden" id="repairVariationDisposedQty" value="0">
+            <input type="hidden" id="repairVariationMaxDamaged" value="0">
+            <div class="form-group">
+                <label for="repairVariationQtyInput">Quantity to repair</label>
+                <input type="number" id="repairVariationQtyInput" min="1" value="1" required
+                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 1em;">
+                <p id="repairVariationHint" style="margin: 8px 0 0; font-size: 0.85em; color: #666;"></p>
+            </div>
+            <div class="pi-form-actions">
+                <button type="button" id="cancelRepairVariation" class="pi-btn pi-btn-secondary">Cancel</button>
+                <button type="button" id="confirmRepairVariation" class="pi-btn pi-btn-primary">Confirm repair</button>
+            </div>
+        </form>
+    </div>
+</div>

@@ -221,18 +221,24 @@
             background-color: #e0ac06;
         }
 
-        .edit-inventory-btn {
+        .edit-inventory-btn,
+        .edit-inventory-product-btn,
+        .edit-variation-status-btn {
             background-color: #FFC107;
             color: #333;
             border: none;
             border-radius: 5px;
             padding: 5px 10px;
-            font-size: 0.9em;
             cursor: pointer;
             margin-right: 5px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .edit-inventory-btn:hover {
+        .edit-inventory-btn:hover,
+        .edit-inventory-product-btn:hover,
+        .edit-variation-status-btn:hover {
             background-color: #e0ac06;
         }
 
@@ -242,8 +248,10 @@
             border: none;
             border-radius: 5px;
             padding: 5px 10px;
-            font-size: 0.9em;
             cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .delete-inventory-btn:hover {
@@ -591,8 +599,9 @@
             padding: 5px 10px;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 0.85em;
-            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         .archive-variation-btn:hover { background-color: #c82333 !important; }
         .edit-material-btn {
@@ -1389,13 +1398,16 @@
                                             <% } else { %>
                                                 <span style="color: #999; font-size: 0.9em; margin-right: 5px;">No inventory yet</span>
                                             <% } %>
-                                            <button type="button" class="edit-inventory-product-btn" style="background:#ffc107;color:#000;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:0.8em;" data-product-id="<%= productId %>" title="Edit product">Edit</button>
-                                            <button class="delete-inventory-btn" 
+                                            <button type="button" class="edit-inventory-product-btn" data-product-id="<%= productId %>" title="Edit product" aria-label="Edit product">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                            </button>
+                                            <button type="button" class="delete-inventory-btn" 
                                                 data-product-id="<%= (item.ProductID || item.InventoryProductID) %>" 
                                                 data-product-name="<%= productName.replace(/'/g, "\\'").replace(/"/g, "&quot;") %>"
                                                 data-is-from-products="<%= item.ProductID ? 'true' : 'false' %>"
-                                                title="Archive Product">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                                                title="Archive Product"
+                                                aria-label="Archive Product">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
                                             </button>
                                         </div>
                                     </td>
@@ -1571,7 +1583,7 @@
         </div>
     </div>
 
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260522g" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260524a" defer></script>
     <script src="/js/Employee/Admin/product-inventory-tabs.js?v=20260522c" defer></script>
     <script src="/js/Employee/Admin/raw-materials-tab.js"></script>
     <script src="/js/Employee/Admin/bom-bundles-tab.js?v=20260522b" defer></script>

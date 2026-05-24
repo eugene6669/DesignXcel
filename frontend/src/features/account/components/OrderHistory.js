@@ -90,7 +90,10 @@ const normalizeReturnWorkflowStatus = (status, order) => {
     if (action === 'refund') return 'Process Refund';
     if (action === 'replacement') return 'Process Replacement';
   }
-  if (status === 'Returned') return 'Return';
+  if (status === 'Returned') {
+    if (String(order?.ReturnReason || '').startsWith('APPEALED:')) return 'Appealed';
+    return 'Return';
+  }
   if (status === 'Refunded' || status === 'Completed Returned') return 'Returned';
   return status;
 };
@@ -103,10 +106,16 @@ const isReceiveStatus = (status) => RECEIVE_STATUSES.includes(status);
 const formatReturnReasonDisplay = (reason) => {
   if (!reason) return '';
   if (reason.startsWith('DECLINED:')) return reason.replace(/^DECLINED:\s*/, '');
+  if (reason.startsWith('APPEALED:')) return reason.replace(/^APPEALED:\s*/, '');
   if (reason.startsWith(PRE_RECEIVE_RETURN_PREFIX)) {
     return reason.slice(PRE_RECEIVE_RETURN_PREFIX.length).trim();
   }
   return reason;
+};
+
+const isDeclinedReturnOrder = (order) => {
+  if (!order) return false;
+  return order.Status === 'Declined' || String(order.ReturnReason || '').startsWith('DECLINED:');
 };
 
 const orderFlow = [
@@ -984,6 +993,7 @@ const OrderHistory = () => {
   const [modal, setModal] = useState({ open: false, orderId: null });
   const [receiveConfirmModal, setReceiveConfirmModal] = useState({ open: false, orderId: null, order: null });
   const [returnSubmitConfirmModal, setReturnSubmitConfirmModal] = useState({ open: false });
+  const [appealConfirmModal, setAppealConfirmModal] = useState({ open: false, orderId: null });
   const pendingReturnSubmitRef = useRef(null);
   const [countdown, setCountdown] = useState(5);
   const [activeTab, setActiveTab] = useState('all');
@@ -993,7 +1003,7 @@ const OrderHistory = () => {
   const [successModal, setSuccessModal] = useState({ open: false, message: '', navigateTo: null, modalType: 'buyAgain', isSuccess: false });
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [reviewModal, setReviewModal] = useState({ open: false, order: null });
-  const [returnModal, setReturnModal] = useState({ open: false, orderId: null, order: null, isPreReceive: false });
+  const [returnModal, setReturnModal] = useState({ open: false, orderId: null, order: null, isPreReceive: false, isAppeal: false });
   const [returning, setReturning] = useState({});
   const [returnReason, setReturnReason] = useState('');
   const [returnType, setReturnType] = useState(''); // damage | wrong_item | other
@@ -1174,6 +1184,99 @@ const OrderHistory = () => {
     requireUnused: true
   };
 
+  const buildSelectedItemsFromOrder = (order, prefillFromReturnItems = false) => {
+    const initialItems = {};
+    if (!order?.items?.length) return initialItems;
+
+    let returnItemsJson = null;
+    if (prefillFromReturnItems && order.ReturnItems) {
+      try {
+        returnItemsJson = typeof order.ReturnItems === 'string'
+          ? JSON.parse(order.ReturnItems)
+          : order.ReturnItems;
+      } catch (e) {
+        console.error('Error parsing ReturnItems for prefill:', e);
+      }
+    }
+
+    order.items.forEach((item) => {
+      const itemId = item.ProductID || item.productId;
+      const variationId = item.VariationID || item.variationId || null;
+      const key = variationId ? `${itemId}_${variationId}` : `${itemId}_null`;
+      const quantity = item.quantity || item.Quantity || 0;
+
+      if (!itemId || quantity <= 0) return;
+
+      let returnQuantity = 0;
+      if (Array.isArray(returnItemsJson) && returnItemsJson.length > 0) {
+        const match = returnItemsJson.find((ri) => {
+          const returnId = ri.productId || ri.ProductID;
+          const returnVariationId = ri.variationId || ri.VariationID || null;
+          const productMatch = String(itemId) === String(returnId);
+          const variationMatch = (variationId == null && (returnVariationId == null || returnVariationId === undefined))
+            || (variationId != null && returnVariationId != null && String(variationId) === String(returnVariationId));
+          return productMatch && variationMatch;
+        });
+        if (match) {
+          returnQuantity = parseInt(match.quantity || match.Quantity, 10) || 0;
+        }
+      }
+
+      initialItems[key] = {
+        productId: itemId,
+        variationId,
+        maxQuantity: quantity,
+        returnQuantity
+      };
+    });
+    return initialItems;
+  };
+
+  const resetReturnFormFields = () => {
+    setReturnReason('');
+    setReturnType('');
+    setActionType('');
+    setItemsSectionExpanded(false);
+    setReturnImage(null);
+    setReturnVideo(null);
+    setReturnImagePreview(null);
+    setReturnVideoPreview(null);
+    setProofOfPurchaseImage(null);
+    setProofOfPurchaseImagePreview(null);
+    setReturnConditions({
+      originalPackaging: false,
+      allParts: false,
+      unused: false,
+      proofOfPurchase: false
+    });
+    setSelectedItems({});
+  };
+
+  const prefillReturnFormFromOrder = (order) => {
+    if (!order) return;
+
+    if (order.ActionType) setActionType(order.ActionType);
+    if (order.ReturnType) setReturnType(order.ReturnType);
+
+    const reason = String(order.ReturnReason || '');
+    if (reason.startsWith('DECLINED:')) {
+      setReturnReason(reason.replace(/^DECLINED:\s*/, '').trim());
+    } else if (reason.startsWith('APPEALED:')) {
+      setReturnReason(reason.replace(/^APPEALED:\s*/, '').trim());
+    } else {
+      setReturnReason(formatReturnReasonDisplay(reason));
+    }
+
+    setReturnConditions({
+      originalPackaging: Boolean(order.OriginalPackaging),
+      allParts: Boolean(order.AllParts),
+      unused: Boolean(order.Unused),
+      proofOfPurchase: Boolean(order.ProofOfPurchase)
+    });
+
+    setSelectedItems(buildSelectedItemsFromOrder(order, true));
+  };
+
   const handleReturnOrder = (orderId) => {
     const order = orders.find(o => o.OrderID === orderId);
     if (!order) return;
@@ -1184,38 +1287,32 @@ const OrderHistory = () => {
       return;
     }
 
-    setReturnModal({ open: true, orderId, order, isPreReceive: true });
-    setReturnReason('');
-    setReturnType('');
-    setActionType('');
-    setItemsSectionExpanded(false); // Start collapsed (dropdown state)
-    setReturnImage(null);
-    setReturnVideo(null);
-    setReturnImagePreview(null);
-    setReturnVideoPreview(null);
-    setProofOfPurchaseImage(null);
-    setProofOfPurchaseImagePreview(null);
-    
-    // Initialize selectedItems for partial returns
-    const initialItems = {};
-    if (order && order.items && Array.isArray(order.items) && order.items.length > 0) {
-      order.items.forEach(item => {
-        const itemId = item.ProductID || item.productId;
-        const variationId = item.VariationID || item.variationId || null;
-        const key = variationId ? `${itemId}_${variationId}` : `${itemId}_null`;
-        const quantity = item.quantity || item.Quantity || 0;
-        
-        if (itemId && quantity > 0) {
-          initialItems[key] = {
-            productId: itemId,
-            variationId: variationId,
-            maxQuantity: quantity,
-            returnQuantity: 0 // Start with 0, user must select quantity
-          };
-        }
-      });
-    }
-    setSelectedItems(initialItems);
+    resetReturnFormFields();
+    setReturnModal({ open: true, orderId, order, isPreReceive: true, isAppeal: false });
+    setSelectedItems(buildSelectedItemsFromOrder(order, false));
+  };
+
+  const openAppealConfirmModal = (orderId) => {
+    setAppealConfirmModal({ open: true, orderId });
+  };
+
+  const closeAppealConfirmModal = () => {
+    setAppealConfirmModal({ open: false, orderId: null });
+  };
+
+  const confirmAppealStart = () => {
+    const orderId = appealConfirmModal.orderId;
+    closeAppealConfirmModal();
+    if (orderId) handleAppealOrder(orderId);
+  };
+
+  const handleAppealOrder = (orderId) => {
+    const order = orders.find(o => o.OrderID === orderId);
+    if (!order || !isDeclinedReturnOrder(order)) return;
+
+    resetReturnFormFields();
+    prefillReturnFormFromOrder(order);
+    setReturnModal({ open: true, orderId, order, isPreReceive: false, isAppeal: true });
   };
 
   const returnOverlayClickAt = useRef(0);
@@ -1235,7 +1332,7 @@ const OrderHistory = () => {
     returnOverlayClickAt.current = 0;
     setReturnSubmitConfirmModal({ open: false });
     pendingReturnSubmitRef.current = null;
-    setReturnModal({ open: false, orderId: null, order: null, isPreReceive: false });
+    setReturnModal({ open: false, orderId: null, order: null, isPreReceive: false, isAppeal: false });
     setReturnReason('');
     setReturnType('');
     setActionType('');
@@ -1351,7 +1448,7 @@ const OrderHistory = () => {
     }
 
     const isPreReceive = returnModal.isPreReceive || isReceiveStatus(order?.Status);
-    if (!isPreReceive) {
+    if (!returnModal.isAppeal && !isPreReceive) {
       alert('Returns must be filed while the order is still in To Receive status.');
       return false;
     }
@@ -1383,6 +1480,7 @@ const OrderHistory = () => {
       returnType,
       returnReason: returnReason.trim(),
       isPreReceive,
+      isAppeal: Boolean(returnModal.isAppeal),
       returnItems
     };
 
@@ -1408,6 +1506,7 @@ const OrderHistory = () => {
       returnType: submitReturnType,
       returnReason: submitReturnReason,
       isPreReceive,
+      isAppeal,
       returnItems
     } = pending;
 
@@ -1419,7 +1518,9 @@ const OrderHistory = () => {
       formData.append('actionType', submitActionType);
       formData.append('returnType', submitReturnType);
       formData.append('returnReason', submitReturnReason);
-      if (isPreReceive) {
+      if (isAppeal) {
+        formData.append('isAppeal', 'true');
+      } else if (isPreReceive) {
         formData.append('returnPhase', 'pre_receive');
       }
       formData.append('originalPackaging', returnConditions.originalPackaging);
@@ -1450,9 +1551,26 @@ const OrderHistory = () => {
       const data = await res.json();
       
       if (data.success) {
-        setOrders((prev) => prev.map(order => order.OrderID === orderId ? { ...order, Status: 'Returned' } : order));
+        setOrders((prev) => prev.map((o) => (o.OrderID === orderId
+          ? {
+            ...o,
+            Status: 'Returned',
+            ActionType: submitActionType,
+            ReturnType: submitReturnType,
+            ReturnReason: isAppeal ? `APPEALED: ${submitReturnReason}` : submitReturnReason,
+            ReturnItems: JSON.stringify(returnItems)
+          }
+          : o)));
         closeReturnModal();
-        setSuccessModal({ open: true, message: 'Return request submitted successfully. We will review your request and notify you when it is processed.', navigateTo: null, modalType: 'return', isSuccess: true });
+        setSuccessModal({
+          open: true,
+          message: isAppeal
+            ? 'Your appeal has been submitted. Our team will review your return request again.'
+            : 'Return request submitted successfully. We will review your request and notify you when it is processed.',
+          navigateTo: null,
+          modalType: 'return',
+          isSuccess: true
+        });
       } else {
         alert(data.message || 'Failed to submit return request.');
       }
@@ -2127,7 +2245,29 @@ const OrderHistory = () => {
                   </div>
                 </div>
               </div>
-              <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {isDeclinedReturnOrder(order) && (
+                  <button
+                    type="button"
+                    onClick={() => openAppealConfirmModal(order.OrderID)}
+                    disabled={returning[order.OrderID]}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '16px',
+                      border: 'none',
+                      background: '#8b5cf6',
+                      color: '#ffffff',
+                      fontWeight: '600',
+                      fontSize: '12px',
+                      cursor: returning[order.OrderID] ? 'not-allowed' : 'pointer',
+                      opacity: returning[order.OrderID] ? 0.7 : 1,
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="Submit an appeal to re-open your declined return request"
+                  >
+                    {returning[order.OrderID] ? 'Submitting…' : 'Appeal'}
+                  </button>
+                )}
                 <span style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -2566,18 +2706,39 @@ const OrderHistory = () => {
         order={orders.find((o) => o.OrderID === modal.orderId)}
       />
       <ConfirmationModal
+        isOpen={appealConfirmModal.open}
+        onClose={closeAppealConfirmModal}
+        onConfirm={confirmAppealStart}
+        title="Submit an appeal?"
+        type="warning"
+        overlayZIndex={2900}
+        confirmText="Continue to appeal form"
+        cancelText="Cancel"
+        message={
+          <div style={{ textAlign: 'left', lineHeight: 1.6, fontSize: '0.95rem', color: '#374151' }}>
+            <p style={{ margin: '0 0 12px 0' }}>
+              Your return request was declined. You can appeal this decision and submit an updated return request for admin review.
+            </p>
+            <p style={{ margin: 0 }}>
+              You will complete the same return form (items, evidence, and details) as your original request.
+            </p>
+          </div>
+        }
+      />
+      <ConfirmationModal
         isOpen={returnSubmitConfirmModal.open}
         onClose={closeReturnSubmitConfirmModal}
         onConfirm={confirmReturn}
-        title="Submit Return Request?"
+        title={returnModal.isAppeal ? 'Submit appeal?' : 'Submit Return Request?'}
         type="warning"
         overlayZIndex={3000}
-        confirmText="Yes, Submit Return"
+        confirmText={returnModal.isAppeal ? 'Yes, Submit Appeal' : 'Yes, Submit Return'}
         cancelText="Go Back"
         message={
           <div style={{ textAlign: 'left', lineHeight: 1.6, fontSize: '0.95rem', color: '#374151' }}>
             <p style={{ margin: '0 0 12px 0' }}>
-              You are about to submit a <strong>{returnSubmitConfirmModal.actionType === 'replacement' ? 'replacement' : 'refund'}</strong> request for this order.
+              You are about to submit a <strong>{returnSubmitConfirmModal.actionType === 'replacement' ? 'replacement' : 'refund'}</strong>
+              {returnModal.isAppeal ? ' appeal' : ' request'} for this order.
             </p>
             <p style={{ margin: '0 0 12px 0' }}>
               Make sure your selected items, quantities, evidence, and proof of purchase are correct. This request will be reviewed by our team.
@@ -2659,7 +2820,7 @@ const OrderHistory = () => {
             <div className="order-details-header">
               <div className="order-details-title-section">
                 <h2 className="order-details-title">
-                  {returnModal.isPreReceive ? 'Return Items' : 'Return Order'}
+                  {returnModal.isAppeal ? 'Appeal Return Request' : (returnModal.isPreReceive ? 'Return Items' : 'Return Order')}
                 </h2>
                 <p className="order-details-subtitle">
                   Order #{returnModal.order?.ReferenceNumber || returnModal.orderId}
