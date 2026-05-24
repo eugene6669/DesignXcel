@@ -9,20 +9,7 @@ if (-not (Test-Path $config)) {
     Write-Error "Missing ngrok.yml at $config"
 }
 
-# Winget updates PATH only for new shells — refresh so ngrok is found
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
-            [System.Environment]::GetEnvironmentVariable("Path", "User")
-
-function Resolve-NgrokExe {
-    $cmd = Get-Command ngrok -ErrorAction SilentlyContinue
-    if ($cmd) { return $cmd.Source }
-
-    $wingetNgrok = Get-ChildItem -Path "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Filter "ngrok.exe" -Recurse -ErrorAction SilentlyContinue |
-        Select-Object -First 1 -ExpandProperty FullName
-    if ($wingetNgrok) { return $wingetNgrok }
-
-    return $null
-}
+. "$PSScriptRoot\Resolve-Ngrok.ps1"
 
 $ngrokExe = Resolve-NgrokExe
 if (-not $ngrokExe) {
