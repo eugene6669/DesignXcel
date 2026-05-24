@@ -22,29 +22,51 @@
             return '<span class="return-qty return-qty-' + kind + (n > 0 ? ' has-stock' : '') + '">' + n + '</span>';
         }
 
-        function buildRepairedQtyCellHtml(repairedQty, variationId, variationName, qtySnapshot) {
-            let html = '<div class="return-qty-cell">' + formatReturnQtyHtml(repairedQty, 'repaired');
-            if (isProductReturnsPage && repairedQty > 0 && variationId) {
-                const snap = qtySnapshot || {};
-                html += '<button type="button" class="make-available-variation-btn" data-variation-id="' + variationId + '"' +
-                    ' data-variation-name="' + escapeHtml(variationName || 'Variation') + '"' +
-                    ' data-available-qty="' + (Number(snap.available) || 0) + '"' +
-                    ' data-returned-qty="' + (Number(snap.returned) || 0) + '"' +
-                    ' data-damaged-qty="' + (Number(snap.damaged) || 0) + '"' +
-                    ' data-repaired-qty="' + repairedQty + '"' +
-                    ' data-disposed-qty="' + (Number(snap.disposed) || 0) + '"' +
-                    ' data-inventory-product-id="' + (snap.inventoryProductId || '') + '"' +
-                    ' title="Move quantity from repaired to available stock">Available</button>';
+        /** Total on-hand = available + damaged + repaired; align with parent when one variation. */
+        function resolveVariationStockTotals(variation, parentStock, variationCount) {
+            const baseQuantity = Number(variation.Quantity) || 0;
+            const damagedQty = Number(variation.DamagedQuantity) || 0;
+            const repairedQty = Number(variation.RepairedQuantity) || 0;
+            let availableQty;
+            if (variation.AvailableQuantity === null || variation.AvailableQuantity === undefined) {
+                availableQty = baseQuantity > 0 ? baseQuantity : 0;
+            } else {
+                availableQty = Number(variation.AvailableQuantity) || 0;
             }
-            html += '</div>';
-            return html;
+            const bucketTotal = availableQty + damagedQty + repairedQty;
+            let totalQty = Math.max(bucketTotal, baseQuantity);
+            const parentTotal = Number(parentStock) || 0;
+            if (parentTotal > totalQty && variationCount === 1) {
+                totalQty = parentTotal;
+            }
+            return {
+                availableQty: availableQty,
+                damagedQty: damagedQty,
+                repairedQty: repairedQty,
+                disposedQty: Number(variation.DisposedQuantity) || 0,
+                totalQty: totalQty
+            };
         }
 
-        function buildDamagedQtyCellHtml(damagedQty, variationId, variationName, qtySnapshot) {
-            let html = '<div class="return-qty-cell">' + formatReturnQtyHtml(damagedQty, 'damaged');
-            if (isProductReturnsPage && damagedQty > 0 && variationId) {
-                const snap = qtySnapshot || {};
-                html += '<button type="button" class="repair-variation-btn" data-variation-id="' + variationId + '"' +
+        function buildRepairedQtyCellHtml(repairedQty) {
+            return '<div class="return-qty-cell">' + formatReturnQtyHtml(repairedQty, 'repaired') + '</div>';
+        }
+
+        function buildDamagedQtyCellHtml(damagedQty) {
+            return '<div class="return-qty-cell">' + formatReturnQtyHtml(damagedQty, 'damaged') + '</div>';
+        }
+
+        var PI_SVG_EDIT = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>';
+        var PI_SVG_ARCHIVE = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>';
+        var PI_SVG_REPAIR = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>';
+        var PI_SVG_AVAILABLE = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+
+        function buildReturnRepairActionButtons(variationId, variationName, qtySnapshot, damagedQty, repairedQty) {
+            if (!isProductReturnsPage || !variationId) return '';
+            const snap = qtySnapshot || {};
+            let html = '<div class="return-action-btns" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">';
+            if (damagedQty > 0) {
+                html += '<button type="button" class="repair-variation-btn pi-icon-action-btn pi-icon-repair-btn" data-variation-id="' + variationId + '"' +
                     ' data-variation-name="' + escapeHtml(variationName || 'Variation') + '"' +
                     ' data-available-qty="' + (Number(snap.available) || 0) + '"' +
                     ' data-returned-qty="' + (Number(snap.returned) || 0) + '"' +
@@ -52,14 +74,22 @@
                     ' data-repaired-qty="' + (Number(snap.repaired) || 0) + '"' +
                     ' data-disposed-qty="' + (Number(snap.disposed) || 0) + '"' +
                     ' data-inventory-product-id="' + (snap.inventoryProductId || '') + '"' +
-                    ' title="Move quantity from damaged to repaired">Repair</button>';
+                    ' title="Repair damaged stock">' + PI_SVG_REPAIR + '</button>';
+            }
+            if (repairedQty > 0) {
+                html += '<button type="button" class="make-available-variation-btn pi-icon-action-btn pi-icon-available-btn" data-variation-id="' + variationId + '"' +
+                    ' data-variation-name="' + escapeHtml(variationName || 'Variation') + '"' +
+                    ' data-available-qty="' + (Number(snap.available) || 0) + '"' +
+                    ' data-returned-qty="' + (Number(snap.returned) || 0) + '"' +
+                    ' data-damaged-qty="' + (Number(snap.damaged) || 0) + '"' +
+                    ' data-repaired-qty="' + repairedQty + '"' +
+                    ' data-disposed-qty="' + (Number(snap.disposed) || 0) + '"' +
+                    ' data-inventory-product-id="' + (snap.inventoryProductId || '') + '"' +
+                    ' title="Move repaired stock to available">' + PI_SVG_AVAILABLE + '</button>';
             }
             html += '</div>';
             return html;
         }
-
-        var PI_SVG_EDIT = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>';
-        var PI_SVG_ARCHIVE = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>';
 
         // Show custom popup
         function showCustomPopup(message, isError) {
@@ -247,24 +277,23 @@
                 || (Number(variation.PendingInspectionQty) || 0) > 0;
         }
 
-        function buildFlatVariationRowHtml(variation, productId) {
+        function buildFlatVariationRowHtml(variation, productId, parentStock, variationCount) {
             const imageUrl = getVariationDisplayImageUrl(variation);
             const variationName = variation.VariationName || 'N/A';
             const variationId = variation.VariationID || 0;
             const variationSku = variation.SKU || '—';
             const color = variation.Color || '—';
-            let availableQty = variation.AvailableQuantity;
-            const baseQuantity = variation.Quantity || 0;
-            if ((availableQty === null || availableQty === undefined || availableQty === 0) && baseQuantity > 0) {
-                availableQty = baseQuantity;
-            } else {
-                availableQty = availableQty || 0;
-            }
-            const damagedQty = variation.DamagedQuantity || 0;
+            const stock = resolveVariationStockTotals(
+                variation,
+                parentStock,
+                variationCount != null ? variationCount : 1
+            );
+            const availableQty = stock.availableQty;
+            const damagedQty = stock.damagedQty;
+            const repairedQty = stock.repairedQty;
+            const disposedQty = stock.disposedQty;
+            const totalQty = stock.totalQty;
             const returnedQty = variation.ReturnedQuantity || 0;
-            const repairedQty = variation.RepairedQuantity || 0;
-            const disposedQty = variation.DisposedQuantity || 0;
-            const totalQty = (availableQty + damagedQty) > 0 ? (availableQty + damagedQty) : baseQuantity;
             const price = variation.Price
                 ? '₱' + parseFloat(variation.Price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 : '—';
@@ -310,7 +339,7 @@
 
         function insertFlatVariationRows(productRow, variations, productId) {
             removeFlatVariationRows(productId);
-            const emptyColspan = isProductReturnsPage ? 9 : 7;
+            const emptyColspan = isProductReturnsPage ? 10 : 7;
             if (!variations || !variations.length) {
                 productRow.insertAdjacentHTML('afterend',
                     '<tr class="variation-flat-row variation-flat-empty" data-parent-product-id="' + productId + '">' +
@@ -327,9 +356,15 @@
                     '<td colspan="' + emptyColspan + '" style="padding:8px 28px;color:#888;font-size:0.9em;">No variations with return/damaged/repaired stock</td></tr>');
                 return;
             }
+            let parentStock = 0;
+            const qtyEl = productRow.querySelector('td.qty-col .stock-qty');
+            if (qtyEl) {
+                parentStock = parseInt(String(qtyEl.textContent).replace(/[^\d-]/g, ''), 10) || 0;
+            }
+            const variationCount = list.length;
             let insertAfter = productRow;
             list.forEach(function(variation) {
-                insertAfter.insertAdjacentHTML('afterend', buildFlatVariationRowHtml(variation, productId));
+                insertAfter.insertAdjacentHTML('afterend', buildFlatVariationRowHtml(variation, productId, parentStock, variationCount));
                 insertAfter = insertAfter.nextElementSibling;
             });
         }
@@ -340,6 +375,12 @@
                 const response = await fetch('/api/admin/inventory-product-variations/' + productId);
                 const result = await response.json();
                 if (result.success) {
+                    window.currentProductStockInfo = {
+                        productStock: result.productStock || 0,
+                        availableStock: result.availableStock || 0,
+                        totalVariationQuantity: result.totalVariationQuantity || 0
+                    };
+                    window.currentVariationProductId = productId;
                     insertFlatVariationRows(productRow, filterVariationsForListSearch(result.variations || []), productId);
                 }
             } catch (err) {
@@ -602,6 +643,21 @@ const urlParams = new URLSearchParams(window.location.search);
             }
 
             const rowFlags = getVariationContainerFlags(inventoryProductId);
+            let parentStock = 0;
+            if (window.currentProductStockInfo && String(window.currentVariationProductId) === String(inventoryProductId)) {
+                parentStock = Number(window.currentProductStockInfo.productStock) || 0;
+                const tvq = Number(window.currentProductStockInfo.totalVariationQuantity) || 0;
+                if (tvq > parentStock) parentStock = tvq;
+            }
+            const parentRow = document.querySelector('tr[data-inventory-product-id="' + inventoryProductId + '"]');
+            if (parentRow) {
+                const qtyEl = parentRow.querySelector('td.qty-col .stock-qty');
+                if (qtyEl) {
+                    const rowTotal = parseInt(String(qtyEl.textContent).replace(/[^\d-]/g, ''), 10) || 0;
+                    if (rowTotal > parentStock) parentStock = rowTotal;
+                }
+            }
+            const variationCount = variations.length;
 
             tableBody.innerHTML = variations.map(function(variation) {
                 const imageUrl = getVariationDisplayImageUrl(variation);
@@ -614,22 +670,16 @@ const urlParams = new URLSearchParams(window.location.search);
                     : 'N/A';
                 const variationName = variation.VariationName || 'N/A';
                 const variationId = variation.VariationID || 0;
-                const baseQuantity = variation.Quantity || 0;
-                let availableQty = variation.AvailableQuantity;
-                if ((availableQty === null || availableQty === undefined || availableQty === 0) && baseQuantity > 0) {
-                    availableQty = baseQuantity;
-                } else {
-                    availableQty = availableQty || 0;
-                }
-                const damagedQty = variation.DamagedQuantity || 0;
+                const stock = resolveVariationStockTotals(variation, parentStock, variationCount);
+                const availableQty = stock.availableQty;
+                const damagedQty = stock.damagedQty;
+                const repairedQty = stock.repairedQty;
+                const disposedQty = stock.disposedQty;
+                const totalQty = stock.totalQty;
                 const pendingReturned = Number(variation.PendingInspectionQty) || 0;
                 const returnedQty = isProductReturnsPage
                     ? pendingReturned
                     : (Number(variation.ReturnedQuantity) || 0) + pendingReturned;
-                const repairedQty = variation.RepairedQuantity || 0;
-                const disposedQty = variation.DisposedQuantity || 0;
-                const calculatedTotal = availableQty + damagedQty;
-                const totalQty = calculatedTotal > 0 ? calculatedTotal : baseQuantity;
                 const color = variation.Color || 'N/A';
                 const variationSku = variation.SKU || '—';
                 const showStorefront = variationShowOnStorefront(variation);
@@ -648,23 +698,18 @@ const urlParams = new URLSearchParams(window.location.search);
                 } else if (isProductsListingPage && !isProductReturnsPage) {
                     cells.push({ className: 'qty-col var-col-qty', html: formatStockQty(availableQty) });
                 } else if (isProductReturnsPage || rowFlags.showReturnCols) {
+                    const qtySnap = {
+                        available: availableQty,
+                        returned: returnedQty,
+                        damaged: damagedQty,
+                        repaired: repairedQty,
+                        disposed: disposedQty,
+                        inventoryProductId: inventoryProductId
+                    };
                     cells.push(
                         { className: 'qty-col var-col-qty', html: formatReturnQtyHtml(returnedQty, 'returned') },
-                        { className: 'qty-col var-col-qty', html: buildDamagedQtyCellHtml(damagedQty, variationId, variationName, {
-                            available: availableQty,
-                            returned: returnedQty,
-                            repaired: repairedQty,
-                            disposed: disposedQty,
-                            inventoryProductId: inventoryProductId
-                        }) },
-                        { className: 'qty-col var-col-qty', html: buildRepairedQtyCellHtml(repairedQty, variationId, variationName, {
-                            available: availableQty,
-                            returned: returnedQty,
-                            damaged: damagedQty,
-                            repaired: repairedQty,
-                            disposed: disposedQty,
-                            inventoryProductId: inventoryProductId
-                        }) }
+                        { className: 'qty-col var-col-qty', html: buildDamagedQtyCellHtml(damagedQty) },
+                        { className: 'qty-col var-col-qty', html: buildRepairedQtyCellHtml(repairedQty) }
                     );
                 }
 
@@ -672,6 +717,22 @@ const urlParams = new URLSearchParams(window.location.search);
                     { className: 'var-col-price', style: 'text-align:center', html: price },
                     { className: 'var-col-image', style: 'text-align:center', html: imageHtml }
                 );
+
+                if (isProductReturnsPage) {
+                    const qtySnap = {
+                        available: availableQty,
+                        returned: returnedQty,
+                        damaged: damagedQty,
+                        repaired: repairedQty,
+                        disposed: disposedQty,
+                        inventoryProductId: inventoryProductId
+                    };
+                    cells.push({
+                        className: 'var-col-action return-actions-col',
+                        style: 'text-align:center',
+                        html: buildReturnRepairActionButtons(variationId, variationName, qtySnap, damagedQty, repairedQty)
+                    });
+                }
 
                 if (isProductsListingPage && rowFlags.showSf) {
                     cells.push({

@@ -39,7 +39,7 @@ const statusIcon = (status) => {
   const iconStyle = { width: '16px', height: '16px', marginRight: '8px' };
   
   if (status === 'Cancelled') return <XIcon size={16} color="#ef4444" style={iconStyle} />;
-  if (status === 'Returned') return <ArrowRightIcon size={16} color="#f59e0b" style={iconStyle} />;
+  if (status === 'Return' || status === 'Returned') return <ArrowRightIcon size={16} color="#f59e0b" style={iconStyle} />;
   if (status === 'Refunded') return <CheckCircleIcon size={16} color="#10b981" style={iconStyle} />;
   if (status === 'Declined') return <XIcon size={16} color="#ef4444" style={iconStyle} />;
   if (status === 'Pending') return <ClockIcon size={16} color="#f59e0b" style={iconStyle} />;
@@ -52,7 +52,7 @@ const statusIcon = (status) => {
 
 const statusBorderColor = (status) => {
   if (status === 'Cancelled') return '#ef4444';
-  if (status === 'Returned') return '#f59e0b';
+  if (status === 'Return' || status === 'Returned') return '#f59e0b';
   if (status === 'Refunded') return '#10b981';
   if (status === 'Declined') return '#ef4444';
   if (status === 'Pending') return '#f59e0b';
@@ -67,13 +67,17 @@ const statusBorderColor = (status) => {
 const normalizeStatusDisplay = (status) => {
   if (status === 'Received') return 'Receive';
   if (status === 'To Receive') return 'Receive';
-  if (status === 'Returned') return 'Return';
+  if (status === 'Return') return 'Return';
+  if (status === 'Returned') return 'Returned';
   if (status === 'Refunded' || status === 'Completed Returned') return 'Returned';
   return status;
 };
 
+/** Active return workflow (Return tab) — not terminal Returned */
+const RETURN_TAB_STATUSES = ['Return'];
+
+/** In-progress return workflow after approval — excludes terminal "Returned" (Completed tab) */
 const RETURN_RELATED_STATUSES = [
-  'Returned',
   'Refunded',
   'Completed Returned',
   'Processing (Pickup)',
@@ -90,12 +94,18 @@ const normalizeReturnWorkflowStatus = (status, order) => {
     if (action === 'refund') return 'Process Refund';
     if (action === 'replacement') return 'Process Replacement';
   }
-  if (status === 'Returned') {
+  if (status === 'Return') {
     if (String(order?.ReturnReason || '').startsWith('APPEALED:')) return 'Appealed';
     return 'Return';
   }
+  if (status === 'Returned') return 'Returned';
   if (status === 'Refunded' || status === 'Completed Returned') return 'Returned';
   return status;
+};
+
+const isReturnTabOrder = (order) => {
+  if (!order) return false;
+  return RETURN_TAB_STATUSES.includes(order.Status) || RETURN_RELATED_STATUSES.includes(order.Status);
 };
 
 const RECEIVE_STATUSES = ['Receive', 'Received', 'To Receive'];
@@ -117,6 +127,18 @@ const isDeclinedReturnOrder = (order) => {
   if (!order) return false;
   return order.Status === 'Declined' || String(order.ReturnReason || '').startsWith('DECLINED:');
 };
+
+/** To Receive / Receive / Received — show Return Items and Order Received actions */
+const canShowReceivePhaseActions = (order) => {
+  if (!order) return false;
+  const status = order.Status;
+  if (['Completed', 'Delivered', 'Cancelled', 'Refunded'].includes(status)) return false;
+  if (isReceiveStatus(status)) return true;
+  if (isDeclinedReturnOrder(order)) return true;
+  return false;
+};
+
+const canShowOrderReceivedButton = canShowReceivePhaseActions;
 
 const orderFlow = [
   { key: 'Pending', label: 'Pending' },
@@ -553,6 +575,8 @@ const DetailsModal = ({ open, onClose, order }) => {
                       <span className="info-value">
                         {ReturnType === 'damage'
                           ? 'Damaged Item'
+                          : ReturnType === 'mixed'
+                          ? 'Mixed Reason'
                           : ReturnType === 'wrong_item'
                             ? 'Wrong Item'
                             : 'Other Reason'}
@@ -727,18 +751,8 @@ const DetailsModal = ({ open, onClose, order }) => {
                   isStepCompleted = idx <= 5; // All steps up to and including Completed
                   // Don't show Returned step for declined orders
                 } else if (isReturned) {
-                  // If it's the Returned step, mark it as current
-                  if (step.key === 'Returned') {
-                    isStepCurrent = true;
-                  } 
-                  // If it's before Completed (index < 5), mark as completed
-                  else if (idx < 5) {
-                    isStepCompleted = true;
-                  }
-                  // Completed step should also be marked as completed for returned orders
-                  else if (step.key === 'Completed') {
-                    isStepCompleted = true;
-                  }
+                  isStepCompleted = true;
+                  isStepCurrent = false;
                 } else {
                   // Normal flow for non-returned orders
                   isStepCompleted = idx < statusIndex || (idx === statusIndex && isCompleted);
@@ -1006,7 +1020,7 @@ const OrderHistory = () => {
   const [returnModal, setReturnModal] = useState({ open: false, orderId: null, order: null, isPreReceive: false, isAppeal: false });
   const [returning, setReturning] = useState({});
   const [returnReason, setReturnReason] = useState('');
-  const [returnType, setReturnType] = useState(''); // damage | wrong_item | other
+  const [returnType, setReturnType] = useState(''); // damage | wrong_item | mixed | other
   const [actionType, setActionType] = useState(''); // 'refund' or 'replacement' - what customer wants
   const [selectedItems, setSelectedItems] = useState({}); // For partial returns: {key: {productId, variationId, maxQuantity, returnQuantity}}
   const [returnImage, setReturnImage] = useState(null);
@@ -1532,7 +1546,7 @@ const OrderHistory = () => {
     try {
       const formData = new FormData();
       formData.append('actionType', submitActionType);
-      formData.append('returnType', submitReturnType);
+      formData.append('returnType', String(submitReturnType || '').trim().toLowerCase());
       formData.append('returnReason', submitReturnReason);
       if (isAppeal) {
         formData.append('isAppeal', 'true');
@@ -1570,7 +1584,7 @@ const OrderHistory = () => {
         setOrders((prev) => prev.map((o) => (o.OrderID === orderId
           ? {
             ...o,
-            Status: 'Returned',
+            Status: 'Return',
             ActionType: submitActionType,
             ReturnType: submitReturnType,
             ReturnReason: isAppeal ? `APPEALED: ${submitReturnReason}` : submitReturnReason,
@@ -1920,9 +1934,15 @@ const OrderHistory = () => {
 
   let filteredOrders = orders;
   if (activeTab === 'completed') {
-    filteredOrders = orders.filter(order => order.Status === 'Completed' || order.Status === 'Delivered');
+    filteredOrders = orders.filter(order =>
+      order.Status === 'Completed' ||
+      order.Status === 'Delivered' ||
+      order.Status === 'Returned' ||
+      order.Status === 'Refunded' ||
+      order.Status === 'Completed Returned'
+    );
   } else if (activeTab === 'returned') {
-    filteredOrders = orders.filter(order => RETURN_RELATED_STATUSES.includes(order.Status));
+    filteredOrders = orders.filter(isReturnTabOrder);
   } else if (activeTab === 'cancelled') {
     filteredOrders = orders.filter(order => order.Status === 'Cancelled');
   } else if (activeTab === 'pending') {
@@ -2263,26 +2283,50 @@ const OrderHistory = () => {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 {isDeclinedReturnOrder(order) && (
-                  <button
-                    type="button"
-                    onClick={() => openAppealConfirmModal(order.OrderID)}
-                    disabled={returning[order.OrderID]}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: '16px',
-                      border: 'none',
-                      background: '#8b5cf6',
-                      color: '#ffffff',
-                      fontWeight: '600',
-                      fontSize: '12px',
-                      cursor: returning[order.OrderID] ? 'not-allowed' : 'pointer',
-                      opacity: returning[order.OrderID] ? 0.7 : 1,
-                      whiteSpace: 'nowrap'
-                    }}
-                    title="Submit an appeal to re-open your declined return request"
-                  >
-                    {returning[order.OrderID] ? 'Submitting…' : 'Appeal'}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => openAppealConfirmModal(order.OrderID)}
+                      disabled={returning[order.OrderID]}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '16px',
+                        border: 'none',
+                        background: '#8b5cf6',
+                        color: '#ffffff',
+                        fontWeight: '600',
+                        fontSize: '12px',
+                        cursor: returning[order.OrderID] ? 'not-allowed' : 'pointer',
+                        opacity: returning[order.OrderID] ? 0.7 : 1,
+                        whiteSpace: 'nowrap'
+                      }}
+                      title="Submit an appeal to re-open your declined return request"
+                    >
+                      {returning[order.OrderID] ? 'Submitting…' : 'Appeal'}
+                    </button>
+                    {canShowOrderReceivedButton(order) && (
+                      <button
+                        type="button"
+                        disabled={receiving[order.OrderID]}
+                        onClick={() => openReceiveConfirmModal(order)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '16px',
+                          border: 'none',
+                          background: '#10b981',
+                          color: '#ffffff',
+                          fontWeight: '600',
+                          fontSize: '12px',
+                          cursor: receiving[order.OrderID] ? 'not-allowed' : 'pointer',
+                          opacity: receiving[order.OrderID] ? 0.7 : 1,
+                          whiteSpace: 'nowrap'
+                        }}
+                        title="Confirm you received the order (items correct and undamaged)"
+                      >
+                        {receiving[order.OrderID] ? 'Processing…' : 'Receive'}
+                      </button>
+                    )}
+                  </>
                 )}
                 <span style={{
                   display: 'inline-flex',
@@ -2661,21 +2705,21 @@ const OrderHistory = () => {
                   </button>
                 )}
                 
-                {(order.Status === 'Receive' || order.Status === 'Received' || order.Status === 'To Receive') && (
+                {canShowReceivePhaseActions(order) && !isDeclinedReturnOrder(order) && (
                   <>
                     <button
                       className="btn btn-primary"
                       onClick={() => handleReturnOrder(order.OrderID)}
-                      disabled={returning[order.OrderID] || order.Status === 'Returned' || !isWithinReturnWindow(order)}
+                      disabled={returning[order.OrderID] || isReturnTabOrder(order) || !isWithinReturnWindow(order)}
                       style={{
                         padding: '8px 12px',
                         borderRadius: '6px',
                         border: 'none',
-                        background: order.Status === 'Returned' ? '#9ca3af' : '#f59e0b',
+                        background: isReturnTabOrder(order) ? '#9ca3af' : '#f59e0b',
                         color: '#ffffff',
                         fontSize: '12px',
                         fontWeight: '600',
-                        cursor: order.Status === 'Returned' ? 'not-allowed' : 'pointer',
+                        cursor: isReturnTabOrder(order) ? 'not-allowed' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '5px',
@@ -2686,7 +2730,7 @@ const OrderHistory = () => {
                         ? `Refund or replacement within ${RETURN_POLICY.timeframeDays}-day window — seller pays return shipping`
                         : `${RETURN_POLICY.timeframeDays}-day return window ended — contact customer service`}
                     >
-                      {returning[order.OrderID] ? 'Processing...' : RETURN_RELATED_STATUSES.includes(order.Status) ? normalizeStatusDisplay(order.Status) : 'Return Items'}
+                      {returning[order.OrderID] ? 'Processing...' : isReturnTabOrder(order) ? normalizeStatusDisplay(order.Status) : 'Return Items'}
                     </button>
                     <button
                       className="btn btn-success"
@@ -3176,6 +3220,17 @@ const OrderHistory = () => {
                       style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                     />
                     <span style={{ fontWeight: '500', color: '#111827' }}>Wrong Item</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', transition: 'all 0.2s', backgroundColor: returnType === 'mixed' ? '#fef3c7' : '#ffffff' }}>
+                    <input
+                      type="radio"
+                      name="returnType"
+                      value="mixed"
+                      checked={returnType === 'mixed'}
+                      onChange={(e) => setReturnType(e.target.value)}
+                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                    />
+                    <span style={{ fontWeight: '500', color: '#111827' }}>Mixed Reason Type</span>
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '12px', border: '2px solid #e5e7eb', borderRadius: '8px', transition: 'all 0.2s', backgroundColor: returnType === 'other' ? '#fef3c7' : '#ffffff' }}>
                     <input

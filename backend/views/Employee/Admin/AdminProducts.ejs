@@ -1174,8 +1174,25 @@
                 }
             }
 
+            function resolveInventoryProductId(el) {
+                if (!el) return '';
+                const fromBtn = el.getAttribute('data-inventory-product-id') || el.dataset.inventoryProductId || '';
+                if (fromBtn && fromBtn !== 'undefined') return fromBtn;
+                const row = el.closest('[data-inventory-product-id]');
+                if (row) {
+                    const fromRow = row.getAttribute('data-inventory-product-id') || '';
+                    if (fromRow && fromRow !== 'undefined') return fromRow;
+                }
+                return '';
+            }
+
             function openInventoryDiscountModal(inventoryProductId, productName, productPrice) {
-                document.getElementById('inventory-discount-product-id').value = inventoryProductId;
+                const id = String(inventoryProductId || '').trim();
+                if (!id || id === 'undefined') {
+                    showPopup('Could not determine product ID. Refresh the page and try again.', true);
+                    return;
+                }
+                document.getElementById('inventory-discount-product-id').value = id;
                 document.getElementById('inventoryDiscountProductLabel').textContent = productName || '';
                 inventoryDiscountProductPrice = parseFloat(productPrice) || 0;
                 const now = new Date();
@@ -1221,22 +1238,31 @@
                 const addBtn = e.target.closest('.add-inventory-discount-btn');
                 if (addBtn) {
                     openInventoryDiscountModal(
-                        addBtn.dataset.inventoryProductId,
-                        addBtn.dataset.productName,
-                        addBtn.dataset.productPrice
+                        resolveInventoryProductId(addBtn),
+                        addBtn.getAttribute('data-product-name') || addBtn.dataset.productName,
+                        addBtn.getAttribute('data-product-price') || addBtn.dataset.productPrice
                     );
                     return;
                 }
                 const remBtn = e.target.closest('.remove-inventory-discount-btn');
                 if (remBtn) {
-                    removeInventoryDiscount(remBtn.dataset.inventoryProductId, remBtn.dataset.productName);
+                    const remId = resolveInventoryProductId(remBtn);
+                    if (!remId) {
+                        showPopup('Could not determine product ID. Refresh the page and try again.', true);
+                        return;
+                    }
+                    removeInventoryDiscount(remId, remBtn.getAttribute('data-product-name') || remBtn.dataset.productName);
                 }
             });
 
             if (form) {
                 form.addEventListener('submit', async function(e) {
                     e.preventDefault();
-                    const inventoryProductId = document.getElementById('inventory-discount-product-id').value;
+                    const inventoryProductId = String(document.getElementById('inventory-discount-product-id').value || '').trim();
+                    if (!inventoryProductId || inventoryProductId === 'undefined') {
+                        showPopup('Missing product ID. Close the modal and use Add discount on a product row again.', true);
+                        return;
+                    }
                     const discountType = typeEl.value;
                     const discountValue = parseFloat(document.getElementById('inventory-discount-value').value);
                     const startDate = document.getElementById('inventory-discount-start').value;

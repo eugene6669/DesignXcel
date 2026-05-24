@@ -1417,6 +1417,15 @@
             if (current) select.value = current;
         }
 
+        function renderInventoryStatusBadge(status) {
+            const normalizedStatus = String(status || '').toLowerCase();
+            const statusClass = normalizedStatus.includes('out') ? 'badge-danger'
+                : normalizedStatus.includes('low') ? 'badge-warning'
+                : normalizedStatus.includes('no available') ? 'badge-info'
+                : 'badge-success';
+            return `<span class="badge ${statusClass}">${status || 'Active'}</span>`;
+        }
+
         function renderInventoryTable(data) {
             const tbody = document.getElementById('inventory-tbody');
             if (!data || data.length === 0) {
@@ -1424,37 +1433,67 @@
                 return;
             }
 
-            tbody.innerHTML = data.map(item => {
-                const normalizedStatus = String(item.Status || '').toLowerCase();
-                const statusClass = normalizedStatus.includes('out') ? 'badge-danger'
-                    : normalizedStatus.includes('low') ? 'badge-warning'
-                    : normalizedStatus.includes('no available') ? 'badge-info'
-                    : 'badge-success';
-                const statusText = item.Status || 'Active';
-                
-                const rowType = item.RowType || 'Parent';
-                const isParent = rowType === 'Parent';
-                const nameCell = rowType === 'Variation'
-                    ? `<span style="padding-left:12px;color:#555;">↳ ${item.Name || 'N/A'}</span>`
-                    : `<strong>${item.Name || 'N/A'}</strong>`;
-                const skuCell = isParent ? '—' : (item.SKU || '—');
-                const priceCell = isParent
-                    ? '—'
-                    : `₱${Number(item.Price || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}`;
-                return `
-                    <tr>
-                        <td><span class="badge ${rowType === 'Variation' ? 'badge-info' : 'badge-success'}">${rowType}</span></td>
-                        <td>${nameCell}</td>
-                        <td>${skuCell}</td>
-                        <td>${item.CategoryName || 'N/A'}</td>
-                        <td>${item.AvailableQuantity ?? 0}</td>
-                        <td>${item.StockQuantity || 0}</td>
-                        <td>${priceCell}</td>
-                        <td><span class="badge ${statusClass}">${statusText}</span></td>
-                        <td>${item.LastUpdated ? new Date(item.LastUpdated).toLocaleDateString() : 'N/A'}</td>
+            const parents = data.filter(item => (item.RowType || 'Parent') === 'Parent');
+            const variationsByParent = {};
+            data.filter(item => item.RowType === 'Variation').forEach(v => {
+                const pid = v.InventoryProductID;
+                if (!variationsByParent[pid]) variationsByParent[pid] = [];
+                variationsByParent[pid].push(v);
+            });
+
+            const rowsHtml = [];
+            parents.forEach(parent => {
+                const pid = parent.InventoryProductID;
+                const variations = variationsByParent[pid] || [];
+                const hasChildren = parent.HasVariations && variations.length > 0;
+                const toggleBtn = hasChildren
+                    ? `<button type="button" class="inv-report-toggle" data-parent-id="${pid}" aria-expanded="false" title="Show variations" style="background:none;border:none;cursor:pointer;padding:0 6px 0 0;font-size:12px;line-height:1;">▶</button>`
+                    : '<span style="display:inline-block;width:18px;"></span>';
+                rowsHtml.push(`
+                    <tr class="inv-parent-row" data-parent-id="${pid}">
+                        <td><span class="badge badge-success">Parent</span></td>
+                        <td>${toggleBtn}<strong>${parent.Name || 'N/A'}</strong>${hasChildren ? ` <span style="color:#6b7280;font-size:0.85em;">(${variations.length} variation${variations.length === 1 ? '' : 's'})</span>` : ''}</td>
+                        <td>—</td>
+                        <td>${parent.CategoryName || 'N/A'}</td>
+                        <td>${parent.AvailableQuantity ?? 0}</td>
+                        <td>${parent.StockQuantity || 0}</td>
+                        <td>—</td>
+                        <td>${renderInventoryStatusBadge(parent.Status)}</td>
+                        <td>${parent.LastUpdated ? new Date(parent.LastUpdated).toLocaleDateString() : 'N/A'}</td>
                     </tr>
-                `;
-            }).join('');
+                `);
+                if (hasChildren) {
+                    variations.forEach(v => {
+                        rowsHtml.push(`
+                            <tr class="inv-var-row" data-parent-id="${pid}" style="display:none;">
+                                <td><span class="badge badge-info">Variation</span></td>
+                                <td><span style="padding-left:28px;color:#555;">↳ ${v.Name || 'N/A'}</span></td>
+                                <td>${v.SKU || '—'}</td>
+                                <td>${v.CategoryName || parent.CategoryName || 'N/A'}</td>
+                                <td>${v.AvailableQuantity ?? 0}</td>
+                                <td>${v.StockQuantity || 0}</td>
+                                <td>₱${Number(v.Price || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                                <td>${renderInventoryStatusBadge(v.Status)}</td>
+                                <td>${v.LastUpdated ? new Date(v.LastUpdated).toLocaleDateString() : 'N/A'}</td>
+                            </tr>
+                        `);
+                    });
+                }
+            });
+
+            tbody.innerHTML = rowsHtml.join('');
+
+            tbody.querySelectorAll('.inv-report-toggle').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const parentId = btn.getAttribute('data-parent-id');
+                    const expanded = btn.getAttribute('aria-expanded') === 'true';
+                    btn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+                    btn.textContent = expanded ? '▶' : '▼';
+                    tbody.querySelectorAll(`tr.inv-var-row[data-parent-id="${parentId}"]`).forEach(row => {
+                        row.style.display = expanded ? 'none' : '';
+                    });
+                });
+            });
         }
 
         function renderRawMaterialsTable(data) {
@@ -1843,15 +1882,6 @@
                 return;
             }
 
-            // Debug: Log first order to see what data we're receiving
-            if (data.length > 0) {
-                console.log('[SALES REPORT FRONTEND] First order data:', data[0]);
-                console.log('[SALES REPORT FRONTEND] First order TotalDiscounts:', data[0].TotalDiscounts);
-                console.log('[SALES REPORT FRONTEND] First order OrderItems:', data[0].OrderItems);
-                console.log('[SALES REPORT FRONTEND] First order OrderItems type:', typeof data[0].OrderItems);
-                console.log('[SALES REPORT FRONTEND] First order OrderItems length:', data[0].OrderItems ? data[0].OrderItems.length : 'N/A');
-            }
-
             tbody.innerHTML = data.map(item => {
                 const statusClass = item.Status === 'Completed' || item.Status === 'Received' ? 'badge-success' :
                                    item.Status === 'Cancelled' || item.Status === 'Returned' || (item.Status && (item.Status.toLowerCase() === 'returned' || item.Status.toLowerCase() === 'return')) ? 'badge-danger' :
@@ -1865,11 +1895,6 @@
                 // If TotalTaxes is not available, fallback to 0
                 const tax = item.TotalTaxes || 0;
                 
-                // Debug: Log if discount is 0 but we expect it to have a value
-                if (item.OrderID && discount === 0 && item.TotalAmount > 0) {
-                    console.log(`[SALES REPORT FRONTEND] Order ${item.OrderID} has TotalDiscounts:`, item.TotalDiscounts, 'TotalAmount:', item.TotalAmount);
-                }
-                
                 // Format order items count for display
                 let orderItemsCount = item.TotalItems || 0;
                 if (item.OrderItems && Array.isArray(item.OrderItems)) {
@@ -1878,11 +1903,6 @@
                 
                 // Format product names and quantities for display
                 let productNamesQuantitiesHtml = 'N/A';
-                
-                // Debug: Log the item structure
-                if (item.OrderID && !item.OrderItems) {
-                    console.log(`[SALES REPORT FRONTEND] Order ${item.OrderID} has no OrderItems property. Available keys:`, Object.keys(item));
-                }
                 
                 if (item.OrderItems && Array.isArray(item.OrderItems) && item.OrderItems.length > 0) {
                     productNamesQuantitiesHtml = item.OrderItems.map(orderItem => {
@@ -1894,8 +1914,6 @@
                     // Fallback message if OrderItems array is not available
                     productNamesQuantitiesHtml = `${item.TotalItems} item(s) - Details not available`;
                 } else if (item.OrderItems && !Array.isArray(item.OrderItems)) {
-                    // Handle case where OrderItems might be an object or string
-                    console.warn(`[SALES REPORT FRONTEND] Order ${item.OrderID} has OrderItems but it's not an array:`, typeof item.OrderItems, item.OrderItems);
                     productNamesQuantitiesHtml = item.TotalItems ? `${item.TotalItems} item(s) - Details not available` : 'N/A';
                 }
                 

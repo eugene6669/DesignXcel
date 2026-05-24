@@ -36,8 +36,11 @@ function returnedOrderStatusLabel(order) {
     if (status === 'Processing (Pickup)' || (status === 'Processing' && order?.ActionType)) {
         return 'Process Pickup';
     }
-    if (status === 'Returned') {
+    if (status === 'Return') {
         return isAppealedReturn(order) ? 'Appealed' : 'Return';
+    }
+    if (status === 'Returned') {
+        return 'Returned';
     }
     if (status === 'Declined') return 'Declined';
     return status || 'Returned';
@@ -60,6 +63,7 @@ function returnReasonTypeLabel(returnType) {
     const t = String(returnType || '').toLowerCase().trim();
     if (t === 'damage') return 'Damaged Item';
     if (t === 'wrong_item') return 'Wrong Item';
+    if (t === 'mixed') return 'Mixed Reason Type';
     if (t === 'other') return 'Other Reason';
     return returnType ? String(returnType) : '—';
 }

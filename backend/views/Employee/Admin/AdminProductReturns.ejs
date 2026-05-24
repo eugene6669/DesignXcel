@@ -923,6 +923,46 @@
             background: #15803d;
             color: #fff;
         }
+        .pi-icon-action-btn {
+            border: none;
+            border-radius: 6px;
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, transform 0.15s;
+            vertical-align: middle;
+        }
+        .pi-icon-action-btn svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            flex-shrink: 0;
+        }
+        .pi-icon-repair-btn {
+            background: #fff7ed;
+            color: #b45309;
+            border: 1px solid #b45309;
+        }
+        .pi-icon-repair-btn:hover {
+            background: #b45309;
+            color: #fff;
+        }
+        .pi-icon-available-btn {
+            background: #f0fdf4;
+            color: #15803d;
+            border: 1px solid #15803d;
+        }
+        .pi-icon-available-btn:hover {
+            background: #15803d;
+            color: #fff;
+        }
+        .return-actions-col {
+            min-width: 88px;
+        }
     </style>
 </head>
 <body class="page-product-returns">
@@ -1033,7 +1073,7 @@
                     formatListDate: function(v) { return fmtDate(v, 'N/A'); },
                     showReturnColumns: true,
                     showActions: false,
-                    showVariationActions: false,
+                    showVariationActions: true,
                     showStorefront: false,
                     showDiscount: false,
                     emptyListMessage: 'No products have active variations with returned, damaged, or repaired stock.'
@@ -1065,6 +1105,6 @@
         </div>
     </div>
     <%- include('partials/repair-variation-modal') %>
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260524l" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260524o" defer></script>
 </body>
 </html>

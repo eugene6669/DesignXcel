@@ -113,7 +113,7 @@ const INVENTORY_PRODUCT_LIST_CORE = `
         ip.DateAdded,
         COALESCE(vlast.LastVariationAdded, ip.DateAdded) AS LastDateAdded,
         CASE WHEN vagg.HasActiveVariations = 1 THEN vagg.VariationTotalSum
-            ELSE (COALESCE(ip.AvailableQuantity, 0) + COALESCE(ip.DamagedQuantity, 0)) END as TotalQuantity,
+            ELSE (COALESCE(ip.AvailableQuantity, 0) + COALESCE(ip.DamagedQuantity, 0) + COALESCE(ip.RepairedQuantity, 0)) END as TotalQuantity,
         CASE WHEN vagg.HasActiveVariations = 1 THEN vagg.VariationSellableSum
             ELSE COALESCE(ip.AvailableQuantity, 0) END as AvailableQuantity,
         CASE WHEN vagg.HasActiveVariations = 1 THEN vagg.VariationDamagedSum
@@ -174,6 +174,7 @@ const INVENTORY_PRODUCT_LIST_CORE = `
                     CASE WHEN iv2.AvailableQuantity IS NULL OR iv2.AvailableQuantity = 0
                         THEN COALESCE(iv2.Quantity, 0) ELSE iv2.AvailableQuantity END
                     + COALESCE(iv2.DamagedQuantity, 0)
+                    + COALESCE(iv2.RepairedQuantity, 0)
                 )
                 FROM InventoryProductVariations iv2
                 WHERE iv2.InventoryProductID = ip.InventoryProductID AND iv2.IsActive = 1
@@ -711,7 +712,10 @@ function mapVariationStockFields(row) {
         availableQty = Number(availableQty) || 0;
     }
     const damagedQty = Number(row.DamagedQuantity) || 0;
-    const totalQty = (availableQty + damagedQty) > 0 ? (availableQty + damagedQty) : baseQuantity;
+    const repairedQty = Number(row.RepairedQuantity) || 0;
+    const totalQty = (availableQty + damagedQty + repairedQty) > 0
+        ? (availableQty + damagedQty + repairedQty)
+        : baseQuantity;
     return { availableQty, totalQty, damagedQty, baseQuantity };
 }
 

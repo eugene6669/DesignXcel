@@ -36,6 +36,8 @@
 
         if (t === 'wrong_item') return 'Wrong Item';
 
+        if (t === 'mixed') return 'Mixed Reason Type';
+
         if (t === 'other') return 'Other Reason';
 
         return type || '—';
@@ -93,10 +95,16 @@
         return t === 'damage' || t === 'damaged';
     }
 
+    function isMixedReturnType() {
+        return inspectReturnTypeNorm() === 'mixed';
+    }
+
     function updateInspectHintText() {
         const hint = document.getElementById('returnInspectHint');
         if (!hint) return;
-        if (isWrongItemReturnType()) {
+        if (isMixedReturnType()) {
+            hint.innerHTML = 'Mixed return: enter <strong>Damaged</strong>, <strong>Bad item</strong>, and <strong>Good item</strong> quantities. Damaged and bad units go to damaged stock; good units restock to available.';
+        } else if (isWrongItemReturnType()) {
             hint.innerHTML = 'Wrong item return: classify each unit as <strong>Good Item</strong> (restock to available) or <strong>Bad Item</strong> (damaged stock). Totals must match returned quantity.';
         } else if (isDamageReturnType()) {
             hint.innerHTML = 'Damaged item return: mark units as <strong>Damaged</strong>. They will go to damaged stock on Product Returns.';
@@ -195,7 +203,25 @@
 
             let wrongItemQty = parseInt(wrongInput?.value, 10) || 0;
 
-            if (isWrongItemReturnType()) {
+            let mixedDamagedQty = 0;
+
+            let mixedBadQty = 0;
+
+            let mixedGoodQty = 0;
+
+            if (isMixedReturnType()) {
+
+                mixedDamagedQty = parseInt(damagedInput?.value, 10) || 0;
+
+                mixedBadQty = parseInt(badInput?.value, 10) || 0;
+
+                mixedGoodQty = parseInt(goodInput?.value, 10) || 0;
+
+                damagedQty = mixedDamagedQty + mixedBadQty;
+
+                wrongItemQty = mixedGoodQty;
+
+            } else if (isWrongItemReturnType()) {
 
                 wrongItemQty = parseInt(goodInput?.value, 10) || 0;
 
@@ -217,7 +243,13 @@
 
                 damagedQty: damagedQty,
 
-                wrongItemQty: wrongItemQty
+                wrongItemQty: wrongItemQty,
+
+                mixedDamagedQty: mixedDamagedQty,
+
+                mixedBadQty: mixedBadQty,
+
+                mixedGoodQty: mixedGoodQty
 
             });
 
@@ -241,7 +273,17 @@
 
             const it = items[i];
 
-            if (it.damagedQty + it.wrongItemQty !== it.quantity) {
+            if (isMixedReturnType()) {
+
+                const sum = (it.mixedDamagedQty || 0) + (it.mixedBadQty || 0) + (it.mixedGoodQty || 0);
+
+                if (sum !== it.quantity) {
+
+                    return 'For each variant, damaged + bad item + good item must equal returned quantity (' + it.quantity + ').';
+
+                }
+
+            } else if (it.damagedQty + it.wrongItemQty !== it.quantity) {
 
                 if (isWrongItemReturnType()) {
 
@@ -305,6 +347,13 @@
 
     function buildInspectQtyRow(item, index) {
         const q = item.quantity;
+        if (isMixedReturnType()) {
+            return '<div class="return-inspect-qty-row return-inspect-qty-row-mixed">' +
+                '<div><label>Damaged qty</label><input type="number" class="inspect-damaged-qty" min="0" max="' + q + '" value="0"></div>' +
+                '<div><label>Bad item qty</label><input type="number" class="inspect-bad-qty" min="0" max="' + q + '" value="0"></div>' +
+                '<div><label>Good item qty</label><input type="number" class="inspect-good-qty" min="0" max="' + q + '" value="0"></div>' +
+                '</div>';
+        }
         if (isWrongItemReturnType()) {
             return '<div class="return-inspect-qty-row">' +
                 '<div><label>Good item qty</label><input type="number" class="inspect-good-qty" min="0" max="' + q + '" value="0"></div>' +
@@ -497,6 +546,24 @@
         let b = parseInt(badInput?.value, 10) || 0;
 
         const active = document.activeElement;
+
+        if (isMixedReturnType()) {
+
+            let total = d + b + g;
+
+            if (total > item.quantity && active) {
+
+                const others = total - (parseInt(active.value, 10) || 0);
+
+                const room = Math.max(0, item.quantity - others);
+
+                active.value = String(Math.min(parseInt(active.value, 10) || 0, room));
+
+            }
+
+            return;
+
+        }
 
         if (isWrongItemReturnType()) {
 

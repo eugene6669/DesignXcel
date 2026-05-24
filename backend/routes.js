@@ -878,7 +878,7 @@ module.exports = function (sql, pool, getStripe = null) {
             const returned = returnedSplit[i] || 0;
             const repaired = repairedSplit[i] || 0;
             const disposed = disposedSplit[i] || 0;
-            const totalQty = available + damaged;
+            const totalQty = available + damaged + repaired;
 
             const updateReq = transaction ? transaction.request() : pool.request();
             await updateReq
@@ -17285,7 +17285,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                 oi.VariationID,
                                 oi.Quantity,
                                 oi.PriceAtPurchase,
-                                ISNULL(p.Name, 'Unknown Product') AS ProductName,
+                                COALESCE(NULLIF(LTRIM(RTRIM(oi.Name)), ''), p.Name, 'Unknown Product') AS ProductName,
                                 ISNULL(pv.VariationName, '') AS VariationName
                             FROM OrderItems oi
                             LEFT JOIN Products p ON oi.ProductID = p.ProductID
@@ -21921,7 +21921,7 @@ module.exports = function (sql, pool, getStripe = null) {
     const returnedOrdersConfig = {
         route: 'ReturnedOrders',
         status: 'Returned',
-        includeStatuses: ['Returned', 'Processing (Pickup)', 'Awaiting Inspection', 'Inspection Complete', 'Pickup Received', 'Declined', 'Completed Returned', 'Refunded']
+        includeStatuses: ['Return', 'Returned', 'Processing (Pickup)', 'Awaiting Inspection', 'Inspection Complete', 'Pickup Received', 'Declined', 'Completed Returned', 'Refunded']
     };
 
     const legacyOrderRedirects = [
@@ -25235,7 +25235,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             .input('productId', sql.Int, requestedProductId)
                             .query(`
                                 SELECT InventoryProductID,
-                                       COALESCE(AvailableQuantity, 0) + COALESCE(DamagedQuantity, 0) as TotalQuantity,
+                                       COALESCE(AvailableQuantity, 0) + COALESCE(DamagedQuantity, 0) + COALESCE(RepairedQuantity, 0) as TotalQuantity,
                                        COALESCE(AvailableQuantity, 0) as AvailableQuantity
                                 FROM InventoryProducts
                                 WHERE ProductID = @productId AND IsActive = 1
@@ -25262,7 +25262,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             .query(`
                                 SELECT 
                                     InventoryProductID,
-                                    COALESCE(AvailableQuantity, 0) + COALESCE(DamagedQuantity, 0) as TotalQuantity,
+                                    COALESCE(AvailableQuantity, 0) + COALESCE(DamagedQuantity, 0) + COALESCE(RepairedQuantity, 0) as TotalQuantity,
                                     COALESCE(AvailableQuantity, 0) as AvailableQuantity
                                 FROM InventoryProducts
                                 WHERE InventoryProductID = @productId AND IsActive = 1
@@ -25291,12 +25291,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                 v.SKU,
                                 v.Color,
                                 v.Quantity,
-                                -- If AvailableQuantity is NULL or 0, use Quantity; otherwise use AvailableQuantity
-                                CASE 
-                                    WHEN v.AvailableQuantity IS NULL OR v.AvailableQuantity = 0 
-                                    THEN v.Quantity
-                                    ELSE v.AvailableQuantity
-                                END as AvailableQuantity,
+                                COALESCE(v.AvailableQuantity, 0) as AvailableQuantity,
                                 ISNULL(v.DamagedQuantity, 0) as DamagedQuantity,
                                 ISNULL(v.ReturnedQuantity, 0) as ReturnedQuantity,
                                 ISNULL(v.RepairedQuantity, 0) as RepairedQuantity,
@@ -25346,9 +25341,17 @@ module.exports = function (sql, pool, getStripe = null) {
                         console.log('[INVENTORY VARIATIONS API] parent recipe:', recipeLoadErr.message);
                     }
 
-                    // Get total variation quantity used (already filtered by IsActive = 1 in query)
-                    const totalVariationQuantity = result.recordset
-                        .reduce((sum, v) => sum + (v.Quantity || 0), 0);
+                    // Physical total per variation (available + damaged + repaired)
+                    const totalVariationQuantity = result.recordset.reduce((sum, v) => {
+                        const avail = Number(v.AvailableQuantity) || 0;
+                        const damaged = Number(v.DamagedQuantity) || 0;
+                        const repaired = Number(v.RepairedQuantity) || 0;
+                        const qty = Number(v.Quantity) || 0;
+                        return sum + Math.max(avail + damaged + repaired, qty);
+                    }, 0);
+                    if (isInventoryProductID && productStock < totalVariationQuantity) {
+                        productStock = totalVariationQuantity;
+                    }
 
                     await ensureVariationMediaColumns(pool);
                     const variations = [];
@@ -26060,10 +26063,10 @@ module.exports = function (sql, pool, getStripe = null) {
                         });
                     }
 
-                    // Validation: Total = Available + Damaged (same logic as product inventory)
-                    const totalQty = availableQty + damagedQty;
+                    // Total on-hand units = available + damaged + repaired (moving damaged→repaired must not reduce total)
+                    const totalQty = availableQty + damagedQty + repairedQty;
 
-                    console.log('Calculated total quantity:', totalQty, '(Available:', availableQty, '+ Damaged:', damagedQty, ')');
+                    console.log('Calculated total quantity:', totalQty, '(Available:', availableQty, '+ Damaged:', damagedQty, '+ Repaired:', repairedQty, ')');
 
                     // Check if variation exists
                     const variationCheck = await pool.request()
@@ -26089,7 +26092,13 @@ module.exports = function (sql, pool, getStripe = null) {
                     const variationBefore = variationCheck.recordset[0];
                     const inventoryProductId = variationBefore.InventoryProductID;
                     const oldQuantity = variationBefore.Quantity || 0;
-                    const stockDelta = (catalogOnly || inventoryEdit) ? 0 : (totalQty - oldQuantity);
+                    const notesStrEarly = String(notes || '');
+                    const isReturnBucketTransfer = /Repair from damaged/i.test(notesStrEarly)
+                        || /Repaired → available/i.test(notesStrEarly);
+                    let stockDelta = (catalogOnly || inventoryEdit) ? 0 : (totalQty - oldQuantity);
+                    if (isReturnBucketTransfer) {
+                        stockDelta = 0;
+                    }
 
                     if (catalogOnly && !variationNameUpdate && !hasNewThumbs && !hasNewModel && !hasNewMain) {
                         return res.json({
@@ -26287,7 +26296,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         ? await buildInventoryStockRefreshPayload(pool, inventoryProductId)
                         : {};
                     const vLabel = variationBefore.VariationName || `Variation #${parsedVariationID}`;
-                    const notesStr = String(notes || '');
+                    const notesStr = notesStrEarly;
                     let logAction = 'UPDATE';
                     let logDescription = `Updated stock for "${vLabel}" (Variation #${parsedVariationID}): available ${availableQty}, total ${totalQty}`;
                     if (!catalogOnly && !inventoryEdit) {
@@ -29213,14 +29222,19 @@ module.exports = function (sql, pool, getStripe = null) {
             return res.status(400).json({ success: false, message: 'Invalid action type. Must be "refund" or "replacement".' });
         }
 
-        if (!returnType || !returnReason) {
+        if (!returnReason || !String(returnReason).trim()) {
             return res.status(400).json({ success: false, message: 'Return type and reason are required.' });
         }
 
-        if (returnType !== 'damage' && returnType !== 'other' && returnType !== 'wrong_item') {
+        const VALID_CUSTOMER_RETURN_TYPES = ['damage', 'wrong_item', 'mixed', 'other'];
+        returnType = String(returnType || '').trim().toLowerCase();
+        if (returnType === 'damaged') returnType = 'damage';
+        if (returnType === 'wrong item' || returnType === 'wrongitem') returnType = 'wrong_item';
+
+        if (!returnType || !VALID_CUSTOMER_RETURN_TYPES.includes(returnType)) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid return type. Must be "damage", "wrong_item", or "other".'
+                message: 'Invalid return type. Must be "damage", "wrong_item", "mixed", or "other".'
             });
         }
 
@@ -29440,7 +29454,7 @@ module.exports = function (sql, pool, getStripe = null) {
             // Store return conditions and proof of purchase
             let updateQuery = `
                 UPDATE Orders 
-                SET Status = 'Returned',
+                SET Status = 'Return',
                     ReturnType = @returnType,
                     ReturnReason = @returnReason,
                     ActionType = @actionType
@@ -30234,6 +30248,7 @@ module.exports = function (sql, pool, getStripe = null) {
             let paymongoRefundId = null;
             let refundError = null;
             let refundAmount = 0;
+            let paymentIdForDisplay = null;
 
             // Get RefundAmount from database (set during return approval)
             // This amount already accounts for partial returns and deductions
@@ -30279,6 +30294,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     console.log(`[REFUND] Stripe session retrieved: ${session.id}`);
 
                     if (session.payment_intent) {
+                        paymentIdForDisplay = String(session.payment_intent);
                         // Get payment intent details to check current status
                         const paymentIntent = await stripeInstance.paymentIntents.retrieve(session.payment_intent);
                         console.log(`[REFUND] Payment intent status: ${paymentIntent.status}`);
@@ -30371,6 +30387,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         const tok = p.match(/pay_[a-zA-Z0-9]+/);
                         return tok ? tok[0] : p;
                     })();
+                    paymentIdForDisplay = paymentId;
                     const authHeader = `Basic ${Buffer.from(`${paymongoSecretKey}:`).toString('base64')}`;
                     const storedOrTotalAmount = storedRefundAmount > 0
                         ? storedRefundAmount
@@ -30586,13 +30603,20 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
-            // Build response message
+            if (!paymentIdForDisplay) {
+                const txn = String(order.TransactionID || '').trim();
+                const payTok = txn.match(/pay_[a-zA-Z0-9]+/);
+                const piTok = txn.match(/pi_[a-zA-Z0-9]+/);
+                if (payTok) paymentIdForDisplay = payTok[0];
+                else if (piTok) paymentIdForDisplay = piTok[0];
+            }
+
+            // Build response message — process refund id is the original payment id
             let responseMessage = `Refund processed successfully. ₱${refundAmount.toFixed(2)} has been refunded to the customer.`;
-            if (stripeRefundId) {
-                responseMessage += ` Stripe Refund ID: ${stripeRefundId}. You can view this refund in your Stripe Dashboard.`;
-            } else if (paymongoRefundId) {
-                responseMessage += ` PayMongo Refund ID: ${paymongoRefundId}.`;
-            } else if (refundError) {
+            if (paymentIdForDisplay) {
+                responseMessage += ` Payment ID: ${paymentIdForDisplay}.`;
+            }
+            if (refundError) {
                 responseMessage += ` Note: Payment gateway refund failed (${refundError}). Please process the refund manually in your payment gateway dashboard if needed.`;
             }
 
@@ -30600,6 +30624,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 success: true,
                 message: responseMessage,
                 refundAmount: refundAmount,
+                paymentId: paymentIdForDisplay || null,
                 stripeRefundId: stripeRefundId || null,
                 paymongoRefundId: paymongoRefundId || null,
                 refundError: refundError || null
@@ -30809,7 +30834,7 @@ module.exports = function (sql, pool, getStripe = null) {
                            c.FullName AS CustomerName, c.Email AS CustomerEmail
                     FROM Orders o
                     INNER JOIN Customers c ON o.CustomerID = c.CustomerID
-                    WHERE o.OrderID = @orderId AND o.Status = 'Returned'
+                    WHERE o.OrderID = @orderId AND o.Status IN ('Return', 'Returned')
                 `);
 
             if (!orderResult.recordset.length) {
@@ -31023,7 +31048,7 @@ module.exports = function (sql, pool, getStripe = null) {
                            c.FullName AS CustomerName, c.Email AS CustomerEmail
                     FROM Orders o
                     INNER JOIN Customers c ON o.CustomerID = c.CustomerID
-                    WHERE o.OrderID = @orderId AND o.Status = 'Returned'
+                    WHERE o.OrderID = @orderId AND o.Status IN ('Return', 'Returned')
                 `);
 
             if (!orderResult.recordset.length) {

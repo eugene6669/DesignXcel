@@ -134,7 +134,7 @@
     </div>
     <% } %>
     <div class="od-return-actions-bar">
-        <% if (order.Status === 'Returned') { %>
+        <% if (order.Status === 'Return' || order.Status === 'Returned') { %>
             <button type="button" onclick="openApproveModal(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Approve Return</button>
             <button type="button" onclick="openDeclineModal(<%= order.OrderID %>)" class="btn-action btn-decline table-action-btn">Decline Return</button>
         <% } else if (order.Status === 'Processing (Pickup)' || (order.Status === 'Processing' && actionType)) { %>
