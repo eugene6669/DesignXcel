@@ -65,41 +65,49 @@ export function getProductCardDisplayPricing(product) {
   const variationMin =
     Number(product?.variationMinPrice ?? product?.catalogListPrice ?? 0) || 0;
   const parentList =
-    Number(product?.parentListPrice ?? product?.price ?? product?.Price ?? 0) || 0;
+    Number(product?.parentListPrice ?? 0) || 0;
+  const cmsPrice = Number(product?.price ?? product?.Price ?? 0) || 0;
+  const listBase = parentList > 0 ? parentList : cmsPrice;
+
   const discountInfo = getActiveDiscountInfo(product);
   const hasDiscountFields =
     discountInfo?.discountType && discountInfo.discountValue != null && Number(discountInfo.discountValue) > 0;
 
-  const listBase =
-    hasVariations && parentList > 0
-      ? parentList
-      : hasVariations && variationMin > 0
-        ? variationMin
-        : parentList;
-
+  const cardPricePreset = Number(product?.cardPrice);
   let { displayPrice, originalPrice, hasDiscount: showDiscount } = resolveDiscountedDisplayPrice(
     listBase,
     hasDiscountFields ? discountInfo : null
   );
 
-  if (hasVariations && variationMin > 0) {
-    displayPrice = variationMin;
-    if (listBase > variationMin) {
-      originalPrice = listBase;
-      showDiscount = true;
-    }
+  if (cardPricePreset > 0) {
+    displayPrice = cardPricePreset;
   }
 
   const apiSale = Number(product?.discountedPrice ?? discountInfo?.discountedPrice);
   if (apiSale > 0 && listBase > apiSale) {
-    displayPrice = hasVariations && variationMin > 0 ? variationMin : apiSale;
+    displayPrice = apiSale;
     originalPrice = listBase;
     showDiscount = true;
   }
 
-  const showFromPrefix = hasVariations;
+  if (hasVariations) {
+    if (variationMin > 0 && variationMin < listBase) {
+      displayPrice = variationMin;
+      originalPrice = listBase;
+      showDiscount = true;
+    } else if (!showDiscount && variationMin > 0) {
+      displayPrice = variationMin;
+    }
+  }
+
+  if (hasDiscountFields && listBase > displayPrice) {
+    originalPrice = listBase;
+    showDiscount = true;
+  }
+
   let discountBadgeLabel = null;
-  if (showDiscount && discountInfo) {
+  if (hasDiscountFields && discountInfo) {
+    showDiscount = true;
     if (discountInfo.discountType === 'percentage') {
       discountBadgeLabel = `${Math.round(Number(discountInfo.discountValue))}% off`;
     } else if (discountInfo.discountType === 'fixed') {
@@ -110,11 +118,12 @@ export function getProductCardDisplayPricing(product) {
   return {
     displayPrice,
     originalPrice:
-      showDiscount && originalPrice != null && Number(originalPrice) > Number(displayPrice)
+      originalPrice != null && Number(originalPrice) > Number(displayPrice)
         ? originalPrice
-        : null,
-    showDiscount,
-    showFromPrefix,
+        : showDiscount && listBase > displayPrice
+          ? listBase
+          : null,
+    showDiscount: showDiscount || !!discountBadgeLabel,
     discountBadgeLabel,
   };
 }

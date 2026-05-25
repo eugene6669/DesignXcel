@@ -104,6 +104,8 @@ const INVENTORY_PRODUCT_LIST_CORE = `
         ${INVENTORY_PRODUCT_SKU_SQL} as InventoryProductSKU,
         ip.Category as InventoryProductCategory,
         ip.Price as InventoryProductPrice,
+        ip.CostPrice as InventoryProductCostPrice,
+        vagg.InventoryItemCostTotal,
         COALESCE(
             NULLIF(ip.ImageURL, ''),
             NULLIF(pLinked.ImageURL, ''),
@@ -198,7 +200,20 @@ const INVENTORY_PRODUCT_LIST_CORE = `
                 SELECT SUM(COALESCE(iv6.DisposedQuantity, 0))
                 FROM InventoryProductVariations iv6
                 WHERE iv6.InventoryProductID = ip.InventoryProductID AND iv6.IsActive = 1
-            ), 0) AS VariationDisposedSum
+            ), 0) AS VariationDisposedSum,
+            ISNULL((
+                SELECT SUM(lineCostTotal)
+                FROM (
+                    SELECT
+                        COALESCE(iv7.CostPrice, ip.CostPrice, 0) * (
+                            CASE WHEN iv7.AvailableQuantity IS NULL OR iv7.AvailableQuantity = 0
+                                THEN COALESCE(iv7.Quantity, 0)
+                                ELSE iv7.AvailableQuantity END
+                        ) AS lineCostTotal
+                    FROM InventoryProductVariations iv7
+                    WHERE iv7.InventoryProductID = ip.InventoryProductID AND iv7.IsActive = 1
+                ) costLines
+            ), 0) AS InventoryItemCostTotal
     ) vagg
     OUTER APPLY (
         SELECT TOP 1

@@ -44,8 +44,9 @@ async function ensureBomBundleSchema(pool) {
     const hasRmSku = await columnExists(pool, 'RawMaterials', 'SKU');
     const hasRmSupplier = await columnExists(pool, 'RawMaterials', 'Supplier');
     const hasBundles = await tableExists(pool, 'BomBundles');
+    const hasIpBomBundle = await columnExists(pool, 'InventoryProducts', 'BomBundleID');
 
-    if (schemaReady && hasRmSku && hasRmSupplier && hasBundles) {
+    if (schemaReady && hasRmSku && hasRmSupplier && hasBundles && hasIpBomBundle) {
         return;
     }
 
@@ -79,6 +80,23 @@ async function ensureBomBundleSchema(pool) {
             );
             CREATE INDEX IX_BomBundles_IsActive ON dbo.BomBundles(IsActive);
         `);
+    }
+
+    if (!await columnExists(pool, 'InventoryProducts', 'BomBundleID')) {
+        await runDdl(pool, 'InventoryProducts.BomBundleID', `
+            ALTER TABLE dbo.InventoryProducts ADD BomBundleID INT NULL;
+        `);
+        try {
+            await runDdl(pool, 'FK_InventoryProducts_BomBundle', `
+                ALTER TABLE dbo.InventoryProducts
+                ADD CONSTRAINT FK_InventoryProducts_BomBundle FOREIGN KEY (BomBundleID)
+                    REFERENCES dbo.BomBundles(BomBundleID);
+            `);
+        } catch (fkErr) {
+            if (!/already exists|duplicate/i.test(fkErr.message)) {
+                console.warn('[BOM schema] FK_InventoryProducts_BomBundle:', fkErr.message);
+            }
+        }
     }
 
     if (!await tableExists(pool, 'BomBundleMaterials')) {
@@ -194,9 +212,9 @@ async function loadBomBundleWithMaterials(pool, bomBundleId) {
                 rm.Unit,
                 rm.QuantityAvailable
             FROM BomBundleMaterials bm
-            INNER JOIN RawMaterials rm ON rm.MaterialID = bm.MaterialID AND rm.IsActive = 1
+            LEFT JOIN RawMaterials rm ON rm.MaterialID = bm.MaterialID
             WHERE bm.BomBundleID = @id
-            ORDER BY rm.Name
+            ORDER BY COALESCE(rm.Name, 'Material')
         `);
 
     return {
@@ -252,6 +270,37 @@ async function assertBundleMaterialsWithinStock(poolOrTransaction, materials) {
     }
 }
 
+function recipeSignature(materials) {
+    const normalized = normalizeBundleMaterials(materials);
+    return normalized
+        .map((m) => `${m.materialId}:${m.quantityRequired}`)
+        .sort()
+        .join('|');
+}
+
+/**
+ * Find an active BOM bundle whose materials exactly match the given recipe.
+ */
+async function findBomBundleMatchingMaterials(pool, materials) {
+    await ensureBomBundleSchema(pool);
+    const targetKey = recipeSignature(materials);
+    if (!targetKey) return null;
+
+    const bundles = await loadActiveBomBundles(pool);
+    for (const b of bundles) {
+        const data = await loadBomBundleWithMaterials(pool, b.BomBundleID);
+        if (!data || !data.materials.length) continue;
+        const bundleKey = recipeSignature(data.materials.map((m) => ({
+            materialId: m.MaterialID,
+            quantityRequired: m.QuantityRequired
+        })));
+        if (bundleKey === targetKey) {
+            return data.bundle;
+        }
+    }
+    return null;
+}
+
 async function saveBomBundleMaterials(transaction, bomBundleId, materialsData) {
     const normalized = normalizeBundleMaterials(materialsData);
     await assertBundleMaterialsWithinStock(transaction, normalized);
@@ -277,6 +326,7 @@ module.exports = {
     loadActiveBomBundles,
     loadArchivedBomBundles,
     loadBomBundleWithMaterials,
+    findBomBundleMatchingMaterials,
     saveBomBundleMaterials,
     normalizeBundleMaterials,
     assertBundleMaterialsWithinStock,

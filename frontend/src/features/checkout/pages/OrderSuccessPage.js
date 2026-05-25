@@ -942,7 +942,7 @@ const OrderSuccessPage = () => {
                                     if (!payRef) return null;
                                     return (
                                     <div className="order-detail-item">
-                                        <span className="order-detail-label">Payment reference:</span>
+                                        <span className="order-detail-label">Payment ID Reference:</span>
                                         <span className="order-detail-value" style={{ fontFamily: 'monospace', fontSize: '0.9em', color: '#64748b' }}>
                                             {payRef}
                                         </span>
@@ -1146,40 +1146,33 @@ const OrderSuccessPage = () => {
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                {/* Action Buttons */}
-                <div className="success-actions-section">
-                    <div className="success-actions">
-                        <Link to="/" className="btn btn-primary" replace>
-                            Back to Home
-                        </Link>
-                        <Link to="/products" className="btn btn-secondary">
-                            Continue Shopping
-                        </Link>
-                        <Link to="/account?tab=orders" className="btn btn-secondary">
-                            View Orders
-                        </Link>
-                        {paymentDetails && (
-                            <button
-                                type="button"
-                                className="btn btn-invoice"
-                                onClick={handleDownloadInvoice}
-                                disabled={invoiceDownloading}
-                                aria-busy={invoiceDownloading}
-                            >
-                                {invoiceDownloading ? 'Preparing PDF…' : 'Download Invoice (PDF)'}
-                            </button>
-                        )}
-                    </div>
-                    
-                    {/* Support Information */}
-                    <div className="support-info">
-                        <p>
-                            Need help with your order? 
-                            <Link to="/contact" className="support-link"> Contact our support team</Link>
-                        </p>
+                        <div className="next-steps-actions">
+                            <Link to="/products" className="btn btn-secondary">
+                                Continue Shopping
+                            </Link>
+                            <Link to="/account?tab=orders" className="btn btn-secondary">
+                                View Orders
+                            </Link>
+                            {paymentDetails && (
+                                <button
+                                    type="button"
+                                    className="btn btn-invoice"
+                                    onClick={handleDownloadInvoice}
+                                    disabled={invoiceDownloading}
+                                    aria-busy={invoiceDownloading}
+                                >
+                                    {invoiceDownloading ? 'Preparing…' : 'Download PDF'}
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="support-info">
+                            <p>
+                                Need help with your order?
+                                <Link to="/contact" className="support-link"> Contact our support team</Link>
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>

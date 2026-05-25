@@ -3946,6 +3946,7 @@ app.get('/api/products', async (req, res) => {
 
         const result = await pool.request().query(`
             SELECT 
+                p.ProductID as productId,
                 p.PublicId as id,
                 p.Slug as slug,
                 p.SKU as sku,
@@ -3972,8 +3973,30 @@ app.get('/api/products', async (req, res) => {
                 p.IsBestSeller as isBestSeller,
                 p.IsNewArrival as isNewArrival,
                 p.Model3DURL as model3d,
-                p.Has3DModel as has3dModel
+                p.Has3DModel as has3dModel,
+                pd.DiscountID,
+                pd.DiscountType,
+                pd.DiscountValue,
+                pd.StartDate as discountStartDate,
+                pd.EndDate as discountEndDate,
+                CASE 
+                    WHEN pd.DiscountID IS NOT NULL AND pd.DiscountType = 'percentage' THEN 
+                        p.Price - (p.Price * pd.DiscountValue / 100)
+                    WHEN pd.DiscountID IS NOT NULL AND pd.DiscountType = 'fixed' THEN 
+                        CASE WHEN p.Price - pd.DiscountValue < 0 THEN 0 ELSE p.Price - pd.DiscountValue END
+                    ELSE p.Price
+                END as discountedPrice,
+                CASE 
+                    WHEN pd.DiscountID IS NOT NULL AND pd.DiscountType = 'percentage' THEN 
+                        p.Price * pd.DiscountValue / 100
+                    WHEN pd.DiscountID IS NOT NULL AND pd.DiscountType = 'fixed' THEN 
+                        CASE WHEN pd.DiscountValue > p.Price THEN p.Price ELSE pd.DiscountValue END
+                    ELSE 0
+                END as discountAmount
             FROM Products p WITH (NOLOCK)
+            LEFT JOIN ProductDiscounts pd ON p.ProductID = pd.ProductID 
+                AND pd.IsActive = 1 
+                AND GETDATE() BETWEEN pd.StartDate AND pd.EndDate
             LEFT JOIN (
                 SELECT 
                     cat.CatalogProductID AS ProductID,
@@ -4004,6 +4027,18 @@ app.get('/api/products', async (req, res) => {
 
         // Process images - convert single image URL to array
         const products = result.recordset.map((product) => {
+            const hasDiscount = !!(product.DiscountID && product.DiscountType && product.DiscountValue);
+            const discountInfo = hasDiscount
+                ? {
+                    discountId: product.DiscountID,
+                    discountType: product.DiscountType,
+                    discountValue: product.DiscountValue,
+                    startDate: product.discountStartDate,
+                    endDate: product.discountEndDate,
+                    discountedPrice: product.discountedPrice,
+                    discountAmount: product.discountAmount
+                }
+                : null;
             const row = {
                 ...product,
                 soldQuantity: Number(product.soldQuantity ?? 0) || 0,
@@ -4018,7 +4053,9 @@ app.get('/api/products', async (req, res) => {
                     } catch {
                         return {};
                     }
-                })()
+                })(),
+                hasDiscount,
+                discountInfo
             };
             return mapProductRecordAssetUrls(row);
         });

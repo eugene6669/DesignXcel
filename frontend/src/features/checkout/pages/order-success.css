@@ -580,85 +580,80 @@ body.theme-dark .order-item-price {
     line-height: 1.4;
 }
 
-/* Success Actions Section - Matching Product Detail Page */
-.success-actions-section {
-    background-color: #ffffff;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 20px;
+/* Actions inside What's Next — compact row, white text, simple hover */
+.next-steps-actions {
     display: flex;
-    flex-direction: column;
-    gap: 16px;
-    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    justify-content: flex-start;
+    margin-top: 4px;
+    padding-top: 14px;
+    border-top: 1px solid #e5e7eb;
 }
 
-.success-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-}
-
-.btn {
-    padding: 12px 24px;
-    border-radius: 8px;
+.next-steps-actions .btn {
+    padding: 7px 12px;
+    border-radius: 6px;
     font-weight: 600;
+    font-size: 12px;
+    line-height: 1.2;
     text-decoration: none;
-    border: none;
+    border: 1px solid transparent;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 150px;
-    font-size: 16px;
-}
-
-.btn-primary {
-    background: #F0B21B;
+    min-width: 0;
+    width: auto;
+    flex: 0 1 auto;
     color: #ffffff;
+    white-space: nowrap;
 }
 
-.btn-primary:hover {
-    background: #F0B21B;
+.next-steps-actions .btn:hover {
     transform: none;
     box-shadow: none;
 }
 
-.btn-secondary {
-    background: #6b7280;
-    color: #ffffff !important;
-    border: 1px solid #6b7280;
-}
-
-.btn-secondary:hover {
-    background: #6b7280;
-    border-color: #6b7280;
+.next-steps-actions .btn-secondary {
+    background: #4b5563;
+    border-color: #4b5563;
     color: #ffffff !important;
 }
 
-.btn-invoice {
-    background: #ffffff;
-    color: #111827;
-    border: 2px solid #F0B21B;
+.next-steps-actions .btn-secondary:hover {
+    background: #374151;
+    border-color: #374151;
+    color: #ffffff !important;
 }
 
-.btn-invoice:hover:not(:disabled) {
-    background: #fff8e6;
-    border-color: #d69e16;
-    color: #111827;
+.next-steps-actions .btn-invoice {
+    background: #F0B21B;
+    border-color: #d9a019;
+    color: #ffffff !important;
 }
 
-.btn-invoice:disabled {
-    opacity: 0.65;
+.next-steps-actions .btn-invoice:hover:not(:disabled) {
+    background: #e5a818;
+    border-color: #c99216;
+    color: #ffffff !important;
+}
+
+.next-steps-actions .btn-invoice:disabled {
+    opacity: 0.55;
     cursor: not-allowed;
 }
 
-.support-info {
-    text-align: center;
-    padding: 16px;
-    background: #f8f9fa;
-    border-radius: 8px;
-    border: 1px solid #e5e7eb;
+.next-steps-section .support-info {
+    text-align: left;
+    padding: 12px 0 0;
+    margin: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
 }
 
 .support-info p {
@@ -760,8 +755,7 @@ body.theme-dark .order-success-loading-subtitle {
     }
     
     .order-summary-section,
-    .next-steps-section,
-    .success-actions-section {
+    .next-steps-section {
         padding: 16px;
     }
     
@@ -802,13 +796,17 @@ body.theme-dark .order-success-loading-subtitle {
         padding: 12px;
     }
     
-    .success-actions {
-        flex-direction: column;
-        gap: 8px;
+    .next-steps-actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 6px;
     }
-    
-    .btn {
-        width: 100%;
+
+    .next-steps-actions .btn {
+        width: auto;
+        flex: 0 1 auto;
+        padding: 6px 10px;
+        font-size: 11px;
     }
 }
 
@@ -822,7 +820,6 @@ body.theme-dark .order-success-loading-subtitle {
 .success-container > *:nth-child(2) { animation-delay: 0.2s; }
 .success-container > *:nth-child(3) { animation-delay: 0.3s; }
 .success-container > *:nth-child(4) { animation-delay: 0.4s; }
-.success-container > *:nth-child(5) { animation-delay: 0.5s; }
 
 @keyframes slideInUp {
     from {
@@ -1120,49 +1117,34 @@ body.theme-dark .step-content p {
     color: #cccccc !important;
 }
 
-/* Dark mode styles for success actions section */
-body.theme-dark .success-actions-section {
-    background-color: #2d2d2d !important;
-    border: 1px solid #404040 !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+/* Dark mode — next-steps action buttons */
+body.theme-dark .next-steps-actions {
+    border-top-color: #404040 !important;
 }
 
-/* Dark mode styles for buttons */
-body.theme-dark .btn-primary {
+body.theme-dark .next-steps-actions .btn {
+    color: #ffffff !important;
+}
+
+body.theme-dark .next-steps-actions .btn-secondary {
+    background: #4b5563 !important;
+    border-color: #4b5563 !important;
+    color: #ffffff !important;
+}
+
+body.theme-dark .next-steps-actions .btn-secondary:hover {
+    background: #374151 !important;
+    color: #ffffff !important;
+}
+
+body.theme-dark .next-steps-actions .btn-invoice {
     background: #F0B21B !important;
+    border-color: #d9a019 !important;
     color: #ffffff !important;
 }
 
-body.theme-dark .btn-primary:hover {
-    background: #F0B21B !important;
-    color: #ffffff !important;
-    box-shadow: none !important;
-    transform: none !important;
-}
-
-body.theme-dark .btn-secondary {
-    background: #333333 !important;
-    color: #ffffff !important;
-    border: 1px solid #404040 !important;
-}
-
-body.theme-dark .btn-secondary:hover {
-    background: #333333 !important;
-    border-color: #404040 !important;
-    color: #ffffff !important;
-    transform: none !important;
-    box-shadow: none !important;
-}
-
-body.theme-dark .btn-invoice {
-    background: #2d2d2d !important;
-    color: #ffffff !important;
-    border: 2px solid #F0B21B !important;
-}
-
-body.theme-dark .btn-invoice:hover:not(:disabled) {
-    background: #3d3520 !important;
-    border-color: #F0B21B !important;
+body.theme-dark .next-steps-actions .btn-invoice:hover:not(:disabled) {
+    background: #e5a818 !important;
     color: #ffffff !important;
 }
 
@@ -1253,11 +1235,6 @@ body.theme-dark .payment-security-notice {
         border: 1px solid #404040 !important;
     }
     
-    body.theme-dark .success-actions-section {
-        background: #2d2d2d !important;
-        border: 1px solid #404040 !important;
-    }
-    
     body.theme-dark .payment-status-card {
         background: linear-gradient(135deg, #333333 0%, #2d2d2d 100%) !important;
         border: 1px solid #404040 !important;
@@ -1280,11 +1257,6 @@ body.theme-dark .payment-security-notice {
     }
     
     body.theme-dark .next-steps-section {
-        background: #2d2d2d !important;
-        border: 1px solid #404040 !important;
-    }
-    
-    body.theme-dark .success-actions-section {
         background: #2d2d2d !important;
         border: 1px solid #404040 !important;
     }

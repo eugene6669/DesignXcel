@@ -22,8 +22,8 @@
             return '<span class="return-qty return-qty-' + kind + (n > 0 ? ' has-stock' : '') + '">' + n + '</span>';
         }
 
-        /** Total on-hand = available + damaged + repaired; align with parent when one variation. */
-        function resolveVariationStockTotals(variation, parentStock, variationCount) {
+        /** Total on-hand = available + damaged + repaired (matches parent VariationTotalSum rollup). */
+        function resolveVariationStockTotals(variation) {
             const baseQuantity = Number(variation.Quantity) || 0;
             const damagedQty = Number(variation.DamagedQuantity) || 0;
             const repairedQty = Number(variation.RepairedQuantity) || 0;
@@ -34,11 +34,7 @@
                 availableQty = Number(variation.AvailableQuantity) || 0;
             }
             const bucketTotal = availableQty + damagedQty + repairedQty;
-            let totalQty = Math.max(bucketTotal, baseQuantity);
-            const parentTotal = Number(parentStock) || 0;
-            if (parentTotal > totalQty && variationCount === 1) {
-                totalQty = parentTotal;
-            }
+            const totalQty = Math.max(bucketTotal, baseQuantity);
             return {
                 availableQty: availableQty,
                 damagedQty: damagedQty,
@@ -46,6 +42,24 @@
                 disposedQty: Number(variation.DisposedQuantity) || 0,
                 totalQty: totalQty
             };
+        }
+
+        function sumVariationsTotalOnHand(variations) {
+            return (variations || []).reduce(function(sum, v) {
+                return sum + resolveVariationStockTotals(v).totalQty;
+            }, 0);
+        }
+
+        function updateParentProductRowTotals(inventoryProductId, variations) {
+            const parentRow = document.querySelector(
+                'tr[data-inventory-product-id="' + inventoryProductId + '"]:not(.variations-row)'
+            );
+            if (!parentRow) return;
+            const qtyEl = parentRow.querySelector('td.qty-col .stock-qty');
+            if (!qtyEl) return;
+            const total = sumVariationsTotalOnHand(variations);
+            qtyEl.textContent = String(total);
+            qtyEl.className = 'stock-qty ' + getStockQtyClass(total);
         }
 
         function buildRepairedQtyCellHtml(repairedQty) {
@@ -111,6 +125,7 @@
         }
 
         var PI_SVG_EDIT = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>';
+        var PI_SVG_RESTOCK = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>';
         var PI_SVG_ARCHIVE = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>';
         var PI_SVG_REPAIR = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>';
         var PI_SVG_AVAILABLE = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
@@ -235,6 +250,7 @@
             const restockBlocks = document.querySelectorAll('.variation-edit-inventory-restock');
             const inventoryDetailsBlocks = document.querySelectorAll('.variation-edit-inventory-details');
             const rawMaterialBlocks = document.querySelectorAll('.variation-edit-raw-materials');
+            const recipeViewBlocks = document.querySelectorAll('.variation-edit-recipe-view');
             const title = document.getElementById('editVariationStatusModalTitle');
             const submitBtn = document.getElementById('submitEditVariationStatus');
             const nameInput = document.getElementById('editVariationStatusName');
@@ -243,12 +259,14 @@
             const mode = window._variationEditMode || (isInventoryPage ? 'inventory' : (isProductsListingPage ? 'catalog' : 'status'));
 
             rawMaterialBlocks.forEach(function(el) { el.style.display = 'none'; });
+            recipeViewBlocks.forEach(function(el) { el.style.display = 'none'; });
 
             if (mode === 'inventory' || (isInventoryPage && mode !== 'catalog')) {
                 statusBlocks.forEach(function(el) { el.style.display = 'none'; });
                 catalogBlocks.forEach(function(el) { el.style.display = 'none'; });
-                restockBlocks.forEach(function(el) { el.style.display = ''; });
+                restockBlocks.forEach(function(el) { el.style.display = 'none'; });
                 inventoryDetailsBlocks.forEach(function(el) { el.style.display = ''; });
+                recipeViewBlocks.forEach(function(el) { el.style.display = ''; });
                 if (mainImageWrap) mainImageWrap.style.display = '';
                 if (skuWrap) skuWrap.style.display = '';
                 if (title) title.textContent = 'Edit Variation';
@@ -331,17 +349,13 @@
                 || (Number(variation.PendingInspectionQty) || 0) > 0;
         }
 
-        function buildFlatVariationRowHtml(variation, productId, parentStock, variationCount) {
+        function buildFlatVariationRowHtml(variation, productId) {
             const imageUrl = getVariationDisplayImageUrl(variation);
             const variationName = variation.VariationName || 'N/A';
             const variationId = variation.VariationID || 0;
             const variationSku = variation.SKU || '—';
             const color = variation.Color || '—';
-            const stock = resolveVariationStockTotals(
-                variation,
-                parentStock,
-                variationCount != null ? variationCount : 1
-            );
+            const stock = resolveVariationStockTotals(variation);
             const availableQty = stock.availableQty;
             const damagedQty = stock.damagedQty;
             const repairedQty = stock.repairedQty;
@@ -410,15 +424,9 @@
                     '<td colspan="' + emptyColspan + '" style="padding:8px 28px;color:#888;font-size:0.9em;">No variations with return/damaged/repaired stock</td></tr>');
                 return;
             }
-            let parentStock = 0;
-            const qtyEl = productRow.querySelector('td.qty-col .stock-qty');
-            if (qtyEl) {
-                parentStock = parseInt(String(qtyEl.textContent).replace(/[^\d-]/g, ''), 10) || 0;
-            }
-            const variationCount = list.length;
             let insertAfter = productRow;
             list.forEach(function(variation) {
-                insertAfter.insertAdjacentHTML('afterend', buildFlatVariationRowHtml(variation, productId, parentStock, variationCount));
+                insertAfter.insertAdjacentHTML('afterend', buildFlatVariationRowHtml(variation, productId));
                 insertAfter = insertAfter.nextElementSibling;
             });
         }
@@ -435,7 +443,9 @@
                         totalVariationQuantity: result.totalVariationQuantity || 0
                     };
                     window.currentVariationProductId = productId;
-                    insertFlatVariationRows(productRow, filterVariationsForListSearch(result.variations || []), productId);
+                    const variations = filterVariationsForListSearch(result.variations || []);
+                    insertFlatVariationRows(productRow, variations, productId);
+                    updateParentProductRowTotals(productId, variations);
                 }
             } catch (err) {
                 console.error('Error loading flat variations:', err);
@@ -697,39 +707,25 @@ const urlParams = new URLSearchParams(window.location.search);
             }
 
             const rowFlags = getVariationContainerFlags(inventoryProductId);
-            let parentStock = 0;
-            if (window.currentProductStockInfo && String(window.currentVariationProductId) === String(inventoryProductId)) {
-                parentStock = Number(window.currentProductStockInfo.productStock) || 0;
-                const tvq = Number(window.currentProductStockInfo.totalVariationQuantity) || 0;
-                if (tvq > parentStock) parentStock = tvq;
-            }
-            const parentRow = document.querySelector('tr[data-inventory-product-id="' + inventoryProductId + '"]');
-            if (parentRow) {
-                const qtyEl = parentRow.querySelector('td.qty-col .stock-qty');
-                if (qtyEl) {
-                    const rowTotal = parseInt(String(qtyEl.textContent).replace(/[^\d-]/g, ''), 10) || 0;
-                    if (rowTotal > parentStock) parentStock = rowTotal;
-                }
-            }
-            const variationCount = variations.length;
 
             tableBody.innerHTML = variations.map(function(variation) {
-                const imageUrl = getVariationDisplayImageUrl(variation);
                 const isActive = variation.IsActive !== false && variation.IsActive !== 0 && variation.IsActive !== '0';
                 const statusBadge = isActive
                     ? '<span class="status-badge status-available">Active</span>'
                     : '<span class="status-badge status-disposed">Inactive</span>';
-                const price = variation.Price != null && variation.Price !== '' && !isNaN(parseFloat(variation.Price))
-                    ? '₱' + parseFloat(variation.Price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : 'N/A';
+                const salePriceNum = variation.Price != null && variation.Price !== '' && !isNaN(parseFloat(variation.Price))
+                    ? parseFloat(variation.Price) : null;
+                const price = salePriceNum != null ? formatPhpMoney(salePriceNum) : 'N/A';
                 const variationName = variation.VariationName || 'N/A';
                 const variationId = variation.VariationID || 0;
-                const stock = resolveVariationStockTotals(variation, parentStock, variationCount);
+                const stock = resolveVariationStockTotals(variation);
                 const availableQty = stock.availableQty;
                 const damagedQty = stock.damagedQty;
                 const repairedQty = stock.repairedQty;
                 const disposedQty = stock.disposedQty;
                 const totalQty = stock.totalQty;
+                const unitCost = Number(variation.CostPrice) || 0;
+                const costUnitHtml = formatPhpMoney(unitCost);
                 const pendingReturned = Number(variation.PendingInspectionQty) || 0;
                 const returnedQty = isProductReturnsPage
                     ? pendingReturned
@@ -740,7 +736,6 @@ const urlParams = new URLSearchParams(window.location.search);
                 const showVariationCatalogEdit = isProductsListingPage;
                 const showVariationInventoryEdit = isInventoryPage;
                 const showVariationArchive = isInventoryPage;
-                const imageHtml = '<img src="' + escapeHtml(imageUrl) + '" alt="Variation" style="width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" onerror="this.src=\'/images/placeholder-no-image.svg\'">';
                 const cells = [
                     { className: 'var-col-name', html: '<strong>' + escapeHtml(variationName) + '</strong>' },
                     { className: 'var-col-sku', html: '<code style="font-size:0.85em;">' + escapeHtml(variationSku) + '</code>' },
@@ -768,9 +763,16 @@ const urlParams = new URLSearchParams(window.location.search);
                 }
 
                 cells.push(
-                    { className: 'var-col-price', style: 'text-align:center', html: price },
-                    { className: 'var-col-image', style: 'text-align:center', html: imageHtml }
+                    { className: 'var-col-price', style: 'text-align:center', html: price }
                 );
+                if (isInventoryPage) {
+                    cells.push({ className: 'var-col-price', style: 'text-align:center', html: costUnitHtml });
+                }
+                cells.push({
+                    className: 'var-col-image',
+                    style: 'text-align:center',
+                    html: buildVariationRowImgHtml(variation)
+                });
 
                 if (isProductsListingPage && rowFlags.showDisc) {
                     const variationListPrice = Number(variation.Price) || 0;
@@ -824,13 +826,15 @@ const urlParams = new URLSearchParams(window.location.search);
                     }
                 } else if (isInventoryPage) {
                     cells.push({
+                        className: 'var-col-action pi-actions-col',
                         style: 'text-align:center',
-                        html: '<div style="display:flex;gap:5px;justify-content:center;flex-wrap:wrap;">' +
+                        html: '<div class="pi-actions-cell">' +
+                            '<button type="button" class="restock-variation-btn pi-icon-restock-btn" data-variation-id="' + variationId + '" data-inventory-product-id="' + inventoryProductId + '" data-variation-name="' + attrQuote(variationName) + '" data-available-qty="' + availableQty + '" title="Restock" aria-label="Restock">' + PI_SVG_RESTOCK + '</button>' +
                             (showVariationInventoryEdit
                                 ? '<button type="button" class="edit-variation-status-btn pi-icon-edit-btn" data-mode="inventory" data-variation-id="' + variationId + '" title="Edit variation" aria-label="Edit variation">' + PI_SVG_EDIT + '</button>'
                                 : '') +
                             (showVariationArchive
-                                ? '<button type="button" class="archive-variation-btn" data-variation-id="' + variationId + '" data-variation-name="' + escapeHtml(variationName) + '" title="Archive Variation" aria-label="Archive Variation">' + PI_SVG_ARCHIVE + '</button>'
+                                ? '<button type="button" class="archive-variation-btn pi-icon-archive-btn" data-variation-id="' + variationId + '" data-variation-name="' + escapeHtml(variationName) + '" title="Archive Variation" aria-label="Archive Variation">' + PI_SVG_ARCHIVE + '</button>'
                                 : '') +
                             '</div>'
                     });
@@ -842,6 +846,8 @@ const urlParams = new URLSearchParams(window.location.search);
             if (loadingDiv) loadingDiv.style.display = 'none';
             if (tableContainer) tableContainer.style.display = 'block';
             if (emptyDiv) emptyDiv.style.display = 'none';
+            bindRestockVariationButtons(tableBody);
+            updateParentProductRowTotals(inventoryProductId, variations);
         }
 
         async function loadInventoryProductVariations(inventoryProductId) {
@@ -991,6 +997,21 @@ const urlParams = new URLSearchParams(window.location.search);
             if (makeAvailableBtn) {
                 const vid = parseInt(makeAvailableBtn.dataset.variationId, 10);
                 if (vid) openMakeAvailableVariationModal(vid, makeAvailableBtn.dataset);
+                return;
+            }
+            const restockVarBtn = e.target.closest('.restock-variation-btn');
+            if (restockVarBtn && isInventoryPage) {
+                e.preventDefault();
+                e.stopPropagation();
+                const vid = parseInt(restockVarBtn.getAttribute('data-variation-id'), 10);
+                const ipid = parseInt(restockVarBtn.getAttribute('data-inventory-product-id'), 10);
+                const vname = restockVarBtn.getAttribute('data-variation-name') || 'Variation';
+                const avail = parseInt(restockVarBtn.getAttribute('data-available-qty'), 10) || 0;
+                if (vid && ipid) {
+                    openVariationRestockModal(vid, ipid, vname, avail);
+                } else {
+                    showCustomPopup('Cannot restock: missing variation or product ID.', true);
+                }
                 return;
             }
             const editVarBtn = e.target.closest('.edit-variation-status-btn[data-variation-id]');
@@ -1254,12 +1275,91 @@ const urlParams = new URLSearchParams(window.location.search);
             }
         }
 
-        function getVariationDisplayImageUrl(variation) {
+        function resolveVariationMediaUrl(rawUrl) {
+            if (!rawUrl) return { primary: '', fallback: '', fallback2: '' };
+            const normalized = String(rawUrl).trim().replace(/\\/g, '/');
+            const ensureLeadingSlash = function(value) {
+                const v = String(value || '').trim();
+                if (!v) return '';
+                if (/^https?:\/\//i.test(v) || v.startsWith('data:')) return v;
+                return v.startsWith('/') ? v : '/' + v;
+            };
+            const looksLikeFilename = function(value) {
+                return /\.(png|jpe?g|gif|webp|svg)$/i.test(String(value || ''));
+            };
+            const variationPrefixes = isProductsListingPage
+                ? [
+                    'ProductListing/Main/Product Variations',
+                    'ProductListing/thumbnails/Product Variation',
+                    'ProductListing/thumbnails/Product Variations',
+                    'Inventory/Main/Product Variations',
+                    'Inventory/thumbnails/Product Variations'
+                ]
+                : [
+                    'Inventory/Main/Product Variations',
+                    'Inventory/thumbnails/Product Variations',
+                    'ProductListing/Main/Product Variations',
+                    'ProductListing/thumbnails/Product Variation'
+                ];
+
+            let productImage = ensureLeadingSlash(normalized);
+            const bare = productImage.replace(/^\/+/, '');
+            const filename = bare.includes('/') ? bare.split('/').pop() : bare;
+
+            if (filename && looksLikeFilename(filename)) {
+                if (!bare.includes('/') || /product\s*parent/i.test(bare)) {
+                    productImage = '/uploads/' + variationPrefixes[0] + '/' + filename;
+                }
+            }
+
+            const candidates = [];
+            const addCandidate = function(candidate) {
+                const value = ensureLeadingSlash(candidate);
+                if (value && candidates.indexOf(value) === -1) candidates.push(value);
+            };
+            addCandidate(productImage);
+            if (filename) {
+                variationPrefixes.forEach(function(prefix) {
+                    addCandidate('/uploads/' + prefix + '/' + filename);
+                });
+            }
+            return {
+                primary: candidates[0] || '',
+                fallback: candidates[1] || '',
+                fallback2: candidates[2] || ''
+            };
+        }
+
+        function getVariationMainImageRaw(variation) {
+            const main = variation && variation.VariationImageURL
+                ? String(variation.VariationImageURL).trim()
+                : '';
+            if (main) return main;
             const thumbs = parseThumbnailUrls(variation && variation.ThumbnailURLs);
-            const raw = (thumbs.length > 0 ? thumbs[0] : null) || (variation && variation.VariationImageURL) || '';
+            return thumbs.length > 0 ? thumbs[0] : '';
+        }
+
+        function getVariationDisplayImageUrl(variation) {
+            const raw = getVariationMainImageRaw(variation);
             if (!raw) return '/images/placeholder-no-image.svg';
-            const resolved = resolveProductMediaUrl(raw);
+            const resolved = resolveVariationMediaUrl(raw);
             return encodeUploadPathForHtml(resolved.primary || raw);
+        }
+
+        function buildVariationRowImgHtml(variation) {
+            const raw = getVariationMainImageRaw(variation);
+            if (!raw) {
+                return '<img src="/images/placeholder-no-image.svg" alt="Variation" class="variation-row-thumb">';
+            }
+            const resolved = resolveVariationMediaUrl(raw);
+            const src = encodeUploadPathForHtml(resolved.primary || raw);
+            const fb1 = encodeUploadPathForHtml(resolved.fallback);
+            const fb2 = encodeUploadPathForHtml(resolved.fallback2);
+            const onerror = "if(this.dataset.fallbackSrc&&this.src.indexOf(this.dataset.fallbackSrc)===-1){this.src=this.dataset.fallbackSrc;}else if(this.dataset.fallbackSrc2&&this.src.indexOf(this.dataset.fallbackSrc2)===-1){this.src=this.dataset.fallbackSrc2;}else{this.onerror=null;this.src='/images/placeholder-no-image.svg';}";
+            return '<img src="' + escapeHtml(src) + '" alt="Variation" class="variation-row-thumb"' +
+                ' data-fallback-src="' + escapeHtml(fb1) + '"' +
+                ' data-fallback-src2="' + escapeHtml(fb2) + '"' +
+                ' onerror="' + onerror + '">';
         }
 
         function variationRowTd(cell) {
@@ -1423,8 +1523,7 @@ const urlParams = new URLSearchParams(window.location.search);
             if (Number.isFinite(num)) el.value = num.toFixed(2);
         }
 
-        function bindCreateProductPriceInput() {
-            const el = document.getElementById('createProductPrice');
+        function bindProductPriceInput(el) {
             if (!el || el.dataset.priceBound === '1') return;
             el.dataset.priceBound = '1';
             el.addEventListener('input', function () {
@@ -1441,17 +1540,44 @@ const urlParams = new URLSearchParams(window.location.search);
             });
         }
 
-        function resetCreateProductPrice() {
-            const el = document.getElementById('createProductPrice');
-            if (el) el.value = '';
+        function bindCreateProductPriceInput() {
+            bindProductPriceInput(document.getElementById('createProductPrice'));
+            bindProductPriceInput(document.getElementById('createProductCostPrice'));
         }
 
-        function getCreateProductUnitPrice() {
-            const el = document.getElementById('createProductPrice');
+        function formatPhpMoney(amount) {
+            const n = Number(amount);
+            if (!Number.isFinite(n)) return 'N/A';
+            return '₱' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function getProductUnitPriceFromEl(el, allowZero) {
             if (!el) return null;
             formatCreateProductPriceAuto(el);
             const priceVal = parseFloat(el.value);
-            return (!Number.isNaN(priceVal) && priceVal > 0) ? priceVal : null;
+            if (Number.isNaN(priceVal)) return null;
+            if (allowZero) return priceVal >= 0 ? priceVal : null;
+            return priceVal > 0 ? priceVal : null;
+        }
+
+        function validateSaleCostPair(saleEl, costEl) {
+            const sale = getProductUnitPriceFromEl(saleEl);
+            const cost = getProductUnitPriceFromEl(costEl, true);
+            if (sale == null) return 'Enter a sale price greater than zero.';
+            if (cost == null) return 'Enter an item cost price of zero or greater.';
+            if (cost > sale) return 'Item cost price cannot be higher than the sale price.';
+            return null;
+        }
+
+        function resetCreateProductPrice() {
+            const el = document.getElementById('createProductPrice');
+            if (el) el.value = '';
+            const costEl = document.getElementById('createProductCostPrice');
+            if (costEl) costEl.value = '';
+        }
+
+        function getCreateProductUnitPrice() {
+            return getProductUnitPriceFromEl(document.getElementById('createProductPrice'));
         }
 
         function collectCreateProductVariations() {
@@ -1488,7 +1614,7 @@ const urlParams = new URLSearchParams(window.location.search);
         }
 
         window.restockVariationInline = async function(variationId, inventoryProductId, buttonEl, qtyOverride) {
-            const modalQtyInput = document.getElementById('editVariationRestockQty');
+            const modalQtyInput = document.getElementById('variationRestockQty') || document.getElementById('editVariationRestockQty');
             const qtyInput = qtyOverride != null
                 ? null
                 : (modalQtyInput || document.getElementById('restock-qty-' + variationId));
@@ -1512,7 +1638,11 @@ const urlParams = new URLSearchParams(window.location.search);
                 showCustomPopup(stockCheck.message, true);
                 return;
             }
-            if (buttonEl) { buttonEl.disabled = true; buttonEl.textContent = '...'; }
+            if (buttonEl) {
+                if (!buttonEl.dataset.piIconHtml) buttonEl.dataset.piIconHtml = buttonEl.innerHTML;
+                buttonEl.disabled = true;
+                buttonEl.innerHTML = '…';
+            }
             try {
                 const response = await fetch('/api/admin/inventory-products/restock', {
                     method: 'POST',
@@ -1524,6 +1654,10 @@ const urlParams = new URLSearchParams(window.location.search);
                 if (result.success) {
                     showCustomPopup(result.message || 'Restock successful.');
                     await notifyInventoryStockChanged(inventoryProductId, result);
+                    const restockModal = document.getElementById('variationRestockModal');
+                    if (restockModal && restockModal.style.display === 'block') {
+                        closeVariationRestockModal();
+                    }
                     if (document.getElementById('editVariationStatusModal')?.style.display === 'block' && typeof window.editVariationStatus === 'function') {
                         await window.editVariationStatus(variationId);
                     }
@@ -1538,9 +1672,94 @@ const urlParams = new URLSearchParams(window.location.search);
             } finally {
                 if (buttonEl) {
                     buttonEl.disabled = false;
-                    buttonEl.textContent = buttonEl.id === 'editVariationRestockBtn' ? 'Add Stock' : 'Add';
+                    if (buttonEl.dataset.piIconHtml) {
+                        buttonEl.innerHTML = buttonEl.dataset.piIconHtml;
+                    } else if (buttonEl.id === 'confirmVariationRestock') {
+                        buttonEl.textContent = 'Restock';
+                    } else if (buttonEl.id === 'editVariationRestockBtn') {
+                        buttonEl.textContent = 'Add Stock';
+                    }
                 }
             }
+        }
+
+        function attrQuote(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;');
+        }
+
+        function closeVariationRestockModal() {
+            const modal = document.getElementById('variationRestockModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function openVariationRestockModal(variationId, inventoryProductId, variationName, availableQty) {
+            const modal = document.getElementById('variationRestockModal');
+            if (!modal) {
+                console.warn('[Restock] variationRestockModal not found in DOM');
+                return;
+            }
+            if (modal.parentElement && modal.parentElement !== document.body) {
+                document.body.appendChild(modal);
+            }
+            const vidEl = document.getElementById('variationRestockVariationId');
+            const ipidEl = document.getElementById('variationRestockInventoryProductId');
+            if (vidEl) vidEl.value = String(variationId || '');
+            if (ipidEl) ipidEl.value = String(inventoryProductId || '');
+            const nameEl = document.getElementById('variationRestockName');
+            if (nameEl) nameEl.textContent = variationName || 'Variation';
+            const qtyEl = document.getElementById('variationRestockCurrentQty');
+            if (qtyEl) qtyEl.textContent = String(availableQty != null ? availableQty : 0);
+            const inputEl = document.getElementById('variationRestockQty');
+            if (inputEl) inputEl.value = '1';
+            modal.style.display = 'block';
+        }
+        window.openVariationRestockModal = openVariationRestockModal;
+        window.closeVariationRestockModal = closeVariationRestockModal;
+
+        function bindRestockVariationButtons(root) {
+            if (!root || !root.querySelectorAll) return;
+            root.querySelectorAll('.restock-variation-btn').forEach(function(btn) {
+                if (btn.getAttribute('data-restock-bound') === '1') return;
+                btn.setAttribute('data-restock-bound', '1');
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const vid = parseInt(btn.getAttribute('data-variation-id'), 10);
+                    const ipid = parseInt(btn.getAttribute('data-inventory-product-id'), 10);
+                    const vname = btn.getAttribute('data-variation-name') || 'Variation';
+                    const avail = parseInt(btn.getAttribute('data-available-qty'), 10) || 0;
+                    if (!vid || !ipid) {
+                        showCustomPopup('Cannot restock: missing variation or product ID.', true);
+                        return;
+                    }
+                    openVariationRestockModal(vid, ipid, vname, avail);
+                });
+            });
+        }
+
+        function initVariationRestockModal() {
+            const modal = document.getElementById('variationRestockModal');
+            if (!modal || modal.getAttribute('data-listener-attached')) return;
+            const close = closeVariationRestockModal;
+            ['closeVariationRestockModal', 'cancelVariationRestock'].forEach(function(id) {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('click', close);
+            });
+            const confirmBtn = document.getElementById('confirmVariationRestock');
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', async function() {
+                    const vid = parseInt(document.getElementById('variationRestockVariationId')?.value, 10);
+                    const ipid = parseInt(document.getElementById('variationRestockInventoryProductId')?.value, 10);
+                    const qty = parseInt(document.getElementById('variationRestockQty')?.value, 10);
+                    if (vid && ipid && typeof window.restockVariationInline === 'function') {
+                        await window.restockVariationInline(vid, ipid, confirmBtn, qty);
+                    }
+                });
+            }
+            modal.setAttribute('data-listener-attached', 'true');
         }
 
         let allRawMaterials = [];
@@ -1867,6 +2086,51 @@ const urlParams = new URLSearchParams(window.location.search);
             return materials;
         }
 
+        function renderInventoryProductRecipeDisplay(bundleEl, listEl, data) {
+            const bom = data && data.bomBundle;
+            const mats = (data && data.materials) || [];
+            if (bundleEl) {
+                if (bom && bom.name) {
+                    const code = bom.code ? '<code>' + escapeHtml(bom.code) + '</code> — ' : '';
+                    bundleEl.innerHTML = '<strong>BOM bundle:</strong> ' + code + escapeHtml(bom.name);
+                } else {
+                    bundleEl.innerHTML = '<strong>BOM bundle:</strong> <em>Manual recipe (no bundle linked)</em>';
+                }
+            }
+            if (listEl) {
+                if (!mats.length) {
+                    listEl.innerHTML = '<em>No raw materials in recipe</em>';
+                } else {
+                    listEl.innerHTML = mats.map(function (m) {
+                        const sku = m.MaterialSKU ? escapeHtml(m.MaterialSKU) + ' — ' : '';
+                        const name = escapeHtml(m.MaterialName || ('Material #' + m.MaterialID));
+                        const qty = m.QuantityRequired || 0;
+                        const unit = m.Unit ? ' ' + escapeHtml(m.Unit) : '';
+                        return '<div style="margin:3px 0;">' + sku + name + ' — <strong>' + qty + '</strong>/unit' + unit + '</div>';
+                    }).join('');
+                }
+            }
+        }
+
+        async function loadInventoryProductRecipeDisplay(inventoryProductId, elementIds) {
+            const bundleEl = document.getElementById(elementIds.bundleEl);
+            const listEl = document.getElementById(elementIds.listEl);
+            if (bundleEl) bundleEl.innerHTML = '<em>Loading recipe…</em>';
+            if (listEl) listEl.innerHTML = '';
+            if (!inventoryProductId) {
+                if (bundleEl) bundleEl.innerHTML = '<em>No product linked</em>';
+                return;
+            }
+            try {
+                const res = await fetch('/api/admin/inventory-products/' + inventoryProductId + '/materials', { credentials: 'include' });
+                const data = await res.json();
+                renderInventoryProductRecipeDisplay(bundleEl, listEl, data);
+            } catch (err) {
+                console.error('loadInventoryProductRecipeDisplay:', err);
+                if (bundleEl) bundleEl.innerHTML = '<em style="color:#c00;">Failed to load recipe</em>';
+            }
+        }
+
         async function loadEditVariationRecipe(inventoryProductId) {
             resetEditVariationMaterials();
             if (!inventoryProductId) return;
@@ -1909,13 +2173,17 @@ const urlParams = new URLSearchParams(window.location.search);
         if (addProductForm) {
             addProductForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
-                const unitPrice = getCreateProductUnitPrice();
-                if (unitPrice == null) {
-                    showCustomPopup('Enter a product price greater than zero before creating the product.', true);
+                const saleEl = document.getElementById('createProductPrice');
+                const costEl = document.getElementById('createProductCostPrice');
+                const priceValidation = validateSaleCostPair(saleEl, costEl);
+                if (priceValidation) {
+                    showCustomPopup(priceValidation, true);
                     return;
                 }
-                const priceEl = document.getElementById('createProductPrice');
-                if (priceEl) priceEl.value = unitPrice.toFixed(2);
+                const unitPrice = getProductUnitPriceFromEl(saleEl);
+                const unitCost = getProductUnitPriceFromEl(costEl, true);
+                if (saleEl) saleEl.value = unitPrice.toFixed(2);
+                if (costEl) costEl.value = unitCost.toFixed(2);
                 const variations = collectCreateProductVariations();
                 if (!variations.length) {
                     showCustomPopup('Add at least one variation with name and quantity before creating the product.', true);
@@ -1949,6 +2217,10 @@ const urlParams = new URLSearchParams(window.location.search);
                 }
 
                 const formData = new FormData(this);
+                const bundleSel = document.getElementById('createBomBundleSelect');
+                if (bundleSel && bundleSel.value) {
+                    formData.set('bomBundleId', bundleSel.value);
+                }
                 document.querySelectorAll('#createProductVariationsList .create-product-variation-row').forEach((row) => {
                     appendVariationMediaToFormData(formData, row);
                 });
@@ -2245,6 +2517,12 @@ const urlParams = new URLSearchParams(window.location.search);
                     document.getElementById('editInventoryProductId').value = productId;
                     document.getElementById('editInventoryProductName').value = p.Name || '';
                     document.getElementById('editInventoryProductCurrentImage').value = p.ImageURL || '';
+                    const saleEl = document.getElementById('editInventoryProductSalePrice');
+                    if (saleEl) {
+                        const sp = p.Price != null && p.Price !== '' && !isNaN(parseFloat(p.Price)) ? parseFloat(p.Price) : '';
+                        saleEl.value = sp !== '' ? sp.toFixed(2) : '';
+                        bindProductPriceInput(saleEl);
+                    }
                     const descEl = document.getElementById('editInventoryProductDescription');
                     if (descEl) descEl.value = p.Description || '';
                     const thumbsHidden = document.getElementById('editInventoryProductCurrentThumbnails');
@@ -2277,6 +2555,7 @@ const urlParams = new URLSearchParams(window.location.search);
             const modal = document.getElementById('editInventoryProductModal');
             const form = document.getElementById('editInventoryProductForm');
             if (!modal || !form) return;
+            bindProductPriceInput(document.getElementById('editInventoryProductSalePrice'));
             const close = function() { modal.style.display = 'none'; form.reset(); };
             ['closeEditInventoryProductModal', 'cancelEditInventoryProduct'].forEach(function(id) {
                 const el = document.getElementById(id);
@@ -2285,7 +2564,14 @@ const urlParams = new URLSearchParams(window.location.search);
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 const id = document.getElementById('editInventoryProductId').value;
+                const saleEl = document.getElementById('editInventoryProductSalePrice');
+                const unitPrice = getProductUnitPriceFromEl(saleEl);
+                if (unitPrice == null) {
+                    showCustomPopup('Enter a sale price greater than zero. This applies to all variations.', true);
+                    return;
+                }
                 const fd = new FormData(form);
+                fd.set('price', unitPrice.toFixed(2));
                 const thumbInput = document.getElementById('editInventoryProductThumbnails');
                 if (thumbInput && thumbInput.files && thumbInput.files.length) {
                     fd.delete('productThumbnail');
@@ -2326,6 +2612,7 @@ const urlParams = new URLSearchParams(window.location.search);
         if (isProductsListingPage) initEditInventoryProductModal();
         if (isInventoryPage) initEditInventoryProductQuickModal();
         if (isInventoryPage) initRestockConfirmModal();
+        if (isInventoryPage) initVariationRestockModal();
 
         function openEditInventoryProductQuickModal(productId) {
             const modal = document.getElementById('editInventoryProductQuickModal');
@@ -2342,12 +2629,30 @@ const urlParams = new URLSearchParams(window.location.search);
                     document.getElementById('editInventoryProductQuickName').value = p.Name || '';
                     document.getElementById('editInventoryProductQuickCurrentImage').value = p.ImageURL || '';
                     populateQuickEditProductCategorySelect(p.Category || '');
+                    const quickPriceEl = document.getElementById('editInventoryProductQuickPrice');
+                    const quickCostEl = document.getElementById('editInventoryProductQuickCostPrice');
+                    if (quickPriceEl) {
+                        const parentPrice = p.Price != null && p.Price !== '' && !isNaN(parseFloat(p.Price))
+                            ? parseFloat(p.Price) : '';
+                        quickPriceEl.value = parentPrice !== '' ? parentPrice.toFixed(2) : '';
+                        bindProductPriceInput(quickPriceEl);
+                    }
+                    if (quickCostEl) {
+                        const parentCost = p.CostPrice != null && p.CostPrice !== '' && !isNaN(parseFloat(p.CostPrice))
+                            ? parseFloat(p.CostPrice) : '';
+                        quickCostEl.value = parentCost !== '' ? parentCost.toFixed(2) : '';
+                        bindProductPriceInput(quickCostEl);
+                    }
                     const preview = document.getElementById('editInventoryProductQuickImagePreview');
                     if (preview) {
                         preview.innerHTML = p.ImageURL
                             ? buildMediaImgHtml(p.ImageURL, { label: 'Current main image', style: 'max-width:120px;max-height:120px;object-fit:cover;border-radius:4px;border:1px solid #ddd;' })
                             : '<em style="color:#888;">No image</em>';
                     }
+                    loadInventoryProductRecipeDisplay(productId, {
+                        bundleEl: 'editInventoryProductBomBundleDisplay',
+                        listEl: 'editInventoryProductRecipeList'
+                    });
                     modal.style.display = 'block';
                 })
                 .catch(function() { showCustomPopup('Failed to load product.', true); });
@@ -2357,6 +2662,8 @@ const urlParams = new URLSearchParams(window.location.search);
             const modal = document.getElementById('editInventoryProductQuickModal');
             const form = document.getElementById('editInventoryProductQuickForm');
             if (!modal || !form) return;
+            bindProductPriceInput(document.getElementById('editInventoryProductQuickPrice'));
+            bindProductPriceInput(document.getElementById('editInventoryProductQuickCostPrice'));
             const close = function() { modal.style.display = 'none'; form.reset(); };
             ['closeEditInventoryProductQuickModal', 'cancelEditInventoryProductQuick'].forEach(function(id) {
                 const el = document.getElementById(id);
@@ -2365,7 +2672,18 @@ const urlParams = new URLSearchParams(window.location.search);
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 const id = document.getElementById('editInventoryProductQuickId').value;
+                const quickPriceEl = document.getElementById('editInventoryProductQuickPrice');
+                const quickCostEl = document.getElementById('editInventoryProductQuickCostPrice');
+                const priceValidation = validateSaleCostPair(quickPriceEl, quickCostEl);
+                if (priceValidation) {
+                    showCustomPopup(priceValidation, true);
+                    return;
+                }
+                const unitPrice = getProductUnitPriceFromEl(quickPriceEl);
+                const unitCost = getProductUnitPriceFromEl(quickCostEl, true);
                 const fd = new FormData(form);
+                fd.set('price', unitPrice.toFixed(2));
+                fd.set('costPrice', unitCost.toFixed(2));
                 const btn = document.getElementById('saveEditInventoryProductQuick');
                 if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
                 try {
@@ -2691,6 +3009,15 @@ const urlParams = new URLSearchParams(window.location.search);
                     colorEl.value = loadedColor;
                     colorEl.setAttribute('data-initial-color', loadedColor);
                 }
+                const catalogSaleEl = document.getElementById('editVariationCatalogSalePrice');
+                const loadedSale = variationData.Price != null && variationData.Price !== ''
+                    ? parseFloat(variationData.Price)
+                    : (variation.Price != null ? parseFloat(variation.Price) : NaN);
+                if (catalogSaleEl) {
+                    catalogSaleEl.value = Number.isFinite(loadedSale) && loadedSale > 0 ? loadedSale.toFixed(2) : '';
+                    catalogSaleEl.setAttribute('data-initial-price', catalogSaleEl.value);
+                    bindProductPriceInput(catalogSaleEl);
+                }
                 renderMainImagePreview(
                     document.getElementById('editVariationStatusMainImagePreview'),
                     variationData.VariationImageURL || null
@@ -2699,9 +3026,13 @@ const urlParams = new URLSearchParams(window.location.search);
                     document.getElementById('editVariationCatalogMainImagePreview'),
                     variationData.VariationImageURL || null
                 );
-                const restockQtyEl = document.getElementById('editVariationRestockQty');
-                if (restockQtyEl) restockQtyEl.value = '1';
-                if (!isProductReturnsPage && !isProductsListingPage) {
+                const variationInventoryMode = isInventoryPage && window._variationEditMode === 'inventory';
+                if (variationInventoryMode && parentInvId) {
+                    await loadInventoryProductRecipeDisplay(parentInvId, {
+                        bundleEl: 'editVariationBomBundleDisplay',
+                        listEl: 'editVariationRecipeReadonlyList'
+                    });
+                } else if (!isProductReturnsPage && !isProductsListingPage) {
                     await loadEditVariationRecipe(parentInvId);
                 } else {
                     resetEditVariationMaterials();
@@ -3081,6 +3412,10 @@ const urlParams = new URLSearchParams(window.location.search);
                 const initialVariationName = variationNameInput?.getAttribute('data-initial-name') || '';
                 const variationNameChanged = catalogMode && variationNameInput
                     && String(variationNameInput.value || '').trim() !== String(initialVariationName).trim();
+                const catalogSaleEl = document.getElementById('editVariationCatalogSalePrice');
+                const initialCatalogSale = catalogSaleEl?.getAttribute('data-initial-price') || '';
+                const catalogSaleChanged = catalogMode && catalogSaleEl
+                    && String(catalogSaleEl.value || '').trim() !== String(initialCatalogSale).trim();
 
                 const currentRecipeJson = JSON.stringify(getEditVariationRequiredMaterials());
                 const initialRecipeJson = document.getElementById('editVariationRecipeMaterials')?.getAttribute('data-initial-recipe') || '[]';
@@ -3092,8 +3427,13 @@ const urlParams = new URLSearchParams(window.location.search);
                         showCustomPopup('Variation name is required.', true);
                         return;
                     }
-                    if (!variationNameChanged && !hasMediaUpload && !colorChanged) {
-                        showCustomPopup('No changes detected. Update the variation name, color, main image, thumbnails, or 3D model before saving.', true);
+                    const catalogSale = catalogSaleChanged ? getProductUnitPriceFromEl(catalogSaleEl) : null;
+                    if (catalogSaleChanged && catalogSale == null) {
+                        showCustomPopup('Enter a sale price greater than zero.', true);
+                        return;
+                    }
+                    if (!variationNameChanged && !hasMediaUpload && !colorChanged && !catalogSaleChanged) {
+                        showCustomPopup('No changes detected. Update the variation name, sale price, color, main image, thumbnails, or 3D model before saving.', true);
                         return;
                     }
                 } else if (inventoryMode) {
@@ -3136,6 +3476,10 @@ const urlParams = new URLSearchParams(window.location.search);
                     const vName = String(variationNameInput?.value || '').trim();
                     if (vName) formData.append('variationName', vName);
                     if (colorInput) formData.append('color', String(colorInput.value || '').trim());
+                    if (catalogSaleChanged && catalogSaleEl) {
+                        const catalogSale = getProductUnitPriceFromEl(catalogSaleEl);
+                        if (catalogSale != null) formData.append('price', catalogSale.toFixed(2));
+                    }
                     appendVariationMediaToFormData(formData, document.getElementById('editVariationStatusForm'), {
                         includeMain: true,
                         mainImageId: 'editVariationCatalogMainImage'
@@ -3625,19 +3969,6 @@ const urlParams = new URLSearchParams(window.location.search);
                 }
             } else {
                 console.warn('Update Variation Status button not found - will retry when modal opens');
-            }
-
-            const editVariationRestockBtn = document.getElementById('editVariationRestockBtn');
-            if (editVariationRestockBtn && !editVariationRestockBtn.hasAttribute('data-listener-attached')) {
-                editVariationRestockBtn.addEventListener('click', async function() {
-                    const vid = parseInt(document.getElementById('editVariationStatusVariationID')?.value, 10);
-                    const ipid = parseInt(document.getElementById('editVariationStatusInventoryProductID')?.value, 10);
-                    const qty = parseInt(document.getElementById('editVariationRestockQty')?.value, 10);
-                    if (vid && ipid && typeof window.restockVariationInline === 'function') {
-                        await window.restockVariationInline(vid, ipid, editVariationRestockBtn, qty);
-                    }
-                });
-                editVariationRestockBtn.setAttribute('data-listener-attached', 'true');
             }
 
             const addEditVariationMaterialBtn = document.getElementById('addEditVariationMaterialBtn');

@@ -60,7 +60,6 @@ const ProductCard = ({ product }) => {
     displayPrice,
     originalPrice,
     showDiscount,
-    showFromPrefix,
     discountBadgeLabel,
   } = getProductCardDisplayPricing(product);
 
@@ -135,13 +134,15 @@ const ProductCard = ({ product }) => {
         </div>
       )}
       <div className="product-card-image-container">
-        {has3DModelData && (
+        {(discountBadgeLabel || has3DModelData) && (
           <div className="product-card-badges product-card-badges--left">
-            <div className="model3d-badge">3D</div>
+            {discountBadgeLabel && (
+              <div className="discount-badge">{discountBadgeLabel}</div>
+            )}
+            {has3DModelData && (
+              <div className="model3d-badge">3D</div>
+            )}
           </div>
-        )}
-        {discountBadgeLabel && (
-          <div className="discount-badge discount-badge--top-right">{discountBadgeLabel}</div>
         )}
 
         {/* Product image */}
@@ -232,9 +233,7 @@ const ProductCard = ({ product }) => {
         
         {/* Price section */}
         <div className="product-price-section">
-          <span className="current-price">
-            {showFromPrefix ? `From ${formatPrice(displayPrice)}` : formatPrice(displayPrice)}
-          </span>
+          <span className="current-price">{formatPrice(displayPrice)}</span>
           {originalPrice != null && originalPrice > displayPrice && (
             <span className="original-price">{formatPrice(originalPrice)}</span>
           )}

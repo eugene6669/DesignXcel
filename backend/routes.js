@@ -56,6 +56,18 @@ const {
 } = require('./utils/adminQueryHelpers');
 const { serializeActivityLogChanges, fetchActivityLogs } = require('./utils/activityLogHelpers');
 const { invalidateAdminPageCache } = require('./utils/adminPageCache');
+const {
+    detectSalesReportSchema,
+    isRefundMerchandiseOrder,
+    computeReturnLogisticsCosts,
+    sumRefundMerchandise,
+    countRefundMerchandiseOrders,
+    countReturnedOrders,
+    computeMerchandiseCostMetrics,
+    computeInventoryLossAtCost,
+    aggregateSalesReportFromOrders,
+    applySalesReportOrderRowDisplay
+} = require('./utils/salesReportMetrics');
 const { resolveProductId } = require('./utils/productIdResolver');
 const { formatInventoryDate } = require('./utils/formatInventoryDate');
 const { generateRawMaterialSKU, generateBomBundleCode } = require('./utils/generateMaterialIdentifiers');
@@ -64,6 +76,7 @@ const {
     loadActiveBomBundles,
     loadArchivedBomBundles,
     loadBomBundleWithMaterials,
+    findBomBundleMatchingMaterials,
     saveBomBundleMaterials,
     normalizeBundleMaterials
 } = require('./utils/bomBundleSchema');
@@ -225,23 +238,20 @@ module.exports = function (sql, pool, getStripe = null) {
         const n = (v) => parseFloat(v || 0);
         const i = (v) => parseInt(v || 0, 10);
         return [
-            { label: 'Gross Sales', value: n(stats.grossSales), currency: true },
-            { label: 'Net Sales', value: n(stats.netSales), currency: true },
-            { label: 'Gross Revenue', value: n(stats.grossRevenue), currency: true },
-            { label: 'Net Revenue', value: n(stats.netRevenue), currency: true },
-            { label: 'Total Revenue', value: n(stats.totalRevenue), currency: true },
-            { label: 'Returns', value: n(stats.salesReturns), currency: true },
-            { label: 'Total Discounts', value: n(stats.totalDiscounts), currency: true },
-            { label: 'Total Taxes', value: n(stats.totalTaxes), currency: true },
-            { label: 'Inventory Loss', value: n(stats.inventoryLoss), currency: true },
-            { label: 'Delivery Revenues', value: n(stats.deliveryRevenues), currency: true },
-            { label: 'Total Orders', value: i(stats.totalOrders), currency: false },
-            { label: 'Total Customers', value: i(stats.totalCustomers), currency: false },
-            { label: 'Average Order Value', value: n(stats.averageOrderValue), currency: true },
-            { label: 'Refunded Orders', value: i(stats.refundedOrdersCount), currency: false },
-            { label: 'Returned Orders', value: i(stats.returnedOrdersCount), currency: false },
-            { label: 'Replacement Orders', value: i(stats.replacementOrdersCount), currency: false },
-            { label: 'Return Rate', value: n(stats.returnRate), percent: true }
+            { label: '1. Sales — Gross Product Sales', value: n(stats.grossProductSales || stats.grossSales), currency: true },
+            { label: '1. Sales — Discounts', value: n(stats.totalDiscounts), currency: true },
+            { label: '1. Sales — Net Product Sales', value: n(stats.netProductSales || stats.netSales), currency: true },
+            { label: '1. Sales — Net Delivery Revenue', value: n(stats.netDeliveryRevenue), currency: true },
+            { label: '1. Sales — Net Revenue', value: n(stats.netRevenue), currency: true },
+            { label: '2. Returns — Product Refunds (reversal)', value: n(stats.productRefunds), currency: true },
+            { label: '2. Returns — Delivery Refunds (reversal)', value: n(stats.deliveryRefunds), currency: true },
+            { label: '2. Returns — Return Shipping Expense', value: n(stats.returnShippingExpense || stats.returnShipping), currency: true },
+            { label: '2. Returns — Damage Cost', value: n(stats.damageInventoryCost), currency: true },
+            { label: '3. Inventory — COGS', value: n(stats.cogs), currency: true },
+            { label: '3. Inventory — Replacement Cost', value: n(stats.replacementCost), currency: true },
+            { label: '4. Profit — Gross Profit', value: n(stats.grossProfit), currency: true },
+            { label: '4. Profit — Gross Margin', value: n(stats.grossMargin), percent: true },
+            { label: 'Orders', value: i(stats.totalOrders), currency: false }
         ];
     }
 
@@ -15937,6 +15947,7 @@ module.exports = function (sql, pool, getStripe = null) {
             let hasIsRefundedColumn = false;
             let hasReturnItemsColumn = false;
             let hasRefundAmountColumn = false;
+            let salesReportSchema = { hasReturnShippingFee: false, hasCostPrice: false, hasActionType: false };
             try {
                 const columnCheck = await pool.request().query(`
                     SELECT COUNT(*) as columnExists
@@ -15961,6 +15972,8 @@ module.exports = function (sql, pool, getStripe = null) {
                     AND name = 'RefundAmount'
                 `);
                 hasRefundAmountColumn = refundAmountCheck.recordset[0].columnExists > 0;
+
+                salesReportSchema = await detectSalesReportSchema(pool);
             } catch (err) {
                 console.log('[SALES REPORT] Could not check for IsRefunded/ReturnItems/RefundAmount columns, assuming they do not exist');
             }
@@ -15972,6 +15985,15 @@ module.exports = function (sql, pool, getStripe = null) {
             const refundAmountSelect = hasRefundAmountColumn
                 ? 'ISNULL(o.RefundAmount, 0) AS RefundAmount'
                 : '0 AS RefundAmount';
+            const returnShippingFeeSelect = salesReportSchema.hasReturnShippingFee
+                ? 'ISNULL(o.ReturnShippingFee, 0) AS ReturnShippingFee'
+                : '0 AS ReturnShippingFee';
+            const actionTypeSelect = salesReportSchema.hasActionType
+                ? 'o.ActionType'
+                : 'NULL AS ActionType';
+            const returnTypeSelect = salesReportSchema.hasReturnType
+                ? 'o.ReturnType'
+                : 'NULL AS ReturnType';
 
             // Exclude cancelled orders from the default report; allow explicit Cancelled filter.
             const excludeCancelledDefault = (!status || status.trim() === '')
@@ -15993,6 +16015,9 @@ module.exports = function (sql, pool, getStripe = null) {
                     o.PaymentMethod,
                     ${isRefundedSelect},
                     ${refundAmountSelect},
+                    ${returnShippingFeeSelect},
+                    ${actionTypeSelect},
+                    ${returnTypeSelect},
                     (SELECT COUNT(*) FROM OrderItems oi WHERE oi.OrderID = o.OrderID) AS TotalItems
                     ${hasReturnItemsColumn ? ', o.ReturnItems' : ', NULL AS ReturnItems'}
                 FROM Orders o
@@ -16282,30 +16307,9 @@ module.exports = function (sql, pool, getStripe = null) {
             // 2. Status = 'Completed Returned' (returned orders that were completed)
             // 3. IsRefunded = 1 (legacy tracking)
             // 4. Status = 'Cancelled' AND IsRefunded = 1 (old way)
-            const totalRefunds = result.recordset.reduce((sum, o) => {
-                const isRefunded = o.Status === 'Refunded' ||
-                    o.Status === 'Completed Returned' ||
-                    o.IsRefunded === 1 ||
-                    o.IsRefunded === true ||
-                    (o.Status === 'Cancelled' && (o.IsRefunded === 1 || o.IsRefunded === true));
-
-                if (isRefunded) {
-                    const refundAmount = parseFloat(o.RefundAmount || 0);
-                    // If RefundAmount is 0, use Subtotal as fallback (not TotalAmount, to exclude delivery fees)
-                    const refund = refundAmount > 0 ? refundAmount : parseFloat(o.Subtotal || 0);
-                    return sum + refund;
-                }
-                return sum;
-            }, 0);
-
-            // Count refunded orders
-            const refundedOrdersCount = result.recordset.filter(o => {
-                return o.Status === 'Refunded' ||
-                    o.Status === 'Completed Returned' ||
-                    o.IsRefunded === 1 ||
-                    o.IsRefunded === true ||
-                    (o.Status === 'Cancelled' && (o.IsRefunded === 1 || o.IsRefunded === true));
-            }).length;
+            // Refund merchandise only (excludes replacement Completed Returned — not a product refund)
+            const totalRefunds = sumRefundMerchandise(result.recordset);
+            const refundedOrdersCount = countRefundMerchandiseOrders(result.recordset);
 
             // Calculate Net Sales using Standard E-commerce Furniture Sales Report Formula:
             // Net Sales = Gross Sales - Total Discounts - Total Refunds
@@ -16438,23 +16442,9 @@ module.exports = function (sql, pool, getStripe = null) {
             let returns = 0;
 
             if (returnedOrders.length > 0) {
-                returns = returnedOrders.reduce((sum, o) => {
-                    const refundAmount = parseFloat(o.RefundAmount || 0);
-                    if (refundAmount > 0) {
-                        console.log(`[SALES REPORT] Order ${o.OrderID}: RefundAmount=₱${refundAmount.toFixed(2)}`);
-                        return sum + refundAmount;
-                    } else {
-                        // Fallback: use Subtotal if RefundAmount is 0
-                        const subtotal = parseFloat(o.Subtotal || 0);
-                        if (subtotal > 0) {
-                            console.log(`[SALES REPORT] Order ${o.OrderID}: RefundAmount=0, using Subtotal=₱${subtotal.toFixed(2)}`);
-                            return sum + subtotal;
-                        }
-                    }
-                    return sum;
-                }, 0);
-
-                console.log('[SALES REPORT] Total returns calculated from RefundAmount:', returns);
+                const refundOnlyOrders = returnedOrders.filter(isRefundMerchandiseOrder);
+                returns = sumRefundMerchandise(refundOnlyOrders);
+                console.log('[SALES REPORT] Total refund merchandise (excludes replacement fulfillment):', returns);
             } else {
                 returns = 0;
             }
@@ -16758,69 +16748,12 @@ module.exports = function (sql, pool, getStripe = null) {
                                 }
                             }
 
-                            const inventoryLossQuery = `
-                                SELECT 
-                                    oi.OrderID,
-                                    oi.ProductID,
-                                    oi.VariationID,
-                                    oi.Quantity,
-                                    oi.PriceAtPurchase,
-                                    o.ReturnType,
-                                    o.ActionType
-                                FROM OrderItems oi
-                                INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                                WHERE oi.OrderID IN (${orderIdParams})
-                                AND o.ReturnType = 'damage'
-                            `;
-
-                            const inventoryLossRequest = pool.request();
-                            batch.forEach((id, idx) => {
-                                inventoryLossRequest.input(`orderId${i + idx}`, sql.Int, id);
-                            });
-
-                            const inventoryLossResult = await inventoryLossRequest.query(inventoryLossQuery);
-
-                            // Calculate inventory loss with partial return support
-                            inventoryLossResult.recordset.forEach(item => {
-                                const orderId = item.OrderID;
-                                const returnItems = orderReturnItemsMap.get(orderId);
-                                const returnType = orderReturnTypes.get(orderId) || item.ReturnType;
-                                const actionType = orderActionTypes.get(orderId) || item.ActionType;
-
-                                if (returnType === 'damage') {
-                                    // Check if this is a partial return
-                                    if (returnItems && Array.isArray(returnItems) && returnItems.length > 0) {
-                                        const returnItem = returnItems.find(ri => {
-                                            const returnProductId = ri.productId || ri.ProductID;
-                                            const returnVariationId = ri.variationId || ri.VariationID || null;
-                                            const itemProductId = item.ProductID;
-                                            const itemVariationId = item.VariationID || null;
-
-                                            const productMatch = String(returnProductId) === String(itemProductId);
-                                            const variationMatch = (returnVariationId == null && (itemVariationId == null || itemVariationId === undefined)) ||
-                                                (returnVariationId != null && itemVariationId != null && String(returnVariationId) === String(itemVariationId));
-                                            return productMatch && variationMatch;
-                                        });
-
-                                        if (returnItem) {
-                                            // Partial return: use returned quantity for damaged items
-                                            const returnQty = parseInt(returnItem.quantity || returnItem.Quantity || 0);
-                                            const price = parseFloat(item.PriceAtPurchase || 0);
-                                            inventoryLoss += price * returnQty;
-                                            totalUnitsDamaged += returnQty;
-                                        }
-                                    } else {
-                                        // Full return: use all items
-                                        const quantity = parseFloat(item.Quantity || 0);
-                                        const price = parseFloat(item.PriceAtPurchase || 0);
-                                        inventoryLoss += price * quantity;
-                                        totalUnitsDamaged += quantity;
-                                    }
-                                }
-                            });
-
                             // Count replacement orders
-                            const replacementOrders = await pool.request().query(`
+                            const replacementOrdersRequest = pool.request();
+                            batch.forEach((id, idx) => {
+                                replacementOrdersRequest.input(`orderId${i + idx}`, sql.Int, id);
+                            });
+                            const replacementOrders = await replacementOrdersRequest.query(`
                                 SELECT COUNT(DISTINCT OrderID) AS ReplacementCount
                                 FROM Orders
                                 WHERE OrderID IN (${orderIdParams})
@@ -16875,8 +16808,23 @@ module.exports = function (sql, pool, getStripe = null) {
                             });
                         }
                     } catch (inventoryLossError) {
-                        console.error('[SALES REPORT] Error calculating Inventory Loss:', inventoryLossError);
+                        console.error('[SALES REPORT] Error calculating return unit metrics:', inventoryLossError);
                     }
+                }
+
+                try {
+                    const costLoss = await computeInventoryLossAtCost(
+                        pool,
+                        sql,
+                        returnedOrders,
+                        hasReturnItemsColumn,
+                        salesReportSchema.hasCostPrice
+                    );
+                    inventoryLoss = costLoss.damageInventoryCost;
+                    totalUnitsDamaged = costLoss.totalUnitsDamaged;
+                    console.log('[SALES REPORT] Inventory loss at item cost (damaged, non-resellable):', inventoryLoss);
+                } catch (costLossErr) {
+                    console.error('[SALES REPORT] Error calculating inventory loss at cost:', costLossErr);
                 }
             }
 
@@ -17466,71 +17414,17 @@ module.exports = function (sql, pool, getStripe = null) {
                         });
                     }
 
-                    // Snapshot merchandise subtotals before refund display adjustments (for stats fallback)
+                    // Attach order items; display VAT-inclusive line amounts (no separate tax column)
                     result.recordset.forEach(order => {
-                        order.__merchandiseSubtotal = parseFloat(order.Subtotal || 0);
-                    });
-
-                    // Attach order items to each order as plain objects for JSON serialization
-                    // Also update Subtotal, TotalAmount, DeliveryCost for refunded orders with partial returns
-                    result.recordset.forEach(order => {
-                        // Ensure OrderItems is a plain array that will serialize properly
                         const items = orderItemsMap[order.OrderID] || [];
                         order.OrderItems = items.map(item => ({
                             name: String(item.name || 'Unknown Product'),
                             quantity: Number(item.quantity || 0),
                             price: Number(item.price || 0)
                         }));
-
-                        // Update financial values for refunded/completed returned orders with partial returns
-                        const orderStatus = (order.Status || '').toString().toLowerCase();
-                        const isRefunded = orderStatus === 'refunded' || orderStatus === 'completed returned' || (order.IsRefunded === 1);
-                        const hasRefundAmount = parseFloat(order.RefundAmount || 0) > 0;
-                        const hasReturnItems = order.ReturnItems && hasReturnItemsColumn;
-                        const shouldUseRefundedValues = isRefunded && (hasRefundAmount || hasReturnItems);
-
-                        if (shouldUseRefundedValues) {
-                            // Calculate subtotal from returned items if available, otherwise use RefundAmount
-                            let subtotalFromItems = 0;
-                            if (items.length > 0) {
-                                subtotalFromItems = items.reduce((sum, item) => {
-                                    return sum + (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 0);
-                                }, 0);
-                            }
-
-                            // Use RefundAmount if available, otherwise use calculated subtotal
-                            if (hasRefundAmount) {
-                                order.Subtotal = parseFloat(order.RefundAmount || 0);
-                                order.TotalAmount = parseFloat(order.RefundAmount || 0);
-                            } else if (subtotalFromItems > 0) {
-                                order.Subtotal = subtotalFromItems;
-                                order.TotalAmount = subtotalFromItems;
-                            } else {
-                                // Fallback: use original subtotal calculation but set delivery to 0
-                                order.Subtotal = parseFloat(order.Subtotal || 0);
-                                order.TotalAmount = parseFloat(order.Subtotal || 0);
-                            }
-
-                            // Set delivery costs to 0 for refunded orders
-                            order.DeliveryCost = 0;
-                            order.ExtraDeliveryFee = 0;
-                            order.TotalDiscounts = 0;
-
-                            // VAT on merchandise shown for this order (replacement/refund still had a taxable sale)
-                            if (items.length > 0) {
-                                order.TotalTaxes = items.reduce((sum, item) => {
-                                    return sum + (parseFloat(item.price) || 0) * 0.12 * (parseInt(item.quantity, 10) || 0);
-                                }, 0);
-                            } else if (hasRefundAmount && parseFloat(order.Subtotal || 0) > 0) {
-                                order.TotalTaxes = parseFloat(order.Subtotal || 0) * 0.12;
-                            }
-
-                            // Update TotalItems count to reflect returned items count if items are filtered
-                            if (items.length > 0) {
-                                order.TotalItems = items.length;
-                            }
-
-                            console.log(`[SALES REPORT] Order ${order.OrderID} - Updated for refund: Status=${order.Status}, Subtotal=₱${order.Subtotal.toFixed(2)}, TotalAmount=₱${order.TotalAmount.toFixed(2)}, DeliveryCost=₱0.00, ItemsCount=${items.length}, RefundAmount=${order.RefundAmount || 0}`);
+                        applySalesReportOrderRowDisplay(order, order.OrderItems);
+                        if (items.length > 0) {
+                            order.TotalItems = items.length;
                         }
                     });
 
@@ -17573,50 +17467,68 @@ module.exports = function (sql, pool, getStripe = null) {
             const sumOrderDiscounts = result.recordset.reduce((sum, order) => sum + parseFloat(order.TotalDiscounts || 0), 0);
             const finalTotalDiscounts = sumOrderDiscounts;
 
-            const sumOrderTaxes = result.recordset.reduce((sum, order) => sum + parseFloat(order.TotalTaxes || 0), 0);
-            const finalTotalTaxes = sumOrderTaxes;
+            // Prices are VAT-inclusive; do not show a separate tax/VAT breakdown
+            const finalTotalTaxes = 0;
 
-            const grossSalesFromMerchandise = result.recordset.reduce((sum, order) => {
-                const merchandise = parseFloat(order.__merchandiseSubtotal ?? order.Subtotal ?? 0);
-                const orderDiscount = parseFloat(order.TotalDiscounts || 0);
-                return sum + merchandise + orderDiscount;
-            }, 0);
+            let cogsNetSales = 0;
+            let replacementCogs = 0;
+            try {
+                const costMetrics = await computeMerchandiseCostMetrics(
+                    pool,
+                    sql,
+                    orderIds,
+                    salesReportSchema.hasCostPrice
+                );
+                cogsNetSales = costMetrics.cogs;
+                replacementCogs = costMetrics.replacementCost;
+            } catch (cogsErr) {
+                console.error('[SALES REPORT] Error calculating COGS:', cogsErr);
+            }
 
-            const grossSalesForStats = grossSales > 0 ? grossSales : grossSalesFromMerchandise;
-            const salesReturnsValue = totalRefunds > 0 ? totalRefunds : returns;
-            const netSalesForStats = grossSalesForStats - finalTotalDiscounts - salesReturnsValue;
-
-            const deliveryFeesAllSalesOrders = result.recordset.reduce((sum, order) => {
-                return sum + parseFloat(order.DeliveryCost || 0) + parseFloat(order.ExtraDeliveryFee || 0);
-            }, 0);
-
-            const deliveryFeesValidOrders = result.recordset
-                .filter(o => {
-                    const status = (o.Status || '').toLowerCase().trim();
-                    return status !== 'refunded' && status !== 'completed returned' && o.IsRefunded !== 1 && o.IsRefunded !== true;
-                })
-                .reduce((sum, order) => sum + parseFloat(order.DeliveryCost || 0) + parseFloat(order.ExtraDeliveryFee || 0), 0);
-
-            const grossRevenueValue = grossSalesForStats + deliveryFeesAllSalesOrders;
-            const netRevenueValue = grossRevenueValue - finalTotalDiscounts - salesReturnsValue;
+            const returnedOrdersCountForRate = countReturnedOrders(result.recordset);
+            const reportMetrics = aggregateSalesReportFromOrders(result.recordset, {
+                cogs: cogsNetSales,
+                damageInventoryCost: inventoryLoss,
+                replacementCost: replacementCogs,
+                totalOrders,
+                returnedOrdersCount: returnedOrdersCountForRate
+            });
 
             const stats = {
-                grossSales: grossSalesForStats,
-                netSales: netSalesForStats,
-                grossRevenue: grossRevenueValue,
-                netRevenue: netRevenueValue,
-                salesReturns: salesReturnsValue,
+                grossSales: reportMetrics.grossSales,
+                grossProductSales: reportMetrics.grossProductSales,
+                netSales: reportMetrics.netSales,
+                netProductSales: reportMetrics.netProductSales,
+                recognizedProductRevenue: reportMetrics.recognizedProductRevenue,
+                grossRevenue: reportMetrics.grossProductSales + reportMetrics.deliveryRevenueGross,
+                netRevenue: reportMetrics.netRevenue,
+                deliveryRevenue: reportMetrics.deliveryRevenue,
+                deliveryRevenueGross: reportMetrics.deliveryRevenueGross,
+                netDeliveryRevenue: reportMetrics.netDeliveryRevenue,
+                salesReturns: reportMetrics.productRefunds,
+                productRefunds: reportMetrics.productRefunds,
+                deliveryRefunds: reportMetrics.deliveryRefunds,
                 totalRefunds: totalRefunds,
                 refundedOrdersCount: refundedOrdersCount,
-                returnedOrdersCount: returnedOrdersCount,
-                returnRate: returnRate,
-                totalDiscounts: finalTotalDiscounts,
+                returnedOrdersCount: returnedOrdersCountForRate,
+                returnRate: reportMetrics.returnRate,
+                refundRate: reportMetrics.refundRate,
+                totalDiscounts: reportMetrics.totalDiscounts,
                 totalTaxes: finalTotalTaxes,
-                deliveryRevenues: deliveryFeesValidOrders,
+                deliveryRevenues: reportMetrics.netDeliveryRevenue,
+                recognizedProductRevenue: reportMetrics.recognizedProductRevenue,
+                returnShippingExpense: reportMetrics.returnShippingExpense,
+                returnShipping: reportMetrics.returnShipping,
+                replacementShipping: reportMetrics.replacementShipping,
                 deliveryRevenuesLostFromReturns: deliveryRevenuesFromReturns,
                 deliveryRevenuesLostFromRefunds: deliveryRevenuesFromRefunds,
-                totalDeliveryRevenues: deliveryFeesValidOrders,
-                inventoryLoss: inventoryLoss,
+                inventoryLoss: reportMetrics.damageInventoryCost,
+                damageInventoryCost: reportMetrics.damageInventoryCost,
+                cogs: reportMetrics.cogs,
+                replacementCost: reportMetrics.replacementCost,
+                grossProfit: reportMetrics.grossProfit,
+                grossMargin: reportMetrics.grossMargin,
+                totalRevenue: reportMetrics.netRevenue,
                 totalUnitsSold: totalUnitsSold,
                 totalUnitsReturned: totalUnitsReturned,
                 totalUnitsDamaged: totalUnitsDamaged,
@@ -17626,19 +17538,21 @@ module.exports = function (sql, pool, getStripe = null) {
                 damageRate: totalUnitsReturned > 0 ? (totalUnitsDamaged / totalUnitsReturned) * 100 : 0,
                 returnRateByUnits: totalUnitsSold > 0 ? (totalUnitsReturned / totalUnitsSold) * 100 : 0,
                 replacementRate: totalUnitsReturned > 0 ? (totalUnitsReplaced / totalUnitsReturned) * 100 : 0,
-                totalRevenue: netSalesForStats + deliveryFeesValidOrders,
                 totalOrders: totalOrders,
                 totalCustomers: new Set(result.recordset.map(o => o.CustomerEmail)).size,
                 averageOrderValue: averageOrderValue
             };
 
             console.log('[SALES REPORT] Final stats:', {
-                grossSales: grossSalesForStats,
-                netSales: netSalesForStats,
-                grossRevenue: grossRevenueValue,
-                netRevenue: netRevenueValue,
-                totalDiscounts: finalTotalDiscounts,
-                salesReturns: salesReturnsValue
+                grossProductSales: reportMetrics.grossProductSales,
+                netProductSales: reportMetrics.netProductSales,
+                recognizedProductRevenue: reportMetrics.recognizedProductRevenue,
+                netDeliveryRevenue: reportMetrics.netDeliveryRevenue,
+                netRevenue: reportMetrics.netRevenue,
+                productRefunds: reportMetrics.productRefunds,
+                returnShippingExpense: reportMetrics.returnShippingExpense,
+                damageCost: reportMetrics.damageInventoryCost,
+                grossProfit: reportMetrics.grossProfit
             });
 
             // Revenue composition: structural split (matches stats.grossRevenue = merchandise + delivery)
@@ -17697,9 +17611,9 @@ module.exports = function (sql, pool, getStripe = null) {
             }
 
             const revenueComposition = {
-                grossRevenue: grossRevenueValue,
-                merchandise: grossSalesForStats,
-                delivery: deliveryFeesAllSalesOrders,
+                grossRevenue: reportMetrics.grossProductSales + reportMetrics.deliveryRevenueGross,
+                merchandise: reportMetrics.grossProductSales,
+                delivery: reportMetrics.deliveryRevenueGross,
                 byCategory: revenueCompositionByCategory
             };
 
@@ -17752,6 +17666,16 @@ module.exports = function (sql, pool, getStripe = null) {
             const refundAmountColumn = hasRefundAmountColumn ? ', ISNULL(o.RefundAmount, 0) AS RefundAmount' : ', 0 AS RefundAmount';
             const isRefundedColumn = hasRefundAmountColumn ? ', CASE WHEN ISNULL(o.RefundAmount, 0) > 0 THEN 1 ELSE 0 END AS IsRefunded' : ', 0 AS IsRefunded';
 
+            let exportReportSchema = { hasReturnShippingFee: false, hasCostPrice: false };
+            try {
+                exportReportSchema = await detectSalesReportSchema(pool);
+            } catch (exportSchemaErr) {
+                console.warn('[CSV EXPORT] Sales report schema detection failed:', exportSchemaErr.message);
+            }
+            const returnShippingFeeColumnExport = exportReportSchema.hasReturnShippingFee
+                ? ', ISNULL(o.ReturnShippingFee, 0) AS ReturnShippingFee'
+                : ', 0 AS ReturnShippingFee';
+
             const excludeCancelledExport = (!status || status.trim() === '')
                 ? ` AND o.Status <> 'Cancelled'`
                 : '';
@@ -17775,6 +17699,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     ${returnItemsColumn}
                     ${refundAmountColumn}
                     ${isRefundedColumn}
+                    ${returnShippingFeeColumnExport}
                 FROM Orders o
                 INNER JOIN Customers c ON o.CustomerID = c.CustomerID
                 WHERE 1=1
@@ -18365,50 +18290,29 @@ module.exports = function (sql, pool, getStripe = null) {
             const totalOrders = result.recordset.length;
             const returnRate = totalOrders > 0 ? (returnedOrdersCount / totalOrders) * 100 : 0;
 
-            // Calculate Inventory Loss (value of returned/damaged items)
             let inventoryLoss = 0;
-            if (returnedOrders.length > 0) {
-                const returnedOrderIds = returnedOrders.map(o => o.OrderID);
-                if (returnedOrderIds.length > 0) {
-                    try {
-                        const batchSize = 1000;
-                        for (let i = 0; i < returnedOrderIds.length; i += batchSize) {
-                            const batch = returnedOrderIds.slice(i, i + batchSize);
-                            const orderIdParams = batch.map((id, idx) => `@orderId${i + idx}`).join(',');
-
-                            const inventoryLossQuery = `
-                                SELECT 
-                                    SUM(ISNULL(oi.PriceAtPurchase, 0) * ISNULL(oi.Quantity, 0)) AS TotalLoss
-                                FROM OrderItems oi
-                                INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                                WHERE oi.OrderID IN (${orderIdParams})
-                                AND o.ReturnType = 'damage'
-                            `;
-
-                            const inventoryLossRequest = pool.request();
-                            batch.forEach((id, idx) => {
-                                inventoryLossRequest.input(`orderId${i + idx}`, sql.Int, id);
-                            });
-
-                            const inventoryLossResult = await inventoryLossRequest.query(inventoryLossQuery);
-                            inventoryLoss += parseFloat(inventoryLossResult.recordset[0]?.TotalLoss || 0);
-                        }
-                    } catch (inventoryLossError) {
-                        console.error('[SALES REPORT EXPORT] Error calculating Inventory Loss:', inventoryLossError);
-                    }
+            const damageReturnOrdersExport = result.recordset.filter(o => {
+                const s = (o.Status || '').toLowerCase().trim();
+                return (s === 'refunded' || s === 'completed returned' || s === 'returned')
+                    && String(o.ReturnType || '').toLowerCase() === 'damage';
+            });
+            if (damageReturnOrdersExport.length > 0) {
+                try {
+                    const costLossExport = await computeInventoryLossAtCost(
+                        pool,
+                        sql,
+                        damageReturnOrdersExport,
+                        hasReturnItemsColumn,
+                        exportReportSchema.hasCostPrice
+                    );
+                    inventoryLoss = costLossExport.damageInventoryCost;
+                } catch (inventoryLossError) {
+                    console.error('[SALES REPORT EXPORT] Error calculating inventory loss at cost:', inventoryLossError);
                 }
             }
 
             // Export stats — same formulas as on-screen Sales/Data report
-            const totalRefundsExport = result.recordset.reduce((sum, o) => {
-                const isRefunded = o.Status === 'Refunded' ||
-                    o.Status === 'Completed Returned' ||
-                    o.IsRefunded === 1 ||
-                    o.IsRefunded === true;
-                if (!isRefunded) return sum;
-                const refundAmount = parseFloat(o.RefundAmount || 0);
-                return sum + (refundAmount > 0 ? refundAmount : parseFloat(o.Subtotal || 0));
-            }, 0);
+            const totalRefundsExport = sumRefundMerchandise(result.recordset);
 
             const sumOrderDiscountsExport = Object.values(orderDiscounts).reduce((s, v) => s + parseFloat(v || 0), 0);
             const finalDiscountsExport = sumOrderDiscountsExport;
@@ -18438,14 +18342,32 @@ module.exports = function (sql, pool, getStripe = null) {
             const netRevenueValue = grossRevenueValue - finalDiscountsExport - salesReturnsExport;
             const totalRevenueExport = netSalesValue + deliveryFeesValidExport;
 
-            const refundedOrdersCountExport = result.recordset.filter(o => {
-                const s = (o.Status || '').toLowerCase().trim();
-                return s === 'refunded' || s === 'completed returned' || o.IsRefunded === 1 || o.IsRefunded === true;
-            }).length;
+            const refundedOrdersCountExport = countRefundMerchandiseOrders(result.recordset);
 
             const replacementOrdersCountExport = result.recordset.filter(o => o.ActionType === 'replacement').length;
 
-            // COGS, Gross Profit, and Gross Margin calculations removed
+            let cogsExport = 0;
+            let replacementCogsExport = 0;
+            try {
+                const costMetricsExport = await computeMerchandiseCostMetrics(
+                    pool,
+                    sql,
+                    orderIds,
+                    exportReportSchema.hasCostPrice
+                );
+                cogsExport = costMetricsExport.cogs;
+                replacementCogsExport = costMetricsExport.replacementCost;
+            } catch (cogsExportErr) {
+                console.error('[SALES REPORT EXPORT] COGS calculation failed:', cogsExportErr);
+            }
+
+            const reportMetricsExport = aggregateSalesReportFromOrders(result.recordset, {
+                cogs: cogsExport,
+                damageInventoryCost: inventoryLoss,
+                replacementCost: replacementCogsExport,
+                totalOrders,
+                returnedOrdersCount: countReturnedOrders(result.recordset)
+            });
 
             // Calculate Total Customers
             const totalCustomers = new Set(result.recordset.map(o => o.CustomerEmail)).size;
@@ -18468,23 +18390,31 @@ module.exports = function (sql, pool, getStripe = null) {
             };
 
             const exportSummaryStats = {
-                grossSales: grossSalesValue,
-                netSales: netSalesValue,
-                grossRevenue: grossRevenueValue,
-                netRevenue: netRevenueValue,
-                totalRevenue: totalRevenueExport,
+                grossSales: reportMetricsExport.grossSales,
+                grossProductSales: reportMetricsExport.grossProductSales,
+                netProductSales: reportMetricsExport.netProductSales,
+                netSales: reportMetricsExport.netSales,
+                netRevenue: reportMetricsExport.netRevenue,
+                deliveryRevenue: reportMetricsExport.deliveryRevenue,
+                productRefunds: reportMetricsExport.productRefunds,
                 salesReturns: salesReturnsExport,
                 totalDiscounts: finalDiscountsExport,
                 totalTaxes: finalTotalTaxesExport,
-                inventoryLoss: inventoryLoss,
-                deliveryRevenues: deliveryFeesValidExport,
+                returnShippingExpense: reportMetricsExport.returnShippingExpense,
+                returnRate: reportMetricsExport.returnRate,
+                refundRate: reportMetricsExport.refundRate,
+                damageInventoryCost: reportMetricsExport.damageInventoryCost,
+                replacementCost: reportMetricsExport.replacementCost,
+                cogs: reportMetricsExport.cogs,
+                grossProfit: reportMetricsExport.grossProfit,
+                grossMargin: reportMetricsExport.grossMargin,
+                deliveryRevenues: reportMetricsExport.deliveryRevenue,
                 totalOrders: totalOrders,
                 totalCustomers: totalCustomers,
                 averageOrderValue: averageOrderValue,
                 refundedOrdersCount: refundedOrdersCountExport,
-                returnedOrdersCount: returnedOrdersCount,
-                replacementOrdersCount: replacementOrdersCountExport,
-                returnRate: returnRate
+                returnedOrdersCount: countReturnedOrders(result.recordset),
+                replacementOrdersCount: replacementOrdersCountExport
             };
 
             const filterParts = [];
@@ -18593,19 +18523,14 @@ module.exports = function (sql, pool, getStripe = null) {
                     ? productsList.join('; ')
                     : (row.TotalItems ? `${row.TotalItems} item(s)` : '—');
 
-                let subtotal = parseFloat(row.Subtotal || 0);
-                let deliveryFee = parseFloat(row.DeliveryCost || 0) + parseFloat(row.ExtraDeliveryFee || 0);
-                let totalAmount = parseFloat(row.TotalAmount || 0);
-                if (shouldUseRefundedValues) {
-                    if (hasRefundAmount) {
-                        subtotal = parseFloat(row.RefundAmount || 0);
-                        totalAmount = parseFloat(row.RefundAmount || 0);
-                    } else if (refundedItems.length > 0) {
-                        subtotal = refundedItems.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (parseInt(item.quantity, 10) || 0), 0);
-                        totalAmount = subtotal;
-                    }
-                    deliveryFee = 0;
-                }
+                const exportItems = refundedItems.map(item => ({
+                    price: parseFloat(item.price) || 0,
+                    quantity: parseInt(item.quantity, 10) || 0
+                }));
+                const exportRow = applySalesReportOrderRowDisplay({ ...row }, exportItems);
+                const subtotal = parseFloat(exportRow.Subtotal || 0);
+                const deliveryFee = parseFloat(exportRow.DeliveryCost || 0) + parseFloat(exportRow.ExtraDeliveryFee || 0);
+                const totalAmount = parseFloat(exportRow.TotalAmount || 0);
 
                 dataRow.getCell(1).value = row.OrderID || '';
                 dataRow.getCell(2).value = row.ReferenceNumber || '';
@@ -24423,10 +24348,12 @@ module.exports = function (sql, pool, getStripe = null) {
                 try {
                     await pool.connect();
                     await ensureVariationMediaColumns(pool);
-                    const { name, description, price, category, length, width, height, weight, dimensions, requiredMaterials, quantity, variationsJson, bomBundleId } = req.body;
+                    await ensureBomBundleSchema(pool);
+                    const { name, description, price, costPrice, category, length, width, height, weight, dimensions, requiredMaterials, quantity, variationsJson, bomBundleId } = req.body;
 
                     console.log('ProductInventory/Add - Received data:', {
                         name, description, price, category, quantity,
+                        bomBundleId: bomBundleId || null,
                         variationModels: req.files && req.files.variationModel3d ? req.files.variationModel3d.length : 0,
                         variationThumbs: req.files && req.files.variationThumbnail ? req.files.variationThumbnail.length : 0
                     });
@@ -24449,7 +24376,16 @@ module.exports = function (sql, pool, getStripe = null) {
 
                     const parentPrice = parseFloat(price);
                     if (Number.isNaN(parentPrice) || parentPrice <= 0) {
-                        return respondError('Product price is required and must be greater than zero.');
+                        return respondError('Sale price is required and must be greater than zero.');
+                    }
+                    const parentCost = costPrice != null && String(costPrice).trim() !== ''
+                        ? parseFloat(costPrice)
+                        : NaN;
+                    if (Number.isNaN(parentCost) || parentCost < 0) {
+                        return respondError('Item cost price is required and must be zero or greater.');
+                    }
+                    if (parentCost > parentPrice) {
+                        return respondError('Item cost price cannot be higher than the sale price.');
                     }
 
                     const validVariations = variationsList.filter((v) => {
@@ -24488,6 +24424,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     }
 
                     const catalogPrice = parentPrice;
+                    const catalogCostPrice = parentCost;
 
                     const initialQuantity = parseInt(quantity, 10) || 0;
                     const mediaByVariation = mapVariationMediaFiles(req.files, validVariations);
@@ -24531,13 +24468,14 @@ module.exports = function (sql, pool, getStripe = null) {
                             .input('name', sql.NVarChar, name)
                             .input('description', sql.NVarChar, description || '')
                             .input('price', sql.Decimal(10, 2), catalogPrice)
+                            .input('costPrice', sql.Decimal(10, 2), catalogCostPrice)
                             .input('category', sql.NVarChar, category)
                             .input('dimensions', sql.NVarChar, dimensionsJson)
                             .input('tempSlug', sql.NVarChar, tempSlug)
                             .input('createdBy', sql.Int, req.session.user.id)
                             .query(`
-                                INSERT INTO InventoryProducts (Name, Description, Price, Category, Dimensions, DateAdded, IsActive, SKU, PublicId, Slug, CreatedBy)
-                                VALUES (@name, @description, @price, @category, @dimensions, GETDATE(), 1, NULL, NEWID(), @tempSlug, @createdBy)
+                                INSERT INTO InventoryProducts (Name, Description, Price, CostPrice, Category, Dimensions, DateAdded, IsActive, SKU, PublicId, Slug, CreatedBy)
+                                VALUES (@name, @description, @price, @costPrice, @category, @dimensions, GETDATE(), 1, NULL, NEWID(), @tempSlug, @createdBy)
                                 SELECT SCOPE_IDENTITY() as InventoryProductID
                             `);
 
@@ -24585,6 +24523,19 @@ module.exports = function (sql, pool, getStripe = null) {
                                 `);
                         }
 
+                        const parsedBomBundleId = parseInt(bomBundleId, 10) || null;
+                        if (parsedBomBundleId) {
+                            await transaction.request()
+                                .input('inventoryProductId', sql.Int, inventoryProductId)
+                                .input('bomBundleId', sql.Int, parsedBomBundleId)
+                                .query(`
+                                    UPDATE InventoryProducts
+                                    SET BomBundleID = @bomBundleId, DateUpdated = GETDATE()
+                                    WHERE InventoryProductID = @inventoryProductId
+                                `);
+                            console.log('[MATERIALS] Linked BomBundleID', parsedBomBundleId, 'to inventory product', inventoryProductId);
+                        }
+
                         let materialsCollected = [];
                         await saveInventoryProductMaterials(transaction, inventoryProductId, validMaterials);
                         materialsCollected = await getInventoryProductMaterials(transaction, inventoryProductId);
@@ -24599,6 +24550,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             if (!variationName || variationQuantity <= 0) continue;
 
                             const variationPrice = parentPrice;
+                            const variationCostPrice = parentCost;
 
                             variationStockTotal += variationQuantity;
                             const media = mediaByVariation[vi] || { mainFile: null, modelFile: null, thumbFiles: [] };
@@ -24613,14 +24565,15 @@ module.exports = function (sql, pool, getStripe = null) {
                                 .input('color', sql.NVarChar, (v.color || '').trim() || null)
                                 .input('quantity', sql.Int, variationQuantity)
                                 .input('price', sql.Decimal(10, 2), variationPrice)
+                                .input('costPrice', sql.Decimal(10, 2), variationCostPrice)
                                 .input('variationImageUrl', sql.NVarChar, variationImageUrl)
                                 .input('thumbJson', sql.NVarChar, thumbJson)
                                 .input('model3d', sql.NVarChar, model3dUrl)
                                 .input('createdBy', sql.Int, req.session.user.id)
                                 .query(`
-                                    INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity, Price, VariationImageURL, ThumbnailURLs, Model3D, IsActive, CreatedBy)
+                                    INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity, Price, CostPrice, VariationImageURL, ThumbnailURLs, Model3D, IsActive, CreatedBy)
                                     OUTPUT INSERTED.VariationID
-                                    VALUES (NULL, @inventoryProductID, @variationName, @color, @quantity, @quantity, @price, @variationImageUrl, @thumbJson, @model3d, 1, @createdBy)
+                                    VALUES (NULL, @inventoryProductID, @variationName, @color, @quantity, @quantity, @price, @costPrice, @variationImageUrl, @thumbJson, @model3d, 1, @createdBy)
                                 `);
 
                             const variationId = insertVar.recordset[0].VariationID;
@@ -25015,7 +24968,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     await pool.connect();
                     await ensureVariationMediaColumns(pool);
                     const id = parseInt(req.params.id, 10);
-                    const { name, category, description, currentImageURL, currentThumbnailURLs } = req.body;
+                    const { name, category, description, currentImageURL, currentThumbnailURLs, price, costPrice } = req.body;
                     if (!id || Number.isNaN(id)) {
                         return res.status(400).json({ success: false, message: 'Invalid product id.' });
                     }
@@ -25024,6 +24977,23 @@ module.exports = function (sql, pool, getStripe = null) {
                     }
                     if (!category || !String(category).trim()) {
                         return res.status(400).json({ success: false, message: 'Category is required.' });
+                    }
+                    let unitPrice = null;
+                    if (price != null && String(price).trim() !== '') {
+                        unitPrice = parseFloat(price);
+                        if (Number.isNaN(unitPrice) || unitPrice <= 0) {
+                            return res.status(400).json({ success: false, message: 'Sale price must be greater than zero.' });
+                        }
+                    }
+                    let unitCostPrice = null;
+                    if (costPrice != null && String(costPrice).trim() !== '') {
+                        unitCostPrice = parseFloat(costPrice);
+                        if (Number.isNaN(unitCostPrice) || unitCostPrice < 0) {
+                            return res.status(400).json({ success: false, message: 'Item cost price must be zero or greater.' });
+                        }
+                        if (unitPrice != null && unitCostPrice > unitPrice) {
+                            return res.status(400).json({ success: false, message: 'Item cost price cannot be higher than the sale price.' });
+                        }
                     }
                     let imageUrl = currentImageURL || null;
                     if (req.files && req.files.productImage && req.files.productImage[0]) {
@@ -25045,23 +25015,67 @@ module.exports = function (sql, pool, getStripe = null) {
                     if (newThumbs.length) {
                         thumbJson = JSON.stringify(newThumbs);
                     }
-                    await pool.request()
+                    const updateReq = pool.request()
                         .input('id', sql.Int, id)
                         .input('name', sql.NVarChar, String(name).trim())
                         .input('description', sql.NVarChar, description != null ? String(description) : '')
                         .input('category', sql.NVarChar, String(category).trim())
                         .input('imageUrl', sql.NVarChar, imageUrl)
-                        .input('thumbJson', sql.NVarChar, thumbJson)
-                        .query(`
+                        .input('thumbJson', sql.NVarChar, thumbJson);
+                    let updateSql = `
                             UPDATE InventoryProducts
                             SET Name = @name,
                                 Description = @description,
                                 Category = @category,
                                 ImageURL = COALESCE(@imageUrl, ImageURL),
                                 ThumbnailURLs = COALESCE(@thumbJson, ThumbnailURLs),
-                                DateUpdated = GETDATE()
-                            WHERE InventoryProductID = @id AND IsActive = 1
+                                DateUpdated = GETDATE()`;
+                    if (unitPrice != null) {
+                        updateReq.input('price', sql.Decimal(10, 2), unitPrice);
+                        updateSql += `,
+                                Price = @price`;
+                    }
+                    if (unitCostPrice != null) {
+                        updateReq.input('costPrice', sql.Decimal(10, 2), unitCostPrice);
+                        updateSql += `,
+                                CostPrice = @costPrice`;
+                    }
+                    updateSql += `
+                            WHERE InventoryProductID = @id AND IsActive = 1`;
+                    await updateReq.query(updateSql);
+
+                    if (unitPrice != null || unitCostPrice != null) {
+                        const syncReq = pool.request().input('id', sql.Int, id);
+                        let varSet = 'UpdatedAt = GETDATE()';
+                        if (unitPrice != null) {
+                            syncReq.input('price', sql.Decimal(10, 2), unitPrice);
+                            varSet = 'Price = @price, ' + varSet;
+                        }
+                        if (unitCostPrice != null) {
+                            syncReq.input('costPrice', sql.Decimal(10, 2), unitCostPrice);
+                            varSet = 'CostPrice = @costPrice, ' + varSet;
+                        }
+                        await syncReq.query(`
+                            UPDATE InventoryProductVariations
+                            SET ${varSet}
+                            WHERE IsActive = 1
+                              AND (InventoryProductID = @id OR ProductID = @id);
                         `);
+                        if (unitPrice != null) {
+                            await pool.request()
+                                .input('id', sql.Int, id)
+                                .input('price', sql.Decimal(10, 2), unitPrice)
+                                .query(`
+                                    UPDATE pv
+                                    SET pv.Price = @price, pv.UpdatedAt = GETDATE()
+                                    FROM ProductVariations pv
+                                    INNER JOIN InventoryProductVariations ipv ON ipv.VariationID = pv.VariationID
+                                    WHERE ipv.IsActive = 1
+                                      AND (ipv.InventoryProductID = @id OR ipv.ProductID = @id);
+                                `);
+                        }
+                    }
+
                     await syncInventoryProductCatalogToProducts(id);
                     invalidateAdminPageCache('admin:');
                     return res.json({ success: true, message: 'Product catalog updated successfully.', imageUrl });
@@ -25297,6 +25311,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                 ISNULL(v.RepairedQuantity, 0) as RepairedQuantity,
                                 ISNULL(v.DisposedQuantity, 0) as DisposedQuantity,
                                 COALESCE(NULLIF(v.Price, 0), ip.Price, p.Price, 0) AS Price,
+                                COALESCE(v.CostPrice, ip.CostPrice, 0) AS CostPrice,
                                 COALESCE(
                                     NULLIF(LTRIM(RTRIM(ISNULL(v.VariationImageURL, N''))), N''),
                                     pv.VariationImageURL
@@ -25347,9 +25362,10 @@ module.exports = function (sql, pool, getStripe = null) {
                         const damaged = Number(v.DamagedQuantity) || 0;
                         const repaired = Number(v.RepairedQuantity) || 0;
                         const qty = Number(v.Quantity) || 0;
-                        return sum + Math.max(avail + damaged + repaired, qty);
+                        const sellable = (avail === 0 && qty > 0) ? qty : avail;
+                        return sum + Math.max(sellable + damaged + repaired, qty);
                     }, 0);
-                    if (isInventoryProductID && productStock < totalVariationQuantity) {
+                    if (isInventoryProductID && result.recordset.length > 0) {
                         productStock = totalVariationQuantity;
                     }
 
@@ -25551,6 +25567,20 @@ module.exports = function (sql, pool, getStripe = null) {
                         resolvedVariationPrice = null;
                     }
 
+                    let resolvedVariationCost = null;
+                    if (actualInventoryProductID) {
+                        const parentCostRow = await pool.request()
+                            .input('inventoryProductId', sql.Int, actualInventoryProductID)
+                            .query(`
+                                SELECT CostPrice FROM InventoryProducts
+                                WHERE InventoryProductID = @inventoryProductId AND IsActive = 1
+                            `);
+                        const parentCostVal = parentCostRow.recordset[0]?.CostPrice;
+                        if (parentCostVal != null && !Number.isNaN(parseFloat(parentCostVal))) {
+                            resolvedVariationCost = parseFloat(parentCostVal);
+                        }
+                    }
+
                     const addVariationTx = new sql.Transaction(pool);
                     await addVariationTx.begin();
                     let variationID;
@@ -25563,15 +25593,16 @@ module.exports = function (sql, pool, getStripe = null) {
                             .input('color', sql.NVarChar, color || null)
                             .input('quantity', sql.Int, variationQuantity)
                             .input('price', sql.Decimal(10, 2), resolvedVariationPrice)
+                            .input('costPrice', sql.Decimal(10, 2), resolvedVariationCost)
                             .input('imageUrl', sql.NVarChar, mediaUrls.imageUrl)
                             .input('thumbJson', sql.NVarChar, mediaUrls.thumbJson)
                             .input('model3d', sql.NVarChar, mediaUrls.model3d)
                             .input('isActive', sql.Bit, isActive === '1' ? 1 : 0)
                             .input('createdBy', sql.Int, req.session.user ? req.session.user.id : null)
                             .query(`
-                                INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity, Price, VariationImageURL, ThumbnailURLs, Model3D, IsActive, CreatedBy)
+                                INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity, Price, CostPrice, VariationImageURL, ThumbnailURLs, Model3D, IsActive, CreatedBy)
                                     OUTPUT INSERTED.VariationID
-                                VALUES (@productID, @inventoryProductID, @variationName, @color, @quantity, @quantity, @price, @imageUrl, @thumbJson, @model3d, @isActive, @createdBy)
+                                VALUES (@productID, @inventoryProductID, @variationName, @color, @quantity, @quantity, @price, @costPrice, @imageUrl, @thumbJson, @model3d, @isActive, @createdBy)
                             `);
 
                         variationID = result.recordset[0].VariationID;
@@ -25967,7 +25998,9 @@ module.exports = function (sql, pool, getStripe = null) {
                                 COALESCE(Color, '') as Color,
                                 COALESCE(VariationImageURL, '') as VariationImageURL,
                                 ThumbnailURLs,
-                                Model3D
+                                Model3D,
+                                COALESCE(Price, 0) AS Price,
+                                COALESCE(CostPrice, 0) AS CostPrice
                             FROM InventoryProductVariations
                             WHERE VariationID = @variationID
                         `);
@@ -26019,6 +26052,13 @@ module.exports = function (sql, pool, getStripe = null) {
                         : null;
                     const colorUpdate = req.body.color != null ? String(req.body.color).trim() : null;
                     const skuUpdate = req.body.sku != null ? String(req.body.sku).trim() : null;
+                    let catalogPriceUpdate = null;
+                    if (req.body.price != null && String(req.body.price).trim() !== '') {
+                        catalogPriceUpdate = parseFloat(req.body.price);
+                        if (Number.isNaN(catalogPriceUpdate) || catalogPriceUpdate <= 0) {
+                            return res.json({ success: false, message: 'Sale price must be greater than zero.' });
+                        }
+                    }
 
                     const parsedVariationID = parseInt(variationID);
                     const availableQty = parseInt(availableQuantity) || 0;
@@ -26100,7 +26140,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         stockDelta = 0;
                     }
 
-                    if (catalogOnly && !variationNameUpdate && !hasNewThumbs && !hasNewModel && !hasNewMain) {
+                    if (catalogOnly && !variationNameUpdate && !hasNewThumbs && !hasNewModel && !hasNewMain && catalogPriceUpdate == null) {
                         return res.json({
                             success: false,
                             message: 'No catalog changes to save.'
@@ -26148,6 +26188,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                 VariationImageURL = @variationImageUrl,
                                 ThumbnailURLs = @thumbJson,
                                 Model3D = @model3d,
+                                Price = COALESCE(@catalogPrice, Price),
                                 UpdatedAt = GETDATE()
                             WHERE VariationID = @variationID;
                             
@@ -26186,7 +26227,19 @@ module.exports = function (sql, pool, getStripe = null) {
                             .input('variationImageUrl', sql.NVarChar, finalVariationImageUrl)
                             .input('thumbJson', sql.NVarChar, finalThumbJson)
                             .input('model3d', sql.NVarChar, finalModel3d)
+                            .input('catalogPrice', sql.Decimal(10, 2), catalogPriceUpdate)
                             .query(updateQuery);
+
+                        if (catalogOnly && catalogPriceUpdate != null) {
+                            await variationTransaction.request()
+                                .input('variationID', sql.Int, parsedVariationID)
+                                .input('catalogPrice', sql.Decimal(10, 2), catalogPriceUpdate)
+                                .query(`
+                                    UPDATE ProductVariations
+                                    SET Price = @catalogPrice, UpdatedAt = GETDATE()
+                                    WHERE VariationID = @variationID
+                                `);
+                        }
 
                         if (!catalogOnly && !inventoryEdit && stockDelta !== 0 && inventoryProductId) {
                             await applyMaterialsDeltaForInventoryProduct(variationTransaction, inventoryProductId, stockDelta);
@@ -27126,6 +27179,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                     Name,
                                     Description,
                                     Price,
+                                    CostPrice,
                                     Category,
                                     ImageURL,
                                     ThumbnailURLs,
@@ -27423,9 +27477,10 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/api/admin/inventory-products/:id/materials', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
+            await ensureBomBundleSchema(pool);
             const inventoryProductId = parseInt(req.params.id, 10);
             if (!inventoryProductId || isNaN(inventoryProductId)) {
-                return res.json({ success: false, message: 'Invalid inventory product ID', materials: [] });
+                return res.json({ success: false, message: 'Invalid inventory product ID', materials: [], bomBundle: null });
             }
 
             let materials = [];
@@ -27433,11 +27488,13 @@ module.exports = function (sql, pool, getStripe = null) {
                 const result = await pool.request()
                     .input('inventoryProductId', sql.Int, inventoryProductId)
                     .query(`
-                        SELECT ipm.MaterialID, ipm.QuantityRequired, rm.Name as MaterialName, rm.Unit
+                        SELECT ipm.MaterialID, ipm.QuantityRequired,
+                            COALESCE(rm.Name, CONCAT('Material #', ipm.MaterialID)) AS MaterialName,
+                            rm.Unit, rm.SKU AS MaterialSKU
                         FROM InventoryProductMaterials ipm
-                        INNER JOIN RawMaterials rm ON ipm.MaterialID = rm.MaterialID
-                        WHERE ipm.InventoryProductID = @inventoryProductId AND rm.IsActive = 1
-                        ORDER BY rm.Name
+                        LEFT JOIN RawMaterials rm ON ipm.MaterialID = rm.MaterialID
+                        WHERE ipm.InventoryProductID = @inventoryProductId
+                        ORDER BY COALESCE(rm.Name, CAST(ipm.MaterialID AS NVARCHAR(20)))
                     `);
                 materials = result.recordset || [];
             } catch (tableErr) {
@@ -27446,16 +27503,88 @@ module.exports = function (sql, pool, getStripe = null) {
 
             if (materials.length === 0) {
                 const recipeRows = await getInventoryProductMaterials(pool, inventoryProductId);
-                materials = recipeRows.map((m) => ({
-                    MaterialID: m.materialId,
-                    QuantityRequired: m.quantityRequired
-                }));
+                if (recipeRows.length) {
+                    const ids = recipeRows.map((m) => m.materialId).filter(Boolean);
+                    if (ids.length) {
+                        const idList = ids.join(',');
+                        const namesResult = await pool.request().query(`
+                            SELECT MaterialID, Name AS MaterialName, Unit, SKU AS MaterialSKU
+                            FROM RawMaterials
+                            WHERE MaterialID IN (${idList})
+                        `);
+                        const nameMap = new Map((namesResult.recordset || []).map((r) => [r.MaterialID, r]));
+                        materials = recipeRows.map((m) => {
+                            const meta = nameMap.get(m.materialId) || {};
+                            return {
+                                MaterialID: m.materialId,
+                                QuantityRequired: m.quantityRequired,
+                                MaterialName: meta.MaterialName || ('Material #' + m.materialId),
+                                Unit: meta.Unit || null,
+                                MaterialSKU: meta.MaterialSKU || null
+                            };
+                        });
+                    } else {
+                        materials = recipeRows.map((m) => ({
+                            MaterialID: m.materialId,
+                            QuantityRequired: m.quantityRequired,
+                            MaterialName: 'Material #' + m.materialId
+                        }));
+                    }
+                }
             }
 
-            res.json({ success: true, materials });
+            let bomBundle = null;
+            try {
+                const ipRow = await pool.request()
+                    .input('id', sql.Int, inventoryProductId)
+                    .query(`
+                        SELECT ip.BomBundleID, b.BundleCode, b.Name
+                        FROM InventoryProducts ip
+                        LEFT JOIN BomBundles b ON b.BomBundleID = ip.BomBundleID
+                        WHERE ip.InventoryProductID = @id
+                    `);
+                const row = ipRow.recordset[0];
+                if (row && row.BomBundleID) {
+                    bomBundle = {
+                        id: row.BomBundleID,
+                        code: row.BundleCode || null,
+                        name: row.Name || 'BOM bundle'
+                    };
+                }
+            } catch (bomColErr) {
+                console.log('[MATERIALS] BomBundleID lookup:', bomColErr.message);
+            }
+
+            if (!bomBundle && materials.length) {
+                const matched = await findBomBundleMatchingMaterials(pool, materials.map((m) => ({
+                    materialId: m.MaterialID,
+                    quantityRequired: m.QuantityRequired
+                })));
+                if (matched) {
+                    bomBundle = {
+                        id: matched.BomBundleID,
+                        code: matched.BundleCode,
+                        name: matched.Name
+                    };
+                    try {
+                        await pool.request()
+                            .input('id', sql.Int, inventoryProductId)
+                            .input('bomBundleId', sql.Int, matched.BomBundleID)
+                            .query(`
+                                UPDATE InventoryProducts
+                                SET BomBundleID = @bomBundleId, DateUpdated = GETDATE()
+                                WHERE InventoryProductID = @id AND (BomBundleID IS NULL OR BomBundleID = 0)
+                            `);
+                    } catch (backfillErr) {
+                        console.log('[MATERIALS] BomBundleID backfill skipped:', backfillErr.message);
+                    }
+                }
+            }
+
+            res.json({ success: true, materials, bomBundle });
         } catch (err) {
             console.error('Error fetching inventory product materials:', err);
-            res.json({ success: false, message: 'Failed to load recipe.', materials: [] });
+            res.json({ success: false, message: 'Failed to load recipe.', materials: [], bomBundle: null });
         }
     });
 
@@ -30928,9 +31057,15 @@ module.exports = function (sql, pool, getStripe = null) {
             const deliveryProportion = fullOrderSubtotal > 0 ? returnedSubtotal / fullOrderSubtotal : 1;
             const proportionalDeliveryFee = Math.round(totalDeliveryFee * deliveryProportion * 100) / 100;
 
-            // Return shipping: seller pays for pre-receipt returns; otherwise customer unless defective
+            // Return shipping: seller pays on seller-fault returns (damage, wrong item, mixed, replacement, pre-receipt)
             let returnShippingFee = 0;
-            if (!isPreReceiveReturn && order.ReturnType !== 'damage' && order.ReturnType !== 'wrong_item') {
+            const returnTypeNorm = String(order.ReturnType || '').toLowerCase().trim();
+            const sellerFaultReturn = isPreReceiveReturn
+                || returnTypeNorm === 'damage'
+                || returnTypeNorm === 'wrong_item'
+                || returnTypeNorm === 'mixed'
+                || order.ActionType === 'replacement';
+            if (!sellerFaultReturn && !isPreReceiveReturn) {
                 returnShippingFee = parseFloat(order.DeliveryCost) || 0;
             }
 

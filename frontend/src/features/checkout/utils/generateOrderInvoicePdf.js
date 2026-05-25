@@ -232,7 +232,7 @@ export async function downloadOrderInvoicePdf({
     let py = y + 10;
     py = drawKv('Method', method, col2X, py, colW);
     py = drawKv('Status', status, col2X, py, colW);
-    if (payRef) py = drawKv('Reference', payRef, col2X, py, colW);
+    if (payRef) py = drawKv('Payment ID Reference', payRef, col2X, py, colW);
     if (serviceType) py = drawKv('Service', serviceType, col2X, py, colW);
     if (paymentDetails.pickupDate) {
         drawKv('Pickup', formatDateTime(paymentDetails.pickupDate), col2X, py, colW);

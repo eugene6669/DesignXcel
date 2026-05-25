@@ -613,7 +613,7 @@ const sendOrderOutForDeliveryEmail = async (toEmail, customerName, orderDetails)
                                             <p style="margin: 0 0 10px 0; color: #1f2937; font-size: 14px; font-weight: 600;">Order Number:</p>
                                             <p style="margin: 0 0 20px 0; color: #6b7280; font-size: 16px; font-weight: 600;">#${orderDetails.referenceNumber || orderDetails.orderId}</p>
                                             ${orderDetails.transactionId ? `
-                                            <p style="margin: 0 0 10px 0; color: #1f2937; font-size: 14px; font-weight: 600;">Transaction ID:</p>
+                                            <p style="margin: 0 0 10px 0; color: #1f2937; font-size: 14px; font-weight: 600;">Payment ID Reference:</p>
                                             <p style="margin: 0 0 20px 0; color: #6b7280; font-size: 14px; font-family: monospace;">${orderDetails.transactionId}</p>
                                             ` : ''}
                                         </div>
@@ -867,7 +867,7 @@ const sendOrderShippingEmail = async (toEmail, customerName, orderDetails) => {
                                             <p style="margin: 0 0 10px 0; color: #1f2937; font-size: 14px; font-weight: 600;">Order Number:</p>
                                             <p style="margin: 0 0 20px 0; color: #6b7280; font-size: 16px; font-weight: 600;">#${orderDetails.referenceNumber || orderDetails.orderId}</p>
                                             ${orderDetails.transactionId ? `
-                                            <p style="margin: 0 0 10px 0; color: #1f2937; font-size: 14px; font-weight: 600;">Transaction ID:</p>
+                                            <p style="margin: 0 0 10px 0; color: #1f2937; font-size: 14px; font-weight: 600;">Payment ID Reference:</p>
                                             <p style="margin: 0 0 20px 0; color: #6b7280; font-size: 14px; font-family: monospace;">${orderDetails.transactionId}</p>
                                             ` : ''}
                                         </div>
@@ -1100,7 +1100,7 @@ const sendOrderReceivedEmail = async (toEmail, customerName, orderDetails) => {
                                             <p style="margin: 0 0 10px 0; color: #1f2937; font-size: 14px; font-weight: 600;">Order Number:</p>
                                             <p style="margin: 0 0 20px 0; color: #6b7280; font-size: 16px; font-weight: 600;">#${orderDetails.referenceNumber || orderDetails.orderId}</p>
                                             ${orderDetails.transactionId ? `
-                                            <p style="margin: 0 0 10px 0; color: #1f2937; font-size: 14px; font-weight: 600;">Transaction ID:</p>
+                                            <p style="margin: 0 0 10px 0; color: #1f2937; font-size: 14px; font-weight: 600;">Payment ID Reference:</p>
                                             <p style="margin: 0 0 20px 0; color: #6b7280; font-size: 14px; font-family: monospace;">${orderDetails.transactionId}</p>
                                             ` : ''}
                                         </div>
@@ -1556,7 +1556,7 @@ const sendOrderReceiptEmail = async (toEmail, customerName, orderDetails) => {
             .replace(/\{\{ORDER_HISTORY_LINK\}\}/g, `${frontendUrl}/account?tab=orders`)
             .replace(/\{\{SUPPORT_LINK\}\}/g, `${frontendUrl}/contact`);
 
-        // Handle Transaction ID (conditional replacement)
+        // Handle Payment ID Reference (conditional replacement)
         if (orderDetails.transactionId) {
             htmlContent = htmlContent
                 .replace(/\{\{#TRANSACTION_ID\}\}/g, '')
@@ -1855,7 +1855,7 @@ const sendRefundReceiptEmail = async (toEmail, customerName, orderDetails) => {
             .replace(/\{\{ORDER_HISTORY_LINK\}\}/g, `${frontendUrl}/account?tab=orders`)
             .replace(/\{\{SUPPORT_LINK\}\}/g, `${frontendUrl}/contact`);
 
-        // Handle Transaction ID (conditional replacement)
+        // Handle Payment ID Reference (conditional replacement)
         if (orderDetails.transactionId) {
             htmlContent = htmlContent
                 .replace(/\{\{#TRANSACTION_ID\}\}/g, '')
@@ -2156,7 +2156,7 @@ const sendReturnRefundReceiptEmail = async (toEmail, customerName, orderDetails)
             .replace(/\{\{ORDER_HISTORY_LINK\}\}/g, `${frontendUrl}/account?tab=orders`)
             .replace(/\{\{SUPPORT_LINK\}\}/g, `${frontendUrl}/contact`);
 
-        // Handle Transaction ID (conditional replacement)
+        // Handle Payment ID Reference (conditional replacement)
         if (orderDetails.transactionId) {
             htmlContent = htmlContent
                 .replace(/\{\{#TRANSACTION_ID\}\}/g, '')

@@ -1104,13 +1104,12 @@
                                     <th>Delivery</th>
                                     <th>Total Amount</th>
                                     <th>Discounts</th>
-                                    <th>Taxes</th>
                                     <th>Payment Method</th>
                                 </tr>
                             </thead>
                             <tbody id="sales-tbody">
                                 <tr>
-                                    <td colspan="15" class="loading">Loading sales data...</td>
+                                    <td colspan="14" class="loading">Loading sales data...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1829,13 +1828,13 @@
                     renderSalesCharts(data.stats, data.revenueComposition);
                 } else {
                     document.getElementById('sales-tbody').innerHTML = 
-                        `<tr><td colspan="15" class="empty-state">${data.error || 'Error loading sales data'}</td></tr>`;
+                        `<tr><td colspan="14" class="empty-state">${data.error || 'Error loading sales data'}</td></tr>`;
                 }
                 return data;
             } catch (error) {
                 console.error('Error loading sales:', error);
                 document.getElementById('sales-tbody').innerHTML = 
-                    `<tr><td colspan="15" class="empty-state">Error loading sales data</td></tr>`;
+                    `<tr><td colspan="14" class="empty-state">Error loading sales data</td></tr>`;
                 return { success: false };
             }
         }
@@ -1854,31 +1853,31 @@
         }
 
         function buildSalesSummaryTableRows(stats) {
-            return [
-                ['Gross Sales', formatSalesSummaryValue(stats, 'grossSales', { currency: true })],
-                ['Net Sales', formatSalesSummaryValue(stats, 'netSales', { currency: true })],
-                ['Gross Revenue', formatSalesSummaryValue(stats, 'grossRevenue', { currency: true })],
-                ['Net Revenue', formatSalesSummaryValue(stats, 'netRevenue', { currency: true })],
-                ['Total Revenue', formatSalesSummaryValue(stats, 'totalRevenue', { currency: true })],
-                ['Returns', formatSalesSummaryValue(stats, 'salesReturns', { currency: true })],
-                ['Total Discounts', formatSalesSummaryValue(stats, 'totalDiscounts', { currency: true })],
-                ['Total Taxes', formatSalesSummaryValue(stats, 'totalTaxes', { currency: true })],
-                ['Inventory Loss', formatSalesSummaryValue(stats, 'inventoryLoss', { currency: true })],
-                ['Delivery Revenues', formatSalesSummaryValue(stats, 'deliveryRevenues', { currency: true })],
-                ['Total Orders', formatSalesSummaryValue(stats, 'totalOrders')],
-                ['Total Customers', formatSalesSummaryValue(stats, 'totalCustomers')],
-                ['Average Order Value', formatSalesSummaryValue(stats, 'averageOrderValue', { currency: true })],
-                ['Refunded Orders', formatSalesSummaryValue(stats, 'refundedOrdersCount')],
-                ['Returned Orders', formatSalesSummaryValue(stats, 'returnedOrdersCount')],
-                ['Replacement Orders', formatSalesSummaryValue(stats, 'replacementOrdersCount')],
-                ['Return Rate', formatSalesSummaryValue(stats, 'returnRate', { percent: true })]
+            const rows = [
+                ['1. Sales', 'Gross Product Sales', formatSalesSummaryValue(stats, 'grossProductSales', { currency: true }), 'List product value (subtotal + discounts)'],
+                ['1. Sales', 'Discounts', formatSalesSummaryValue(stats, 'totalDiscounts', { currency: true }), 'Promotions / price reductions'],
+                ['1. Sales', 'Net Product Sales', formatSalesSummaryValue(stats, 'netProductSales', { currency: true }), 'Gross product − discounts (= product subtotal)'],
+                ['1. Sales', 'Net Revenue', formatSalesSummaryValue(stats, 'netRevenue', { currency: true }), 'Recognized product + delivery after reversals'],
+                ['2. Delivery', 'Delivery Revenue', formatSalesSummaryValue(stats, 'deliveryRevenueGross', { currency: true }), 'Delivery fees charged'],
+                ['2. Delivery', 'Delivery Refunds', formatSalesSummaryValue(stats, 'deliveryRefunds', { currency: true }), 'Revenue reversal — not a loss'],
+                ['2. Delivery', 'Net Delivery Revenue', formatSalesSummaryValue(stats, 'netDeliveryRevenue', { currency: true }), 'Delivery after refunds'],
+                ['3. Returns', 'Product Refunds', formatSalesSummaryValue(stats, 'productRefunds', { currency: true }), 'Revenue reversal — not a loss'],
+                ['3. Returns', 'Return Shipping Expense', formatSalesSummaryValue(stats, 'returnShippingExpense', { currency: true }), 'Direct cash expense (seller-paid)'],
+                ['3. Returns', 'Damage Cost', formatSalesSummaryValue(stats, 'damageInventoryCost', { currency: true }), 'Inventory write-off at item cost'],
+                ['3. Returns', 'Refund Rate', formatSalesSummaryValue(stats, 'refundRate', { percent: true }), 'Product refunds ÷ gross product sales'],
+                ['3. Returns', 'Return Rate', formatSalesSummaryValue(stats, 'returnRate', { percent: true }), 'Returned orders ÷ total orders'],
+                ['4. Profit', 'COGS', formatSalesSummaryValue(stats, 'cogs', { currency: true }), 'Cost of fulfilled products sold'],
+                ['4. Profit', 'Replacement Cost', formatSalesSummaryValue(stats, 'replacementCost', { currency: true }), 'Replacement units at item cost'],
+                ['4. Profit', 'Gross Profit', formatSalesSummaryValue(stats, 'grossProfit', { currency: true }), 'Net revenue − COGS − return shipping − damage − replacement'],
+                ['4. Profit', 'Gross Margin', formatSalesSummaryValue(stats, 'grossMargin', { percent: true }), 'Gross profit ÷ net revenue']
             ];
+            return rows;
         }
 
         function renderSalesTable(data) {
             const tbody = document.getElementById('sales-tbody');
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="15" class="empty-state">No sales data found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="14" class="empty-state">No sales data found</td></tr>';
                 return;
             }
 
@@ -1890,10 +1889,6 @@
                 // Use TotalDiscounts directly from API response (calculated from OrderItems)
                 // If TotalDiscounts is not available, fallback to 0
                 const discount = item.TotalDiscounts || 0;
-                
-                // Use TotalTaxes directly from API response (calculated from OrderItems)
-                // If TotalTaxes is not available, fallback to 0
-                const tax = item.TotalTaxes || 0;
                 
                 // Format order items count for display
                 let orderItemsCount = item.TotalItems || 0;
@@ -1932,7 +1927,6 @@
                         <td>₱${Number(item.DeliveryCost || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                         <td>₱${Number(item.TotalAmount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                         <td>₱${Number(discount).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                        <td>₱${Number(tax).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                         <td>${item.PaymentMethod || 'N/A'}</td>
                     </tr>
                 `;
@@ -1948,222 +1942,69 @@
                 container.dataset.stats = JSON.stringify(stats);
             }
             
-            // Render stat cards (keep existing cards)
-            container.innerHTML = `
-                <!-- Revenue Metrics (Updated Formulas) -->
+            const fmt = (v, type) => {
+                if (type === 'percent') return Number(v || 0).toFixed(1) + '%';
+                if (type === 'currency') return '₱' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2 });
+                return String(v ?? 0);
+            };
+
+            const sections = [
+                {
+                    title: '1. Sales',
+                    cards: [
+                        { label: 'Gross Product Sales', value: fmt(stats.grossProductSales || stats.grossSales, 'currency'), hint: 'List value: subtotal + discounts' },
+                        { label: 'Discounts', value: fmt(stats.totalDiscounts, 'currency'), hint: 'Price reductions' },
+                        { label: 'Net Product Sales', value: fmt(stats.netProductSales, 'currency'), hint: 'Gross − discounts (product subtotal)' },
+                        { label: 'Net Revenue', value: fmt(stats.netRevenue, 'currency'), hint: 'Recognized revenue after all reversals' }
+                    ]
+                },
+                {
+                    title: '2. Delivery',
+                    cards: [
+                        { label: 'Delivery Revenue', value: fmt(stats.deliveryRevenueGross || stats.deliveryRevenue, 'currency'), hint: 'Fees charged to customer' },
+                        { label: 'Delivery Refunds', value: fmt(stats.deliveryRefunds, 'currency'), hint: 'Revenue reversal — not a loss' },
+                        { label: 'Net Delivery Revenue', value: fmt(stats.netDeliveryRevenue, 'currency'), hint: 'Delivery after refunds' },
+                        { label: 'Product Refunds', value: fmt(stats.productRefunds, 'currency'), hint: 'Revenue reversal — not a loss' }
+                    ]
+                },
+                {
+                    title: '3. Returns (expenses)',
+                    cards: [
+                        { label: 'Return Shipping Expense', value: fmt(stats.returnShippingExpense || stats.returnShipping, 'currency'), hint: 'Direct cash out — real loss' },
+                        { label: 'Damage Cost', value: fmt(stats.damageInventoryCost, 'currency'), hint: 'Inventory write-off — real loss' },
+                        { label: 'Refund Rate', value: fmt(stats.refundRate, 'percent'), hint: 'Product refunds ÷ gross product sales' },
+                        { label: 'Return Rate', value: fmt(stats.returnRate, 'percent'), hint: 'Returned orders ÷ total orders' }
+                    ]
+                },
+                {
+                    title: '4. Profit',
+                    cards: [
+                        { label: 'COGS', value: fmt(stats.cogs, 'currency'), hint: 'Cost of products sold' },
+                        { label: 'Replacement Cost', value: fmt(stats.replacementCost, 'currency'), hint: 'Replacement units at cost' },
+                        { label: 'Gross Profit', value: fmt(stats.grossProfit, 'currency'), hint: 'Net revenue − COGS − return shipping − damage − replacement' },
+                        { label: 'Gross Margin', value: fmt(stats.grossMargin, 'percent'), hint: 'Gross profit ÷ net revenue' }
+                    ]
+                }
+            ];
+
+            container.innerHTML = sections.map(sec => `
+                <div style="grid-column:1/-1;font-weight:700;font-size:0.9rem;color:#374151;margin:0.5rem 0 0.25rem;padding-top:0.5rem;border-top:1px solid #e5e7eb;">${sec.title}</div>
+                ${sec.cards.map(c => `
                 <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="2" x2="12" y2="22"/>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Gross Sales</div>
-                    <div class="stat-value">₱${Number(stats.grossSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Total price of items sold (before discounts & returns)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="2" x2="12" y2="22"/>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Net Sales</div>
-                    <div class="stat-value">₱${Number(stats.netSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Gross Sales – (Discounts + Returns)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="2" x2="12" y2="22"/>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Gross Revenue</div>
-                    <div class="stat-value">₱${Number(stats.grossRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Gross Sales + Delivery Fees</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z"/>
-                            <path d="M16 17l-3-3-3 3" stroke-width="2"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Returns</div>
-                    <div class="stat-value">₱${Number(stats.salesReturns || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.7rem; color: var(--text-light); margin-top: 0.2rem;">${stats.returnedOrdersCount || 0} orders (${Number(stats.returnRate || 0).toFixed(1)}%)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Total Discounts</div>
-                    <div class="stat-value">₱${Number(stats.totalDiscounts || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">All discounts applied</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="2" x2="12" y2="22"/>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Net Revenue</div>
-                    <div class="stat-value">₱${Number(stats.netRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Gross Revenue – (Discounts + Returns)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M9 12l2 2 4-4"/>
-                            <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/>
-                            <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Inventory Loss</div>
-                    <div class="stat-value">₱${Number(stats.inventoryLoss || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Value of returned/damaged items</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M9 11l3 3L22 4"/>
-                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Total Taxes</div>
-                    <div class="stat-value">₱${Number(stats.totalTaxes || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Price before Tax item × (12% / 100)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M1 3h15v13H1zM5 21h19"/>
-                            <path d="M8 21V11M16 21V11"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Delivery Revenues</div>
-                    <div class="stat-value">₱${Number(stats.deliveryRevenues || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Delivery + Extra Delivery (excluding returns)</div>
-                </div>
-                <!-- Total Orders Section -->
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="9" cy="21" r="1"/>
-                            <circle cx="20" cy="21" r="1"/>
-                            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Total Orders</div>
-                    <div class="stat-value">${stats.totalOrders || 0}</div>
-                </div>
-                
-                <!-- Total Customers Section -->
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-                            <circle cx="9" cy="7" r="4"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Total Customers</div>
-                    <div class="stat-value">${stats.totalCustomers || 0}</div>
-                </div>
-                
-                <!-- Average Order Value Section -->
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="1" x2="12" y2="23"/>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Average Order Value</div>
-                    <div class="stat-value">₱${Number(stats.averageOrderValue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                </div>
-            `;
-            
-            // Render stats table - vertical columns layout
+                    <div class="stat-label">${c.label}</div>
+                    <div class="stat-value">${c.value}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">${c.hint}</div>
+                </div>`).join('')}
+            `).join('');
+
             const statsTableHead = document.getElementById('stats-thead');
             const statsTableBody = document.getElementById('stats-tbody');
             if (statsTableHead && statsTableBody) {
-                // Build header row with metric names as columns
-                const metrics = [
-                    { name: 'Gross Sales', isSection: false },
-                    { name: 'Net Sales', isSection: false },
-                    { name: 'Gross Revenue', isSection: false },
-                    { name: 'Net Revenue', isSection: false },
-                    { name: 'Total Revenue', isSection: false },
-                    { name: 'Returns', isSection: false },
-                    { name: 'Total Discounts', isSection: false },
-                    { name: 'Inventory Loss', isSection: false },
-                    { name: 'Total Taxes', isSection: false },
-                    { name: 'Delivery Revenues', isSection: false },
-                    { name: 'Total Orders', isSection: true },
-                    { name: 'Total Customers', isSection: true },
-                    { name: 'Average Order Value', isSection: true },
-                    { name: 'Refunded Orders', isSection: true },
-                    { name: 'Returned Orders', isSection: true },
-                    { name: 'Replacement Orders', isSection: true },
-                    { name: 'Return Rate', isSection: true }
-                ];
-
-                let headerHTML = '<tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;"><th style="padding: 0.75rem; text-align: left; font-weight: 600; color: #111827; font-size: 0.875rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; border-right: 1px solid #e5e7eb; background: #f9fafb;">Metric</th>';
-                metrics.forEach(metric => {
-                    const bgColor = metric.isSection ? '#f3f4f6' : '#f9fafb';
-                    headerHTML += `<th style="padding: 0.75rem; text-align: center; font-weight: 600; color: #111827; font-size: 0.75rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; background: ${bgColor}; border-left: 1px solid #e5e7eb;">${metric.name}</th>`;
-                });
-                headerHTML += '</tr>';
-                statsTableHead.innerHTML = headerHTML;
-
-                // Build value row
-                let valueRow = '<tr style="border-bottom: 1px solid #e5e7eb;"><td style="padding: 0.75rem; font-weight: 600; color: #374151; border-right: 1px solid #e5e7eb; background: #f9fafb;">Value</td>';
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.grossSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.netSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.grossRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.netRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.totalRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.salesReturns || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.totalDiscounts || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.inventoryLoss || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.totalTaxes || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.deliveryRevenues || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.totalOrders || 0}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.totalCustomers || 0}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">₱${Number(stats.averageOrderValue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.refundedOrdersCount || 0}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.returnedOrdersCount || 0}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.replacementOrdersCount || 0}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${Number(stats.returnRate || 0).toFixed(1)}%</td>`;
-                valueRow += '</tr>';
-
-                // Build formula row
-                let formulaRow = '<tr><td style="padding: 0.75rem; font-weight: 600; color: #374151; border-right: 1px solid #e5e7eb; background: #f9fafb;">Formula</td>';
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Total price of items sold (before discounts & returns)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Gross Sales – (Discounts + Returns)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Gross Sales + Delivery Fees</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Gross Revenue – (Discounts + Returns)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Net Sales + Delivery Revenues</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">${stats.returnedOrdersCount || 0} orders (${Number(stats.returnRate || 0).toFixed(1)}%)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">All discounts applied</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Value of returned/damaged items</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Price before Tax item × (12% / 100)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Delivery + Extra Delivery (excluding returns)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Total number of orders</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Unique customers with orders</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Sum of TotalAmount / qualifying orders</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Refunded / completed returned</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Same as refunded orders count</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Orders with replacement action</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">(Returned Orders / Total Orders) × 100</td>`;
-                formulaRow += '</tr>';
-
-                statsTableBody.innerHTML = valueRow + formulaRow;
+                const rows = buildSalesSummaryTableRows(stats);
+                statsTableHead.innerHTML = '<tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:0.75rem;text-align:left;">Section</th><th style="padding:0.75rem;text-align:left;">Metric</th><th style="padding:0.75rem;text-align:right;">Value</th><th style="padding:0.75rem;text-align:left;">Formula</th></tr>';
+                statsTableBody.innerHTML = rows.map(([section, name, val, formula]) =>
+                    `<tr><td style="padding:0.75rem;color:#6b7280;">${section}</td><td style="padding:0.75rem;font-weight:600;color:#374151;">${name}</td><td style="padding:0.75rem;text-align:right;font-weight:600;">${val}</td><td style="padding:0.75rem;color:#6b7280;font-size:0.8rem;">${formula}</td></tr>`
+                ).join('');
             }
         }
 
@@ -2282,11 +2123,11 @@
 
             // Chart data
             const revenueData = [
-                { label: 'Gross Revenue', value: parseFloat(stats.grossSales || 0), color: '#F0B21B' },
-                { label: 'Net Revenue', value: parseFloat(stats.netSales || 0), color: '#10b981' },
-                { label: 'Total Revenue', value: parseFloat(stats.totalRevenue || 0), color: '#3b82f6' },
-                { label: 'Taxes', value: parseFloat(stats.totalTaxes || 0), color: '#8b5cf6' },
-                { label: 'Delivery', value: parseFloat(stats.deliveryRevenues || 0), color: '#06b6d4' }
+                { label: 'Gross Product', value: parseFloat(stats.grossProductSales || stats.grossSales || 0), color: '#F0B21B' },
+                { label: 'Net Product', value: parseFloat(stats.netProductSales || 0), color: '#10b981' },
+                { label: 'Recognized', value: parseFloat(stats.recognizedProductRevenue ?? stats.netSales ?? 0), color: '#8b5cf6' },
+                { label: 'Net Revenue', value: parseFloat(stats.netRevenue || 0), color: '#3b82f6' },
+                { label: 'Net Delivery', value: parseFloat(stats.netDeliveryRevenue || stats.deliveryRevenues || 0), color: '#06b6d4' }
             ];
 
             const maxValue = Math.max(...revenueData.map(d => d.value), 1);

@@ -47,6 +47,12 @@
             background-color: #c82333;
         }
         /* Modal Styles */
+        #variationRestockModal.modal {
+            z-index: 1200;
+        }
+        #variationRestockModal.modal[style*="display: block"] {
+            display: block !important;
+        }
         .modal {
             display: none;
             position: fixed;
@@ -225,22 +231,47 @@
         .edit-inventory-product-btn,
         .edit-inventory-product-quick-btn,
         .edit-variation-status-btn,
-        .pi-icon-edit-btn {
-            background-color: #FFC107;
-            color: #333;
+        .pi-icon-edit-btn,
+        .pi-icon-restock-btn,
+        .pi-icon-archive-btn,
+        .delete-inventory-btn,
+        .archive-variation-btn,
+        .restock-variation-btn {
             border: none;
             border-radius: 6px;
             width: 34px;
             height: 34px;
+            min-width: 34px;
+            min-height: 34px;
             padding: 0;
-            margin: 0 2px;
+            margin: 0;
             cursor: pointer;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             transition: background 0.2s, transform 0.15s;
+            vertical-align: middle;
+            box-sizing: border-box;
         }
-
+        .edit-inventory-btn,
+        .edit-inventory-product-btn,
+        .edit-inventory-product-quick-btn,
+        .edit-variation-status-btn,
+        .pi-icon-edit-btn {
+            background-color: #FFC107;
+            color: #333;
+        }
+        .pi-icon-restock-btn,
+        .restock-variation-btn {
+            background-color: #198754;
+            color: #fff;
+        }
+        .pi-icon-archive-btn,
+        .delete-inventory-btn,
+        .archive-variation-btn {
+            background-color: #DC3545;
+            color: #fff;
+        }
         .edit-inventory-btn:hover,
         .edit-inventory-product-btn:hover,
         .edit-inventory-product-quick-btn:hover,
@@ -249,12 +280,29 @@
             background-color: #e0ac06;
             transform: translateY(-1px);
         }
-
+        .pi-icon-restock-btn:hover,
+        .restock-variation-btn:hover {
+            background-color: #157347;
+            transform: translateY(-1px);
+        }
+        .pi-icon-archive-btn:hover,
+        .delete-inventory-btn:hover,
+        .archive-variation-btn:hover {
+            background-color: #c82333;
+            transform: translateY(-1px);
+        }
         .edit-inventory-product-quick-btn svg,
         .edit-variation-status-btn svg,
-        .pi-icon-edit-btn svg {
+        .pi-icon-edit-btn svg,
+        .pi-icon-restock-btn svg,
+        .restock-variation-btn svg,
+        .pi-icon-archive-btn svg,
+        .delete-inventory-btn svg,
+        .archive-variation-btn svg {
             width: 16px;
             height: 16px;
+            stroke: currentColor;
+            flex-shrink: 0;
         }
 
         .pi-media-preview-main img {
@@ -296,22 +344,6 @@
             font-size: 0.8em;
             color: #856404;
             word-break: break-all;
-        }
-
-        .delete-inventory-btn {
-            background-color: #DC3545;
-            color: #fff;
-            border: none;
-            border-radius: 5px;
-            padding: 5px 10px;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .delete-inventory-btn:hover {
-            background-color: #c82333;
         }
 
         /* Form Styles */
@@ -578,13 +610,83 @@
         .stock-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; font-size: 0.8em; color: #555; align-items: center; }
         .stock-legend span { display: inline-flex; align-items: center; gap: 6px; }
         .stock-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
-        .stock-qty { font-weight: 700; font-size: 1.05em; display: inline-block; min-width: 2em; text-align: center; }
+        .stock-qty { font-weight: 700; font-size: 0.95em; display: inline-block; min-width: 2em; text-align: center; }
         .stock-qty-negative { color: #b02a37; }
         .stock-qty-out { color: #DC3545; }
         .stock-qty-critical { color: #FF9800; }
         .stock-qty-low { color: #d4af37; }
         .stock-qty-normal { color: #28a745; }
         .stock-qty-available { color: #28a745; }
+
+        /* Inventory product list — compact rows + column grid (matches Products listing) */
+        .inventory-listing-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 0.88em;
+            table-layout: fixed;
+        }
+        .inventory-listing-table td.pi-actions-col,
+        .inventory-listing-table th.pi-actions-col {
+            text-align: center !important;
+        }
+        .inventory-listing-table th,
+        .inventory-listing-table td {
+            padding: 8px 10px;
+            border: 1px solid #dee2e6;
+            vertical-align: middle;
+        }
+        .inventory-listing-table thead th {
+            background: #f2f2f2;
+            font-weight: 600;
+            font-size: 0.85em;
+        }
+        .inventory-listing-table tbody tr:hover { background: #fafbfc; }
+        .inventory-listing-table .image-preview {
+            width: 44px;
+            height: 44px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            display: block;
+            margin: 0 auto;
+        }
+        .inventory-listing-table .toggle-variations-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px;
+            color: #666;
+            line-height: 0;
+        }
+        .variations-row > td {
+            padding: 10px 12px !important;
+            background: #f8f9fa;
+            border-top: 2px solid #dee2e6;
+        }
+        .variations-container h4 { margin: 0; font-size: 0.9em; color: #333; }
+        .variations-nested-table.inventory-listing-table { margin-top: 6px; font-size: 0.85em; }
+        .variations-nested-table.inventory-listing-table th,
+        .variations-nested-table.inventory-listing-table td { padding: 6px 8px; }
+        .variations-nested-table .var-col-image img,
+        .variations-nested-table .var-col-image .variation-row-thumb {
+            width: 48px;
+            height: 48px;
+            max-width: 48px;
+            max-height: 48px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            display: block;
+            margin: 0 auto;
+        }
+        .pi-actions-cell {
+            display: inline-flex;
+            gap: 4px;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+        }
         .inventory-list-toolbar { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between; margin-bottom: 16px; }
         .inventory-list-toolbar form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
         .inventory-list-toolbar label { display: block; font-size: 0.85em; margin-bottom: 4px; color: #555; }
@@ -644,22 +746,18 @@
             cursor: pointer;
             white-space: nowrap;
         }
-        .inventory-filter-actions .pi-btn-primary { background: #007bff; color: #fff; }
-        .inventory-filter-actions .pi-btn-primary:hover { background: #0069d9; }
+        .inventory-filter-actions .pi-btn-primary,
+        .inventory-filter-actions .add-inventory-btn {
+            background-color: #FFC107;
+            color: #333;
+        }
+        .inventory-filter-actions .pi-btn-primary:hover,
+        .inventory-filter-actions .add-inventory-btn:hover {
+            background-color: #e0ac06;
+            color: #333;
+        }
         .inventory-filter-actions .pi-btn-secondary { background: #6c757d; color: #fff; text-decoration: none; display: inline-flex; align-items: center; }
         .inventory-filter-actions .pi-btn-secondary:hover { background: #5a6268; color: #fff; }
-        .archive-variation-btn {
-            background-color: #dc3545 !important;
-            color: #fff !important;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .archive-variation-btn:hover { background-color: #c82333 !important; }
         .edit-material-btn {
             background-color: #ffc107;
             color: #000;
@@ -806,7 +904,8 @@
             align-items: start;
         }
         #addProductModal .pi-create-form .pi-create-top .form-group { margin-bottom: 0; }
-        #addProductModal #createProductPrice { text-align: right; }
+        #addProductModal #createProductPrice,
+        #addProductModal #createProductCostPrice { text-align: right; }
         #addProductModal .pi-create-form textarea { min-height: 56px; }
         #addProductModal .pi-section { margin-top: 8px; padding: 10px; }
         #addProductModal .pi-section h4 { margin-bottom: 4px; }
@@ -1132,6 +1231,8 @@
                             InventoryProductSKU: product.InventoryProductSKU,
                             InventoryProductCategory: product.InventoryProductCategory,
                             InventoryProductPrice: product.InventoryProductPrice,
+                            InventoryProductCostPrice: product.InventoryProductCostPrice,
+                            InventoryItemCostTotal: product.InventoryItemCostTotal || 0,
                             InventoryProductImageURL: product.InventoryProductImageURL,
                             LastDateAdded: product.DateAdded,
                             TotalQuantity: product.TotalQuantity || 0,
@@ -1189,7 +1290,7 @@
                             </select>
                         </div>
                         <div class="inventory-filter-actions">
-                            <button type="submit" class="pi-btn pi-btn-primary">Apply filters</button>
+                            <button type="submit" class="add-inventory-btn">Apply filters</button>
                             <% if (invFilters.search || invFilters.category) { %>
                             <a href="/Employee/Admin/ProductInventory" class="pi-btn pi-btn-secondary">Clear</a>
                             <% } %>
@@ -1203,8 +1304,8 @@
 
 
                 <div class="pi-toolbar">
-                    <button type="button" id="manageCategoriesBtn" class="add-inventory-btn" style="background:#17a2b8;">Manage Categories</button>
-                    <button type="button" id="addInventoryItemBtn" class="add-inventory-btn">Add Product</button>
+                    <button type="button" id="manageCategoriesBtn" class="add-inventory-btn">Manage Categories</button>
+                    <button type="button" id="addInventoryItemBtn" class="add-inventory-btn">Create Product</button>
                 </div>
             
 
@@ -1230,8 +1331,12 @@
                                     <input type="text" id="name" name="name" required>
                                 </div>
                                 <div class="form-group">
-                                    <label for="createProductPrice">Price (₱) <span style="color:#dc3545;">*</span></label>
+                                    <label for="createProductPrice">Sale Price (₱) <span style="color:#dc3545;">*</span></label>
                                     <input type="text" id="createProductPrice" name="price" inputmode="decimal" autocomplete="off" required placeholder="0.00">
+                                </div>
+                                <div class="form-group">
+                                    <label for="createProductCostPrice">Item Cost Price (₱) <span style="color:#dc3545;">*</span></label>
+                                    <input type="text" id="createProductCostPrice" name="costPrice" inputmode="decimal" autocomplete="off" required placeholder="0.00">
                                 </div>
                                 <div class="form-group">
                                     <label for="category">Category <span style="color:#dc3545;">*</span></label>
@@ -1363,12 +1468,13 @@
                         <span><i style="background:#FF9800;"></i> Critical (1–10)</span>
                         <span><i style="background:#d4af37;"></i> Low (11–20)</span>
                     </div>
-                    <table>
+                    <table class="inventory-listing-table">
                         <thead>
                             <tr>
                                 <th>Product Name</th>
                                 <th>Category</th>
                                 <th class="qty-col" title="Sum of quantity across all product variations">Total Qty</th>
+                                <th class="pi-price-col" style="text-align:right;" title="Sum of item cost × qty across all variations">Item Cost Total</th>
                                 <th>Image</th>
                                 <th>Last Added</th>
                                 <th>Actions</th>
@@ -1424,6 +1530,7 @@
                                 const disposedQty = item.DisposedQuantity || 0;
                                 const productId = item.InventoryProductID;
                                 const hasInventory = item.hasInventory !== false;
+                                const itemCostTotal = Number(item.InventoryItemCostTotal) || 0;
                             %>
                                 <tr data-inventory-product-id="<%= productId %>" data-product-name="<%= productName.replace(/"/g, '&quot;') %>">
                                     <td>
@@ -1437,7 +1544,8 @@
                                         </div>
                                     </td>
                                     <td><%= productCategory %></td>
-                                    <td class="qty-col"><span class="stock-qty"><%= totalQty %></span></td>
+                                    <td class="qty-col"><span class="stock-qty <%= stockQtyClass(totalQty) %>"><%= totalQty %></span></td>
+                                    <td class="pi-price-col" style="text-align:right;">₱<%= itemCostTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
                                     <td>
                                         <% if (productImagePrimary) {
                                             const encodeInvImgPath = (p) => String(p || '').split('/').map((seg, i) => {
@@ -1461,22 +1569,16 @@
                                         <% } %>
                                     </td>
                                     <td><%= item.LastDateAdded ? new Date(item.LastDateAdded).toLocaleDateString() : 'N/A' %></td>
-                                    <td>
-                                        <div style="display: flex; gap: 5px; align-items: center; flex-wrap: wrap;">
-                                            <% if (hasInventory) { %>
-                                                <% 
-                                                    // All products on this page are from InventoryProducts table
-                                                    const isFromProductsTable = false;
-                                                    const productIdentifier = item.InventoryProductID;
-                                                %>
-                                            <% } else { %>
-                                                <span style="color: #999; font-size: 0.9em; margin-right: 5px;">No inventory yet</span>
+                                    <td class="pi-actions-col">
+                                        <div class="pi-actions-cell">
+                                            <% if (!hasInventory) { %>
+                                                <span style="color: #999; font-size: 0.85em;">No inventory yet</span>
                                             <% } %>
                                             <button type="button" class="edit-inventory-product-quick-btn pi-icon-edit-btn" data-product-id="<%= productId %>" title="Edit product" aria-label="Edit product">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                                             </button>
-                                            <button type="button" class="delete-inventory-btn" 
-                                                data-product-id="<%= (item.ProductID || item.InventoryProductID) %>" 
+                                            <button type="button" class="delete-inventory-btn pi-icon-archive-btn"
+                                                data-product-id="<%= (item.ProductID || item.InventoryProductID) %>"
                                                 data-product-name="<%= productName.replace(/'/g, "\\'").replace(/"/g, "&quot;") %>"
                                                 data-is-from-products="<%= item.ProductID ? 'true' : 'false' %>"
                                                 title="Archive Product"
@@ -1487,7 +1589,7 @@
                                     </td>
                                 </tr>
                                 <tr class="variations-row" data-inventory-product-id="<%= productId %>" style="display: none;">
-                                    <td colspan="6" style="padding: 20px; background-color: #f8f9fa; border-top: 2px solid #dee2e6;">
+                                    <td colspan="7">
                                         <div class="variations-container" data-inventory-product-id="<%= productId %>" data-show-return-columns="0" data-show-storefront="0" data-show-variation-actions="1">
                                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                                                 <h4 style="margin: 0; color: #333;">Product Variations</h4>
@@ -1500,16 +1602,17 @@
                                                 <p>Expand to load variations, or click Refresh.</p>
                                             </div>
                                             <div class="variations-table-container" style="display: none;">
-                                                <table class="variations-nested-table" style="width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed;">
+                                                <table class="variations-nested-table inventory-listing-table">
                                                     <thead>
-                                                        <tr style="background-color: #e9ecef;">
-                                                            <th class="var-col-name" style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">Variation Name</th>
-                                                            <th class="var-col-sku" style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">SKU</th>
-                                                            <th class="var-col-color" style="padding: 10px; border: 1px solid #dee2e6; text-align: left;">Color</th>
-                                                            <th class="var-col-qty qty-col" style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Qty</th>
-                                                            <th class="var-col-price" style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Price</th>
-                                                            <th class="var-col-image" style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Image</th>
-                                                            <th class="var-col-action" style="padding: 10px; border: 1px solid #dee2e6; text-align: center;">Actions</th>
+                                                        <tr>
+                                                            <th class="var-col-name">Variation</th>
+                                                            <th class="var-col-sku">SKU</th>
+                                                            <th class="var-col-color">Color</th>
+                                                            <th class="var-col-qty qty-col">Qty</th>
+                                                            <th class="var-col-price">Sale Price</th>
+                                                            <th class="var-col-price">Item Cost</th>
+                                                            <th class="var-col-image">Image</th>
+                                                            <th class="var-col-action pi-actions-col">Actions</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody class="variations-table-body"></tbody>
@@ -1643,6 +1746,32 @@
     <%- include('partials/edit-inventory-product-quick-modal') %>
     <%- include('partials/edit-variation-status-modal') %>
 
+    <!-- Restock Variation Modal -->
+    <div id="variationRestockModal" class="modal pi-modal-compact">
+        <div class="modal-content">
+            <span class="close-button" id="closeVariationRestockModal">&times;</span>
+            <h3>Restock Variation</h3>
+            <input type="hidden" id="variationRestockVariationId" value="">
+            <input type="hidden" id="variationRestockInventoryProductId" value="">
+            <div class="form-group">
+                <label>Variation</label>
+                <p id="variationRestockName" style="margin:4px 0 0;font-weight:600;color:#333;"></p>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;padding:10px;background:#f8f9fa;border-radius:6px;font-size:0.9em;">
+                <strong>Current Qty Stock:</strong> <span id="variationRestockCurrentQty">0</span>
+            </div>
+            <div class="form-group">
+                <label for="variationRestockQty">Quantity to add</label>
+                <input type="number" id="variationRestockQty" min="1" value="1" style="width:100%;max-width:120px;padding:8px;border:1px solid #ced4da;border-radius:4px;text-align:center;">
+                <p style="font-size:0.85em;color:#666;margin:8px 0 0;">Adds available stock and deducts raw materials per unit.</p>
+            </div>
+            <div class="pi-form-actions">
+                <button type="button" id="cancelVariationRestock" class="pi-btn pi-btn-secondary">Cancel</button>
+                <button type="button" id="confirmVariationRestock" class="pi-btn pi-btn-primary" style="background:#FFC107;color:#333;border:none;">Restock</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Inventory Changes Confirmation Modal -->
     <div id="inventoryConfirmationModal" class="inventory-confirmation-modal">
         <div class="inventory-confirmation-content">
@@ -1669,10 +1798,10 @@
         </div>
     </div>
 
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260524p" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260525k" defer></script>
     <script src="/js/Employee/Admin/product-inventory-tabs.js?v=20260522c" defer></script>
     <script src="/js/Employee/Admin/raw-materials-tab.js"></script>
-    <script src="/js/Employee/Admin/bom-bundles-tab.js?v=20260522b" defer></script>
+    <script src="/js/Employee/Admin/bom-bundles-tab.js?v=20260525b" defer></script>
 
     <% if (locals.error && locals.error.length > 0) { %>
     <script>
@@ -1715,8 +1844,7 @@
             var n = parseFloat(v);
             if (isFinite(n)) el.value = n.toFixed(2);
         }
-        function wireCreateProductPrice() {
-            var el = document.getElementById('createProductPrice');
+        function wireCreateProductPriceField(el) {
             if (!el || el.getAttribute('data-auto-price') === '1') return;
             el.setAttribute('data-auto-price', '1');
             el.addEventListener('input', function () {
@@ -1729,17 +1857,22 @@
                 if (e.key === 'Enter') { formatCreatePrice(el); }
             });
         }
+        function wireCreateProductPrices() {
+            wireCreateProductPriceField(document.getElementById('createProductPrice'));
+            wireCreateProductPriceField(document.getElementById('createProductCostPrice'));
+        }
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', wireCreateProductPrice);
+            document.addEventListener('DOMContentLoaded', wireCreateProductPrices);
         } else {
-            wireCreateProductPrice();
+            wireCreateProductPrices();
         }
         var addBtn = document.getElementById('addInventoryItemBtn');
-        if (addBtn) addBtn.addEventListener('click', function () { setTimeout(wireCreateProductPrice, 0); });
+        if (addBtn) addBtn.addEventListener('click', function () { setTimeout(wireCreateProductPrices, 0); });
         var form = document.getElementById('addProductForm');
         if (form) {
             form.addEventListener('submit', function () {
                 formatCreatePrice(document.getElementById('createProductPrice'));
+                formatCreatePrice(document.getElementById('createProductCostPrice'));
             }, true);
         }
     })();

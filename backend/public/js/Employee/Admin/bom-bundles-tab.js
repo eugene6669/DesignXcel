@@ -56,6 +56,21 @@
         });
     }
 
+    function ensureMaterialInCache(entry) {
+        if (!entry) return;
+        const id = parseInt(entry.materialId || entry.id, 10);
+        if (!id) return;
+        if (!cachedRawMaterials) cachedRawMaterials = [];
+        if (getMaterialById(id)) return;
+        cachedRawMaterials.push({
+            id: id,
+            sku: entry.materialSku || entry.sku || '',
+            name: entry.materialName || entry.name || ('Material #' + id),
+            unit: entry.unit || 'pcs',
+            stockQuantity: Number(entry.stockQuantity) || 0
+        });
+    }
+
     function materialOptionLabel(m) {
         const sku = m.sku ? m.sku + ' — ' : '';
         return sku + m.name + ' (' + (m.unit || 'pcs') + ', stock: ' + (m.stockQuantity ?? 0) + ')';
@@ -113,15 +128,28 @@
                 html += '<option value="' + id + '"' + (id === String(current) ? ' selected' : '') + '>' +
                     materialOptionLabel(m) + '</option>';
             });
+            if (current && !materials.some(function (m) { return String(m.id) === String(current); })) {
+                const meta = row.getAttribute('data-material-label');
+                html += '<option value="' + current + '" selected>' +
+                    (meta || ('Material #' + current)) + '</option>';
+            }
             select.innerHTML = html;
+            if (current) select.value = String(current);
             applyQtyLimits(row);
         });
     }
 
-    async function createBomMaterialRow(selectedId, qty) {
+    async function createBomMaterialRow(selectedId, qty, materialMeta) {
         await getRawMaterialsList();
+        if (materialMeta) ensureMaterialInCache(materialMeta);
         const row = document.createElement('div');
         row.className = 'bom-material-row material-row';
+        if (selectedId && materialMeta) {
+            const label = (materialMeta.materialSku ? materialMeta.materialSku + ' — ' : '') +
+                (materialMeta.materialName || materialMeta.name || ('Material #' + selectedId)) +
+                ' (' + (materialMeta.unit || 'pcs') + ')';
+            row.setAttribute('data-material-label', label);
+        }
 
         const select = document.createElement('select');
         select.className = 'material-select';
@@ -157,8 +185,8 @@
         const container = document.getElementById('bomMaterialsContainer');
         if (container) container.appendChild(row);
 
-        if (selectedId) select.value = String(selectedId);
         refreshAllMaterialSelects();
+        if (selectedId) select.value = String(selectedId);
         return row;
     }
 
@@ -225,11 +253,15 @@
             }
             document.getElementById('bomBundleName').value = data.bundle.Name || '';
             document.getElementById('bomBundleDescription').value = data.bundle.Description || '';
+            await getRawMaterialsList();
+            if (data.materials && data.materials.length) {
+                data.materials.forEach(function (m) { ensureMaterialInCache(m); });
+            }
             const container = document.getElementById('bomMaterialsContainer');
             if (container) container.innerHTML = '';
             if (data.materials && data.materials.length) {
                 for (const m of data.materials) {
-                    await createBomMaterialRow(m.materialId, m.quantityRequired);
+                    await createBomMaterialRow(m.materialId, m.quantityRequired, m);
                 }
             } else {
                 await createBomMaterialRow();

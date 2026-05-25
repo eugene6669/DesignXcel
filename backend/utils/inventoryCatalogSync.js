@@ -56,7 +56,9 @@ async function ensureVariationMediaColumns(pool) {
         { table: 'ProductVariations', column: 'ThumbnailURLs', ddl: 'ALTER TABLE ProductVariations ADD ThumbnailURLs NVARCHAR(MAX) NULL' },
         { table: 'ProductVariations', column: 'SKU', ddl: 'ALTER TABLE ProductVariations ADD SKU NVARCHAR(100) NULL' },
         { table: 'InventoryProducts', column: 'ThumbnailURLs', ddl: 'ALTER TABLE InventoryProducts ADD ThumbnailURLs NVARCHAR(MAX) NULL' },
-        { table: 'InventoryProducts', column: 'Model3D', ddl: 'ALTER TABLE InventoryProducts ADD Model3D NVARCHAR(500) NULL' }
+        { table: 'InventoryProducts', column: 'Model3D', ddl: 'ALTER TABLE InventoryProducts ADD Model3D NVARCHAR(500) NULL' },
+        { table: 'InventoryProducts', column: 'CostPrice', ddl: 'ALTER TABLE InventoryProducts ADD CostPrice DECIMAL(10, 2) NULL' },
+        { table: 'InventoryProductVariations', column: 'CostPrice', ddl: 'ALTER TABLE InventoryProductVariations ADD CostPrice DECIMAL(10, 2) NULL' }
     ];
     for (const { table, column, ddl } of checks) {
         const exists = await pool.request()

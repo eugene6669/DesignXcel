@@ -204,6 +204,19 @@
             border: 1px solid #ddd;
         }
 
+        .variations-nested-table .var-col-image img,
+        .variations-nested-table .var-col-image .variation-row-thumb {
+            width: 48px;
+            height: 48px;
+            max-width: 48px;
+            max-height: 48px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+            display: block;
+            margin: 0 auto;
+        }
+
         /* Button Styles */
         .add-inventory-btn {
             background-color: #FFC107;
@@ -970,7 +983,7 @@
         <div class="main-content">
             <div class="header">
                 <h2>Products</h2>
-                <p class="products-list-hint">Catalog: edit product name, category, description, and images via the row action. Edit variation name, thumbnails, and 3D model from each variation. Stock and restock are on <a href="/Employee/Admin/ProductInventory">Product Inventory</a>; returns on <a href="/Employee/Admin/ProductReturns">Product Returns</a>.</p>
+                <p class="products-list-hint">Catalog: edit product name, category, sale price, description, and images via the row action. Edit variation name, sale price, thumbnails, and 3D model from each variation. Stock and restock are on <a href="/Employee/Admin/ProductInventory">Product Inventory</a>; returns on <a href="/Employee/Admin/ProductReturns">Product Returns</a>.</p>
             </div>
             <div id="productsListingPanel" class="content-area">
 
@@ -990,6 +1003,7 @@
                             InventoryProductSKU: product.InventoryProductSKU,
                             InventoryProductCategory: product.InventoryProductCategory,
                             InventoryProductPrice: product.InventoryProductPrice,
+                            InventoryItemCostTotal: product.InventoryItemCostTotal || 0,
                             InventoryProductImageURL: product.InventoryProductImageURL,
                             LastDateAdded: product.LastDateAdded || product.DateAdded,
                             LastDateAddedLabel: fmtDate(product.LastDateAdded || product.DateAdded, 'N/A'),
@@ -1301,6 +1315,6 @@
         })();
     </script>
 
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260524q" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260525j" defer></script>
 </body>
 </html>

@@ -520,10 +520,13 @@ async function enrichProductsCatalogPricingFromInventory(pool, products) {
         } else {
             catalogPrice = parent > 0 ? parent : minVar;
         }
-        if (catalogPrice > 0 || parent > 0) {
+        if (catalogPrice > 0 || parent > 0 || minVar > 0) {
             priceByProduct.set(row.ProductID, {
-                catalogPrice: catalogPrice > 0 ? catalogPrice : parent,
-                parentListPrice: parent > 0 ? parent : catalogPrice,
+                catalogPrice: hasVariations
+                    ? (minVar > 0 ? minVar : 0)
+                    : (catalogPrice > 0 ? catalogPrice : parent),
+                parentListPrice: parent > 0 ? parent : 0,
+                variationMinPrice: minVar > 0 ? minVar : 0,
                 hasVariations
             });
         }
@@ -533,13 +536,33 @@ async function enrichProductsCatalogPricingFromInventory(pool, products) {
         const pid = idByIndex[i];
         const pricing = pid ? priceByProduct.get(pid) : null;
         if (!pricing) return product;
-        const { catalogPrice, parentListPrice, hasVariations } = pricing;
-        const enriched = applyDiscountToProductRecord(product, catalogPrice);
+        const { catalogPrice, parentListPrice, variationMinPrice, hasVariations } = pricing;
+        const sellBase =
+            hasVariations && variationMinPrice > 0
+                ? variationMinPrice
+                : catalogPrice > 0
+                    ? catalogPrice
+                    : parentListPrice;
+        if (!sellBase) return product;
+        const discountBase = parentListPrice > 0 ? parentListPrice : sellBase;
+        const enriched = applyDiscountToProductRecord(product, discountBase);
+        const listPrice = discountBase;
+        let cardPrice = sellBase;
+        if (enriched.hasDiscount && enriched.discountInfo?.discountedPrice != null) {
+            cardPrice = Number(enriched.discountInfo.discountedPrice);
+            if (hasVariations && variationMinPrice > 0 && variationMinPrice < listPrice) {
+                cardPrice = variationMinPrice;
+            }
+        } else if (hasVariations && variationMinPrice > 0) {
+            cardPrice = variationMinPrice;
+        }
         return {
             ...enriched,
-            variationMinPrice: catalogPrice,
-            catalogListPrice: catalogPrice,
-            parentListPrice: parentListPrice || catalogPrice,
+            price: listPrice,
+            cardPrice,
+            variationMinPrice: variationMinPrice > 0 ? variationMinPrice : sellBase,
+            catalogListPrice: sellBase,
+            parentListPrice: parentListPrice > 0 ? parentListPrice : listPrice,
             hasVariations: enriched.hasVariations || hasVariations || false
         };
     });
