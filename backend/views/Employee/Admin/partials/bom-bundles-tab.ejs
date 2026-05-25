@@ -14,29 +14,31 @@
                         <th>Bundle Name</th>
                         <th class="qty-col">Materials</th>
                         <th>Created</th>
-                        <th style="width:100px;">Actions</th>
+                        <th class="pi-actions-col">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     <% bundles.forEach(function(b) { %>
                         <tr data-bundle-id="<%= b.BomBundleID %>">
-                            <td><code><%= b.BundleCode || '—' %></code></td>
+                            <td><code style="font-size:0.85em;"><%= b.BundleCode || '—' %></code></td>
                             <td><%= b.Name %></td>
                             <td class="qty-col"><%= b.MaterialCount || 0 %></td>
                             <td><%= b.DateAdded ? new Date(b.DateAdded).toLocaleDateString() : '—' %></td>
-                            <td class="rm-actions-cell">
-                                <button type="button" class="edit-bom-bundle-btn edit-material-btn" title="Edit"
+                            <td class="pi-actions-col">
+                                <div class="pi-actions-cell">
+                                <button type="button" class="edit-bom-bundle-btn pi-icon-edit-btn" title="Edit" aria-label="Edit"
                                     data-id="<%= b.BomBundleID %>"
                                     data-name="<%= (b.Name || '').replace(/"/g, '&quot;') %>"
                                     data-code="<%= b.BundleCode || '' %>"
                                     data-description="<%= (b.Description || '').replace(/"/g, '&quot;') %>">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 20h9"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 3.5a2.121 2.121 0 113 3L7 19 21l1.5-4L16.5 3.5z"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                                 </button>
-                                <button type="button" class="delete-bom-bundle-btn delete-material-btn" title="Archive"
+                                <button type="button" class="delete-bom-bundle-btn pi-icon-archive-btn" title="Archive" aria-label="Archive"
                                     data-id="<%= b.BomBundleID %>"
                                     data-name="<%= (b.Name || '').replace(/"/g, '&quot;') %>">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
                                 </button>
+                                </div>
                             </td>
                         </tr>
                     <% }); %>

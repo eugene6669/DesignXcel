@@ -2,28 +2,30 @@
 (function () {
     'use strict';
 
-    var TAB_PANELS = ['productsTab', 'rawMaterialsTab', 'bomBundlesTab'];
-    var TAB_NAMES = ['products', 'raw-materials', 'bom-bundles'];
+    var INVENTORY_BASE = '/Employee/Admin/Inventory';
+    var DEFAULT_TAB = 'ProductInventory';
+    var TAB_PANELS = ['productsTab', 'rawMaterialsTab', 'bomBundlesTab', 'stockMovementTab'];
+    var TAB_NAMES = ['ProductInventory', 'raw-materials', 'bom-bundles', 'stock-movement'];
+
+    function normalizeTabName(urlTab) {
+        if (!urlTab || urlTab === 'products') return DEFAULT_TAB;
+        if (urlTab === 'ProductInventory') return DEFAULT_TAB;
+        return urlTab;
+    }
 
     function tabUrl(name) {
-        var base = '/Employee/Admin/ProductInventory';
-        if (name === 'products') {
-            return base + '?tab=products';
-        }
-        return base + '?tab=' + encodeURIComponent(name);
+        var tab = normalizeTabName(name);
+        return INVENTORY_BASE + '?tab=' + encodeURIComponent(tab);
     }
 
     function getTabFromUrl() {
-        var urlTab = new URLSearchParams(window.location.search).get('tab');
-        if (urlTab === 'raw-materials' || urlTab === 'bom-bundles') {
-            return urlTab;
-        }
-        return 'products';
+        return normalizeTabName(new URLSearchParams(window.location.search).get('tab'));
     }
 
     function showTab(name) {
-        if (TAB_NAMES.indexOf(name) === -1) {
-            name = 'products';
+        var tab = normalizeTabName(name);
+        if (TAB_NAMES.indexOf(tab) === -1) {
+            tab = DEFAULT_TAB;
         }
 
         TAB_PANELS.forEach(function (id) {
@@ -35,12 +37,14 @@
             btn.classList.remove('active');
         });
 
-        var panelId = name === 'raw-materials' ? 'rawMaterialsTab'
-            : name === 'bom-bundles' ? 'bomBundlesTab' : 'productsTab';
+        var panelId = tab === 'raw-materials' ? 'rawMaterialsTab'
+            : tab === 'bom-bundles' ? 'bomBundlesTab'
+            : tab === 'stock-movement' ? 'stockMovementTab'
+            : 'productsTab';
         var panel = document.getElementById(panelId);
         if (panel) panel.classList.add('active');
 
-        var btn = document.querySelector('.tab-navigation .tab-button[data-tab="' + name + '"]');
+        var btn = document.querySelector('.tab-navigation .tab-button[data-tab="' + tab + '"]');
         if (btn) btn.classList.add('active');
 
         var bomModal = document.getElementById('bomBundleModal');

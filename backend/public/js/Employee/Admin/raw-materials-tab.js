@@ -115,7 +115,7 @@
 
         wireClose(['rmCloseAddMaterial', 'rmCancelAddMaterial'], 'rmAddMaterialModal');
 
-        document.querySelectorAll('#rawMaterialsTab .edit-material-btn').forEach(function (btn) {
+        document.querySelectorAll('#rawMaterialsTab .edit-raw-material-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 document.getElementById('rmEditMaterialID').value = btn.getAttribute('data-id');
                 const skuEl = document.getElementById('rmEditSku');
@@ -131,7 +131,7 @@
 
         wireClose(['rmCloseEditMaterial', 'rmCancelEditMaterial'], 'rmEditMaterialModal');
 
-        ['rmAddMaterialModal', 'rmEditMaterialModal', 'rmQuickAddModal', 'rmManageUnitsModal'].forEach(function (modalId) {
+        ['rmAddMaterialModal', 'rmEditMaterialModal', 'rmQuickAddModal', 'rmManageUnitsModal', 'rawMaterialRestockModal'].forEach(function (modalId) {
             const modal = document.getElementById(modalId);
             if (!modal) return;
             modal.addEventListener('click', function (e) {
@@ -190,7 +190,7 @@
             if (ok > 0) {
                 popup('Added ' + ok + ' material(s).' + (fail ? ' ' + fail + ' skipped (may already exist).' : ''));
                 setTimeout(function () {
-                    window.location.href = '/Employee/Admin/ProductInventory?tab=raw-materials';
+                    window.location.href = '/Employee/Admin/Inventory?tab=raw-materials';
                 }, 800);
             } else {
                 popup('No materials were added. They may already exist.', true);
@@ -287,6 +287,98 @@
         }
     }
 
+    function stockQtyClassFor(n) {
+        const num = Number(n) || 0;
+        if (num < 0) return 'stock-qty-negative';
+        if (num === 0) return 'stock-qty-out';
+        if (num <= 10) return 'stock-qty-critical';
+        if (num <= 20) return 'stock-qty-low';
+        return 'stock-qty-normal';
+    }
+
+    function updateMaterialQtyDisplay(materialId, newQty) {
+        const span = document.querySelector('#rawMaterialsTable .rm-qty-display[data-material-id="' + materialId + '"]');
+        if (!span) return;
+        span.textContent = String(newQty);
+        span.className = 'stock-qty rm-qty-display ' + stockQtyClassFor(newQty);
+        const row = document.querySelector('#rawMaterialsTable tr[data-material-id="' + materialId + '"]');
+        if (row) {
+            const editBtn = row.querySelector('.edit-raw-material-btn');
+            const restockBtn = row.querySelector('.restock-raw-material-btn');
+            if (editBtn) editBtn.setAttribute('data-quantity', String(newQty));
+            if (restockBtn) restockBtn.setAttribute('data-quantity', String(newQty));
+        }
+    }
+
+    function initRestock() {
+        const modal = document.getElementById('rawMaterialRestockModal');
+        const qtyInput = document.getElementById('rawMaterialRestockQty');
+        const confirmBtn = document.getElementById('rmConfirmRestock');
+        if (!modal || !confirmBtn) return;
+
+        function closeRestockModal() {
+            closeModal('rawMaterialRestockModal');
+            if (qtyInput) qtyInput.value = '1';
+        }
+
+        wireClose(['rmCloseRestockModal', 'rmCancelRestock'], 'rawMaterialRestockModal');
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal) closeRestockModal();
+        });
+
+        document.querySelectorAll('#rawMaterialsTab .restock-raw-material-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const materialId = btn.getAttribute('data-material-id');
+                const name = btn.getAttribute('data-material-name') || 'Material';
+                const qty = parseInt(btn.getAttribute('data-quantity'), 10) || 0;
+                const unit = btn.getAttribute('data-unit') || '';
+                document.getElementById('rawMaterialRestockId').value = materialId;
+                document.getElementById('rawMaterialRestockName').textContent = name;
+                document.getElementById('rawMaterialRestockCurrentQty').textContent = String(qty);
+                const unitEl = document.getElementById('rawMaterialRestockUnit');
+                if (unitEl) unitEl.textContent = unit ? ' ' + unit : '';
+                if (qtyInput) qtyInput.value = '1';
+                openModal('rawMaterialRestockModal');
+            });
+        });
+
+        confirmBtn.addEventListener('click', async function () {
+            const materialId = document.getElementById('rawMaterialRestockId').value;
+            const quantityToAdd = parseInt(qtyInput && qtyInput.value, 10);
+            if (!materialId) {
+                popup('Missing material ID.', true);
+                return;
+            }
+            if (!quantityToAdd || quantityToAdd < 1) {
+                popup('Enter a quantity of at least 1.', true);
+                return;
+            }
+            confirmBtn.disabled = true;
+            try {
+                const res = await fetch('/api/admin/raw-materials/' + materialId + '/restock', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quantityToAdd: quantityToAdd })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    popup(data.message || 'Stock updated.');
+                    updateMaterialQtyDisplay(materialId, data.quantityAvailable);
+                    document.getElementById('rawMaterialRestockCurrentQty').textContent = String(data.quantityAvailable);
+                    const restockBtn = document.querySelector('#rawMaterialsTab .restock-raw-material-btn[data-material-id="' + materialId + '"]');
+                    if (restockBtn) restockBtn.setAttribute('data-quantity', String(data.quantityAvailable));
+                    closeRestockModal();
+                } else {
+                    popup(data.message || 'Failed to restock.', true);
+                }
+            } catch (e) {
+                popup('Failed to restock material.', true);
+            }
+            confirmBtn.disabled = false;
+        });
+    }
+
     function removeMaterialRow(materialId) {
         const row = document.querySelector('#rawMaterialsTable tr[data-material-id="' + materialId + '"]');
         if (row) row.remove();
@@ -339,6 +431,7 @@
         initQuickAdd();
         initManageUnits();
         initArchiveButtons();
+        initRestock();
     }
 
     if (document.readyState === 'loading') {

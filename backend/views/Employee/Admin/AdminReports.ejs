@@ -1854,22 +1854,22 @@
 
         function buildSalesSummaryTableRows(stats) {
             const rows = [
-                ['1. Sales', 'Gross Product Sales', formatSalesSummaryValue(stats, 'grossProductSales', { currency: true }), 'List product value (subtotal + discounts)'],
-                ['1. Sales', 'Discounts', formatSalesSummaryValue(stats, 'totalDiscounts', { currency: true }), 'Promotions / price reductions'],
-                ['1. Sales', 'Net Product Sales', formatSalesSummaryValue(stats, 'netProductSales', { currency: true }), 'Gross product − discounts (= product subtotal)'],
-                ['1. Sales', 'Net Revenue', formatSalesSummaryValue(stats, 'netRevenue', { currency: true }), 'Recognized product + delivery after reversals'],
-                ['2. Delivery', 'Delivery Revenue', formatSalesSummaryValue(stats, 'deliveryRevenueGross', { currency: true }), 'Delivery fees charged'],
-                ['2. Delivery', 'Delivery Refunds', formatSalesSummaryValue(stats, 'deliveryRefunds', { currency: true }), 'Revenue reversal — not a loss'],
-                ['2. Delivery', 'Net Delivery Revenue', formatSalesSummaryValue(stats, 'netDeliveryRevenue', { currency: true }), 'Delivery after refunds'],
-                ['3. Returns', 'Product Refunds', formatSalesSummaryValue(stats, 'productRefunds', { currency: true }), 'Revenue reversal — not a loss'],
-                ['3. Returns', 'Return Shipping Expense', formatSalesSummaryValue(stats, 'returnShippingExpense', { currency: true }), 'Direct cash expense (seller-paid)'],
-                ['3. Returns', 'Damage Cost', formatSalesSummaryValue(stats, 'damageInventoryCost', { currency: true }), 'Inventory write-off at item cost'],
-                ['3. Returns', 'Refund Rate', formatSalesSummaryValue(stats, 'refundRate', { percent: true }), 'Product refunds ÷ gross product sales'],
-                ['3. Returns', 'Return Rate', formatSalesSummaryValue(stats, 'returnRate', { percent: true }), 'Returned orders ÷ total orders'],
-                ['4. Profit', 'COGS', formatSalesSummaryValue(stats, 'cogs', { currency: true }), 'Cost of fulfilled products sold'],
-                ['4. Profit', 'Replacement Cost', formatSalesSummaryValue(stats, 'replacementCost', { currency: true }), 'Replacement units at item cost'],
-                ['4. Profit', 'Gross Profit', formatSalesSummaryValue(stats, 'grossProfit', { currency: true }), 'Net revenue − COGS − return shipping − damage − replacement'],
-                ['4. Profit', 'Gross Margin', formatSalesSummaryValue(stats, 'grossMargin', { percent: true }), 'Gross profit ÷ net revenue']
+                ['Sales', 'Gross Product Sales', formatSalesSummaryValue(stats, 'grossProductSales', { currency: true }), 'List product value (subtotal + discounts)'],
+                ['Sales', 'Discounts', formatSalesSummaryValue(stats, 'totalDiscounts', { currency: true }), 'Promotions / price reductions'],
+                ['Sales', 'Net Product Sales', formatSalesSummaryValue(stats, 'netProductSales', { currency: true }), 'Gross product − discounts (= product subtotal)'],
+                ['Sales', 'Net Revenue', formatSalesSummaryValue(stats, 'netRevenue', { currency: true }), 'Recognized product + delivery after reversals'],
+                ['Delivery', 'Delivery Revenue', formatSalesSummaryValue(stats, 'deliveryRevenueGross', { currency: true }), 'Delivery fees charged'],
+                ['Delivery', 'Delivery Refunds', formatSalesSummaryValue(stats, 'deliveryRefunds', { currency: true }), 'Revenue reversal — not a loss'],
+                ['Delivery', 'Net Delivery Revenue', formatSalesSummaryValue(stats, 'netDeliveryRevenue', { currency: true }), 'Delivery after refunds'],
+                ['Returns', 'Product Refunds', formatSalesSummaryValue(stats, 'productRefunds', { currency: true }), 'Revenue reversal — not a loss'],
+                ['Returns', 'Return Shipping Expense', formatSalesSummaryValue(stats, 'returnShippingExpense', { currency: true }), 'Direct cash expense (seller-paid)'],
+                ['Returns', 'Damage Cost', formatSalesSummaryValue(stats, 'damageInventoryCost', { currency: true }), 'Inventory write-off at item cost'],
+                ['Returns', 'Refund Rate', formatSalesSummaryValue(stats, 'refundRate', { percent: true }), 'Product refunds ÷ gross product sales'],
+                ['Returns', 'Return Rate', formatSalesSummaryValue(stats, 'returnRate', { percent: true }), 'Returned orders ÷ total orders'],
+                ['Profit', 'COGS', formatSalesSummaryValue(stats, 'cogs', { currency: true }), 'Cost of fulfilled products sold'],
+                ['Profit', 'Replacement Cost', formatSalesSummaryValue(stats, 'replacementCost', { currency: true }), 'Replacement units at item cost'],
+                ['Profit', 'Gross Profit', formatSalesSummaryValue(stats, 'grossProfit', { currency: true }), 'Net revenue − COGS − return shipping − damage − replacement'],
+                ['Profit', 'Gross Margin', formatSalesSummaryValue(stats, 'grossMargin', { percent: true }), 'Gross profit ÷ net revenue']
             ];
             return rows;
         }
@@ -1950,7 +1950,7 @@
 
             const sections = [
                 {
-                    title: '1. Sales',
+                    title: 'Sales',
                     cards: [
                         { label: 'Gross Product Sales', value: fmt(stats.grossProductSales || stats.grossSales, 'currency'), hint: 'List value: subtotal + discounts' },
                         { label: 'Discounts', value: fmt(stats.totalDiscounts, 'currency'), hint: 'Price reductions' },
@@ -1959,7 +1959,7 @@
                     ]
                 },
                 {
-                    title: '2. Delivery',
+                    title: 'Delivery',
                     cards: [
                         { label: 'Delivery Revenue', value: fmt(stats.deliveryRevenueGross || stats.deliveryRevenue, 'currency'), hint: 'Fees charged to customer' },
                         { label: 'Delivery Refunds', value: fmt(stats.deliveryRefunds, 'currency'), hint: 'Revenue reversal — not a loss' },
@@ -1968,7 +1968,7 @@
                     ]
                 },
                 {
-                    title: '3. Returns (expenses)',
+                    title: 'Returns (expenses)',
                     cards: [
                         { label: 'Return Shipping Expense', value: fmt(stats.returnShippingExpense || stats.returnShipping, 'currency'), hint: 'Direct cash out — real loss' },
                         { label: 'Damage Cost', value: fmt(stats.damageInventoryCost, 'currency'), hint: 'Inventory write-off — real loss' },
@@ -1977,7 +1977,7 @@
                     ]
                 },
                 {
-                    title: '4. Profit',
+                    title: 'Profit',
                     cards: [
                         { label: 'COGS', value: fmt(stats.cogs, 'currency'), hint: 'Cost of products sold' },
                         { label: 'Replacement Cost', value: fmt(stats.replacementCost, 'currency'), hint: 'Replacement units at cost' },

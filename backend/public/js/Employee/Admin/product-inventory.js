@@ -22,24 +22,32 @@
             return '<span class="return-qty return-qty-' + kind + (n > 0 ? ' has-stock' : '') + '">' + n + '</span>';
         }
 
-        /** Total on-hand = available + damaged + repaired (matches parent VariationTotalSum rollup). */
-        function resolveVariationStockTotals(variation) {
+        /** Sellable qty — matches SQL VariationSellableSum / cost-basis qty. */
+        function resolveVariationSellableQty(variation) {
             const baseQuantity = Number(variation.Quantity) || 0;
+            if (variation.AvailableQuantity === null || variation.AvailableQuantity === undefined) {
+                return baseQuantity > 0 ? baseQuantity : 0;
+            }
+            const av = Number(variation.AvailableQuantity) || 0;
+            return (av === 0 && baseQuantity > 0) ? baseQuantity : av;
+        }
+
+        /** Total on-hand = sellable + damaged + repaired + returned (incl. pending inspection). */
+        function resolveVariationStockTotals(variation) {
             const damagedQty = Number(variation.DamagedQuantity) || 0;
             const repairedQty = Number(variation.RepairedQuantity) || 0;
-            let availableQty;
-            if (variation.AvailableQuantity === null || variation.AvailableQuantity === undefined) {
-                availableQty = baseQuantity > 0 ? baseQuantity : 0;
-            } else {
-                availableQty = Number(variation.AvailableQuantity) || 0;
-            }
-            const bucketTotal = availableQty + damagedQty + repairedQty;
-            const totalQty = Math.max(bucketTotal, baseQuantity);
+            const disposedQty = Number(variation.DisposedQuantity) || 0;
+            const pendingReturned = Number(variation.PendingInspectionQty) || 0;
+            const storedReturned = Number(variation.ReturnedQuantity) || 0;
+            const returnedQty = storedReturned + pendingReturned;
+            const availableQty = resolveVariationSellableQty(variation);
+            const totalQty = availableQty + damagedQty + repairedQty + returnedQty + disposedQty;
             return {
                 availableQty: availableQty,
                 damagedQty: damagedQty,
                 repairedQty: repairedQty,
-                disposedQty: Number(variation.DisposedQuantity) || 0,
+                returnedQty: returnedQty,
+                disposedQty: disposedQty,
                 totalQty: totalQty
             };
         }
@@ -50,20 +58,74 @@
             }, 0);
         }
 
+        function sumVariationsAvailable(variations) {
+            return (variations || []).reduce(function(sum, v) {
+                return sum + resolveVariationStockTotals(v).availableQty;
+            }, 0);
+        }
+
+        function sumVariationsItemCostTotal(variations) {
+            return (variations || []).reduce(function(sum, v) {
+                const unitCost = Number(v.CostPrice) || 0;
+                return sum + unitCost * resolveVariationSellableQty(v);
+            }, 0);
+        }
+
+        function sumVariationsReturnedDisplay(variations) {
+            return (variations || []).reduce(function(sum, v) {
+                const pending = Number(v.PendingInspectionQty) || 0;
+                const stored = Number(v.ReturnedQuantity) || 0;
+                return sum + stored + pending;
+            }, 0);
+        }
+
+        function sumVariationsDamagedQty(variations) {
+            return (variations || []).reduce(function(sum, v) {
+                return sum + (Number(v.DamagedQuantity) || 0);
+            }, 0);
+        }
+
+        function sumVariationsRepairedQty(variations) {
+            return (variations || []).reduce(function(sum, v) {
+                return sum + (Number(v.RepairedQuantity) || 0);
+            }, 0);
+        }
+
         function updateParentProductRowTotals(inventoryProductId, variations) {
             const parentRow = document.querySelector(
                 'tr[data-inventory-product-id="' + inventoryProductId + '"]:not(.variations-row)'
             );
             if (!parentRow) return;
             const qtyEl = parentRow.querySelector('td.qty-col .stock-qty');
-            if (!qtyEl) return;
-            const total = sumVariationsTotalOnHand(variations);
-            qtyEl.textContent = String(total);
-            qtyEl.className = 'stock-qty ' + getStockQtyClass(total);
-        }
-
-        function buildRepairedQtyCellHtml(repairedQty) {
-            return '<div class="return-qty-cell">' + formatReturnQtyHtml(repairedQty, 'repaired') + '</div>';
+            if (qtyEl) {
+                const qty = (isProductsListingPage && !isProductReturnsPage)
+                    ? sumVariationsAvailable(variations)
+                    : sumVariationsTotalOnHand(variations);
+                qtyEl.textContent = String(qty);
+                qtyEl.className = 'stock-qty ' + getStockQtyClass(qty);
+            }
+            const returnedEl = parentRow.querySelector('.return-qty-col-returned .return-qty');
+            if (returnedEl) {
+                const n = sumVariationsReturnedDisplay(variations);
+                returnedEl.textContent = String(n);
+                returnedEl.className = 'return-qty return-qty-returned' + (n > 0 ? ' has-stock' : '');
+            }
+            const damagedEl = parentRow.querySelector('.return-qty-col-damaged .return-qty');
+            if (damagedEl) {
+                const n = sumVariationsDamagedQty(variations);
+                damagedEl.textContent = String(n);
+                damagedEl.className = 'return-qty return-qty-damaged' + (n > 0 ? ' has-stock' : '');
+            }
+            const repairedEl = parentRow.querySelector('.return-qty-col-repaired .return-qty');
+            if (repairedEl) {
+                const n = sumVariationsRepairedQty(variations);
+                repairedEl.textContent = String(n);
+                repairedEl.className = 'return-qty return-qty-repaired' + (n > 0 ? ' has-stock' : '');
+            }
+            const costTotalEl = parentRow.querySelector('td.item-cost-total-col');
+            if (costTotalEl && isProductsListingPage && !isProductReturnsPage) {
+                costTotalEl.textContent = formatPhpMoney(sumVariationsItemCostTotal(variations));
+            }
         }
 
         function computeVariationDiscountedPrice(listPrice, discountType, discountValue) {
@@ -120,8 +182,45 @@
                 '</div>';
         }
 
-        function buildDamagedQtyCellHtml(damagedQty) {
+        function shouldShowReturnWorkflowPage() {
+            return isProductReturnsPage || (isInventoryPage && isProductInventoryProductsTab());
+        }
+
+        function variationQtySnapshotFromCtx(ctx) {
+            return {
+                available: ctx.availableQty,
+                returned: ctx.returnedQty,
+                damaged: ctx.damagedQty,
+                repaired: ctx.repairedQty,
+                disposed: ctx.disposedQty,
+                inventoryProductId: ctx.inventoryProductId
+            };
+        }
+
+        function attrQuoteDataset(ctx) {
+            const snap = variationQtySnapshotFromCtx(ctx);
+            return ' data-variation-id="' + ctx.variationId + '"' +
+                ' data-variation-name="' + attrQuote(ctx.variationName) + '"' +
+                ' data-available-qty="' + snap.available + '"' +
+                ' data-returned-qty="' + (Number(ctx.variation.ReturnedQuantity) || 0) + '"' +
+                ' data-damaged-qty="' + snap.damaged + '"' +
+                ' data-repaired-qty="' + snap.repaired + '"' +
+                ' data-disposed-qty="' + snap.disposed + '"' +
+                ' data-inventory-product-id="' + (snap.inventoryProductId || '') + '"';
+        }
+
+        function buildReturnedQtyCellHtml(ctx) {
+            return '<div class="return-qty-cell">' + formatReturnQtyHtml(ctx.returnedQty, 'returned') + '</div>';
+        }
+
+        function buildDamagedQtyCellHtml(ctx) {
+            const damagedQty = typeof ctx === 'object' ? ctx.damagedQty : ctx;
             return '<div class="return-qty-cell">' + formatReturnQtyHtml(damagedQty, 'damaged') + '</div>';
+        }
+
+        function buildRepairedQtyCellHtml(ctx) {
+            const repairedQty = typeof ctx === 'object' ? ctx.repairedQty : ctx;
+            return '<div class="return-qty-cell">' + formatReturnQtyHtml(repairedQty, 'repaired') + '</div>';
         }
 
         var PI_SVG_EDIT = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>';
@@ -130,10 +229,23 @@
         var PI_SVG_REPAIR = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>';
         var PI_SVG_AVAILABLE = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
 
-        function buildReturnRepairActionButtons(variationId, variationName, qtySnapshot, damagedQty, repairedQty) {
-            if (!isProductReturnsPage || !variationId) return '';
+        function buildReturnRepairActionButtons(variationId, variationName, qtySnapshot, damagedQty, repairedQty, storedReturnedQty) {
+            if (!shouldShowReturnWorkflowPage() || !variationId) return '';
             const snap = qtySnapshot || {};
-            let html = '<div class="return-action-btns" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">';
+            const storedReturned = Number(storedReturnedQty) || 0;
+            let html = '<div class="return-action-btns" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;align-items:center;">';
+            if (storedReturned > 0) {
+                html += '<button type="button" class="return-col-action-btn returned-to-damaged-btn pi-btn pi-btn-sm"' +
+                    ' data-variation-id="' + variationId + '"' +
+                    ' data-variation-name="' + escapeHtml(variationName || 'Variation') + '"' +
+                    ' data-available-qty="' + (Number(snap.available) || 0) + '"' +
+                    ' data-returned-qty="' + storedReturned + '"' +
+                    ' data-damaged-qty="' + (Number(snap.damaged) || 0) + '"' +
+                    ' data-repaired-qty="' + (Number(snap.repaired) || 0) + '"' +
+                    ' data-disposed-qty="' + (Number(snap.disposed) || 0) + '"' +
+                    ' data-inventory-product-id="' + (snap.inventoryProductId || '') + '"' +
+                    ' title="Move returned stock to damaged">To damaged</button>';
+            }
             if (damagedQty > 0) {
                 html += '<button type="button" class="repair-variation-btn pi-icon-action-btn pi-icon-repair-btn" data-variation-id="' + variationId + '"' +
                     ' data-variation-name="' + escapeHtml(variationName || 'Variation') + '"' +
@@ -237,7 +349,7 @@
 
         function isProductInventoryProductsTab() {
             const urlTab = new URLSearchParams(window.location.search).get('tab');
-            if (urlTab === 'products') return true;
+            if (urlTab === 'ProductInventory' || urlTab === 'products') return true;
             if (urlTab) return false;
             const productsTab = document.getElementById('productsTab');
             return !!(productsTab && productsTab.classList.contains('active'));
@@ -283,6 +395,7 @@
                 catalogBlocks.forEach(function(el) { el.style.display = ''; });
                 restockBlocks.forEach(function(el) { el.style.display = 'none'; });
                 inventoryDetailsBlocks.forEach(function(el) { el.style.display = ''; });
+                recipeViewBlocks.forEach(function(el) { el.style.display = ''; });
                 if (mainImageWrap) mainImageWrap.style.display = 'none';
                 if (skuWrap) skuWrap.style.display = 'none';
                 if (title) title.textContent = 'Edit Variation';
@@ -375,14 +488,20 @@
             if (!isProductReturnsPage) {
                 cols += '<td class="qty-col">' + formatAvailableQty(availableQty) + '</td>';
             } else {
-                cols += '<td class="qty-col">' + formatReturnQtyHtml(returnedQty, 'returned') + '</td>' +
-                    '<td class="qty-col">' + buildDamagedQtyCellHtml(damagedQty, variationId, variationName, {
-                    available: availableQty,
-                    returned: returnedQty,
-                    repaired: repairedQty,
-                    disposed: disposedQty
-                }) + '</td>' +
-                    '<td class="qty-col">' + formatReturnQtyHtml(repairedQty, 'repaired') + '</td>';
+                const flatCtx = {
+                    variationId: variationId,
+                    variationName: variationName,
+                    variation: variation,
+                    availableQty: availableQty,
+                    returnedQty: returnedQty,
+                    damagedQty: damagedQty,
+                    repairedQty: repairedQty,
+                    disposedQty: disposedQty,
+                    inventoryProductId: productId
+                };
+                cols += '<td class="qty-col">' + buildReturnedQtyCellHtml(flatCtx) + '</td>' +
+                    '<td class="qty-col">' + buildDamagedQtyCellHtml(flatCtx) + '</td>' +
+                    '<td class="qty-col">' + buildRepairedQtyCellHtml(flatCtx) + '</td>';
             }
 
             cols += '<td style="text-align:center;"><img src="' + escapeHtml(imageUrl) + '" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" onerror="this.src=\'/images/placeholder-no-image.svg\'"></td>';
@@ -464,7 +583,7 @@
 let currentSelectedProductId = null;
         let currentSelectedProductName = null;
 
-        if (addInventoryItemBtn) addInventoryItemBtn.style.display = 'inline-block';
+        if (addInventoryItemBtn && isProductsListingPage) addInventoryItemBtn.style.display = 'inline-block';
 const urlParams = new URLSearchParams(window.location.search);
         const urlInventoryProductId = urlParams.get('inventoryProductId');
 
@@ -608,14 +727,34 @@ const urlParams = new URLSearchParams(window.location.search);
                 const kinds = ['returned', 'damaged', 'repaired'];
                 kinds.forEach(function (kind, i) {
                     if (!qtyTds[i]) return;
-                    if (kind === 'damaged' && vals[i] > 0) {
-                        qtyTds[i].innerHTML = formatReturnQtyHtml(vals[i], kind);
-                    } else if (kind === 'repaired' && vals[i] > 0) {
-                        qtyTds[i].innerHTML = formatReturnQtyHtml(vals[i], kind);
-                    } else {
-                        qtyTds[i].innerHTML = formatReturnQtyHtml(vals[i], kind);
-                    }
+                    qtyTds[i].innerHTML = formatReturnQtyHtml(vals[i], kind);
                 });
+                return;
+            }
+            if (isInventoryPage && isProductInventoryProductsTab()) {
+                const totalEl = row.querySelector('td.qty-col .stock-qty');
+                if (totalEl) {
+                    totalEl.textContent = String(summary.totalQuantity);
+                    totalEl.className = 'stock-qty ' + getStockQtyClass(summary.totalQuantity);
+                }
+                const returnedEl = row.querySelector('.return-qty-col-returned .return-qty');
+                if (returnedEl) {
+                    const n = summary.returnedQuantity || 0;
+                    returnedEl.textContent = String(n);
+                    returnedEl.className = 'return-qty return-qty-returned' + (n > 0 ? ' has-stock' : '');
+                }
+                const damagedEl = row.querySelector('.return-qty-col-damaged .return-qty');
+                if (damagedEl) {
+                    const n = summary.damagedQuantity || 0;
+                    damagedEl.textContent = String(n);
+                    damagedEl.className = 'return-qty return-qty-damaged' + (n > 0 ? ' has-stock' : '');
+                }
+                const repairedEl = row.querySelector('.return-qty-col-repaired .return-qty');
+                if (repairedEl) {
+                    const n = summary.repairedQuantity || 0;
+                    repairedEl.textContent = String(n);
+                    repairedEl.className = 'return-qty return-qty-repaired' + (n > 0 ? ' has-stock' : '');
+                }
                 return;
             }
             const qtyCells = row.querySelectorAll('td.qty-col .stock-qty');
@@ -707,139 +846,16 @@ const urlParams = new URLSearchParams(window.location.search);
             }
 
             const rowFlags = getVariationContainerFlags(inventoryProductId);
+            const columnKeys = getVariationColumnKeys(container);
+            if (!columnKeys.length) {
+                console.warn('[variations] No data-var-col headers found for product', inventoryProductId);
+            }
 
             tableBody.innerHTML = variations.map(function(variation) {
-                const isActive = variation.IsActive !== false && variation.IsActive !== 0 && variation.IsActive !== '0';
-                const statusBadge = isActive
-                    ? '<span class="status-badge status-available">Active</span>'
-                    : '<span class="status-badge status-disposed">Inactive</span>';
-                const salePriceNum = variation.Price != null && variation.Price !== '' && !isNaN(parseFloat(variation.Price))
-                    ? parseFloat(variation.Price) : null;
-                const price = salePriceNum != null ? formatPhpMoney(salePriceNum) : 'N/A';
-                const variationName = variation.VariationName || 'N/A';
-                const variationId = variation.VariationID || 0;
-                const stock = resolveVariationStockTotals(variation);
-                const availableQty = stock.availableQty;
-                const damagedQty = stock.damagedQty;
-                const repairedQty = stock.repairedQty;
-                const disposedQty = stock.disposedQty;
-                const totalQty = stock.totalQty;
-                const unitCost = Number(variation.CostPrice) || 0;
-                const costUnitHtml = formatPhpMoney(unitCost);
-                const pendingReturned = Number(variation.PendingInspectionQty) || 0;
-                const returnedQty = isProductReturnsPage
-                    ? pendingReturned
-                    : (Number(variation.ReturnedQuantity) || 0) + pendingReturned;
-                const color = variation.Color || 'N/A';
-                const variationSku = variation.SKU || '—';
-                const showStorefront = variationShowOnStorefront(variation);
-                const showVariationCatalogEdit = isProductsListingPage;
-                const showVariationInventoryEdit = isInventoryPage;
-                const showVariationArchive = isInventoryPage;
-                const cells = [
-                    { className: 'var-col-name', html: '<strong>' + escapeHtml(variationName) + '</strong>' },
-                    { className: 'var-col-sku', html: '<code style="font-size:0.85em;">' + escapeHtml(variationSku) + '</code>' },
-                    { className: 'var-col-color', html: escapeHtml(color) }
-                ];
-
-                if (isInventoryPage) {
-                    cells.push({ className: 'qty-col', html: formatStockQty(totalQty) });
-                } else if (isProductsListingPage && !isProductReturnsPage) {
-                    cells.push({ className: 'qty-col var-col-qty', html: formatStockQty(availableQty) });
-                } else if (isProductReturnsPage || rowFlags.showReturnCols) {
-                    const qtySnap = {
-                        available: availableQty,
-                        returned: returnedQty,
-                        damaged: damagedQty,
-                        repaired: repairedQty,
-                        disposed: disposedQty,
-                        inventoryProductId: inventoryProductId
-                    };
-                    cells.push(
-                        { className: 'qty-col var-col-qty', html: formatReturnQtyHtml(returnedQty, 'returned') },
-                        { className: 'qty-col var-col-qty', html: buildDamagedQtyCellHtml(damagedQty) },
-                        { className: 'qty-col var-col-qty', html: buildRepairedQtyCellHtml(repairedQty) }
-                    );
-                }
-
-                cells.push(
-                    { className: 'var-col-price', style: 'text-align:center', html: price }
-                );
-                if (isInventoryPage) {
-                    cells.push({ className: 'var-col-price', style: 'text-align:center', html: costUnitHtml });
-                }
-                cells.push({
-                    className: 'var-col-image',
-                    style: 'text-align:center',
-                    html: buildVariationRowImgHtml(variation)
+                const ctx = buildVariationRowContext(variation, inventoryProductId, rowFlags);
+                const cells = columnKeys.map(function(key) {
+                    return renderVariationCellByKey(key, ctx);
                 });
-
-                if (isProductsListingPage && rowFlags.showDisc) {
-                    const variationListPrice = Number(variation.Price) || 0;
-                    cells.push({
-                        className: 'var-col-discount discount-cell',
-                        style: 'text-align:center',
-                        html: buildVariationDiscountCellHtml(variationListPrice, rowFlags.discountMeta)
-                    });
-                }
-
-                if (isProductReturnsPage) {
-                    const qtySnap = {
-                        available: availableQty,
-                        returned: returnedQty,
-                        damaged: damagedQty,
-                        repaired: repairedQty,
-                        disposed: disposedQty,
-                        inventoryProductId: inventoryProductId
-                    };
-                    cells.push({
-                        className: 'var-col-action return-actions-col',
-                        style: 'text-align:center',
-                        html: buildReturnRepairActionButtons(variationId, variationName, qtySnap, damagedQty, repairedQty)
-                    });
-                }
-
-                if (isProductsListingPage && rowFlags.showSf) {
-                    cells.push({
-                        className: 'var-col-action',
-                        style: 'text-align:center',
-                        html: '<label class="storefront-toggle-label" title="Include on customer storefront">' +
-                            '<input type="checkbox" class="variation-storefront-toggle" data-variation-id="' + variationId + '"' +
-                            (showStorefront ? ' checked' : '') + '> Storefront</label>'
-                    });
-                    cells.push({
-                        className: 'last-added-cell var-col-date',
-                        style: 'text-align:center',
-                        html: formatVariationDate(variation.CreatedAt)
-                    });
-                    if (!isProductReturnsPage) {
-                        cells.push({ className: 'var-col-status', style: 'text-align:center', html: statusBadge });
-                    }
-                    if (rowFlags.showVarAct) {
-                        cells.push({
-                            className: 'var-col-action',
-                            style: 'text-align:center',
-                            html: showVariationCatalogEdit
-                                ? '<button type="button" class="edit-variation-status-btn pi-icon-edit-btn" data-mode="catalog" data-variation-id="' + variationId + '" title="Edit variation catalog" aria-label="Edit variation catalog">' + PI_SVG_EDIT + '</button>'
-                                : ''
-                        });
-                    }
-                } else if (isInventoryPage) {
-                    cells.push({
-                        className: 'var-col-action pi-actions-col',
-                        style: 'text-align:center',
-                        html: '<div class="pi-actions-cell">' +
-                            '<button type="button" class="restock-variation-btn pi-icon-restock-btn" data-variation-id="' + variationId + '" data-inventory-product-id="' + inventoryProductId + '" data-variation-name="' + attrQuote(variationName) + '" data-available-qty="' + availableQty + '" title="Restock" aria-label="Restock">' + PI_SVG_RESTOCK + '</button>' +
-                            (showVariationInventoryEdit
-                                ? '<button type="button" class="edit-variation-status-btn pi-icon-edit-btn" data-mode="inventory" data-variation-id="' + variationId + '" title="Edit variation" aria-label="Edit variation">' + PI_SVG_EDIT + '</button>'
-                                : '') +
-                            (showVariationArchive
-                                ? '<button type="button" class="archive-variation-btn pi-icon-archive-btn" data-variation-id="' + variationId + '" data-variation-name="' + escapeHtml(variationName) + '" title="Archive Variation" aria-label="Archive Variation">' + PI_SVG_ARCHIVE + '</button>'
-                                : '') +
-                            '</div>'
-                    });
-                }
-
                 return '<tr>' + cells.map(variationRowTd).join('') + '</tr>';
             }).join('');
 
@@ -865,8 +881,10 @@ const urlParams = new URLSearchParams(window.location.search);
             if (emptyDiv) emptyDiv.style.display = 'none';
 
             try {
+                const includePending = isProductReturnsPage
+                    || (isInventoryPage && isProductInventoryProductsTab());
                 const response = await fetch('/api/admin/inventory-product-variations/' + inventoryProductId
-                    + (isProductReturnsPage ? '?includePendingInspection=1' : ''));
+                    + (includePending ? '?includePendingInspection=1' : ''));
                 const result = await response.json();
                 if (result.success) {
                     const variations = result.variations || [];
@@ -987,14 +1005,20 @@ const urlParams = new URLSearchParams(window.location.search);
                 openAddVariationModal(productId, productName, false);
                 return;
             }
+            const returnedToDamagedBtn = e.target.closest('.returned-to-damaged-btn');
+            if (returnedToDamagedBtn && shouldShowReturnWorkflowPage()) {
+                const vid = parseInt(returnedToDamagedBtn.dataset.variationId, 10);
+                if (vid) openReturnedToDamagedModal(vid, returnedToDamagedBtn.dataset);
+                return;
+            }
             const repairBtn = e.target.closest('.repair-variation-btn');
-            if (repairBtn) {
+            if (repairBtn && shouldShowReturnWorkflowPage()) {
                 const vid = parseInt(repairBtn.dataset.variationId, 10);
                 if (vid) openRepairVariationModal(vid, repairBtn.dataset);
                 return;
             }
             const makeAvailableBtn = e.target.closest('.make-available-variation-btn');
-            if (makeAvailableBtn) {
+            if (makeAvailableBtn && shouldShowReturnWorkflowPage()) {
                 const vid = parseInt(makeAvailableBtn.dataset.variationId, 10);
                 if (vid) openMakeAvailableVariationModal(vid, makeAvailableBtn.dataset);
                 return;
@@ -1377,6 +1401,158 @@ const urlParams = new URLSearchParams(window.location.search);
                 showDisc: !!(container && container.getAttribute('data-show-discount') === '1'),
                 discountMeta: getParentDiscountMetaFromContainer(container)
             };
+        }
+
+        function getVariationColumnKeys(container) {
+            if (!container) return [];
+            const table = container.querySelector('.variations-nested-table');
+            if (!table) return [];
+            const ths = table.querySelectorAll('thead tr th[data-var-col]');
+            return Array.from(ths).map(function(th) {
+                return String(th.getAttribute('data-var-col') || '').trim();
+            }).filter(Boolean);
+        }
+
+        function buildVariationRowContext(variation, inventoryProductId, rowFlags) {
+            const stock = resolveVariationStockTotals(variation);
+            const salePriceNum = variation.Price != null && variation.Price !== '' && !isNaN(parseFloat(variation.Price))
+                ? parseFloat(variation.Price) : null;
+            const unitCost = Number(variation.CostPrice) || 0;
+            const costBasisQty = resolveVariationSellableQty(variation);
+            const pendingReturned = Number(variation.PendingInspectionQty) || 0;
+            const variationName = variation.VariationName || 'N/A';
+            const variationId = variation.VariationID || 0;
+            return {
+                variation: variation,
+                inventoryProductId: inventoryProductId,
+                rowFlags: rowFlags,
+                variationId: variationId,
+                variationName: variationName,
+                variationSku: variation.SKU || '—',
+                color: variation.Color || 'N/A',
+                salePriceHtml: salePriceNum != null ? formatPhpMoney(salePriceNum) : 'N/A',
+                itemCostHtml: formatPhpMoney(unitCost * costBasisQty),
+                availableQty: stock.availableQty,
+                totalQty: stock.totalQty,
+                damagedQty: stock.damagedQty,
+                repairedQty: stock.repairedQty,
+                disposedQty: stock.disposedQty,
+                returnedQty: stock.returnedQty,
+                isActive: variation.IsActive !== false && variation.IsActive !== 0 && variation.IsActive !== '0',
+                showStorefront: variationShowOnStorefront(variation)
+            };
+        }
+
+        function renderVariationCellByKey(key, ctx) {
+            const variation = ctx.variation;
+            const rowFlags = ctx.rowFlags;
+            const center = 'text-align:center';
+            switch (key) {
+                case 'image':
+                    return { className: 'var-col-image', style: center, html: '' };
+                case 'name':
+                    return {
+                        className: 'var-col-name pi-product-name-col',
+                        html: '<div class="pi-name-with-image-cell">' +
+                            buildVariationRowImgHtml(variation) +
+                            '<strong>' + escapeHtml(ctx.variationName) + '</strong></div>'
+                    };
+                case 'sku':
+                    return { className: 'var-col-sku', html: '<code style="font-size:0.85em;">' + escapeHtml(ctx.variationSku) + '</code>' };
+                case 'color':
+                    return { className: 'var-col-color', html: escapeHtml(ctx.color) };
+                case 'qty': {
+                    const qtyHtml = isInventoryPage
+                        ? formatStockQty(ctx.totalQty)
+                        : formatStockQty(ctx.availableQty);
+                    return { className: 'qty-col var-col-qty', html: qtyHtml };
+                }
+                case 'returned':
+                    return { className: 'qty-col var-col-qty', html: buildReturnedQtyCellHtml(ctx) };
+                case 'damaged':
+                    return { className: 'qty-col var-col-qty', html: buildDamagedQtyCellHtml(ctx) };
+                case 'repaired':
+                    return { className: 'qty-col var-col-qty', html: buildRepairedQtyCellHtml(ctx) };
+                case 'sale-price':
+                    return { className: 'var-col-price', style: center, html: ctx.salePriceHtml };
+                case 'item-cost':
+                    return { className: 'var-col-price', style: center, html: ctx.itemCostHtml };
+                case 'discount':
+                    return {
+                        className: 'var-col-discount discount-cell',
+                        style: center,
+                        html: buildVariationDiscountCellHtml(Number(variation.Price) || 0, rowFlags.discountMeta)
+                    };
+                case 'storefront':
+                    return { className: 'var-col-action', style: center, html: '' };
+                case 'last-added':
+                    return {
+                        className: 'last-added-cell var-col-date',
+                        style: center,
+                        html: formatVariationDate(variation.CreatedAt)
+                    };
+                case 'status': {
+                    const badge = ctx.isActive
+                        ? '<span class="status-badge status-available">Active</span>'
+                        : '<span class="status-badge status-disposed">Inactive</span>';
+                    return { className: 'var-col-status', style: center, html: badge };
+                }
+                case 'actions': {
+                    const qtySnap = {
+                        available: ctx.availableQty,
+                        returned: ctx.returnedQty,
+                        damaged: ctx.damagedQty,
+                        repaired: ctx.repairedQty,
+                        disposed: ctx.disposedQty,
+                        inventoryProductId: ctx.inventoryProductId
+                    };
+                    const storedReturned = Number(ctx.variation.ReturnedQuantity) || 0;
+                    const returnBtns = buildReturnRepairActionButtons(
+                        ctx.variationId, ctx.variationName, qtySnap, ctx.damagedQty, ctx.repairedQty, storedReturned
+                    );
+                    if (isInventoryPage && isProductInventoryProductsTab()) {
+                        return {
+                            className: 'var-col-action return-actions-col',
+                            style: center,
+                            html: '<div class="pi-actions-cell">' +
+                                returnBtns +
+                                '<button type="button" class="restock-variation-btn pi-icon-restock-btn" data-variation-id="' + ctx.variationId +
+                                '" data-inventory-product-id="' + ctx.inventoryProductId + '" data-variation-name="' + attrQuote(ctx.variationName) +
+                                '" data-available-qty="' + ctx.availableQty + '" title="Restock" aria-label="Restock">' + PI_SVG_RESTOCK + '</button>' +
+                                '<button type="button" class="edit-variation-status-btn pi-icon-edit-btn" data-mode="inventory" data-variation-id="' + ctx.variationId +
+                                '" title="Edit variation" aria-label="Edit variation">' + PI_SVG_EDIT + '</button>' +
+                                '<button type="button" class="archive-variation-btn pi-icon-archive-btn" data-variation-id="' + ctx.variationId +
+                                '" data-variation-name="' + escapeHtml(ctx.variationName) + '" title="Archive Variation" aria-label="Archive Variation">' + PI_SVG_ARCHIVE + '</button>' +
+                                '</div>'
+                        };
+                    }
+                    if (isProductsListingPage && rowFlags.showVarAct) {
+                        const sfHtml = rowFlags.showSf
+                            ? '<label class="storefront-toggle-label" title="Include on customer storefront">' +
+                                '<input type="checkbox" class="variation-storefront-toggle" data-variation-id="' + ctx.variationId + '"' +
+                                (ctx.showStorefront ? ' checked' : '') + '> Storefront</label>'
+                            : '';
+                        return {
+                            className: 'var-col-action',
+                            style: center,
+                            html: '<div class="pi-actions-cell">' + sfHtml +
+                                '<button type="button" class="edit-variation-status-btn pi-icon-edit-btn" data-mode="catalog" data-variation-id="' + ctx.variationId +
+                                '" title="Edit variation catalog" aria-label="Edit variation catalog">' + PI_SVG_EDIT + '</button>' +
+                                '</div>'
+                        };
+                    }
+                    if (isProductReturnsPage) {
+                        return {
+                            className: 'var-col-action return-actions-col',
+                            style: center,
+                            html: returnBtns
+                        };
+                    }
+                    return { className: 'var-col-action', style: center, html: '' };
+                }
+                default:
+                    return { className: '', html: '' };
+            }
         }
 
         function resolveProductMediaUrl(rawUrl) {
@@ -1882,17 +2058,18 @@ const urlParams = new URLSearchParams(window.location.search);
             if (!el) return;
             if (!materials || materials.length === 0) {
                 el.innerHTML = '<span style="color:#856404;">No parent recipe — stock will not deduct raw materials. Set recipe on the product first.</span>';
+                el.style.display = '';
                 return;
             }
-            const lines = materials.map(function (m) {
-                const mat = allRawMaterials.find(function (r) { return String(r.id) === String(m.materialId); });
-                const name = mat ? mat.name : ('Material #' + m.materialId);
-                return name + ' — <strong>' + m.quantityRequired + '</strong>/unit';
-            });
-            el.innerHTML = '<span style="color:#155724;">Uses parent recipe:</span> ' + lines.join('; ');
+            el.style.display = 'none';
         }
 
         async function loadParentRecipeForAddVariation(inventoryProductId) {
+            if (!inventoryProductId) return [];
+            await loadInventoryProductRecipeDisplay(inventoryProductId, {
+                bundleEl: 'addVariationBomBundleDisplay',
+                listEl: 'addVariationRecipeMaterialsList'
+            });
             const recipe = await fetchInventoryRecipeMaterials(inventoryProductId);
             window.currentParentRecipeMaterials = recipe;
             renderAddVariationRecipeStatus(recipe);
@@ -1904,8 +2081,9 @@ const urlParams = new URLSearchParams(window.location.search);
             try {
                 const res = await fetch('/api/admin/inventory-products/' + inventoryProductId + '/materials', { credentials: 'include' });
                 const data = await res.json();
-                if (!data.success || !data.materials) return [];
-                return mapApiMaterialsToRecipe(data.materials);
+                if (!data.success) return [];
+                const mats = data.materials || [];
+                return mapApiMaterialsToRecipe(mats);
             } catch (err) {
                 console.error('fetchInventoryRecipeMaterials:', err);
                 return [];
@@ -2227,14 +2405,20 @@ const urlParams = new URLSearchParams(window.location.search);
 
                 const submitBtn = this.querySelector('button[type="submit"]');
                 if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Creating...'; }
-                const actionPath = this.getAttribute('action') || '/Employee/Admin/ProductInventory/Add';
+                const actionPath = this.getAttribute('action') || '/Employee/Admin/ProductsListing/Add';
                 try {
                     const response = await postMultipartForm(actionPath, formData);
                     const result = response.result;
                     if (response.ok && result.success) {
                         showCustomPopup(result.message || 'Product created.');
                         setTimeout(function() {
-                            window.location.href = '/Employee/Admin/ProductInventory';
+                            const dest = isProductsListingPage
+                                ? '/Employee/Admin/ProductsListing'
+                                : '/Employee/Admin/Inventory?tab=ProductInventory';
+                            const id = result.inventoryProductId;
+                            window.location.href = id
+                                ? dest + (dest.indexOf('?') >= 0 ? '&' : '?') + 'inventoryProductId=' + encodeURIComponent(id)
+                                : dest;
                         }, 500);
                     } else {
                         showCustomPopup(result.message || 'Failed to create product.', true);
@@ -2456,16 +2640,12 @@ const urlParams = new URLSearchParams(window.location.search);
             }
         }
 
-        if (isInventoryPage) {
-            initManageCategories();
-            fetchProductCategoriesFromServer();
-        }
-
         if (isProductsListingPage && window.__adminProductCategories && Array.isArray(window.__adminProductCategories)) {
             managedCategories = window.__adminProductCategories.slice();
         }
 
         if (isProductsListingPage) {
+            initManageCategories();
             fetchProductCategoriesFromServer();
         }
 
@@ -2523,12 +2703,23 @@ const urlParams = new URLSearchParams(window.location.search);
                         saleEl.value = sp !== '' ? sp.toFixed(2) : '';
                         bindProductPriceInput(saleEl);
                     }
+                    const costEl = document.getElementById('editInventoryProductCostPrice');
+                    if (costEl) {
+                        const cp = p.CostPrice != null && p.CostPrice !== '' && !isNaN(parseFloat(p.CostPrice))
+                            ? parseFloat(p.CostPrice) : '';
+                        costEl.value = cp !== '' ? cp.toFixed(2) : '';
+                        bindProductPriceInput(costEl);
+                    }
                     const descEl = document.getElementById('editInventoryProductDescription');
                     if (descEl) descEl.value = p.Description || '';
                     const thumbsHidden = document.getElementById('editInventoryProductCurrentThumbnails');
                     const thumbUrls = parseThumbnailUrls(p.ThumbnailURLs);
                     if (thumbsHidden) thumbsHidden.value = JSON.stringify(thumbUrls);
                     populateEditProductCategorySelect(p.Category || '');
+                    loadInventoryProductRecipeDisplay(productId, {
+                        bundleEl: 'editInventoryProductBomBundleDisplay',
+                        listEl: 'editInventoryProductRecipeList'
+                    });
                     const preview = document.getElementById('editInventoryProductImagePreview');
                     if (preview) {
                         preview.innerHTML = p.ImageURL
@@ -2556,6 +2747,7 @@ const urlParams = new URLSearchParams(window.location.search);
             const form = document.getElementById('editInventoryProductForm');
             if (!modal || !form) return;
             bindProductPriceInput(document.getElementById('editInventoryProductSalePrice'));
+            bindProductPriceInput(document.getElementById('editInventoryProductCostPrice'));
             const close = function() { modal.style.display = 'none'; form.reset(); };
             ['closeEditInventoryProductModal', 'cancelEditInventoryProduct'].forEach(function(id) {
                 const el = document.getElementById(id);
@@ -2565,13 +2757,17 @@ const urlParams = new URLSearchParams(window.location.search);
                 e.preventDefault();
                 const id = document.getElementById('editInventoryProductId').value;
                 const saleEl = document.getElementById('editInventoryProductSalePrice');
-                const unitPrice = getProductUnitPriceFromEl(saleEl);
-                if (unitPrice == null) {
-                    showCustomPopup('Enter a sale price greater than zero. This applies to all variations.', true);
+                const costEl = document.getElementById('editInventoryProductCostPrice');
+                const priceValidation = validateSaleCostPair(saleEl, costEl);
+                if (priceValidation) {
+                    showCustomPopup(priceValidation, true);
                     return;
                 }
+                const unitPrice = getProductUnitPriceFromEl(saleEl);
+                const unitCost = getProductUnitPriceFromEl(costEl, true);
                 const fd = new FormData(form);
                 fd.set('price', unitPrice.toFixed(2));
+                fd.set('costPrice', unitCost.toFixed(2));
                 const thumbInput = document.getElementById('editInventoryProductThumbnails');
                 if (thumbInput && thumbInput.files && thumbInput.files.length) {
                     fd.delete('productThumbnail');
@@ -2629,20 +2825,6 @@ const urlParams = new URLSearchParams(window.location.search);
                     document.getElementById('editInventoryProductQuickName').value = p.Name || '';
                     document.getElementById('editInventoryProductQuickCurrentImage').value = p.ImageURL || '';
                     populateQuickEditProductCategorySelect(p.Category || '');
-                    const quickPriceEl = document.getElementById('editInventoryProductQuickPrice');
-                    const quickCostEl = document.getElementById('editInventoryProductQuickCostPrice');
-                    if (quickPriceEl) {
-                        const parentPrice = p.Price != null && p.Price !== '' && !isNaN(parseFloat(p.Price))
-                            ? parseFloat(p.Price) : '';
-                        quickPriceEl.value = parentPrice !== '' ? parentPrice.toFixed(2) : '';
-                        bindProductPriceInput(quickPriceEl);
-                    }
-                    if (quickCostEl) {
-                        const parentCost = p.CostPrice != null && p.CostPrice !== '' && !isNaN(parseFloat(p.CostPrice))
-                            ? parseFloat(p.CostPrice) : '';
-                        quickCostEl.value = parentCost !== '' ? parentCost.toFixed(2) : '';
-                        bindProductPriceInput(quickCostEl);
-                    }
                     const preview = document.getElementById('editInventoryProductQuickImagePreview');
                     if (preview) {
                         preview.innerHTML = p.ImageURL
@@ -2662,8 +2844,6 @@ const urlParams = new URLSearchParams(window.location.search);
             const modal = document.getElementById('editInventoryProductQuickModal');
             const form = document.getElementById('editInventoryProductQuickForm');
             if (!modal || !form) return;
-            bindProductPriceInput(document.getElementById('editInventoryProductQuickPrice'));
-            bindProductPriceInput(document.getElementById('editInventoryProductQuickCostPrice'));
             const close = function() { modal.style.display = 'none'; form.reset(); };
             ['closeEditInventoryProductQuickModal', 'cancelEditInventoryProductQuick'].forEach(function(id) {
                 const el = document.getElementById(id);
@@ -2672,18 +2852,7 @@ const urlParams = new URLSearchParams(window.location.search);
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 const id = document.getElementById('editInventoryProductQuickId').value;
-                const quickPriceEl = document.getElementById('editInventoryProductQuickPrice');
-                const quickCostEl = document.getElementById('editInventoryProductQuickCostPrice');
-                const priceValidation = validateSaleCostPair(quickPriceEl, quickCostEl);
-                if (priceValidation) {
-                    showCustomPopup(priceValidation, true);
-                    return;
-                }
-                const unitPrice = getProductUnitPriceFromEl(quickPriceEl);
-                const unitCost = getProductUnitPriceFromEl(quickCostEl, true);
                 const fd = new FormData(form);
-                fd.set('price', unitPrice.toFixed(2));
-                fd.set('costPrice', unitCost.toFixed(2));
                 const btn = document.getElementById('saveEditInventoryProductQuick');
                 if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
                 try {
@@ -2721,7 +2890,7 @@ const urlParams = new URLSearchParams(window.location.search);
                 // Create a form and submit it
                 const form = document.createElement('form');
                 form.method = 'POST';
-                form.action = `/Employee/Admin/ProductInventory/Archive/${productId}`;
+                form.action = `/Employee/Admin/Inventory/Archive/${productId}`;
                 form.style.display = 'none';
                 
                 // Add hidden input to indicate if it's from Products table (always false for InventoryProducts)
@@ -3009,15 +3178,6 @@ const urlParams = new URLSearchParams(window.location.search);
                     colorEl.value = loadedColor;
                     colorEl.setAttribute('data-initial-color', loadedColor);
                 }
-                const catalogSaleEl = document.getElementById('editVariationCatalogSalePrice');
-                const loadedSale = variationData.Price != null && variationData.Price !== ''
-                    ? parseFloat(variationData.Price)
-                    : (variation.Price != null ? parseFloat(variation.Price) : NaN);
-                if (catalogSaleEl) {
-                    catalogSaleEl.value = Number.isFinite(loadedSale) && loadedSale > 0 ? loadedSale.toFixed(2) : '';
-                    catalogSaleEl.setAttribute('data-initial-price', catalogSaleEl.value);
-                    bindProductPriceInput(catalogSaleEl);
-                }
                 renderMainImagePreview(
                     document.getElementById('editVariationStatusMainImagePreview'),
                     variationData.VariationImageURL || null
@@ -3027,7 +3187,8 @@ const urlParams = new URLSearchParams(window.location.search);
                     variationData.VariationImageURL || null
                 );
                 const variationInventoryMode = isInventoryPage && window._variationEditMode === 'inventory';
-                if (variationInventoryMode && parentInvId) {
+                const variationCatalogMode = isProductsListingPage && window._variationEditMode === 'catalog';
+                if (parentInvId && (variationInventoryMode || variationCatalogMode)) {
                     await loadInventoryProductRecipeDisplay(parentInvId, {
                         bundleEl: 'editVariationBomBundleDisplay',
                         listEl: 'editVariationRecipeReadonlyList'
@@ -3412,11 +3573,6 @@ const urlParams = new URLSearchParams(window.location.search);
                 const initialVariationName = variationNameInput?.getAttribute('data-initial-name') || '';
                 const variationNameChanged = catalogMode && variationNameInput
                     && String(variationNameInput.value || '').trim() !== String(initialVariationName).trim();
-                const catalogSaleEl = document.getElementById('editVariationCatalogSalePrice');
-                const initialCatalogSale = catalogSaleEl?.getAttribute('data-initial-price') || '';
-                const catalogSaleChanged = catalogMode && catalogSaleEl
-                    && String(catalogSaleEl.value || '').trim() !== String(initialCatalogSale).trim();
-
                 const currentRecipeJson = JSON.stringify(getEditVariationRequiredMaterials());
                 const initialRecipeJson = document.getElementById('editVariationRecipeMaterials')?.getAttribute('data-initial-recipe') || '[]';
                 const recipeChanged = !isProductReturnsPage && !catalogMode && currentRecipeJson !== initialRecipeJson;
@@ -3427,13 +3583,8 @@ const urlParams = new URLSearchParams(window.location.search);
                         showCustomPopup('Variation name is required.', true);
                         return;
                     }
-                    const catalogSale = catalogSaleChanged ? getProductUnitPriceFromEl(catalogSaleEl) : null;
-                    if (catalogSaleChanged && catalogSale == null) {
-                        showCustomPopup('Enter a sale price greater than zero.', true);
-                        return;
-                    }
-                    if (!variationNameChanged && !hasMediaUpload && !colorChanged && !catalogSaleChanged) {
-                        showCustomPopup('No changes detected. Update the variation name, sale price, color, main image, thumbnails, or 3D model before saving.', true);
+                    if (!variationNameChanged && !hasMediaUpload && !colorChanged) {
+                        showCustomPopup('No changes detected. Update the variation name, color, main image, thumbnails, or 3D model before saving.', true);
                         return;
                     }
                 } else if (inventoryMode) {
@@ -3476,10 +3627,6 @@ const urlParams = new URLSearchParams(window.location.search);
                     const vName = String(variationNameInput?.value || '').trim();
                     if (vName) formData.append('variationName', vName);
                     if (colorInput) formData.append('color', String(colorInput.value || '').trim());
-                    if (catalogSaleChanged && catalogSaleEl) {
-                        const catalogSale = getProductUnitPriceFromEl(catalogSaleEl);
-                        if (catalogSale != null) formData.append('price', catalogSale.toFixed(2));
-                    }
                     appendVariationMediaToFormData(formData, document.getElementById('editVariationStatusForm'), {
                         includeMain: true,
                         mainImageId: 'editVariationCatalogMainImage'
@@ -3891,8 +4038,146 @@ const urlParams = new URLSearchParams(window.location.search);
             }
         }
 
-        function initRepairVariationModal() {
-            if (!isProductReturnsPage) return;
+        async function openReturnedToDamagedModal(variationId, datasetFallback) {
+            const modal = document.getElementById('returnedToDamagedModal');
+            if (!modal) return;
+
+            let variationData = null;
+            try {
+                const response = await fetch('/api/admin/inventory-variation-quantity/' + variationId);
+                const result = await response.json();
+                if (result.success && result.variation) {
+                    variationData = result.variation;
+                }
+            } catch (err) {
+                console.warn('[ReturnedToDamaged] Could not load variation:', err);
+            }
+
+            const fb = datasetFallback || {};
+            const available = resolveVariationAvailableQty(variationData, fb);
+            const returned = Number(variationData?.ReturnedQuantity ?? fb.returnedQty) || 0;
+            const damaged = Number(variationData?.DamagedQuantity ?? fb.damagedQty) || 0;
+            const repaired = Number(variationData?.RepairedQuantity ?? fb.repairedQty) || 0;
+            const disposed = Number(variationData?.DisposedQuantity ?? fb.disposedQty) || 0;
+            const inventoryProductId = variationData?.InventoryProductID || fb.inventoryProductId || '';
+            const variationName = variationData?.VariationName || fb.variationName || 'Variation';
+
+            if (returned <= 0) {
+                showCustomPopup('No returned quantity available to mark as damaged.', true);
+                return;
+            }
+
+            document.getElementById('returnedToDamagedVariationId').value = variationId;
+            document.getElementById('returnedToDamagedInventoryProductId').value = inventoryProductId;
+            document.getElementById('returnedToDamagedAvailableQty').value = available;
+            document.getElementById('returnedToDamagedReturnedQty').value = returned;
+            document.getElementById('returnedToDamagedDamagedQty').value = damaged;
+            document.getElementById('returnedToDamagedRepairedQty').value = repaired;
+            document.getElementById('returnedToDamagedDisposedQty').value = disposed;
+            document.getElementById('returnedToDamagedMaxReturned').value = returned;
+
+            const qtyInput = document.getElementById('returnedToDamagedQtyInput');
+            if (qtyInput) {
+                qtyInput.min = '1';
+                qtyInput.max = String(returned);
+                qtyInput.value = '1';
+            }
+
+            const subtitle = document.getElementById('returnedToDamagedSubtitle');
+            if (subtitle) {
+                subtitle.textContent = 'Variation: ' + variationName;
+            }
+            const hint = document.getElementById('returnedToDamagedHint');
+            if (hint) {
+                hint.textContent = 'Currently in returned: ' + returned + '. Items move to Damaged.';
+            }
+
+            modal.style.display = 'block';
+        }
+
+        function closeReturnedToDamagedModal() {
+            const modal = document.getElementById('returnedToDamagedModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function submitReturnedToDamaged() {
+            const variationId = parseInt(document.getElementById('returnedToDamagedVariationId')?.value, 10);
+            const maxReturned = parseInt(document.getElementById('returnedToDamagedMaxReturned')?.value, 10) || 0;
+            const moveQty = parseInt(document.getElementById('returnedToDamagedQtyInput')?.value, 10) || 0;
+            const available = parseInt(document.getElementById('returnedToDamagedAvailableQty')?.value, 10) || 0;
+            const returned = parseInt(document.getElementById('returnedToDamagedReturnedQty')?.value, 10) || 0;
+            const damaged = parseInt(document.getElementById('returnedToDamagedDamagedQty')?.value, 10) || 0;
+            const repaired = parseInt(document.getElementById('returnedToDamagedRepairedQty')?.value, 10) || 0;
+            const disposed = parseInt(document.getElementById('returnedToDamagedDisposedQty')?.value, 10) || 0;
+            const inventoryProductId = document.getElementById('returnedToDamagedInventoryProductId')?.value || '';
+
+            if (!variationId) {
+                showCustomPopup('Variation not found.', true);
+                return;
+            }
+            if (moveQty < 1) {
+                showCustomPopup('Enter at least 1 item to move.', true);
+                return;
+            }
+            if (moveQty > maxReturned) {
+                showCustomPopup('Cannot move more than the returned quantity (' + maxReturned + ').', true);
+                return;
+            }
+
+            const transferQty = Math.min(moveQty, maxReturned);
+            const newReturned = maxReturned - transferQty;
+            const newDamaged = damaged + transferQty;
+
+            const confirmBtn = document.getElementById('confirmReturnedToDamaged');
+            if (confirmBtn) {
+                confirmBtn.disabled = true;
+                confirmBtn.textContent = 'Saving…';
+            }
+
+            const formData = new FormData();
+            formData.append('variationID', variationId);
+            formData.append('availableQuantity', available);
+            formData.append('returnedQuantity', newReturned);
+            formData.append('damagedQuantity', newDamaged);
+            formData.append('repairedQuantity', repaired);
+            formData.append('disposedQuantity', disposed);
+            formData.append('notes', 'Returned → damaged (' + transferQty + ')');
+            formData.append('recipeMaterials', '[]');
+
+            try {
+                const response = await fetch('/api/admin/inventory-product-variations/update-status', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) {
+                    showCustomPopup('Failed to update: server returned ' + response.status, true);
+                    return;
+                }
+                const result = await response.json();
+                if (result.success) {
+                    showCustomPopup('Moved ' + transferQty + ' item(s) from returned to damaged.');
+                    closeReturnedToDamagedModal();
+                    const pid = inventoryProductId || currentSelectedProductId;
+                    if (pid) {
+                        await notifyInventoryStockChanged(pid, result);
+                        await loadInventoryProductVariations(pid);
+                    }
+                } else {
+                    showCustomPopup('Failed: ' + (result.message || 'Unknown error'), true);
+                }
+            } catch (err) {
+                console.error('[ReturnedToDamaged] Error:', err);
+                showCustomPopup('Failed to update stock.', true);
+            } finally {
+                if (confirmBtn) {
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Confirm';
+                }
+            }
+        }
+
+        function initReturnWorkflowModals() {
+            if (!shouldShowReturnWorkflowPage()) return;
             ['closeRepairVariationModal', 'cancelRepairVariation'].forEach(function (id) {
                 const el = document.getElementById(id);
                 if (el && !el.hasAttribute('data-repair-listener')) {
@@ -3932,9 +4217,29 @@ const urlParams = new URLSearchParams(window.location.search);
                 });
                 makeAvailableModal.setAttribute('data-available-listener', '1');
             }
+
+            ['closeReturnedToDamagedModal', 'cancelReturnedToDamaged'].forEach(function (id) {
+                const el = document.getElementById(id);
+                if (el && !el.hasAttribute('data-returned-damaged-listener')) {
+                    el.addEventListener('click', closeReturnedToDamagedModal);
+                    el.setAttribute('data-returned-damaged-listener', '1');
+                }
+            });
+            const returnedDamagedConfirm = document.getElementById('confirmReturnedToDamaged');
+            if (returnedDamagedConfirm && !returnedDamagedConfirm.hasAttribute('data-returned-damaged-listener')) {
+                returnedDamagedConfirm.addEventListener('click', submitReturnedToDamaged);
+                returnedDamagedConfirm.setAttribute('data-returned-damaged-listener', '1');
+            }
+            const returnedDamagedModal = document.getElementById('returnedToDamagedModal');
+            if (returnedDamagedModal && !returnedDamagedModal.hasAttribute('data-returned-damaged-listener')) {
+                returnedDamagedModal.addEventListener('click', function (e) {
+                    if (e.target === returnedDamagedModal) closeReturnedToDamagedModal();
+                });
+                returnedDamagedModal.setAttribute('data-returned-damaged-listener', '1');
+            }
         }
 
-        initRepairVariationModal();
+        initReturnWorkflowModals();
 
         // Function to attach event listeners for edit variation status form
         function attachEditVariationStatusListeners() {

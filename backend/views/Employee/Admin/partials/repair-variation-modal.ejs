@@ -1,3 +1,32 @@
+<!-- Returned → damaged (Product Returns / Product Inventory) -->
+<div id="returnedToDamagedModal" class="modal pi-modal-compact" style="display: none;">
+    <div class="modal-content">
+        <span class="close-button" id="closeReturnedToDamagedModal" aria-label="Close">&times;</span>
+        <h3>Mark as damaged</h3>
+        <p id="returnedToDamagedSubtitle" style="margin: 0 0 12px; color: #555; font-size: 0.9em;"></p>
+        <form id="returnedToDamagedForm" onsubmit="return false;">
+            <input type="hidden" id="returnedToDamagedVariationId" value="">
+            <input type="hidden" id="returnedToDamagedInventoryProductId" value="">
+            <input type="hidden" id="returnedToDamagedAvailableQty" value="0">
+            <input type="hidden" id="returnedToDamagedReturnedQty" value="0">
+            <input type="hidden" id="returnedToDamagedDamagedQty" value="0">
+            <input type="hidden" id="returnedToDamagedRepairedQty" value="0">
+            <input type="hidden" id="returnedToDamagedDisposedQty" value="0">
+            <input type="hidden" id="returnedToDamagedMaxReturned" value="0">
+            <div class="form-group">
+                <label for="returnedToDamagedQtyInput">Quantity to move to damaged</label>
+                <input type="number" id="returnedToDamagedQtyInput" min="1" value="1" required
+                    style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 1em;">
+                <p id="returnedToDamagedHint" style="margin: 8px 0 0; font-size: 0.85em; color: #666;"></p>
+            </div>
+            <div class="pi-form-actions">
+                <button type="button" id="cancelReturnedToDamaged" class="pi-btn pi-btn-secondary">Cancel</button>
+                <button type="button" id="confirmReturnedToDamaged" class="pi-btn pi-btn-primary">Confirm</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Repair damaged → repaired (Product Returns) -->
 <div id="repairVariationModal" class="modal pi-modal-compact" style="display: none;">
     <div class="modal-content">

@@ -311,7 +311,7 @@
                 popup(data.message || 'Bundle saved.');
                 closeModal('bomBundleModal');
                 setTimeout(function () {
-                    window.location.href = '/Employee/Admin/ProductInventory?tab=bom-bundles';
+                    window.location.href = '/Employee/Admin/Inventory?tab=bom-bundles';
                 }, 600);
             } else {
                 popup(data.message || 'Failed to save bundle.', true);

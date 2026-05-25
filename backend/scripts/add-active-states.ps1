@@ -2,7 +2,7 @@
 $rolePages = @{
     "Admin" = @{
         "AdminManager" = "/Employee/AdminManager"
-        "AdminProducts" = "/Employee/Admin/Products"
+        "AdminProducts" = "/Employee/Admin/ProductsListing"
         "AdminMaterials" = "/Employee/Admin/RawMaterials"
         "AdminAlerts" = "/Employee/Admin/Alerts"
         "AdminArchived" = "/Employee/Admin/Archived"

@@ -1019,7 +1019,7 @@ function toggleProductNewArrival(productId, newArrival) {
 
 function editProduct(productId) {
     // Open product edit modal or redirect to product edit page
-    window.open(`/Employee/Admin/ProductInventory?inventoryProductId=${productId}`, '_blank');
+    window.open(`/Employee/Admin/Inventory?tab=ProductInventory&inventoryProductId=${productId}`, '_blank');
 }
 
 function deleteProduct(productId) {

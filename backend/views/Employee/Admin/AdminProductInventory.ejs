@@ -231,12 +231,15 @@
         .edit-inventory-product-btn,
         .edit-inventory-product-quick-btn,
         .edit-variation-status-btn,
+        .edit-raw-material-btn,
+        .edit-bom-bundle-btn,
         .pi-icon-edit-btn,
         .pi-icon-restock-btn,
         .pi-icon-archive-btn,
         .delete-inventory-btn,
         .archive-variation-btn,
-        .restock-variation-btn {
+        .restock-variation-btn,
+        .restock-raw-material-btn {
             border: none;
             border-radius: 6px;
             width: 34px;
@@ -257,18 +260,24 @@
         .edit-inventory-product-btn,
         .edit-inventory-product-quick-btn,
         .edit-variation-status-btn,
+        .edit-raw-material-btn,
+        .edit-bom-bundle-btn,
         .pi-icon-edit-btn {
             background-color: #FFC107;
             color: #333;
         }
         .pi-icon-restock-btn,
-        .restock-variation-btn {
+        .restock-variation-btn,
+        .restock-raw-material-btn {
             background-color: #198754;
             color: #fff;
         }
         .pi-icon-archive-btn,
         .delete-inventory-btn,
-        .archive-variation-btn {
+        .archive-variation-btn,
+        .archive-material-btn,
+        .delete-bom-bundle-btn,
+        .archive-bom-bundle-btn {
             background-color: #DC3545;
             color: #fff;
         }
@@ -276,29 +285,41 @@
         .edit-inventory-product-btn:hover,
         .edit-inventory-product-quick-btn:hover,
         .edit-variation-status-btn:hover,
+        .edit-raw-material-btn:hover,
+        .edit-bom-bundle-btn:hover,
         .pi-icon-edit-btn:hover {
             background-color: #e0ac06;
             transform: translateY(-1px);
         }
         .pi-icon-restock-btn:hover,
-        .restock-variation-btn:hover {
+        .restock-variation-btn:hover,
+        .restock-raw-material-btn:hover {
             background-color: #157347;
             transform: translateY(-1px);
         }
         .pi-icon-archive-btn:hover,
         .delete-inventory-btn:hover,
-        .archive-variation-btn:hover {
+        .archive-variation-btn:hover,
+        .archive-material-btn:hover,
+        .delete-bom-bundle-btn:hover,
+        .archive-bom-bundle-btn:hover {
             background-color: #c82333;
             transform: translateY(-1px);
         }
         .edit-inventory-product-quick-btn svg,
         .edit-variation-status-btn svg,
+        .edit-raw-material-btn svg,
+        .edit-bom-bundle-btn svg,
         .pi-icon-edit-btn svg,
         .pi-icon-restock-btn svg,
         .restock-variation-btn svg,
+        .restock-raw-material-btn svg,
         .pi-icon-archive-btn svg,
         .delete-inventory-btn svg,
-        .archive-variation-btn svg {
+        .archive-variation-btn svg,
+        .archive-material-btn svg,
+        .delete-bom-bundle-btn svg,
+        .archive-bom-bundle-btn svg {
             width: 16px;
             height: 16px;
             stroke: currentColor;
@@ -626,9 +647,20 @@
             font-size: 0.88em;
             table-layout: fixed;
         }
-        .inventory-listing-table td.pi-actions-col,
-        .inventory-listing-table th.pi-actions-col {
+        .inventory-listing-table:not(.variations-nested-table) td.pi-actions-col,
+        .inventory-listing-table:not(.variations-nested-table) th.pi-actions-col {
             text-align: center !important;
+            width: 1%;
+            white-space: nowrap;
+            min-width: 88px;
+        }
+        .inventory-listing-table:not(.variations-nested-table) .pi-actions-cell { flex-shrink: 0; }
+        .variations-nested-table.inventory-listing-table .var-col-action,
+        .variations-nested-table.inventory-listing-table td.var-col-action {
+            text-align: center !important;
+            width: auto;
+            min-width: 112px;
+            white-space: nowrap;
         }
         .inventory-listing-table th,
         .inventory-listing-table td {
@@ -668,8 +700,21 @@
         .variations-nested-table.inventory-listing-table { margin-top: 6px; font-size: 0.85em; }
         .variations-nested-table.inventory-listing-table th,
         .variations-nested-table.inventory-listing-table td { padding: 6px 8px; }
-        .variations-nested-table .var-col-image img,
-        .variations-nested-table .var-col-image .variation-row-thumb {
+        .pi-name-with-image-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+        .pi-name-with-image-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+        .pi-name-with-image-cell .image-preview,
+        .pi-name-with-image-cell .variation-row-thumb,
+        .variations-nested-table .var-col-name .variation-row-thumb {
             width: 48px;
             height: 48px;
             max-width: 48px;
@@ -677,15 +722,51 @@
             object-fit: cover;
             border-radius: 4px;
             border: 1px solid #ddd;
+            flex-shrink: 0;
             display: block;
-            margin: 0 auto;
+            margin: 0;
         }
+        .pi-name-image-placeholder {
+            flex-shrink: 0;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            font-size: 0.85em;
+            border: 1px dashed #dee2e6;
+            border-radius: 4px;
+            background: #f8f9fa;
+        }
+        .pi-product-name-col { min-width: 180px; }
+        .return-qty { font-weight: 600; display: inline-block; min-width: 1.5em; text-align: center; }
+        .return-qty.has-stock { font-weight: 700; }
+        .return-qty-damaged, .return-qty-th-damaged { color: #b45309; }
+        .return-qty-returned, .return-qty-th-returned { color: #1d4ed8; }
+        .return-qty-repaired, .return-qty-th-repaired { color: #047857; }
+        .return-qty-cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .return-col-action-btn {
+            font-size: 0.72em; line-height: 1.2; padding: 3px 8px; border-radius: 4px;
+            cursor: pointer; font-weight: 600; white-space: nowrap; border: 1px solid;
+        }
+        .return-col-action-btn.returned-to-damaged-btn { border-color: #1d4ed8; background: #eff6ff; color: #1d4ed8; }
+        .return-col-action-btn.returned-to-damaged-btn:hover { background: #1d4ed8; color: #fff; }
+        .return-col-action-btn.repair-variation-btn { border-color: #b45309; background: #fff7ed; color: #b45309; }
+        .return-col-action-btn.repair-variation-btn:hover { background: #b45309; color: #fff; }
+        .return-col-action-btn.make-available-variation-btn { border-color: #15803d; background: #f0fdf4; color: #15803d; }
+        .return-col-action-btn.make-available-variation-btn:hover { background: #15803d; color: #fff; }
+        .pi-icon-action-btn { border: none; border-radius: 6px; width: 34px; height: 34px; padding: 0; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center; }
+        .pi-icon-repair-btn { background: #fff7ed; color: #b45309; border: 1px solid #b45309; }
+        .pi-icon-available-btn { background: #f0fdf4; color: #15803d; border: 1px solid #15803d; }
         .pi-actions-cell {
             display: inline-flex;
             gap: 4px;
             justify-content: center;
             align-items: center;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
+            white-space: nowrap;
         }
         .inventory-list-toolbar { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between; margin-bottom: 16px; }
         .inventory-list-toolbar form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
@@ -700,6 +781,86 @@
         .inventory-pagination a:hover { background: #f8f9fa; }
         .inventory-pagination .current { background: #007bff; color: #fff; border-color: #007bff; }
         .inventory-pagination .disabled { color: #9ca3af; pointer-events: none; background: #f3f4f6; }
+        .stock-movement-pagination button.stock-movement-page-btn {
+            padding: 6px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background: #fff;
+            color: #333;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+        .stock-movement-pagination button.stock-movement-page-btn:hover { background: #f8f9fa; }
+        .stock-movement-loading { padding: 16px; color: #666; }
+        .stock-movement-page-size { padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.9em; min-width: 72px; }
+        .stock-movement-list-wrap { margin-bottom: 8px; }
+        .stock-movement-grouped-list { display: flex; flex-direction: column; gap: 8px; }
+        .stock-mv-product-block {
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            background: #fff;
+            overflow: hidden;
+        }
+        .stock-mv-product-header,
+        .stock-mv-variation-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 12px 14px;
+            border: none;
+            background: #f8f9fa;
+            cursor: pointer;
+            text-align: left;
+            font-size: 0.95em;
+        }
+        .stock-mv-product-header:hover,
+        .stock-mv-variation-header:hover { background: #eef1f4; }
+        .stock-mv-product-header { border-bottom: 1px solid #e9ecef; }
+        .stock-mv-product-block.is-expanded .stock-mv-product-header { background: #e9ecef; border-bottom-color: #dee2e6; }
+        .stock-mv-variation-header { background: #fff; padding-left: 36px; border-top: 1px solid #eee; }
+        .stock-mv-variation-block.is-expanded .stock-mv-variation-header { background: #f3f4f6; }
+        .stock-mv-expand-icon { display: inline-flex; flex-shrink: 0; color: #666; }
+        .stock-mv-expand-icon-nested { margin-left: 4px; }
+        .stock-movement-chevron { transition: transform 0.2s ease; }
+        .stock-mv-product-block.is-expanded > .stock-mv-product-header .stock-movement-chevron,
+        .stock-mv-variation-block.is-expanded > .stock-mv-variation-header .stock-movement-chevron { transform: rotate(90deg); }
+        .stock-mv-product-title,
+        .stock-mv-variation-title { flex: 1; min-width: 0; }
+        .stock-mv-meta { font-size: 0.82em; color: #6b7280; white-space: nowrap; }
+        .stock-mv-product-body { background: #fafbfc; }
+        .stock-mv-variation-body { padding: 0 12px 12px 48px; overflow-x: auto; }
+        .stock-mv-nested-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88em;
+            background: #fff;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+        }
+        .stock-mv-nested-table th {
+            background: #e9ecef;
+            padding: 8px 10px;
+            text-align: left;
+            font-weight: 600;
+        }
+        .stock-mv-nested-table td { padding: 8px 10px; border-top: 1px solid #eee; }
+        .stock-mv-notes-cell { max-width: 220px; word-break: break-word; font-size: 0.9em; color: #555; }
+        .stock-mv-no-movements { margin: 12px 14px 12px 36px; color: #888; font-size: 0.9em; }
+        .stock-mv-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        .stock-mv-badge-damaged { background: #fff7ed; color: #b45309; }
+        .stock-mv-badge-repaired { background: #eff6ff; color: #1d4ed8; }
+        .stock-mv-badge-available { background: #f0fdf4; color: #15803d; }
+        .stock-mv-badge-restock { background: #f5f3ff; color: #6d28d9; }
+        .stock-mv-badge-default { background: #f3f4f6; color: #374151; }
+        .stock-mv-muted { color: #888; font-size: 0.9em; }
+        .stock-mv-sku { font-size: 0.85em; }
         .inventory-filter-card {
             background: #fff;
             border: 1px solid #e9ecef;
@@ -747,49 +908,55 @@
             white-space: nowrap;
         }
         .inventory-filter-actions .pi-btn-primary,
-        .inventory-filter-actions .add-inventory-btn {
+        .inventory-filter-actions .inventory-filter-apply-btn {
             background-color: #FFC107;
             color: #333;
+            padding: 4px 10px;
+            font-size: 0.78em;
+            line-height: 1.2;
+            min-height: 0;
         }
         .inventory-filter-actions .pi-btn-primary:hover,
-        .inventory-filter-actions .add-inventory-btn:hover {
+        .inventory-filter-actions .inventory-filter-apply-btn:hover {
             background-color: #e0ac06;
             color: #333;
         }
-        .inventory-filter-actions .pi-btn-secondary { background: #6c757d; color: #fff; text-decoration: none; display: inline-flex; align-items: center; }
-        .inventory-filter-actions .pi-btn-secondary:hover { background: #5a6268; color: #fff; }
-        .edit-material-btn {
-            background-color: #ffc107;
-            color: #000;
-            border: none;
-            border-radius: 5px;
-            padding: 5px 10px;
-            font-size: 0.9em;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .edit-material-btn:hover { background-color: #e0ac06; }
-        .delete-material-btn {
-            background-color: #DC3545;
+        .inventory-filter-actions .pi-btn-secondary {
+            background: #6c757d;
             color: #fff;
-            border: none;
-            border-radius: 5px;
-            padding: 5px 10px;
-            font-size: 0.9em;
-            cursor: pointer;
+            text-decoration: none;
             display: inline-flex;
             align-items: center;
-            justify-content: center;
+            padding: 4px 10px;
+            font-size: 0.78em;
+            line-height: 1.2;
         }
-        .delete-material-btn:hover { background-color: #c82333; }
-        #rawMaterialsTable .rm-actions-cell {
-            display: flex;
-            gap: 5px;
-            justify-content: center;
-            align-items: center;
+        .inventory-filter-actions .pi-btn-secondary:hover { background: #5a6268; color: #fff; }
+        #rawMaterialsTable {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
         }
+        #rawMaterialsTable th,
+        #rawMaterialsTable td {
+            padding: 8px 10px;
+            border: 1px solid #dee2e6;
+            vertical-align: middle;
+        }
+        #rawMaterialsTable thead th {
+            background: #f2f2f2;
+            font-weight: 600;
+            font-size: 0.85em;
+        }
+        #rawMaterialsTable tbody tr:hover { background: #fafbfc; }
+        #rawMaterialsTable th.pi-actions-col,
+        #rawMaterialsTable td.pi-actions-col {
+            text-align: center !important;
+            width: 1%;
+            white-space: nowrap;
+            min-width: 114px;
+        }
+        #rawMaterialsTable .pi-actions-cell { flex-shrink: 0; }
         .qty-col { text-align: center !important; }
         #rawMaterialsTable th.qty-col,
         #rawMaterialsTable td.qty-col { text-align: center !important; }
@@ -987,16 +1154,39 @@
         #productsTab > .content-area > table { font-size: 0.9em; }
         #productsTab > .content-area > table th,
         #productsTab > .content-area > table td { padding: 10px; }
-        #rawMaterialsTable, #bomBundlesTable { font-size: 0.88em; }
-        #rawMaterialsTable th, #rawMaterialsTable td,
-        #bomBundlesTable th, #bomBundlesTable td { padding: 8px 10px; }
-        #bomBundlesTable { width: 100%; border-collapse: collapse; margin-top: 12px; }
-        #bomBundlesTable th, #bomBundlesTable td { border: 1px solid #ddd; text-align: left; }
-        #bomBundlesTable th { background: #f2f2f2; }
+        #bomBundlesTable {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 0.9em;
+        }
+        #bomBundlesTable th,
+        #bomBundlesTable td {
+            padding: 8px 10px;
+            border: 1px solid #dee2e6;
+            vertical-align: middle;
+        }
+        #bomBundlesTable thead th {
+            background: #f2f2f2;
+            font-weight: 600;
+            font-size: 0.85em;
+        }
+        #bomBundlesTable tbody tr:hover { background: #fafbfc; }
+        #bomBundlesTable th.pi-actions-col,
+        #bomBundlesTable td.pi-actions-col {
+            text-align: center !important;
+            width: 1%;
+            white-space: nowrap;
+            min-width: 88px;
+        }
+        #bomBundlesTable .pi-actions-cell { flex-shrink: 0; }
+        #bomBundlesTable th.qty-col,
+        #bomBundlesTable td.qty-col { text-align: center !important; }
         .bom-intro { font-size: 0.88em; color: #555; margin: 0 0 12px 0; max-width: 720px; }
         body.page-inventory #productsTab.tab-content,
         body.page-inventory #rawMaterialsTab.tab-content,
-        body.page-inventory #bomBundlesTab.tab-content {
+        body.page-inventory #bomBundlesTab.tab-content,
+        body.page-inventory #stockMovementTab.tab-content {
             display: none !important;
             visibility: hidden !important;
             height: 0 !important;
@@ -1007,7 +1197,8 @@
         }
         body.page-inventory #productsTab.tab-content.active,
         body.page-inventory #rawMaterialsTab.tab-content.active,
-        body.page-inventory #bomBundlesTab.tab-content.active {
+        body.page-inventory #bomBundlesTab.tab-content.active,
+        body.page-inventory #stockMovementTab.tab-content.active {
             display: block !important;
             visibility: visible !important;
             height: auto !important;
@@ -1206,20 +1397,21 @@
     <div class="dashboard-container">
         <!-- Sidebar content -->
         <div class="sidebar">
-            <%- include('partials/sidebar', { activePage: 'product-inventory' }) %>
+            <%- include('partials/sidebar', { activePage: 'inventory' }) %>
         </div>
         <div class="main-content">
             <div class="header">
-                <h2>Product Inventory Management</h2>
+                <h2>Inventory Management</h2>
             </div>
 
             <div class="tab-navigation" role="tablist">
-                <button type="button" class="tab-button<%= (typeof activeTab !== 'undefined' && activeTab === 'products') || (typeof activeTab === 'undefined') ? ' active' : '' %>" data-tab="products" id="tabBtnProducts">Products</button>
+                <button type="button" class="tab-button<%= (typeof activeTab !== 'undefined' && (activeTab === 'ProductInventory' || activeTab === 'products')) || (typeof activeTab === 'undefined') ? ' active' : '' %>" data-tab="ProductInventory" id="tabBtnProductInventory">Product Inventory</button>
                 <button type="button" class="tab-button<%= typeof activeTab !== 'undefined' && activeTab === 'raw-materials' ? ' active' : '' %>" data-tab="raw-materials" id="tabBtnRawMaterials">Raw Materials</button>
                 <button type="button" class="tab-button<%= typeof activeTab !== 'undefined' && activeTab === 'bom-bundles' ? ' active' : '' %>" data-tab="bom-bundles" id="tabBtnBomBundles">BOM Bundles</button>
+                <button type="button" class="tab-button<%= typeof activeTab !== 'undefined' && activeTab === 'stock-movement' ? ' active' : '' %>" data-tab="stock-movement" id="tabBtnStockMovement">Stock Movement</button>
             </div>
 
-            <div id="productsTab" class="tab-content<%= (typeof activeTab === 'undefined' || activeTab === 'products') ? ' active' : '' %>" data-search-filter="<%= (typeof listFilters !== 'undefined' && listFilters.search) ? String(listFilters.search).replace(/"/g, '&quot;') : '' %>">
+            <div id="productsTab" class="tab-content<%= (typeof activeTab === 'undefined' || activeTab === 'ProductInventory' || activeTab === 'products') ? ' active' : '' %>" data-search-filter="<%= (typeof listFilters !== 'undefined' && listFilters.search) ? String(listFilters.search).replace(/"/g, '&quot;') : '' %>">
             <div class="content-area">
                 <% 
                     // Use allInventoryProducts directly from InventoryProducts table
@@ -1251,14 +1443,22 @@
                     const invCategories = typeof categories !== 'undefined' ? categories : [];
                     function invListUrl(pageNum) {
                         const parts = [];
-                        if (typeof activeTab !== 'undefined' && activeTab === 'raw-materials') parts.push('tab=raw-materials');
+                        if (typeof activeTab !== 'undefined' && activeTab === 'raw-materials') {
+                            parts.push('tab=raw-materials');
+                        } else if (typeof activeTab !== 'undefined' && activeTab === 'bom-bundles') {
+                            parts.push('tab=bom-bundles');
+                        } else if (typeof activeTab !== 'undefined' && activeTab === 'stock-movement') {
+                            parts.push('tab=stock-movement');
+                        } else {
+                            parts.push('tab=ProductInventory');
+                        }
                         parts.push('page=' + encodeURIComponent(pageNum));
                         if (invFilters.search) parts.push('search=' + encodeURIComponent(invFilters.search));
                         if (invFilters.category) parts.push('category=' + encodeURIComponent(invFilters.category));
                         if (typeof inventoryProductIdFocus !== 'undefined' && inventoryProductIdFocus) {
                             parts.push('inventoryProductId=' + encodeURIComponent(inventoryProductIdFocus));
                         }
-                        return '/Employee/Admin/ProductInventory?' + parts.join('&');
+                        return '/Employee/Admin/Inventory?' + parts.join('&');
                     }
                     function stockQtyClass(qty) {
                         const n = Number(qty) || 0;
@@ -1274,7 +1474,8 @@
 
 
                 <div class="inventory-filter-card" data-inventory-search="<%= (invFilters.search || '').replace(/"/g, '&quot;') %>">
-                    <form method="get" action="/Employee/Admin/ProductInventory" class="inventory-filter-form">
+                    <form method="get" action="/Employee/Admin/Inventory" class="inventory-filter-form">
+                        <input type="hidden" name="tab" value="ProductInventory">
                         <input type="hidden" name="page" value="1">
                         <div class="inventory-filter-field">
                             <label for="invSearch">Search</label>
@@ -1290,9 +1491,9 @@
                             </select>
                         </div>
                         <div class="inventory-filter-actions">
-                            <button type="submit" class="add-inventory-btn">Apply filters</button>
+                            <button type="submit" class="pi-btn pi-btn-primary inventory-filter-apply-btn">Apply</button>
                             <% if (invFilters.search || invFilters.category) { %>
-                            <a href="/Employee/Admin/ProductInventory" class="pi-btn pi-btn-secondary">Clear</a>
+                            <a href="/Employee/Admin/Inventory?tab=ProductInventory" class="pi-btn pi-btn-secondary">Clear</a>
                             <% } %>
                         </div>
                     </form>
@@ -1303,12 +1504,6 @@
 
 
 
-                <div class="pi-toolbar">
-                    <button type="button" id="manageCategoriesBtn" class="add-inventory-btn">Manage Categories</button>
-                    <button type="button" id="addInventoryItemBtn" class="add-inventory-btn">Create Product</button>
-                </div>
-            
-
     <% if (locals.error && locals.error.length > 0) { %>
                     <div class="error-message"><%= error %></div>
                 <% } %>
@@ -1316,151 +1511,6 @@
                     <% const hideRawMaterialFlashOnProducts = /raw material/i.test(String(success || '')); %>
                     <div class="success-message<%= hideRawMaterialFlashOnProducts ? ' success-message--raw-material' : '' %>"><%= success %></div>
                 <% } %>
-
-                <!-- Create Product Modal -->
-                <div id="addProductModal" class="modal pi-modal-compact pi-create-product-modal">
-                    <div class="modal-content">
-                        <span class="close-button" id="closeAddModal">&times;</span>
-                        <h3>Create New Product</h3>
-                        <form id="addProductForm" class="pi-create-form" action="/Employee/Admin/ProductInventory/Add" method="POST" enctype="multipart/form-data">
-                            <input type="hidden" id="quantity" name="quantity" value="0">
-
-                            <div class="pi-form-grid pi-create-top">
-                                <div class="form-group">
-                                    <label for="name">Product Name <span style="color:#dc3545;">*</span></label>
-                                    <input type="text" id="name" name="name" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="createProductPrice">Sale Price (₱) <span style="color:#dc3545;">*</span></label>
-                                    <input type="text" id="createProductPrice" name="price" inputmode="decimal" autocomplete="off" required placeholder="0.00">
-                                </div>
-                                <div class="form-group">
-                                    <label for="createProductCostPrice">Item Cost Price (₱) <span style="color:#dc3545;">*</span></label>
-                                    <input type="text" id="createProductCostPrice" name="costPrice" inputmode="decimal" autocomplete="off" required placeholder="0.00">
-                                </div>
-                                <div class="form-group">
-                                    <label for="category">Category <span style="color:#dc3545;">*</span></label>
-                                    <select id="category" name="category" required>
-                                        <option value="">Select category</option>
-                                        <% if (categories && categories.length > 0) { %>
-                                            <% categories.forEach(cat => { %>
-                                                <option value="<%= cat %>"><%= cat %></option>
-                                            <% }); %>
-                                        <% } else { %>
-                                            <option value="Chairs">Chairs</option>
-                                            <option value="Tables">Tables</option>
-                                            <option value="Storage">Storage</option>
-                                            <option value="Partitions">Partitions</option>
-                                            <option value="Others">Others</option>
-                                        <% } %>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="description">Description</label>
-                                <textarea id="description" name="description" rows="2" placeholder="Optional"></textarea>
-                            </div>
-
-                            <div class="form-group pi-section">
-                                <h4>Product Images</h4>
-                                <p style="font-size:0.85em;color:#666;margin:0 0 8px;">Parent catalog images (variations have their own media below).</p>
-                                <div class="pi-form-grid">
-                                    <div>
-                                        <label for="createProductMainImage">Main Image</label>
-                                        <input type="file" id="createProductMainImage" name="productMainImage" accept="image/*">
-                                    </div>
-                                    <div>
-                                        <label for="createProductThumbnails">Thumbnails (up to 4)</label>
-                                        <input type="file" id="createProductThumbnails" name="productThumbnail" accept="image/*" multiple>
-                                    </div>
-                                </div>
-                            </div>
-
-<div class="form-group pi-section" style="display: none;">
-                                <h4>Dimensions</h4>
-                                <div class="pi-form-grid">
-                                    <div>
-                                        <label for="length">Length (cm)</label>
-                                        <input type="number" id="length" name="length" step="0.1" min="0" placeholder="0.0">
-                                    </div>
-                                    <div>
-                                        <label for="width">Width (cm)</label>
-                                        <input type="number" id="width" name="width" step="0.1" min="0" placeholder="0.0">
-                                    </div>
-                                    <div>
-                                        <label for="height">Height (cm)</label>
-                                        <input type="number" id="height" name="height" step="0.1" min="0" placeholder="0.0">
-                                    </div>
-                                    <div>
-                                        <label for="weight">Weight (kg)</label>
-                                        <input type="number" id="weight" name="weight" step="0.1" min="0" placeholder="0.0">
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="form-group pi-section">
-                                <h4>BOM Bundle <span style="color:#dc3545;">*</span></h4>
-                                <p>Pick a saved recipe or add materials manually.</p>
-                                <label for="createBomBundleSelect">Bundle</label>
-                                <select id="createBomBundleSelect" name="bomBundleId">
-                                    <option value="">— Manual materials (no bundle) —</option>
-                                    <% const bundleList = typeof bomBundles !== 'undefined' && Array.isArray(bomBundles) ? bomBundles : []; %>
-                                    <% bundleList.forEach(function(b) { %>
-                                        <option value="<%= b.BomBundleID %>"><%= b.BundleCode %> — <%= b.Name %></option>
-                                    <% }); %>
-                                </select>
-                            </div>
-                            <div class="form-group pi-section">
-                                <h4>Materials <span style="color:#dc3545;">*</span></h4>
-                                <p>Qty per unit when stocked.</p>
-                                <div id="createInventoryRecipeStatus" style="font-size:0.82em;margin-bottom:8px;color:#666;"><em>Select a bundle or add materials</em></div>
-                                <div class="materials-section">
-                                    <div id="createInventoryMaterialsContainer"></div>
-                                    <button type="button" id="addCreateInventoryMaterialBtn" class="add-material-btn">+ Add Material</button>
-                                    <div id="createInventoryMaterialsSummary" style="margin-top: 10px; padding: 8px; background: #fff; border-radius: 4px; font-size: 0.9em;">
-                                        <strong>Selected materials:</strong>
-                                        <div id="createInventoryMaterialsSummaryList" style="margin-top: 4px; color: #666;"><em>No materials selected yet</em></div>
-                                    </div>
-                                </div>
-                                <input type="hidden" id="requiredMaterials" name="requiredMaterials" value="">
-                            </div>
-
-
-                            <div class="form-group pi-section">
-                                <h4>Variations <span style="color:#dc3545;">*</span></h4>
-                                <p>At least one. Main image required; thumbnails and 3D optional.</p>
-                                <p id="createVariationTotalSummary" style="font-size:0.85em;margin:0 0 8px;color:#007bff;font-weight:600;">Total quantity: 0</p>
-                                <div id="createProductVariationsList"></div>
-                                <button type="button" id="addCreateProductVariationBtn" class="pi-btn pi-btn-info pi-btn-sm" style="margin-top:6px;">+ Add Variation</button>
-                            </div>
-                            <input type="hidden" id="variationsJson" name="variationsJson" value="">
-
-                            <div class="pi-form-actions">
-                                <button type="button" id="cancelAddProduct" class="pi-btn pi-btn-secondary">Cancel</button>
-                                <button type="submit" class="pi-btn pi-btn-primary">Create Product</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- Manage Categories Modal -->
-                <div id="piManageCategoriesModal" class="modal pi-modal-compact pi-modal-categories">
-                    <div class="modal-content">
-                        <span class="close-button" id="piCloseManageCategories">&times;</span>
-                        <h3>Manage Categories</h3>
-                        <p class="pi-modal-hint">Add or remove categories saved for product forms. Categories used by active products cannot be deleted.</p>
-                        <div class="pi-add-category-row">
-                            <input type="text" id="piNewCategoryName" placeholder="New category" maxlength="120">
-                            <button type="button" class="pi-btn pi-btn-primary pi-btn-sm" id="piAddCategoryBtn">Add</button>
-                        </div>
-                        <div id="piCategoriesList" class="pi-categories-list pi-categories-scroll"><em style="color:#888;">Loading…</em></div>
-                        <div class="pi-form-actions">
-                            <button type="button" class="pi-btn pi-btn-secondary pi-btn-sm" id="piCloseManageCategoriesBtn">Close</button>
-                        </div>
-                    </div>
-                </div>
-
 
                 <% if (allProductsList && allProductsList.length > 0) { %>
                     <div class="stock-legend">
@@ -1474,8 +1524,9 @@
                                 <th>Product Name</th>
                                 <th>Category</th>
                                 <th class="qty-col" title="Sum of quantity across all product variations">Total Qty</th>
-                                <th class="pi-price-col" style="text-align:right;" title="Sum of item cost × qty across all variations">Item Cost Total</th>
-                                <th>Image</th>
+                                <th class="qty-col return-qty-th return-qty-th-returned">Returned</th>
+                                <th class="qty-col return-qty-th return-qty-th-damaged">Damaged</th>
+                                <th class="qty-col return-qty-th return-qty-th-repaired">Repaired</th>
                                 <th>Last Added</th>
                                 <th>Actions</th>
                             </tr>
@@ -1530,44 +1581,45 @@
                                 const disposedQty = item.DisposedQuantity || 0;
                                 const productId = item.InventoryProductID;
                                 const hasInventory = item.hasInventory !== false;
-                                const itemCostTotal = Number(item.InventoryItemCostTotal) || 0;
                             %>
                                 <tr data-inventory-product-id="<%= productId %>" data-product-name="<%= productName.replace(/"/g, '&quot;') %>">
-                                    <td>
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <button type="button" class="toggle-variations-btn" data-inventory-product-id="<%= productId %>" style="background: none; border: none; cursor: pointer; padding: 4px; color: #666;" title="Show variations">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="toggle-icon">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                                                </svg>
-                                            </button>
-                                            <strong><%= productName %></strong>
+                                    <td class="pi-product-name-col">
+                                        <div class="pi-name-with-image-cell">
+                                            <% if (productImagePrimary) {
+                                                const encodeInvImgPath = (p) => String(p || '').split('/').map((seg, i) => {
+                                                    if (!seg || i === 0) return seg;
+                                                    try { return encodeURIComponent(decodeURIComponent(seg)); } catch (e) { return encodeURIComponent(seg); }
+                                                }).join('/');
+                                                const imgSrc = encodeInvImgPath(productImagePrimary);
+                                                const imgFb1 = encodeInvImgPath(productImageFallback);
+                                                const imgFb2 = encodeInvImgPath(productImageFallback2);
+                                            %>
+                                                <img
+                                                    src="<%= imgSrc %>"
+                                                    alt="Product Image"
+                                                    class="image-preview"
+                                                    data-fallback-src="<%= imgFb1 %>"
+                                                    data-fallback-src2="<%= imgFb2 %>"
+                                                    onerror="if(this.dataset.fallbackSrc && this.src.indexOf(this.dataset.fallbackSrc) === -1){this.src=this.dataset.fallbackSrc;}else if(this.dataset.fallbackSrc2 && this.src.indexOf(this.dataset.fallbackSrc2) === -1){this.src=this.dataset.fallbackSrc2;}else{this.onerror=null;this.src='/images/placeholder-no-image.svg';}"
+                                                >
+                                            <% } else { %>
+                                                <span class="pi-name-image-placeholder">—</span>
+                                            <% } %>
+                                            <div class="pi-name-with-image-label">
+                                                <button type="button" class="toggle-variations-btn" data-inventory-product-id="<%= productId %>" style="background: none; border: none; cursor: pointer; padding: 4px; color: #666;" title="Show variations">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="toggle-icon">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                                    </svg>
+                                                </button>
+                                                <strong><%= productName %></strong>
+                                            </div>
                                         </div>
                                     </td>
                                     <td><%= productCategory %></td>
                                     <td class="qty-col"><span class="stock-qty <%= stockQtyClass(totalQty) %>"><%= totalQty %></span></td>
-                                    <td class="pi-price-col" style="text-align:right;">₱<%= itemCostTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
-                                    <td>
-                                        <% if (productImagePrimary) {
-                                            const encodeInvImgPath = (p) => String(p || '').split('/').map((seg, i) => {
-                                                if (!seg || i === 0) return seg;
-                                                try { return encodeURIComponent(decodeURIComponent(seg)); } catch (e) { return encodeURIComponent(seg); }
-                                            }).join('/');
-                                            const imgSrc = encodeInvImgPath(productImagePrimary);
-                                            const imgFb1 = encodeInvImgPath(productImageFallback);
-                                            const imgFb2 = encodeInvImgPath(productImageFallback2);
-                                        %>
-                                            <img
-                                                src="<%= imgSrc %>"
-                                                alt="Product Image"
-                                                class="image-preview"
-                                                data-fallback-src="<%= imgFb1 %>"
-                                                data-fallback-src2="<%= imgFb2 %>"
-                                                onerror="if(this.dataset.fallbackSrc && this.src.indexOf(this.dataset.fallbackSrc) === -1){this.src=this.dataset.fallbackSrc;}else if(this.dataset.fallbackSrc2 && this.src.indexOf(this.dataset.fallbackSrc2) === -1){this.src=this.dataset.fallbackSrc2;}else{this.onerror=null;this.src='/images/placeholder-no-image.svg';}"
-                                            >
-                                        <% } else { %>
-                                            <span style="color: #999;">No image</span>
-                                        <% } %>
-                                    </td>
+                                    <td class="qty-col return-qty-col-returned"><span class="return-qty return-qty-returned<%= returnedQty > 0 ? ' has-stock' : '' %>"><%= returnedQty %></span></td>
+                                    <td class="qty-col return-qty-col-damaged"><span class="return-qty return-qty-damaged<%= damagedQty > 0 ? ' has-stock' : '' %>"><%= damagedQty %></span></td>
+                                    <td class="qty-col return-qty-col-repaired"><span class="return-qty return-qty-repaired<%= repairedQty > 0 ? ' has-stock' : '' %>"><%= repairedQty %></span></td>
                                     <td><%= item.LastDateAdded ? new Date(item.LastDateAdded).toLocaleDateString() : 'N/A' %></td>
                                     <td class="pi-actions-col">
                                         <div class="pi-actions-cell">
@@ -1589,12 +1641,11 @@
                                     </td>
                                 </tr>
                                 <tr class="variations-row" data-inventory-product-id="<%= productId %>" style="display: none;">
-                                    <td colspan="7">
-                                        <div class="variations-container" data-inventory-product-id="<%= productId %>" data-show-return-columns="0" data-show-storefront="0" data-show-variation-actions="1">
+                                    <td colspan="8">
+                                        <div class="variations-container" data-inventory-product-id="<%= productId %>" data-show-return-columns="1" data-show-storefront="0" data-show-variation-actions="1">
                                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                                                 <h4 style="margin: 0; color: #333;">Product Variations</h4>
                                                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                                                    <button type="button" class="add-variation-row-btn variations-btn" data-id="<%= productId %>" data-name="<%= productName.replace(/'/g, "\\'").replace(/"/g, "&quot;") %>" data-is-from-products="false" style="background: #6f42c1; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9em;">+ Add Variation</button>
                                                     <button type="button" class="refresh-variations-btn" data-inventory-product-id="<%= productId %>" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9em;">Refresh</button>
                                                 </div>
                                             </div>
@@ -1605,14 +1656,14 @@
                                                 <table class="variations-nested-table inventory-listing-table">
                                                     <thead>
                                                         <tr>
-                                                            <th class="var-col-name">Variation</th>
-                                                            <th class="var-col-sku">SKU</th>
-                                                            <th class="var-col-color">Color</th>
-                                                            <th class="var-col-qty qty-col">Qty</th>
-                                                            <th class="var-col-price">Sale Price</th>
-                                                            <th class="var-col-price">Item Cost</th>
-                                                            <th class="var-col-image">Image</th>
-                                                            <th class="var-col-action pi-actions-col">Actions</th>
+                                                            <th data-var-col="name" class="var-col-name">Variation</th>
+                                                            <th data-var-col="sku" class="var-col-sku">SKU</th>
+                                                            <th data-var-col="color" class="var-col-color">Color</th>
+                                                            <th data-var-col="qty" class="var-col-qty qty-col">Qty</th>
+                                                            <th data-var-col="returned" class="var-col-qty return-qty-th return-qty-th-returned">Returned</th>
+                                                            <th data-var-col="damaged" class="var-col-qty return-qty-th return-qty-th-damaged">Damaged</th>
+                                                            <th data-var-col="repaired" class="var-col-qty return-qty-th return-qty-th-repaired">Repaired</th>
+                                                            <th data-var-col="actions" class="var-col-action">Actions</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody class="variations-table-body"></tbody>
@@ -1661,16 +1712,18 @@
             </div>
             </div>
 
-            <%- include('partials/raw-materials-tab', { materials: typeof materials !== 'undefined' ? materials : [], units: typeof units !== 'undefined' ? units : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'products' }) %>
-            <%- include('partials/bom-bundles-tab', { bomBundles: typeof bomBundles !== 'undefined' ? bomBundles : [], materials: typeof materials !== 'undefined' ? materials : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'products' }) %>
+            <%- include('partials/raw-materials-tab', { materials: typeof materials !== 'undefined' ? materials : [], units: typeof units !== 'undefined' ? units : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
+            <%- include('partials/bom-bundles-tab', { bomBundles: typeof bomBundles !== 'undefined' ? bomBundles : [], materials: typeof materials !== 'undefined' ? materials : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
+            <%- include('partials/stock-movement-tab', { activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
 
         </div>
         <script>
         (function () {
-            var tab = <%- JSON.stringify(typeof activeTab !== 'undefined' ? activeTab : 'products') %>;
-            var panels = { products: 'productsTab', 'raw-materials': 'rawMaterialsTab', 'bom-bundles': 'bomBundlesTab' };
+            var tab = <%- JSON.stringify(typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory') %>;
+            if (tab === 'products') tab = 'ProductInventory';
+            var panels = { ProductInventory: 'productsTab', products: 'productsTab', 'raw-materials': 'rawMaterialsTab', 'bom-bundles': 'bomBundlesTab', 'stock-movement': 'stockMovementTab' };
             var activeId = panels[tab] || 'productsTab';
-            ['productsTab', 'rawMaterialsTab', 'bomBundlesTab'].forEach(function (id) {
+            ['productsTab', 'rawMaterialsTab', 'bomBundlesTab', 'stockMovementTab'].forEach(function (id) {
                 var el = document.getElementById(id);
                 if (el) el.classList.toggle('active', id === activeId);
             });
@@ -1683,68 +1736,9 @@
     <%- include('partials/bom-bundle-modal') %>
     </div>
 
-    <!-- Variations Management Modal -->
-    <div id="variationsModal" class="modal pi-modal-compact pi-modal-xl">
-        <div class="modal-content" style="position: relative;">
-            <span class="close-button" id="closeVariationsModal" onclick="if(window.closeVariationsModalFunc) window.closeVariationsModalFunc(); else { const modal = document.getElementById('variationsModal'); if(modal) modal.style.display = 'none'; }">&times;</span>
-            <h3 id="variationsModalTitle">Manage Product Variations</h3>
-            
-            <!-- Notification Popup inside Modal -->
-            <div id="variationModalNotification" class="modal-notification" style="display: none; position: absolute; top: 20px; right: 20px; background-color: #4CAF50; color: white; padding: 15px 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 10001; animation: slideIn 0.5s ease-out; max-width: 300px;">
-                <div class="modal-notification-content" style="display: flex; align-items: center; gap: 12px;">
-                    <span class="modal-notification-icon">✓</span>
-                    <span class="modal-notification-message"></span>
-                </div>
-            </div>
-            
-            <!-- Add Variation Form -->
-            <div class="pi-section">
-                <h4>Add New Variation</h4>
-                <form id="addVariationForm">
-                    <input type="hidden" id="variationProductID" name="productID">
-                    <input type="hidden" id="variationInventoryProductID" name="inventoryProductID">
-                    <input type="hidden" name="isActive" value="1">
-                    <div class="pi-form-grid">
-                        <div>
-                            <label for="variationName">Variation Name</label>
-                            <input type="text" id="variationName" name="variationName" required>
-                        </div>
-                        <div>
-                            <label for="variationColor">Color</label>
-                            <input type="text" id="variationColor" name="color">
-                        </div>
-                    </div>
-                    <div class="pi-form-grid" style="margin-top:10px;">
-                        <div>
-                            <label for="variationQuantity">Quantity</label>
-                            <input type="number" id="variationQuantity" name="quantity" min="1" required>
-                            <small id="availableStockInfo" style="display: block; margin-top: 5px; color: #666; font-size: 0.85em;"></small>
-                            <div id="addVariationRecipeStatus" style="margin-top: 8px; font-size: 0.85em; color: #555;"><em>Loading parent recipe…</em></div>
-                        </div>
-                    </div>
-                    <div class="pi-form-grid" style="margin-top:10px;">
-                        <div>
-                            <label for="variationMainImage">Main Image</label>
-                            <input type="file" id="variationMainImage" class="variation-main-image" accept="image/*">
-                        </div>
-                        <div>
-                            <label for="variationThumbnails">Thumbnails (up to 4)</label>
-                            <input type="file" id="variationThumbnails" class="variation-thumbnails" accept="image/*" multiple>
-                        </div>
-                        <div style="grid-column: span 2;">
-                            <label for="variationModel3d">3D Model (GLB/GLTF)</label>
-                            <input type="file" id="variationModel3d" class="variation-model3d" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
-                        </div>
-                    </div>
-                    <button type="submit" class="pi-btn pi-btn-primary" style="margin-top:10px;">Add Variation</button>
-                </form>
-            </div>
-
-        </div>
-    </div>
-
     <%- include('partials/edit-inventory-product-quick-modal') %>
     <%- include('partials/edit-variation-status-modal') %>
+    <%- include('partials/repair-variation-modal') %>
 
     <!-- Restock Variation Modal -->
     <div id="variationRestockModal" class="modal pi-modal-compact">
@@ -1798,10 +1792,11 @@
         </div>
     </div>
 
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260525k" defer></script>
-    <script src="/js/Employee/Admin/product-inventory-tabs.js?v=20260522c" defer></script>
-    <script src="/js/Employee/Admin/raw-materials-tab.js"></script>
-    <script src="/js/Employee/Admin/bom-bundles-tab.js?v=20260525b" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260527c" defer></script>
+    <script src="/js/Employee/Admin/product-inventory-tabs.js?v=20260527a" defer></script>
+    <script src="/js/Employee/Admin/stock-movement-tab.js?v=20260528c" defer></script>
+    <script src="/js/Employee/Admin/raw-materials-tab.js?v=20260525c"></script>
+    <script src="/js/Employee/Admin/bom-bundles-tab.js?v=20260525c" defer></script>
 
     <% if (locals.error && locals.error.length > 0) { %>
     <script>
@@ -1815,7 +1810,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             var msg = <%- JSON.stringify(success || '') %>;
             var urlTab = new URLSearchParams(window.location.search).get('tab');
-            var onProductsTab = urlTab === 'products' || (!urlTab && document.getElementById('productsTab') && document.getElementById('productsTab').classList.contains('active'));
+            var onProductsTab = urlTab === 'ProductInventory' || urlTab === 'products' || (!urlTab && document.getElementById('productsTab') && document.getElementById('productsTab').classList.contains('active'));
             if (onProductsTab && /raw material/i.test(msg)) {
                 var inlineFlash = document.querySelector('.success-message--raw-material');
                 if (inlineFlash) inlineFlash.style.display = 'none';
@@ -1825,58 +1820,6 @@
         });
     </script>
     <% } %>
-    <script>
-    (function () {
-        function sanitizeCreatePrice(v) {
-            v = String(v || '').replace(/,/g, '').replace(/[^\d.]/g, '');
-            var dot = v.indexOf('.');
-            if (dot !== -1) {
-                v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, '');
-                if (v.length - dot - 1 > 2) v = v.slice(0, dot + 3);
-            }
-            return v;
-        }
-        function formatCreatePrice(el) {
-            if (!el) return;
-            var v = sanitizeCreatePrice(el.value);
-            if (!v || v === '.') { el.value = v; return; }
-            if (v.endsWith('.')) v = v.slice(0, -1);
-            var n = parseFloat(v);
-            if (isFinite(n)) el.value = n.toFixed(2);
-        }
-        function wireCreateProductPriceField(el) {
-            if (!el || el.getAttribute('data-auto-price') === '1') return;
-            el.setAttribute('data-auto-price', '1');
-            el.addEventListener('input', function () {
-                var v = sanitizeCreatePrice(el.value);
-                if (el.value !== v) el.value = v;
-            });
-            el.addEventListener('focusout', function () { formatCreatePrice(el); });
-            el.addEventListener('change', function () { formatCreatePrice(el); });
-            el.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') { formatCreatePrice(el); }
-            });
-        }
-        function wireCreateProductPrices() {
-            wireCreateProductPriceField(document.getElementById('createProductPrice'));
-            wireCreateProductPriceField(document.getElementById('createProductCostPrice'));
-        }
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', wireCreateProductPrices);
-        } else {
-            wireCreateProductPrices();
-        }
-        var addBtn = document.getElementById('addInventoryItemBtn');
-        if (addBtn) addBtn.addEventListener('click', function () { setTimeout(wireCreateProductPrices, 0); });
-        var form = document.getElementById('addProductForm');
-        if (form) {
-            form.addEventListener('submit', function () {
-                formatCreatePrice(document.getElementById('createProductPrice'));
-                formatCreatePrice(document.getElementById('createProductCostPrice'));
-            }, true);
-        }
-    })();
-    </script>
 </body>
 </html>
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Products - Design Excellence</title>
+    <title>Products Listing - Design Excellence</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -204,8 +204,21 @@
             border: 1px solid #ddd;
         }
 
-        .variations-nested-table .var-col-image img,
-        .variations-nested-table .var-col-image .variation-row-thumb {
+        .pi-name-with-image-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+        .pi-name-with-image-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+        .pi-name-with-image-cell .image-preview,
+        .pi-name-with-image-cell .variation-row-thumb,
+        .variations-nested-table .var-col-name .variation-row-thumb {
             width: 48px;
             height: 48px;
             max-width: 48px;
@@ -213,9 +226,24 @@
             object-fit: cover;
             border-radius: 4px;
             border: 1px solid #dee2e6;
+            flex-shrink: 0;
             display: block;
-            margin: 0 auto;
+            margin: 0;
         }
+        .pi-name-image-placeholder {
+            flex-shrink: 0;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            font-size: 0.85em;
+            border: 1px dashed #dee2e6;
+            border-radius: 4px;
+            background: #f8f9fa;
+        }
+        .pi-product-name-col { min-width: 180px; }
 
         /* Button Styles */
         .add-inventory-btn {
@@ -811,6 +839,108 @@
             background: #B8860B;
             color: #1a1a1a;
         }
+        /* Create product modal — compact + mobile */
+        #addProductModal.pi-create-product-modal .modal-content {
+            max-width: min(720px, calc(100vw - 24px));
+            padding: 14px 16px;
+            margin: 12px auto;
+        }
+        #addProductModal .pi-create-form .pi-create-top {
+            display: grid;
+            grid-template-columns: 1fr 140px 1fr;
+            gap: 10px 12px;
+            align-items: start;
+        }
+        #addProductModal .pi-create-form .pi-create-top .form-group { margin-bottom: 0; }
+        #addProductModal #createProductPrice,
+        #addProductModal #createProductCostPrice { text-align: right; }
+        #addProductModal .pi-create-form textarea { min-height: 56px; }
+        #addProductModal .pi-section { margin-top: 8px; padding: 10px; }
+        #addProductModal .pi-section h4 { margin-bottom: 4px; }
+        #addProductModal .pi-section > p { margin: 0 0 6px; font-size: 0.78em; }
+        #addProductModal #createBomBundleSelect { max-width: none; margin-bottom: 8px; padding: 6px 8px; }
+        #addProductModal .materials-section { padding: 8px; }
+        #addProductModal #createInventoryMaterialsSummary { margin-top: 6px; padding: 6px; font-size: 0.82em; }
+        #addProductModal .pi-variation-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 72px;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            background: #fff;
+        }
+        #addProductModal .pi-variation-row .pi-var-full { grid-column: 1 / -1; }
+        #addProductModal .pi-variation-row .pi-var-media {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            grid-column: 1 / -1;
+        }
+        #addProductModal .pi-variation-row label {
+            display: block;
+            font-size: 0.78em;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 3px;
+        }
+        #addProductModal .pi-variation-row input[type="text"],
+        #addProductModal .pi-variation-row input[type="number"],
+        #addProductModal .pi-variation-row input[type="file"] {
+            width: 100%;
+            padding: 5px 6px;
+            font-size: 0.85em;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        #addProductModal .pi-variation-remove {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: flex-end;
+        }
+        #addProductModal .pi-variation-remove button {
+            background: #dc3545;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            height: 30px;
+            width: 30px;
+            cursor: pointer;
+            font-size: 1.1em;
+            line-height: 1;
+        }
+        .pi-modal-categories .modal-content { max-width: 380px; padding: 14px 16px; }
+        .pi-modal-categories h3 { margin-bottom: 6px; font-size: 1em; }
+        .pi-modal-categories .pi-modal-hint { margin: 0 0 8px; font-size: 0.78em; color: #666; }
+        .pi-categories-scroll {
+            max-height: 240px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        .pi-categories-list .pi-category-row { padding: 6px 8px; font-size: 0.85em; }
+        .pi-categories-list .pi-category-row button { padding: 3px 8px; font-size: 0.78em; }
+        .pi-modal-categories .pi-form-actions { margin-top: 8px; padding-top: 8px; }
+        @media (max-width: 640px) {
+            #addProductModal.pi-create-product-modal .modal-content {
+                max-width: calc(100vw - 16px);
+                padding: 12px 14px;
+                margin: 8px auto;
+                max-height: 92vh;
+            }
+            #addProductModal .pi-create-form .pi-create-top {
+                grid-template-columns: 1fr;
+            }
+            #addProductModal .pi-variation-row {
+                grid-template-columns: 1fr 1fr;
+            }
+            #addProductModal .pi-variation-row .pi-var-media {
+                grid-template-columns: 1fr;
+            }
+        }
         .pi-modal-compact .pi-btn-secondary { background: #6c757d; color: #fff; }
         .pi-modal-compact .pi-btn-info { background: #007bff; color: #fff; }
         .pi-modal-compact .close-button { margin-top: -4px; }
@@ -982,8 +1112,8 @@
         </div>
         <div class="main-content">
             <div class="header">
-                <h2>Products</h2>
-                <p class="products-list-hint">Catalog: edit product name, category, sale price, description, and images via the row action. Edit variation name, sale price, thumbnails, and 3D model from each variation. Stock and restock are on <a href="/Employee/Admin/ProductInventory">Product Inventory</a>; returns on <a href="/Employee/Admin/ProductReturns">Product Returns</a>.</p>
+                <h2>Products Listing</h2>
+                <p class="products-list-hint">Create products and manage categories with the buttons above. Catalog: edit product name, category, sale price, item cost, description, and images via the row action. Edit variation name, color, thumbnails, and 3D model from each variation. Stock, returns workflow, and restock are on <a href="/Employee/Admin/Inventory?tab=ProductInventory">Inventory</a>.</p>
             </div>
             <div id="productsListingPanel" class="content-area">
 
@@ -1037,7 +1167,7 @@
                         if (typeof inventoryProductIdFocus !== 'undefined' && inventoryProductIdFocus) {
                             parts.push('inventoryProductId=' + encodeURIComponent(inventoryProductIdFocus));
                         }
-                        return '/Employee/Admin/Products?' + parts.join('&');
+                        return '/Employee/Admin/ProductsListing?' + parts.join('&');
                     }
                     function stockQtyClass(qty) {
                         const n = Number(qty) || 0;
@@ -1055,7 +1185,7 @@
                 %>
 
                 <div class="inventory-filter-card" data-inventory-search="<%= (invFilters.search || '').replace(/"/g, '&quot;') %>">
-                    <form method="get" action="/Employee/Admin/Products" class="inventory-filter-form">
+                    <form method="get" action="/Employee/Admin/ProductsListing" class="inventory-filter-form">
                         <input type="hidden" name="page" value="1">
                         <div class="inventory-filter-field">
                             <label for="invSearch">Search</label>
@@ -1073,13 +1203,168 @@
                         <div class="inventory-filter-actions">
                             <button type="submit" class="pi-btn pi-btn-primary">Apply filters</button>
                             <% if (invFilters.search || invFilters.category) { %>
-                            <a href="/Employee/Admin/Products" class="pi-btn pi-btn-secondary">Clear</a>
+                            <a href="/Employee/Admin/ProductsListing" class="pi-btn pi-btn-secondary">Clear</a>
                             <% } %>
                         </div>
                     </form>
                     <% if (invPag.totalCount > 0) { %>
                     <p class="inventory-list-summary">Showing <%= invRangeStart %>–<%= invRangeEnd %> of <%= invPag.totalCount %> products</p>
                     <% } %>
+                </div>
+
+                <div class="pi-toolbar">
+                    <button type="button" id="manageCategoriesBtn" class="add-inventory-btn">Manage Categories</button>
+                    <button type="button" id="addInventoryItemBtn" class="add-inventory-btn">Create Product</button>
+                </div>
+
+                <% if (locals.error && locals.error.length > 0) { %>
+                    <div class="error-message"><%= error %></div>
+                <% } %>
+                <% if (locals.success && locals.success.length > 0) { %>
+                    <div class="success-message"><%= success %></div>
+                <% } %>
+
+                <!-- Create Product Modal -->
+                <div id="addProductModal" class="modal pi-modal-compact pi-create-product-modal">
+                    <div class="modal-content">
+                        <span class="close-button" id="closeAddModal">&times;</span>
+                        <h3>Create New Product</h3>
+                        <form id="addProductForm" class="pi-create-form" action="/Employee/Admin/ProductsListing/Add" method="POST" enctype="multipart/form-data">
+                            <input type="hidden" id="quantity" name="quantity" value="0">
+
+                            <div class="pi-form-grid pi-create-top">
+                                <div class="form-group">
+                                    <label for="name">Product Name <span style="color:#dc3545;">*</span></label>
+                                    <input type="text" id="name" name="name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="createProductPrice">Sale Price (₱) <span style="color:#dc3545;">*</span></label>
+                                    <input type="text" id="createProductPrice" name="price" inputmode="decimal" autocomplete="off" required placeholder="0.00">
+                                </div>
+                                <div class="form-group">
+                                    <label for="createProductCostPrice">Item Cost Price (₱) <span style="color:#dc3545;">*</span></label>
+                                    <input type="text" id="createProductCostPrice" name="costPrice" inputmode="decimal" autocomplete="off" required placeholder="0.00">
+                                </div>
+                                <div class="form-group">
+                                    <label for="category">Category <span style="color:#dc3545;">*</span></label>
+                                    <select id="category" name="category" required>
+                                        <option value="">Select category</option>
+                                        <% if (categories && categories.length > 0) { %>
+                                            <% categories.forEach(cat => { %>
+                                                <option value="<%= cat %>"><%= cat %></option>
+                                            <% }); %>
+                                        <% } else { %>
+                                            <option value="Chairs">Chairs</option>
+                                            <option value="Tables">Tables</option>
+                                            <option value="Storage">Storage</option>
+                                            <option value="Partitions">Partitions</option>
+                                            <option value="Others">Others</option>
+                                        <% } %>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="description">Description</label>
+                                <textarea id="description" name="description" rows="2" placeholder="Optional"></textarea>
+                            </div>
+
+                            <div class="form-group pi-section">
+                                <h4>Product Images</h4>
+                                <p style="font-size:0.85em;color:#666;margin:0 0 8px;">Parent catalog images (variations have their own media below).</p>
+                                <div class="pi-form-grid">
+                                    <div>
+                                        <label for="createProductMainImage">Main Image</label>
+                                        <input type="file" id="createProductMainImage" name="productMainImage" accept="image/*">
+                                    </div>
+                                    <div>
+                                        <label for="createProductThumbnails">Thumbnails (up to 4)</label>
+                                        <input type="file" id="createProductThumbnails" name="productThumbnail" accept="image/*" multiple>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group pi-section" style="display: none;">
+                                <h4>Dimensions</h4>
+                                <div class="pi-form-grid">
+                                    <div>
+                                        <label for="length">Length (cm)</label>
+                                        <input type="number" id="length" name="length" step="0.1" min="0" placeholder="0.0">
+                                    </div>
+                                    <div>
+                                        <label for="width">Width (cm)</label>
+                                        <input type="number" id="width" name="width" step="0.1" min="0" placeholder="0.0">
+                                    </div>
+                                    <div>
+                                        <label for="height">Height (cm)</label>
+                                        <input type="number" id="height" name="height" step="0.1" min="0" placeholder="0.0">
+                                    </div>
+                                    <div>
+                                        <label for="weight">Weight (kg)</label>
+                                        <input type="number" id="weight" name="weight" step="0.1" min="0" placeholder="0.0">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group pi-section">
+                                <h4>BOM Bundle <span style="color:#dc3545;">*</span></h4>
+                                <p>Pick a saved recipe or add materials manually.</p>
+                                <label for="createBomBundleSelect">Bundle</label>
+                                <select id="createBomBundleSelect" name="bomBundleId">
+                                    <option value="">— Manual materials (no bundle) —</option>
+                                    <% const bundleList = typeof bomBundles !== 'undefined' && Array.isArray(bomBundles) ? bomBundles : []; %>
+                                    <% bundleList.forEach(function(b) { %>
+                                        <option value="<%= b.BomBundleID %>"><%= b.BundleCode %> — <%= b.Name %></option>
+                                    <% }); %>
+                                </select>
+                            </div>
+                            <div class="form-group pi-section">
+                                <h4>Materials <span style="color:#dc3545;">*</span></h4>
+                                <p>Qty per unit when stocked.</p>
+                                <div id="createInventoryRecipeStatus" style="font-size:0.82em;margin-bottom:8px;color:#666;"><em>Select a bundle or add materials</em></div>
+                                <div class="materials-section">
+                                    <div id="createInventoryMaterialsContainer"></div>
+                                    <button type="button" id="addCreateInventoryMaterialBtn" class="add-material-btn">+ Add Material</button>
+                                    <div id="createInventoryMaterialsSummary" style="margin-top: 10px; padding: 8px; background: #fff; border-radius: 4px; font-size: 0.9em;">
+                                        <strong>Selected materials:</strong>
+                                        <div id="createInventoryMaterialsSummaryList" style="margin-top: 4px; color: #666;"><em>No materials selected yet</em></div>
+                                    </div>
+                                </div>
+                                <input type="hidden" id="requiredMaterials" name="requiredMaterials" value="">
+                            </div>
+
+                            <div class="form-group pi-section">
+                                <h4>Variations <span style="color:#dc3545;">*</span></h4>
+                                <p>At least one. Main image required; thumbnails and 3D optional.</p>
+                                <p id="createVariationTotalSummary" style="font-size:0.85em;margin:0 0 8px;color:#007bff;font-weight:600;">Total quantity: 0</p>
+                                <div id="createProductVariationsList"></div>
+                                <button type="button" id="addCreateProductVariationBtn" class="pi-btn pi-btn-info pi-btn-sm" style="margin-top:6px;">+ Add Variation</button>
+                            </div>
+                            <input type="hidden" id="variationsJson" name="variationsJson" value="">
+
+                            <div class="pi-form-actions">
+                                <button type="button" id="cancelAddProduct" class="pi-btn pi-btn-secondary">Cancel</button>
+                                <button type="submit" class="pi-btn pi-btn-primary">Create Product</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Manage Categories Modal -->
+                <div id="piManageCategoriesModal" class="modal pi-modal-compact pi-modal-categories">
+                    <div class="modal-content">
+                        <span class="close-button" id="piCloseManageCategories">&times;</span>
+                        <h3>Manage Categories</h3>
+                        <p class="pi-modal-hint">Add or remove categories saved for product forms. Categories used by active products cannot be deleted.</p>
+                        <div class="pi-add-category-row">
+                            <input type="text" id="piNewCategoryName" placeholder="New category" maxlength="120">
+                            <button type="button" class="pi-btn pi-btn-primary pi-btn-sm" id="piAddCategoryBtn">Add</button>
+                        </div>
+                        <div id="piCategoriesList" class="pi-categories-list pi-categories-scroll"><em style="color:#888;">Loading…</em></div>
+                        <div class="pi-form-actions">
+                            <button type="button" class="pi-btn pi-btn-secondary pi-btn-sm" id="piCloseManageCategoriesBtn">Close</button>
+                        </div>
+                    </div>
                 </div>
 
                 <%- include('partials/product-listing-expandable', {
@@ -1125,6 +1410,7 @@
     </script>
     <%- include('partials/edit-inventory-product-modal') %>
     <%- include('partials/edit-variation-status-modal') %>
+    <%- include('partials/admin-variations-modal') %>
 
     <div id="inventory-discount-modal" class="modal">
         <div class="modal-content" style="max-width:480px;">
@@ -1315,6 +1601,72 @@
         })();
     </script>
 
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260525j" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260527b" defer></script>
+    <% if (locals.error && locals.error.length > 0) { %>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            showCustomPopup('<%= error %>', true);
+        });
+    </script>
+    <% } %>
+    <% if (locals.success && locals.success.length > 0) { %>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            showCustomPopup(<%- JSON.stringify(success || '') %>);
+        });
+    </script>
+    <% } %>
+    <script>
+    (function () {
+        function sanitizeCreatePrice(v) {
+            v = String(v || '').replace(/,/g, '').replace(/[^\d.]/g, '');
+            var dot = v.indexOf('.');
+            if (dot !== -1) {
+                v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, '');
+                if (v.length - dot - 1 > 2) v = v.slice(0, dot + 3);
+            }
+            return v;
+        }
+        function formatCreatePrice(el) {
+            if (!el) return;
+            var v = sanitizeCreatePrice(el.value);
+            if (!v || v === '.') { el.value = v; return; }
+            if (v.endsWith('.')) v = v.slice(0, -1);
+            var n = parseFloat(v);
+            if (isFinite(n)) el.value = n.toFixed(2);
+        }
+        function wireCreateProductPriceField(el) {
+            if (!el || el.getAttribute('data-auto-price') === '1') return;
+            el.setAttribute('data-auto-price', '1');
+            el.addEventListener('input', function () {
+                var v = sanitizeCreatePrice(el.value);
+                if (el.value !== v) el.value = v;
+            });
+            el.addEventListener('focusout', function () { formatCreatePrice(el); });
+            el.addEventListener('change', function () { formatCreatePrice(el); });
+            el.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { formatCreatePrice(el); }
+            });
+        }
+        function wireCreateProductPrices() {
+            wireCreateProductPriceField(document.getElementById('createProductPrice'));
+            wireCreateProductPriceField(document.getElementById('createProductCostPrice'));
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', wireCreateProductPrices);
+        } else {
+            wireCreateProductPrices();
+        }
+        var addBtn = document.getElementById('addInventoryItemBtn');
+        if (addBtn) addBtn.addEventListener('click', function () { setTimeout(wireCreateProductPrices, 0); });
+        var form = document.getElementById('addProductForm');
+        if (form) {
+            form.addEventListener('submit', function () {
+                formatCreatePrice(document.getElementById('createProductPrice'));
+                formatCreatePrice(document.getElementById('createProductCostPrice'));
+            }, true);
+        }
+    })();
+    </script>
 </body>
 </html>

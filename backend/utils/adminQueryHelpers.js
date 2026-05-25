@@ -177,6 +177,8 @@ const INVENTORY_PRODUCT_LIST_CORE = `
                         THEN COALESCE(iv2.Quantity, 0) ELSE iv2.AvailableQuantity END
                     + COALESCE(iv2.DamagedQuantity, 0)
                     + COALESCE(iv2.RepairedQuantity, 0)
+                    + COALESCE(iv2.ReturnedQuantity, 0)
+                    + COALESCE(iv2.DisposedQuantity, 0)
                 )
                 FROM InventoryProductVariations iv2
                 WHERE iv2.InventoryProductID = ip.InventoryProductID AND iv2.IsActive = 1
@@ -294,21 +296,73 @@ async function fetchPendingInspectionQtyByVariation(pool) {
     try {
         const ordersSchema = await getOrdersSchemaFlags(pool);
         if (!ordersSchema.hasReturnItems) return pendingMap;
-        const ordersResult = await pool.request().query(`
-            SELECT ReturnItems FROM Orders WHERE Status = 'Awaiting Inspection' AND ReturnItems IS NOT NULL
+        const result = await pool.request().query(`
+            SELECT
+                ipv.VariationID,
+                SUM(
+                    TRY_CAST(COALESCE(JSON_VALUE(ri.value, '$.quantity'), JSON_VALUE(ri.value, '$.Quantity')) AS INT)
+                ) AS PendingQty
+            FROM Orders o
+            CROSS APPLY OPENJSON(o.ReturnItems) AS ri
+            INNER JOIN InventoryProducts ip ON ip.ProductID = TRY_CAST(
+                COALESCE(JSON_VALUE(ri.value, '$.productId'), JSON_VALUE(ri.value, '$.ProductID')) AS INT
+            ) AND ip.IsActive = 1
+            INNER JOIN InventoryProductVariations ipv ON ipv.InventoryProductID = ip.InventoryProductID
+                AND ipv.IsActive = 1
+                AND (
+                    TRY_CAST(COALESCE(JSON_VALUE(ri.value, '$.variationId'), JSON_VALUE(ri.value, '$.VariationID')) AS INT) IS NULL
+                    OR ipv.VariationID = TRY_CAST(COALESCE(JSON_VALUE(ri.value, '$.variationId'), JSON_VALUE(ri.value, '$.VariationID')) AS INT)
+                )
+            WHERE o.Status = 'Awaiting Inspection'
+              AND o.ReturnItems IS NOT NULL
+              AND TRY_CAST(COALESCE(JSON_VALUE(ri.value, '$.quantity'), JSON_VALUE(ri.value, '$.Quantity')) AS INT) > 0
+            GROUP BY ipv.VariationID
         `);
-        for (const row of ordersResult.recordset || []) {
-            let items = [];
-            try {
-                items = typeof row.ReturnItems === 'string' ? JSON.parse(row.ReturnItems) : row.ReturnItems;
-            } catch (e) { continue; }
-            if (!Array.isArray(items)) continue;
-            items.forEach(function (item) {
-                const vid = parseInt(item.variationId || item.VariationID, 10);
-                const qty = parseInt(item.quantity || item.Quantity, 10) || 0;
-                if (!vid || qty <= 0) return;
-                pendingMap.set(vid, (pendingMap.get(vid) || 0) + qty);
-            });
+        for (const row of result.recordset || []) {
+            const vid = parseInt(row.VariationID, 10);
+            const qty = parseInt(row.PendingQty, 10) || 0;
+            if (vid && qty > 0) pendingMap.set(vid, qty);
+        }
+        if (!pendingMap.size) {
+            const ordersResult = await pool.request().query(`
+                SELECT ReturnItems FROM Orders
+                WHERE Status = 'Awaiting Inspection' AND ReturnItems IS NOT NULL
+            `);
+            for (const orderRow of ordersResult.recordset || []) {
+                let items = [];
+                try {
+                    items = typeof orderRow.ReturnItems === 'string'
+                        ? JSON.parse(orderRow.ReturnItems)
+                        : orderRow.ReturnItems;
+                } catch (e) { continue; }
+                if (!Array.isArray(items)) continue;
+                for (const item of items) {
+                    const catalogProductId = parseInt(item.productId || item.ProductID, 10);
+                    const catalogVariationId = item.variationId != null && item.variationId !== ''
+                        ? parseInt(item.variationId || item.VariationID, 10)
+                        : null;
+                    const qty = parseInt(item.quantity || item.Quantity, 10) || 0;
+                    if (!catalogProductId || qty <= 0) continue;
+                    const resolveReq = pool.request()
+                        .input('productId', sql.Int, catalogProductId);
+                    let resolveSql = `
+                        SELECT TOP 1 ipv.VariationID
+                        FROM InventoryProducts ip
+                        INNER JOIN InventoryProductVariations ipv
+                            ON ipv.InventoryProductID = ip.InventoryProductID AND ipv.IsActive = 1
+                        WHERE ip.ProductID = @productId AND ip.IsActive = 1
+                    `;
+                    if (catalogVariationId) {
+                        resolveReq.input('variationId', sql.Int, catalogVariationId);
+                        resolveSql += ' AND ipv.VariationID = @variationId';
+                    }
+                    const resolved = await resolveReq.query(resolveSql);
+                    const invVarId = parseInt(resolved.recordset[0]?.VariationID, 10);
+                    if (invVarId) {
+                        pendingMap.set(invVarId, (pendingMap.get(invVarId) || 0) + qty);
+                    }
+                }
+            }
         }
     } catch (err) {
         console.warn('[fetchPendingInspectionQtyByVariation]', err.message);
@@ -339,23 +393,27 @@ async function sumVariationReturnAggregatesForProducts(pool, inventoryProductIds
     for (const row of result.recordset || []) {
         const pid = row.InventoryProductID;
         if (!map.has(pid)) {
-            map.set(pid, { returned: 0, damaged: 0, repaired: 0 });
+            map.set(pid, { returned: 0, damaged: 0, repaired: 0, pendingTotal: 0 });
         }
         const agg = map.get(pid);
-        agg.returned += pendingMap.get(row.VariationID) || 0;
+        const pending = pendingMap.get(row.VariationID) || 0;
+        agg.returned += (Number(row.ReturnedQuantity) || 0) + pending;
         agg.damaged += Number(row.DamagedQuantity) || 0;
         agg.repaired += Number(row.RepairedQuantity) || 0;
+        agg.pendingTotal += pending;
     }
     return map;
 }
 
 function applyReturnAggregatesToRow(row, agg) {
     if (!row || !agg) return row;
+    const pendingTotal = Number(agg.pendingTotal) || 0;
     return {
         ...row,
         ReturnedQuantity: agg.returned,
         DamagedQuantity: agg.damaged,
-        RepairedQuantity: agg.repaired
+        RepairedQuantity: agg.repaired,
+        TotalQuantity: (Number(row.TotalQuantity) || 0) + pendingTotal
     };
 }
 
@@ -481,12 +539,18 @@ async function loadProductInventoryPageData(pool, options = {}) {
     const totalPages = Math.max(1, Math.ceil(totalCount / pageResult.limit));
     const page = Math.min(pageResult.page, totalPages);
 
+    const inventoryIds = (pageResult.rows || []).map((r) => r.InventoryProductID).filter(Boolean);
+    const returnAggMap = await sumVariationReturnAggregatesForProducts(pool, inventoryIds);
+    const enrichedRows = (pageResult.rows || []).map((row) =>
+        applyReturnAggregatesToRow(row, returnAggMap.get(row.InventoryProductID))
+    );
+
     return {
         materials,
         units,
         categories,
-        allInventoryProducts: pageResult.rows,
-        inventoryItems: pageResult.rows,
+        allInventoryProducts: enrichedRows,
+        inventoryItems: enrichedRows,
         products: [],
         pagination: {
             page,
@@ -1035,5 +1099,6 @@ module.exports = {
     fetchLowStockRawMaterials,
     buildInventoryAlertsPayload,
     fetchInventoryReportProducts,
-    fetchInventoryReportRawMaterials
+    fetchInventoryReportRawMaterials,
+    fetchPendingInspectionQtyByVariation
 };

@@ -52,8 +52,17 @@ const {
     removeProductCategory,
     buildInventoryAlertsPayload,
     fetchInventoryReportProducts,
-    fetchInventoryReportRawMaterials
+    fetchInventoryReportRawMaterials,
+    fetchPendingInspectionQtyByVariation
 } = require('./utils/adminQueryHelpers');
+const {
+    ensureInventoryStockMovementSchema,
+    logInventoryStockMovementFromVariationUpdate,
+    logRestockVariationMovement,
+    logRestockProductMovement,
+    fetchInventoryStockMovements,
+    fetchInventoryStockMovementsGrouped
+} = require('./utils/inventoryStockMovement');
 const { serializeActivityLogChanges, fetchActivityLogs } = require('./utils/activityLogHelpers');
 const { invalidateAdminPageCache } = require('./utils/adminPageCache');
 const {
@@ -1511,6 +1520,34 @@ module.exports = function (sql, pool, getStripe = null) {
             }
         } catch (invMatErr) {
             console.log('[MATERIALS] InventoryProductMaterials:', invMatErr.message);
+        }
+
+        // 1b) BOM bundle linked on inventory product (materials may only live on the bundle)
+        try {
+            const bomLink = await transaction.request()
+                .input('inventoryProductId', sql.Int, invId)
+                .query(`
+                    SELECT BomBundleID
+                    FROM InventoryProducts
+                    WHERE InventoryProductID = @inventoryProductId
+                      AND BomBundleID IS NOT NULL
+                `);
+            const bomBundleId = bomLink.recordset[0]?.BomBundleID;
+            if (bomBundleId) {
+                const bmResult = await transaction.request()
+                    .input('bomBundleId', sql.Int, bomBundleId)
+                    .query(`
+                        SELECT bm.MaterialID, bm.QuantityRequired
+                        FROM BomBundleMaterials bm
+                        WHERE bm.BomBundleID = @bomBundleId
+                    `);
+                const fromBundle = mapMaterialRows(bmResult.recordset);
+                if (fromBundle.length > 0) {
+                    return fromBundle;
+                }
+            }
+        } catch (bomMatErr) {
+            console.log('[MATERIALS] BomBundleMaterials lookup:', bomMatErr.message);
         }
 
         // 2) Linked CMS product (InventoryProducts.ProductID)
@@ -21544,6 +21581,55 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
+    router.post('/api/admin/raw-materials/:id/restock', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const materialId = parseInt(req.params.id, 10);
+            const quantityToAdd = parseInt(req.body.quantityToAdd, 10);
+            if (!materialId || Number.isNaN(materialId)) {
+                return res.status(400).json({ success: false, message: 'Invalid material ID.' });
+            }
+            if (!quantityToAdd || quantityToAdd < 1) {
+                return res.status(400).json({ success: false, message: 'Quantity must be at least 1.' });
+            }
+
+            const current = await pool.request()
+                .input('materialId', sql.Int, materialId)
+                .query(`
+                    SELECT MaterialID, Name, QuantityAvailable, Unit
+                    FROM RawMaterials
+                    WHERE MaterialID = @materialId AND IsActive = 1
+                `);
+            if (!current.recordset.length) {
+                return res.status(404).json({ success: false, message: 'Raw material not found.' });
+            }
+
+            const row = current.recordset[0];
+            const newQty = (row.QuantityAvailable || 0) + quantityToAdd;
+
+            await pool.request()
+                .input('materialId', sql.Int, materialId)
+                .input('newQty', sql.Int, newQty)
+                .query(`
+                    UPDATE RawMaterials
+                    SET QuantityAvailable = @newQty, LastUpdated = GETDATE()
+                    WHERE MaterialID = @materialId
+                `);
+
+            invalidateAdminPageCache('admin:');
+            res.json({
+                success: true,
+                message: `Added ${quantityToAdd} to stock.`,
+                quantityAvailable: newQty,
+                materialName: row.Name,
+                unit: row.Unit
+            });
+        } catch (err) {
+            console.error('Error restocking raw material:', err);
+            res.status(500).json({ success: false, message: 'Failed to restock raw material.' });
+        }
+    });
+
     // Note: Categories are now managed directly in the Products table
     // No separate Categories table exists - categories are stored as a column in Products
 
@@ -23219,7 +23305,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
     adminRoutes.forEach(route => {
         if (route === 'Products') {
-            // Inventory product listing: GET /Employee/Admin/Products (registered below).
+            // Inventory product listing: GET /Employee/Admin/ProductsListing (registered below).
             return;
         } else if (route === 'BulkOrders') {
             // Special handling for BulkOrders route - needs to fetch bulk orders data
@@ -23845,7 +23931,7 @@ module.exports = function (sql, pool, getStripe = null) {
             router.get(`/Employee/Admin/RawMaterials`, isAuthenticated, (req, res) => {
                 const q = new URLSearchParams(req.query);
                 q.set('tab', 'raw-materials');
-                return res.redirect('/Employee/Admin/ProductInventory?' + q.toString());
+                return res.redirect('/Employee/Admin/Inventory?' + q.toString());
             });
 
             router.get(`/Employee/Admin/RawMaterials/_legacy`, isAuthenticated, async (req, res) => {
@@ -23934,10 +24020,16 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             });
 
+            const normalizeAdminInventoryTabParam = (tab) => {
+                if (!tab || tab === 'products') return 'ProductInventory';
+                if (tab === 'ProductInventory') return 'ProductInventory';
+                return tab;
+            };
+
             const redirectProductInventoryTab = (req, res, flashType, message) => {
                 if (flashType && message) req.flash(flashType, message);
-                const tab = req.body?.redirectTab || req.query?.tab || 'products';
-                return res.redirect('/Employee/Admin/ProductInventory?tab=' + encodeURIComponent(tab));
+                const tab = normalizeAdminInventoryTabParam(req.body?.redirectTab || req.query?.tab);
+                return res.redirect('/Employee/Admin/Inventory?tab=' + encodeURIComponent(tab));
             };
 
             // Admin - Add Raw Material
@@ -24249,12 +24341,48 @@ module.exports = function (sql, pool, getStripe = null) {
             // PRODUCT INVENTORY ROUTES
             // =============================================================================
 
-            // Admin - Get Product Inventory Page (CREATE PRODUCTS)
-            router.get('/Employee/Admin/ProductInventory', isAuthenticated, async (req, res) => {
+            router.get('/api/admin/inventory-stock-movements', isAuthenticated, async (req, res) => {
                 try {
+                    await pool.connect();
+                    await ensureInventoryStockMovementSchema(pool);
+                    const opts = {
+                        page: parseInt(req.query.page, 10) || 1,
+                        limit: parseInt(req.query.limit, 10) || 20,
+                        inventoryProductId: req.query.inventoryProductId,
+                        variationId: req.query.variationId
+                    };
+                    const grouped = req.query.grouped === '1' || req.query.grouped === 'true';
+                    const data = grouped
+                        ? await fetchInventoryStockMovementsGrouped(pool, opts)
+                        : await fetchInventoryStockMovements(pool, opts);
+                    res.json({ success: true, grouped, ...data });
+                } catch (err) {
+                    console.error('inventory-stock-movements:', err);
+                    res.status(500).json({ success: false, message: err.message || 'Failed to load stock movements.' });
+                }
+            });
+
+            // Legacy URL → /Employee/Admin/Inventory
+            router.get('/Employee/Admin/ProductInventory', isAuthenticated, (req, res) => {
+                const q = new URLSearchParams(req.query);
+                q.set('tab', normalizeAdminInventoryTabParam(q.get('tab')));
+                const qs = q.toString();
+                return res.redirect('/Employee/Admin/Inventory' + (qs ? '?' + qs : '?tab=ProductInventory'));
+            });
+
+            // Admin - Inventory page (CREATE PRODUCTS tab)
+            router.get('/Employee/Admin/Inventory', isAuthenticated, async (req, res) => {
+                try {
+                    if (!req.query.tab) {
+                        const q = new URLSearchParams(req.query);
+                        q.set('tab', 'ProductInventory');
+                        return res.redirect('/Employee/Admin/Inventory?' + q.toString());
+                    }
+
                     await pool.connect();
                     await ensureVariationMediaColumns(pool);
                     await ensureBomBundleSchema(pool);
+                    await ensureInventoryStockMovementSchema(pool);
 
                     const listOptions = {
                         page: parseInt(req.query.page, 10) || 1,
@@ -24267,19 +24395,21 @@ module.exports = function (sql, pool, getStripe = null) {
 
                     if (pageData.redirectToPage) {
                         const q = new URLSearchParams();
-                        if (req.query.tab) q.set('tab', req.query.tab);
+                        q.set('tab', normalizeAdminInventoryTabParam(req.query.tab));
                         q.set('page', String(pageData.redirectToPage));
                         if (listOptions.search) q.set('search', listOptions.search);
                         if (listOptions.category) q.set('category', listOptions.category);
                         if (listOptions.inventoryProductId) {
                             q.set('inventoryProductId', listOptions.inventoryProductId);
                         }
-                        return res.redirect('/Employee/Admin/ProductInventory?' + q.toString());
+                        return res.redirect('/Employee/Admin/Inventory?' + q.toString());
                     }
 
                     const tab = req.query.tab;
                     const activeTab = tab === 'raw-materials' ? 'raw-materials'
-                        : tab === 'bom-bundles' ? 'bom-bundles' : 'products';
+                        : tab === 'bom-bundles' ? 'bom-bundles'
+                        : tab === 'stock-movement' ? 'stock-movement'
+                        : 'ProductInventory';
 
                     res.render('Employee/Admin/AdminProductInventory', {
                         user: req.session.user,
@@ -24309,14 +24439,14 @@ module.exports = function (sql, pool, getStripe = null) {
                         pagination: { page: 1, limit: 25, totalCount: 0, totalPages: 1 },
                         listFilters: { search: '', category: '' },
                         inventoryProductIdFocus: null,
-                        activeTab: 'products',
+                        activeTab: 'ProductInventory',
                         bomBundles: []
                     });
                 }
             });
 
-            // Admin - Create New Product (from ProductInventory page) - Uses InventoryProducts table
-            router.post('/Employee/Admin/ProductInventory/Add', isAuthenticated, productUpload.fields([
+            // Admin - Create New Product (from Inventory page) - Uses InventoryProducts table
+            router.post(['/Employee/Admin/Inventory/Add', '/Employee/Admin/ProductInventory/Add', '/Employee/Admin/ProductsListing/Add'], isAuthenticated, productUpload.fields([
                 { name: 'productMainImage', maxCount: 1 },
                 { name: 'productThumbnail', maxCount: 4 },
                 { name: 'variationMainImage', maxCount: 50 },
@@ -24330,7 +24460,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         return res.status(status).json({ success: false, message });
                     }
                     req.flash('error', message);
-                    return res.redirect('/Employee/Admin/ProductInventory');
+                    return res.redirect('/Employee/Admin/ProductsListing');
                 };
                 const respondSuccess = (inventoryProductId) => {
                     invalidateAdminPageCache('admin:');
@@ -24342,7 +24472,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         });
                     }
                     req.flash('success', 'Product created successfully in inventory!');
-                    return res.redirect(`/Employee/Admin/ProductInventory?inventoryProductId=${inventoryProductId}`);
+                    return res.redirect(`/Employee/Admin/ProductsListing?inventoryProductId=${inventoryProductId}`);
                 };
 
                 try {
@@ -24682,7 +24812,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
                     if (!productId || !quantity || !inventoryStatus) {
                         req.flash('error', 'Product, quantity, and status are required.');
-                        return res.redirect('/Employee/Admin/Products');
+                        return res.redirect('/Employee/Admin/ProductsListing');
                     }
 
                     let imageUrl = null;
@@ -24720,7 +24850,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
                     if (productCheck.recordset.length === 0) {
                         req.flash('error', 'Product not found.');
-                        return res.redirect('/Employee/Admin/Products');
+                        return res.redirect('/Employee/Admin/ProductsListing');
                     }
 
                     const current = productCheck.recordset[0];
@@ -24785,23 +24915,23 @@ module.exports = function (sql, pool, getStripe = null) {
                         `);
 
                     req.flash('success', `Successfully added ${qty} item(s) to inventory!`);
-                    res.redirect('/Employee/Admin/Products');
+                    res.redirect('/Employee/Admin/ProductsListing');
                 } catch (err) {
                     console.error('Error adding inventory item:', err);
                     req.flash('error', 'Failed to add inventory item: ' + err.message);
-                    res.redirect('/Employee/Admin/Products');
+                    res.redirect('/Employee/Admin/ProductsListing');
                 }
             });
 
             // Admin - Edit Product Inventory
-            router.post('/Employee/Admin/ProductInventory/Edit', isAuthenticated, productUpload.single('inventoryImage'), async (req, res) => {
+            router.post(['/Employee/Admin/Inventory/Edit', '/Employee/Admin/ProductInventory/Edit'], isAuthenticated, productUpload.single('inventoryImage'), async (req, res) => {
                 try {
                     await pool.connect();
                     const { inventoryId, quantity, inventoryStatus, dimensions, location, notes, currentImageURL, productId } = req.body;
 
                     if (!inventoryId) {
                         req.flash('error', 'Inventory ID is required.');
-                        return res.redirect(productId ? `/Employee/Admin/Products?productId=${productId}` : '/Employee/Admin/ProductInventory');
+                        return res.redirect(productId ? `/Employee/Admin/ProductsListing?productId=${productId}` : '/Employee/Admin/Inventory?tab=ProductInventory');
                     }
 
                     let imageUrl = currentImageURL || null;
@@ -24833,16 +24963,16 @@ module.exports = function (sql, pool, getStripe = null) {
                     // This route may need to be updated to work with InventoryProducts
 
                     req.flash('success', 'Inventory item updated successfully!');
-                    res.redirect(productId ? `/Employee/Admin/Products?productId=${productId}` : '/Employee/Admin/ProductInventory');
+                    res.redirect(productId ? `/Employee/Admin/ProductsListing?productId=${productId}` : '/Employee/Admin/Inventory?tab=ProductInventory');
                 } catch (err) {
                     console.error('Error updating product inventory:', err);
                     req.flash('error', 'Failed to update inventory item: ' + err.message);
-                    res.redirect(req.body.productId ? `/Employee/Admin/Products?productId=${req.body.productId}` : '/Employee/Admin/ProductInventory');
+                    res.redirect(req.body.productId ? `/Employee/Admin/ProductsListing?productId=${req.body.productId}` : '/Employee/Admin/Inventory?tab=ProductInventory');
                 }
             });
 
             // Admin - Delete/Archive Product Inventory Item (inventory item, not product)
-            router.post('/Employee/Admin/ProductInventory/DeleteItem/:id', isAuthenticated, async (req, res) => {
+            router.post(['/Employee/Admin/Inventory/DeleteItem/:id', '/Employee/Admin/ProductInventory/DeleteItem/:id'], isAuthenticated, async (req, res) => {
                 try {
                     await pool.connect();
                     const inventoryId = req.params.id;
@@ -24853,17 +24983,17 @@ module.exports = function (sql, pool, getStripe = null) {
                     let productIdToRedirect = productId;
 
                     req.flash('success', 'Inventory item archived successfully!');
-                    res.redirect(productIdToRedirect ? `/Employee/Admin/Products?productId=${productIdToRedirect}` : '/Employee/Admin/ProductInventory');
+                    res.redirect(productIdToRedirect ? `/Employee/Admin/ProductsListing?productId=${productIdToRedirect}` : '/Employee/Admin/Inventory?tab=ProductInventory');
                 } catch (err) {
                     console.error('Error archiving inventory item:', err);
                     req.flash('error', 'Failed to archive inventory item: ' + err.message);
-                    res.redirect(req.query.productId ? `/Employee/Admin/Products?productId=${req.query.productId}` : '/Employee/Admin/ProductInventory');
+                    res.redirect(req.query.productId ? `/Employee/Admin/ProductsListing?productId=${req.query.productId}` : '/Employee/Admin/Inventory?tab=ProductInventory');
                 }
             });
 
             // API endpoint to fetch products from ProductInventory for dropdown
             // API endpoint to fetch products from InventoryProducts table for CMS dropdown
-            // This is used by /Employee/Admin/Products page to select inventory products when creating CMS products
+            // This is used by /Employee/Admin/ProductsListing page to select inventory products when creating CMS products
             router.get('/api/admin/products-from-inventory', isAuthenticated, async (req, res) => {
                 try {
                     await pool.connect();
@@ -25156,6 +25286,17 @@ module.exports = function (sql, pool, getStripe = null) {
                         }
 
                         try {
+                            await logRestockVariationMovement(pool, {
+                                inventoryProductId,
+                                variationId,
+                                quantity: addQty,
+                                userId: req.session.user?.id
+                            });
+                        } catch (movementLogErr) {
+                            console.warn('[STOCK MOVEMENT] restock variation log failed:', movementLogErr.message);
+                        }
+
+                        try {
                             await syncInventoryVariationToProductsVariation(variationId, null);
                         } catch (syncErr) {
                             console.error('[RESTOCK] Variation sync error:', syncErr);
@@ -25195,6 +25336,16 @@ module.exports = function (sql, pool, getStripe = null) {
                     } catch (restockProdErr) {
                         await restockProductTx.rollback();
                         throw restockProdErr;
+                    }
+
+                    try {
+                        await logRestockProductMovement(pool, {
+                            inventoryProductId,
+                            quantity: addQty,
+                            userId: req.session.user?.id
+                        });
+                    } catch (movementLogErr) {
+                        console.warn('[STOCK MOVEMENT] restock product log failed:', movementLogErr.message);
                     }
 
                     if (linkedProductId) {
@@ -25361,9 +25512,11 @@ module.exports = function (sql, pool, getStripe = null) {
                         const avail = Number(v.AvailableQuantity) || 0;
                         const damaged = Number(v.DamagedQuantity) || 0;
                         const repaired = Number(v.RepairedQuantity) || 0;
+                        const returned = Number(v.ReturnedQuantity) || 0;
+                        const disposed = Number(v.DisposedQuantity) || 0;
                         const qty = Number(v.Quantity) || 0;
                         const sellable = (avail === 0 && qty > 0) ? qty : avail;
-                        return sum + Math.max(sellable + damaged + repaired, qty);
+                        return sum + Math.max(sellable + damaged + repaired + returned + disposed, qty);
                     }, 0);
                     if (isInventoryProductID && result.recordset.length > 0) {
                         productStock = totalVariationQuantity;
@@ -25392,11 +25545,29 @@ module.exports = function (sql, pool, getStripe = null) {
                         });
                     }
 
+                    let totalVariationQuantityWithPending = totalVariationQuantity;
+                    if (variations.length) {
+                        totalVariationQuantityWithPending = variations.reduce(function(sum, v) {
+                            const avail = Number(v.AvailableQuantity) || 0;
+                            const damaged = Number(v.DamagedQuantity) || 0;
+                            const repaired = Number(v.RepairedQuantity) || 0;
+                            const returned = Number(v.ReturnedQuantity) || 0;
+                            const disposed = Number(v.DisposedQuantity) || 0;
+                            const pending = Number(v.PendingInspectionQty) || 0;
+                            const qty = Number(v.Quantity) || 0;
+                            const sellable = (avail === 0 && qty > 0) ? qty : avail;
+                            return sum + sellable + damaged + repaired + returned + disposed + pending;
+                        }, 0);
+                        if (isInventoryProductID) {
+                            productStock = totalVariationQuantityWithPending;
+                        }
+                    }
+
                     res.json({
                         success: true,
                         variations,
                         productStock: productStock,
-                        totalVariationQuantity: totalVariationQuantity,
+                        totalVariationQuantity: totalVariationQuantityWithPending,
                         availableStock: productStock - totalVariationQuantity,
                         parentProductPrice,
                         parentRecipeMaterials
@@ -26375,6 +26546,21 @@ module.exports = function (sql, pool, getStripe = null) {
                             Notes: notesStr || null
                         }
                     );
+                    try {
+                        await logInventoryStockMovementFromVariationUpdate(pool, {
+                            variationBefore,
+                            availableQty,
+                            returnedQty,
+                            damagedQty,
+                            repairedQty,
+                            notes: notesStr,
+                            variationId: parsedVariationID,
+                            inventoryProductId,
+                            userId: req.session.user?.id
+                        });
+                    } catch (movementLogErr) {
+                        console.warn('[STOCK MOVEMENT] log failed:', movementLogErr.message);
+                    }
                     res.json(Object.assign(
                         {
                             success: true,
@@ -27248,7 +27434,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
             // Admin - Delete Inventory Product (from ProductInventory page)
             // Admin - Archive Product from ProductInventory page
-            router.post('/Employee/Admin/ProductInventory/Archive/:id', isAuthenticated, async (req, res) => {
+            router.post(['/Employee/Admin/Inventory/Archive/:id', '/Employee/Admin/ProductInventory/Archive/:id'], isAuthenticated, async (req, res) => {
                 console.log('Archive route hit:', req.params.id, req.body);
                 try {
                     await pool.connect();
@@ -27263,7 +27449,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
                         if (productResult.recordset.length === 0) {
                             req.flash('error', 'Product not found.');
-                            return res.redirect('/Employee/Admin/ProductInventory');
+                            return res.redirect('/Employee/Admin/Inventory?tab=ProductInventory');
                         }
 
                         const productName = productResult.recordset[0].Name;
@@ -27282,7 +27468,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
                         if (productResult.recordset.length === 0) {
                             req.flash('error', 'Product not found.');
-                            return res.redirect('/Employee/Admin/ProductInventory');
+                            return res.redirect('/Employee/Admin/Inventory?tab=ProductInventory');
                         }
 
                         const productName = productResult.recordset[0].Name;
@@ -27305,11 +27491,11 @@ module.exports = function (sql, pool, getStripe = null) {
                 } catch (err) {
                     console.error('Error archiving product:', err);
                     req.flash('error', 'Failed to archive product: ' + err.message);
-                    res.redirect('/Employee/Admin/ProductInventory');
+                    res.redirect('/Employee/Admin/Inventory?tab=ProductInventory');
                 }
             });
 
-            router.post('/Employee/Admin/ProductInventory/Delete/:id', isAuthenticated, async (req, res) => {
+            router.post(['/Employee/Admin/Inventory/Delete/:id', '/Employee/Admin/ProductInventory/Delete/:id'], isAuthenticated, async (req, res) => {
                 try {
                     await pool.connect();
                     const inventoryProductId = req.params.id;
@@ -27327,11 +27513,11 @@ module.exports = function (sql, pool, getStripe = null) {
                         `);
 
                     req.flash('success', 'Product archived successfully!');
-                    res.redirect('/Employee/Admin/ProductInventory');
+                    res.redirect('/Employee/Admin/Inventory?tab=ProductInventory');
                 } catch (err) {
                     console.error('Error archiving inventory product:', err);
                     req.flash('error', 'Failed to archive product: ' + err.message);
-                    res.redirect('/Employee/Admin/ProductInventory');
+                    res.redirect('/Employee/Admin/Inventory?tab=ProductInventory');
                 }
             });
         } else {
@@ -27414,6 +27600,17 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
 
                 try {
+                    await logRestockVariationMovement(pool, {
+                        inventoryProductId,
+                        variationId,
+                        quantity: addQty,
+                        userId: req.session.user?.id
+                    });
+                } catch (movementLogErr) {
+                    console.warn('[STOCK MOVEMENT] restock variation log failed:', movementLogErr.message);
+                }
+
+                try {
                     await syncInventoryVariationToProductsVariation(variationId, null);
                 } catch (syncErr) {
                     console.error('[RESTOCK] Variation sync error:', syncErr);
@@ -27453,6 +27650,16 @@ module.exports = function (sql, pool, getStripe = null) {
             } catch (restockProdTxTopErr) {
                 await restockProdTxTop.rollback();
                 throw restockProdTxTopErr;
+            }
+
+            try {
+                await logRestockProductMovement(pool, {
+                    inventoryProductId,
+                    quantity: addQty,
+                    userId: req.session.user?.id
+                });
+            } catch (movementLogErr) {
+                console.warn('[STOCK MOVEMENT] restock product log failed:', movementLogErr.message);
             }
 
             if (linkedProductId) {
@@ -27578,6 +27785,25 @@ module.exports = function (sql, pool, getStripe = null) {
                     } catch (backfillErr) {
                         console.log('[MATERIALS] BomBundleID backfill skipped:', backfillErr.message);
                     }
+                }
+            }
+
+            if (materials.length === 0 && bomBundle && bomBundle.id) {
+                try {
+                    const bundleMats = await pool.request()
+                        .input('bomBundleId', sql.Int, bomBundle.id)
+                        .query(`
+                            SELECT bm.MaterialID, bm.QuantityRequired,
+                                COALESCE(rm.Name, CONCAT('Material #', bm.MaterialID)) AS MaterialName,
+                                rm.Unit, rm.SKU AS MaterialSKU
+                            FROM BomBundleMaterials bm
+                            LEFT JOIN RawMaterials rm ON bm.MaterialID = rm.MaterialID
+                            WHERE bm.BomBundleID = @bomBundleId
+                            ORDER BY COALESCE(rm.Name, CAST(bm.MaterialID AS NVARCHAR(20)))
+                        `);
+                    materials = bundleMats.recordset || [];
+                } catch (bundleLoadErr) {
+                    console.log('[MATERIALS] BomBundleMaterials display load:', bundleLoadErr.message);
                 }
             }
 
@@ -29738,33 +29964,6 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
-    async function fetchPendingInspectionQtyByVariation(pool) {
-        const pendingMap = new Map();
-        try {
-            const ordersSchema = await getOrdersSchemaFlags(pool);
-            if (!ordersSchema.hasReturnItems) return pendingMap;
-            const ordersResult = await pool.request().query(`
-                SELECT ReturnItems FROM Orders WHERE Status = 'Awaiting Inspection' AND ReturnItems IS NOT NULL
-            `);
-            for (const row of ordersResult.recordset || []) {
-                let items = [];
-                try {
-                    items = typeof row.ReturnItems === 'string' ? JSON.parse(row.ReturnItems) : row.ReturnItems;
-                } catch (e) { continue; }
-                if (!Array.isArray(items)) continue;
-                items.forEach(function(item) {
-                    const vid = parseInt(item.variationId || item.VariationID, 10);
-                    const qty = parseInt(item.quantity || item.Quantity, 10) || 0;
-                    if (!vid || qty <= 0) return;
-                    pendingMap.set(vid, (pendingMap.get(vid) || 0) + qty);
-                });
-            }
-        } catch (err) {
-            console.error('[PENDING INSPECTION] count error:', err.message);
-        }
-        return pendingMap;
-    }
-
     function buildReturnedLineItemsFromOrder(orderRow, allOrderItems) {
         let returnedItems = [];
         if (orderRow.ReturnItems) {
@@ -29942,14 +30141,36 @@ module.exports = function (sql, pool, getStripe = null) {
         }
         try {
             await pool.connect();
+            const ordersSchema = await getOrdersSchemaFlags(pool);
             const orderResult = await pool.request()
                 .input('orderId', sql.Int, orderId)
                 .query(`
-                    SELECT OrderID FROM Orders
+                    SELECT OrderID, ReturnItems FROM Orders
                     WHERE OrderID = @orderId AND Status IN ('Processing (Pickup)', 'Processing')
                 `);
             if (!orderResult.recordset.length) {
                 return res.status(404).json({ success: false, message: 'Order not found or not waiting to receive items.' });
+            }
+            const orderRow = orderResult.recordset[0];
+            let returnItemsJson = orderRow.ReturnItems;
+            if (ordersSchema.hasReturnItems && (!returnItemsJson || String(returnItemsJson).trim() === '')) {
+                const itemsResult = await pool.request()
+                    .input('orderId', sql.Int, orderId)
+                    .query(`
+                        SELECT ProductID, VariationID, Quantity, PriceAtPurchase
+                        FROM OrderItems WHERE OrderID = @orderId
+                    `);
+                const built = (itemsResult.recordset || []).map((item) => ({
+                    productId: item.ProductID,
+                    variationId: item.VariationID,
+                    quantity: parseInt(item.Quantity, 10) || 0,
+                    priceAtPurchase: parseFloat(item.PriceAtPurchase) || 0
+                })).filter((item) => item.quantity > 0);
+                returnItemsJson = JSON.stringify(built);
+                await pool.request()
+                    .input('orderId', sql.Int, orderId)
+                    .input('returnItems', sql.NVarChar(sql.MAX), returnItemsJson)
+                    .query(`UPDATE Orders SET ReturnItems = @returnItems WHERE OrderID = @orderId`);
             }
             await pool.request()
                 .input('orderId', sql.Int, orderId)
@@ -32686,7 +32907,12 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
-    router.get('/Employee/Admin/Products', isAuthenticated, async (req, res) => {
+    router.get('/Employee/Admin/Products', isAuthenticated, (req, res) => {
+        const q = new URLSearchParams(req.query);
+        return res.redirect('/Employee/Admin/ProductsListing' + (q.toString() ? '?' + q.toString() : ''));
+    });
+
+    router.get('/Employee/Admin/ProductsListing', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
             const pageData = await loadProductInventoryPageData(pool, {
@@ -32699,7 +32925,7 @@ module.exports = function (sql, pool, getStripe = null) {
             if (pageData.redirectToPage) {
                 const q = new URLSearchParams(req.query);
                 q.set('page', String(pageData.redirectToPage));
-                return res.redirect('/Employee/Admin/Products?' + q.toString());
+                return res.redirect('/Employee/Admin/ProductsListing?' + q.toString());
             }
             res.render('Employee/Admin/AdminProducts', {
                 user: req.session.user,
@@ -32708,6 +32934,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 materials: pageData.materials,
                 units: pageData.units,
                 categories: pageData.categories,
+                bomBundles: pageData.bomBundles || [],
                 allInventoryProducts: pageData.allInventoryProducts,
                 pagination: pageData.pagination,
                 listFilters: pageData.listFilters,
@@ -32715,36 +32942,17 @@ module.exports = function (sql, pool, getStripe = null) {
                 formatInventoryDate: formatInventoryDate
             });
         } catch (err) {
-            console.error('Error loading Admin Products page:', err);
+            console.error('Error loading Admin Products Listing page:', err);
             req.flash('error', 'Failed to load products.');
-            res.redirect('/Employee/Admin/ProductInventory');
+            res.redirect('/Employee/Admin/Inventory?tab=ProductInventory');
         }
     });
 
-    router.get('/Employee/Admin/ProductReturns', isAuthenticated, async (req, res) => {
-        try {
-            await pool.connect();
-            const pageData = await loadProductReturnsPageData(pool, {
-                search: req.query.search || '',
-                category: req.query.category || '',
-                page: parseInt(req.query.page, 10) || 1,
-                limit: 50
-            });
-            res.render('Employee/Admin/AdminProductReturns', {
-                user: req.session.user,
-                error: req.flash('error'),
-                success: req.flash('success'),
-                categories: pageData.categories,
-                allInventoryProducts: pageData.allInventoryProducts,
-                pagination: pageData.pagination,
-                listFilters: pageData.listFilters,
-                formatInventoryDate: formatInventoryDate
-            });
-        } catch (err) {
-            console.error('Error loading Admin Product Returns page:', err);
-            req.flash('error', 'Failed to load product returns.');
-            res.redirect('/Employee/Admin/Products');
-        }
+    router.get('/Employee/Admin/ProductReturns', isAuthenticated, (req, res) => {
+        const q = new URLSearchParams(req.query);
+        q.set('tab', 'ProductInventory');
+        const qs = q.toString();
+        return res.redirect('/Employee/Admin/Inventory' + (qs ? '?' + qs : '?tab=ProductInventory'));
     });
 
     router.get('/Employee/Admin/Products/_legacy', isAuthenticated, async (req, res) => {
@@ -32985,7 +33193,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
             if (checkResult.recordset.length === 0) {
                 req.flash('error', 'Product not found.');
-                return res.redirect('/Employee/Admin/Products');
+                return res.redirect('/Employee/Admin/ProductsListing');
             }
 
             const productName = checkResult.recordset[0].Name;
@@ -33053,11 +33261,11 @@ module.exports = function (sql, pool, getStripe = null) {
             );
 
             req.flash('success', `Product "${productName}" has been archived. You can restore it from the Archived page.`);
-            res.redirect('/Employee/Admin/Products');
+            res.redirect('/Employee/Admin/ProductsListing');
         } catch (err) {
             console.error('Error archiving product:', err);
             req.flash('error', 'Failed to archive product. Please try again.');
-            res.redirect('/Employee/Admin/Products');
+            res.redirect('/Employee/Admin/ProductsListing');
         }
     });
 
@@ -33076,7 +33284,7 @@ module.exports = function (sql, pool, getStripe = null) {
             if (checkResult.recordset.length === 0) {
                 req.flash('error', 'Raw material not found.');
                 const tab = req.body?.redirectTab || 'raw-materials';
-                return res.redirect('/Employee/Admin/ProductInventory?tab=' + encodeURIComponent(tab));
+                return res.redirect('/Employee/Admin/Inventory?tab=' + encodeURIComponent(tab));
             }
 
             const materialName = checkResult.recordset[0].Name;
@@ -33098,12 +33306,12 @@ module.exports = function (sql, pool, getStripe = null) {
 
             req.flash('success', `Raw material "${materialName}" has been archived. You can restore it from the Archived page.`);
             const tab = req.body?.redirectTab || 'raw-materials';
-            res.redirect('/Employee/Admin/ProductInventory?tab=' + encodeURIComponent(tab));
+            res.redirect('/Employee/Admin/Inventory?tab=' + encodeURIComponent(tab));
         } catch (err) {
             console.error('Error archiving raw material:', err);
             req.flash('error', 'Failed to archive raw material. Please try again.');
             const tab = req.body?.redirectTab || 'raw-materials';
-            res.redirect('/Employee/Admin/ProductInventory?tab=' + encodeURIComponent(tab));
+            res.redirect('/Employee/Admin/Inventory?tab=' + encodeURIComponent(tab));
         }
     });
 
@@ -34075,13 +34283,13 @@ module.exports = function (sql, pool, getStripe = null) {
             return res.json({
                 success: false,
                 message: 'Stock quantity cannot be edited from Products page. Please use Product Inventory page to manage stock quantities. Stock is automatically synced from inventory to Products for CMS display.',
-                redirectTo: '/Employee/Admin/ProductInventory'
+                redirectTo: '/Employee/Admin/Inventory?tab=ProductInventory'
             });
         } catch (err) {
             console.error('Error in UpdateStock endpoint:', err);
             res.json({
                 success: false,
-                message: 'Stock management is done through Product Inventory page. Please navigate to /Employee/Admin/ProductInventory'
+                message: 'Stock management is done through Product Inventory page. Please navigate to /Employee/Admin/Inventory'
             });
         }
     });

@@ -22,7 +22,7 @@
                         <th>Unit</th>
                         <th>Supplier</th>
                         <th>Updated</th>
-                        <th style="width:90px;">Actions</th>
+                        <th class="pi-actions-col">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -38,25 +38,35 @@
                         <tr data-material-id="<%= material.MaterialID %>">
                             <td><code style="font-size:0.85em;"><%= material.SKU || '—' %></code></td>
                             <td><%= material.Name %></td>
-                            <td class="qty-col"><span class="stock-qty <%= qtyClass %>"><%= qty %></span></td>
+                            <td class="qty-col"><span class="stock-qty rm-qty-display <%= qtyClass %>" data-material-id="<%= material.MaterialID %>"><%= qty %></span></td>
                             <td><%= material.Unit %></td>
                             <td><%= material.Supplier || '—' %></td>
-                            <td><%= material.LastUpdated ? new Date(material.LastUpdated).toLocaleDateString() : '—' %></td>
-                            <td class="rm-actions-cell">
-                                <button type="button" class="edit-material-btn" title="Edit"
+                            <td class="rm-updated-cell"><%= material.LastUpdated ? new Date(material.LastUpdated).toLocaleDateString() : '—' %></td>
+                            <td class="pi-actions-col">
+                                <div class="pi-actions-cell">
+                                <button type="button" class="restock-raw-material-btn pi-icon-restock-btn"
+                                    data-material-id="<%= material.MaterialID %>"
+                                    data-material-name="<%= material.Name.replace(/'/g, "\\'").replace(/"/g, "&quot;") %>"
+                                    data-quantity="<%= material.QuantityAvailable %>"
+                                    data-unit="<%= material.Unit %>"
+                                    title="Restock" aria-label="Restock">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                </button>
+                                <button type="button" class="edit-raw-material-btn pi-icon-edit-btn" title="Edit" aria-label="Edit"
                                     data-id="<%= material.MaterialID %>"
                                     data-sku="<%= material.SKU || '' %>"
                                     data-name="<%= material.Name %>"
                                     data-quantity="<%= material.QuantityAvailable %>"
                                     data-unit="<%= material.Unit %>"
                                     data-supplier="<%= (material.Supplier || '').replace(/"/g, '&quot;') %>">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 20h9"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 3.5a2.121 2.121 0 113 3L7 19 21l1.5-4L16.5 3.5z"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                                 </button>
-                                <button type="button" class="delete-material-btn archive-material-btn" title="Archive"
+                                <button type="button" class="archive-material-btn pi-icon-archive-btn" title="Archive" aria-label="Archive"
                                     data-id="<%= material.MaterialID %>"
                                     data-name="<%= material.Name %>">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
                                 </button>
+                                </div>
                             </td>
                         </tr>
                     <% }); %>
@@ -167,6 +177,31 @@
         <div class="rm-form-actions">
             <button type="button" class="rm-btn rm-btn-secondary" id="rmCancelQuickAdd">Cancel</button>
             <button type="button" class="rm-btn rm-btn-primary" id="rmSubmitQuickAdd">Add Selected</button>
+        </div>
+    </div>
+</div>
+
+<div id="rawMaterialRestockModal" class="modal pi-modal-compact">
+    <div class="modal-content" style="max-width:420px;">
+        <span class="close-button" id="rmCloseRestockModal">&times;</span>
+        <h3>Restock Raw Material</h3>
+        <input type="hidden" id="rawMaterialRestockId" value="">
+        <div class="form-group">
+            <label>Material</label>
+            <p id="rawMaterialRestockName" style="margin:4px 0 0;font-weight:600;color:#333;"></p>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;padding:10px;background:#f8f9fa;border-radius:6px;font-size:0.9em;">
+            <strong>Current Qty:</strong> <span id="rawMaterialRestockCurrentQty">0</span>
+            <span id="rawMaterialRestockUnit" style="color:#666;"></span>
+        </div>
+        <div class="form-group">
+            <label for="rawMaterialRestockQty">Quantity to add</label>
+            <input type="number" id="rawMaterialRestockQty" min="1" value="1" style="width:100%;max-width:120px;padding:8px;border:1px solid #ced4da;border-radius:4px;text-align:center;">
+            <p style="font-size:0.85em;color:#666;margin:8px 0 0;">Adds to available stock for this material.</p>
+        </div>
+        <div class="pi-form-actions">
+            <button type="button" id="rmCancelRestock" class="pi-btn pi-btn-secondary">Cancel</button>
+            <button type="button" id="rmConfirmRestock" class="pi-btn pi-btn-primary" style="background:#198754;color:#fff;border:none;">Restock</button>
         </div>
     </div>
 </div>

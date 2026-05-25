@@ -806,7 +806,17 @@
             text-transform: uppercase;
             letter-spacing: 0.02em;
         }
-        .variations-returns-table .var-col-name { width: 14%; text-align: left; }
+        .pi-name-with-image-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .pi-name-with-image-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .pi-name-with-image-cell .image-preview,
+        .pi-name-with-image-cell .variation-row-thumb {
+            width: 48px; height: 48px; object-fit: cover; border-radius: 4px; border: 1px solid #dee2e6; flex-shrink: 0;
+        }
+        .pi-name-image-placeholder {
+            flex-shrink: 0; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;
+            color: #999; border: 1px dashed #dee2e6; border-radius: 4px; background: #f8f9fa;
+        }
+        .variations-returns-table .var-col-name { width: 22%; text-align: left; }
         .variations-returns-table .var-col-sku { width: 14%; text-align: left; word-break: break-all; }
         .variations-returns-table .var-col-color { width: 8%; text-align: left; }
         .variations-returns-table .var-col-qty { width: 7%; text-align: center; }
@@ -1105,6 +1115,6 @@
         </div>
     </div>
     <%- include('partials/repair-variation-modal') %>
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260524o" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260525o" defer></script>
 </body>
 </html>
