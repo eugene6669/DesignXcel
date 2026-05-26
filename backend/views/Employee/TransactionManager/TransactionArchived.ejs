@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Archived Items</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
@@ -178,6 +179,29 @@
         .logout-button:hover {
             background-color: #c82333;
         }
+        .archived-section { margin-bottom: 28px; }
+        .archived-section h3 { margin: 0 0 12px; font-size: 1.1em; color: #333; }
+        .archived-section table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+        .archived-section th, .archived-section td { border: 1px solid #dee2e6; padding: 10px; text-align: left; }
+        .archived-section th { background: #f2f2f2; font-weight: 600; }
+        .archived-section tr:nth-child(even) { background: #f9f9f9; }
+        .status-badge { padding: 4px 10px; border-radius: 12px; font-size: 0.85em; font-weight: 500; display: inline-block; }
+        .status-available { background: #28a745; color: #fff; }
+        .status-damaged { background: #dc3545; color: #fff; }
+        .status-returned { background: #ffc107; color: #333; }
+        .status-repaired { background: #17a2b8; color: #fff; }
+        .status-disposed { background: #6c757d; color: #fff; }
+        .stock-qty { font-weight: 700; font-size: 1.05em; display: inline-block; min-width: 2em; text-align: center; }
+        .stock-qty-negative { color: #b02a37; }
+        .stock-qty-out { color: #DC3545; }
+        .stock-qty-critical { color: #e65100; }
+        .stock-qty-low { color: #d4af37; }
+        .stock-qty-normal { color: #28a745; }
+        .stock-qty-available { color: #28a745; }
+        .qty-col { text-align: center !important; }
+        .archived-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+        .archived-variations-wrap { overflow-x: auto; }
+        .empty-table-message { text-align: center; color: #888; padding: 16px; }
     </style>
 </head>
 <body>
@@ -193,53 +217,23 @@
                 <% if (error) { %>
                     <div class="error-message"><%= error %></div>
                 <% } %>
-                <div class="alert-section">
-                    <h3>Archived Products</h3>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Description</th>
-                                <th>Price</th>
-                                <th>Stock</th>
-                                <th>Category</th>
-                                <th>Date Added</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <% if (archivedProducts && archivedProducts.length > 0) { %>
-                                <% archivedProducts.forEach(product => { %>
-                                    <tr>
-                                        <td><%= product.Name %></td>
-                                        <td><%= product.Description %></td>
-                                        <td><%= product.Price %></td>
-                                        <td><%= product.StockQuantity %></td>
-                                        <td><%= product.Category %></td>
-                                        <td><%= product.DateAdded ? new Date(product.DateAdded).toLocaleDateString() : 'N/A' %></td>
-                                        <td>
-                                            <div style="display: flex; gap: 8px; align-items: center;">
-                                                <form action="/Employee/TransactionManager/TransactionArchived/ReactivateProduct/<%= product.ProductID %>" method="POST" style="display:inline;">
-                                                    <button type="submit" class="reactivate-btn">Reactivate</button>
-                                                </form>
-                                                <button type="button" class="delete-btn" data-id="<%= product.ProductID %>" data-type="product" data-name="<%= product.Name %>">Delete</button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                <% }); %>
-                            <% } else { %>
-                                <tr><td colspan="6" class="empty-table-message">No archived products found.</td></tr>
-                            <% } %>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="alert-section">
+                <%
+                function archivedStockQtyClass(qty) {
+                    const n = Number(qty) || 0;
+                    if (n < 0) return 'stock-qty-negative';
+                    if (n === 0) return 'stock-qty-out';
+                    if (n <= 10) return 'stock-qty-critical';
+                    if (n <= 20) return 'stock-qty-low';
+                    return 'stock-qty-normal';
+                }
+                %>
+                <div class="archived-section">
                     <h3>Archived Raw Materials</h3>
                     <table>
                         <thead>
                             <tr>
                                 <th>Name</th>
-                                <th>Quantity</th>
+                                <th class="qty-col">Qty</th>
                                 <th>Unit</th>
                                 <th>Last Updated</th>
                                 <th>Action</th>
@@ -250,12 +244,12 @@
                                 <% archivedMaterials.forEach(material => { %>
                                     <tr>
                                         <td><%= material.Name %></td>
-                                        <td><%= material.QuantityAvailable %></td>
+                                        <td class="qty-col"><span class="stock-qty <%= archivedStockQtyClass(material.QuantityAvailable) %>"><%= material.QuantityAvailable %></span></td>
                                         <td><%= material.Unit %></td>
                                         <td><%= material.LastUpdated ? new Date(material.LastUpdated).toLocaleDateString() : 'N/A' %></td>
                                         <td>
                                             <div style="display: flex; gap: 8px; align-items: center;">
-                                                <form action="/Employee/TransactionManager/TransactionArchived/ReactivateMaterial/<%= material.MaterialID %>" method="POST" style="display:inline;">
+                                                <form action="/Employee/TransactionManager/Archived/ReactivateMaterial/<%= material.MaterialID %>" method="POST" style="display:inline;">
                                                     <button type="submit" class="reactivate-btn">Reactivate</button>
                                                 </form>
                                                 <button type="button" class="delete-btn" data-id="<%= material.MaterialID %>" data-type="material" data-name="<%= material.Name %>">Delete</button>
@@ -269,33 +263,86 @@
                         </tbody>
                     </table>
                 </div>
-                <div class="alert-section">
-                    <h3>Archived Product Inventory</h3>
+                <div class="archived-section">
+                    <h3>Archived BOM Bundles</h3>
                     <table>
                         <thead>
                             <tr>
+                                <th>Code</th>
                                 <th>Name</th>
-                                <th>Description</th>
-                                <th>Price</th>
-                                <th>Category</th>
-                                <th>SKU</th>
-                                <th>Date Added</th>
+                                <th>Materials</th>
+                                <th>Last Updated</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <% if (archivedInventoryProducts && archivedInventoryProducts.length > 0) { %>
-                                <% archivedInventoryProducts.forEach(product => { %>
+                            <% if (archivedBomBundles && archivedBomBundles.length > 0) { %>
+                                <% archivedBomBundles.forEach(function(bundle) { %>
                                     <tr>
-                                        <td><%= product.Name %></td>
-                                        <td><%= product.Description || 'N/A' %></td>
-                                        <td>₱<%= product.Price %></td>
-                                        <td><%= product.Category %></td>
-                                        <td><%= product.SKU %></td>
+                                        <td><code style="font-size:0.85em;"><%= bundle.BundleCode || '—' %></code></td>
+                                        <td><%= bundle.Name %></td>
+                                        <td><%= bundle.MaterialCount || 0 %></td>
+                                        <td><%= bundle.DateUpdated ? new Date(bundle.DateUpdated).toLocaleDateString() : (bundle.DateAdded ? new Date(bundle.DateAdded).toLocaleDateString() : 'N/A') %></td>
+                                        <td>
+                                            <div class="archived-actions">
+                                                <form action="/Employee/TransactionManager/Archived/ReactivateBomBundle/<%= bundle.BomBundleID %>" method="POST" style="display:inline;">
+                                                    <button type="submit" class="reactivate-btn">Reactivate</button>
+                                                </form>
+                                                <button type="button" class="delete-btn" data-id="<%= bundle.BomBundleID %>" data-type="bom-bundle" data-name="<%= bundle.Name %>">Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <% }); %>
+                            <% } else { %>
+                                <tr><td colspan="5" class="empty-table-message">No archived BOM bundles found.</td></tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="archived-section">
+                    <h3>Archived Product Inventory</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Product Name</th>
+                                <th>Category</th>
+                                <th>Status</th>
+                                <th class="qty-col">Total Qty</th>
+                                <th class="qty-col">Available</th>
+                                <th>Image</th>
+                                <th>Last Added</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (archivedInventoryProducts && archivedInventoryProducts.length > 0) { %>
+                                <% archivedInventoryProducts.forEach(product => {
+                                    const totalQ = product.TotalQuantity || 0;
+                                    const availQ = product.AvailableQuantity || 0;
+                                    const invStatus = product.InventoryStatus || 'no_stock';
+                                    const statusClass = invStatus === 'available' ? 'status-available' :
+                                        invStatus === 'damaged' ? 'status-damaged' :
+                                        invStatus === 'returned' ? 'status-returned' :
+                                        invStatus === 'repaired' ? 'status-repaired' : 'status-disposed';
+                                    const imgUrl = product.ImageURL ? String(product.ImageURL).trim() : '';
+                                %>
+                                    <tr>
+                                        <td><strong><%= product.Name %></strong></td>
+                                        <td><%= product.Category || 'N/A' %></td>
+                                        <td><span class="status-badge <%= statusClass %>"><%= invStatus === 'no_stock' ? 'No Stock' : invStatus.charAt(0).toUpperCase() + invStatus.slice(1) %></span></td>
+                                        <td class="qty-col"><span class="stock-qty <%= archivedStockQtyClass(totalQ) %>"><%= totalQ %></span></td>
+                                        <td class="qty-col"><span class="stock-qty stock-qty-available"><%= availQ %></span></td>
+                                        <td>
+                                            <% if (imgUrl) { %>
+                                                <img src="<%= imgUrl.startsWith('/') || imgUrl.startsWith('http') ? imgUrl : '/' + imgUrl %>" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid #ddd;" onerror="this.onerror=null;this.src='/images/placeholder-no-image.svg'">
+                                            <% } else { %>
+                                                <span style="color:#999;">No image</span>
+                                            <% } %>
+                                        </td>
                                         <td><%= product.DateAdded ? new Date(product.DateAdded).toLocaleDateString() : 'N/A' %></td>
                                         <td>
-                                            <div style="display: flex; gap: 8px; align-items: center;">
-                                                <form action="/Employee/TransactionManager/TransactionArchived/ReactivateInventoryProduct/<%= product.InventoryProductID %>" method="POST" style="display:inline;">
+                                            <div class="archived-actions">
+                                                <form action="/Employee/TransactionManager/Archived/ReactivateInventoryProduct/<%= product.InventoryProductID %>" method="POST" style="display:inline;">
                                                     <button type="submit" class="reactivate-btn">Reactivate</button>
                                                 </form>
                                                 <button type="button" class="delete-btn" data-id="<%= product.InventoryProductID %>" data-type="inventory-product" data-name="<%= product.Name %>">Delete</button>
@@ -304,13 +351,13 @@
                                     </tr>
                                 <% }); %>
                             <% } else { %>
-                                <tr><td colspan="7" class="empty-table-message">No archived product inventory found.</td></tr>
+                                <tr><td colspan="8" class="empty-table-message">No archived product inventory found.</td></tr>
                             <% } %>
                         </tbody>
                     </table>
                 </div>
                 
-                <div class="alert-section">
+                <div class="archived-section">
                     <h3>Archived Product Variations Inventory</h3>
                     <div class="archived-variations-wrap">
                     <table class="archived-variations-table">
@@ -318,13 +365,14 @@
                             <tr>
                                 <th>Variation Name</th>
                                 <th>Product</th>
+                                <th>SKU</th>
                                 <th>Color</th>
-                                <th>Total Qty</th>
-                                <th>Avail</th>
-                                <th>Dmg</th>
-                                <th>Rtn</th>
-                                <th>Rpr</th>
-                                <th>Dsp</th>
+                                <th class="qty-col">Qty</th>
+                                <th class="qty-col">Available</th>
+                                <th class="qty-col">Damaged</th>
+                                <th class="qty-col">Returned</th>
+                                <th class="qty-col">Repaired</th>
+                                <th class="qty-col">Disposed</th>
                                 <th>Price</th>
                                 <th>Image</th>
                                 <th>Archived</th>
@@ -345,9 +393,10 @@
                                     <tr>
                                         <td><strong><%= variation.VariationName || 'N/A' %></strong></td>
                                         <td><%= variation.ProductName || 'N/A' %></td>
+                                        <td><code style="font-size:0.85em;"><%= variation.SKU || '—' %></code></td>
                                         <td><%= variation.Color || 'N/A' %></td>
-                                        <td><strong style="color: #007bff;"><%= totalQ %></strong></td>
-                                        <td><span class="status-badge status-available"><%= availQ %></span></td>
+                                        <td class="qty-col"><span class="stock-qty <%= archivedStockQtyClass(totalQ) %>"><%= totalQ %></span></td>
+                                        <td class="qty-col"><span class="stock-qty stock-qty-available"><%= availQ %></span></td>
                                         <td>
                                             <% if (dmgQ > 0) { %>
                                                 <span class="status-badge status-damaged"><%= dmgQ %></span>
@@ -387,8 +436,8 @@
                                         <td><%= variation.UpdatedAt ? new Date(variation.UpdatedAt).toLocaleDateString() : (variation.CreatedAt ? new Date(variation.CreatedAt).toLocaleDateString() : 'N/A') %></td>
                                         <td>
                                             <div class="archived-variations-actions">
-                                                <form method="POST" action="/Employee/TransactionManager/TransactionArchived/ReactivateVariation/<%= variation.VariationID %>" style="margin: 0;">
-                                                    <button type="button" class="reactivate-btn">Reactivate</button>
+                                                <form method="POST" action="/Employee/TransactionManager/Archived/ReactivateVariation/<%= variation.VariationID %>" style="margin: 0;">
+                                                    <button type="submit" class="reactivate-btn">Reactivate</button>
                                                 </form>
                                                 <button type="button" class="delete-btn" data-id="<%= variation.VariationID %>" data-type="variation" data-name="<%= variation.VariationName || 'Variation' %>">Delete</button>
                                             </div>
@@ -396,7 +445,7 @@
                                     </tr>
                                 <% }); %>
                             <% } else { %>
-                                <tr><td colspan="13" class="empty-table-message">No archived inventory variations found.</td></tr>
+                                <tr><td colspan="14" class="empty-table-message">No archived inventory variations found.</td></tr>
                             <% } %>
                         </tbody>
                     </table>
@@ -451,6 +500,8 @@
                 reactivateType = 'product';
             } else if (action.includes('ReactivateMaterial')) {
                 reactivateType = 'material';
+            } else if (action.includes('ReactivateBomBundle')) {
+                reactivateType = 'BOM bundle';
             } else {
                 reactivateType = 'item';
             }
@@ -523,6 +574,8 @@
                 endpoint = `/api/admin/archived/inventory-products/${deleteItemId}/permanent`;
             } else if (deleteItemType === 'variation') {
                 endpoint = `/api/admin/inventory-product-variations/delete-permanent/${deleteItemId}`;
+            } else if (deleteItemType === 'bom-bundle') {
+                endpoint = `/api/admin/archived/bom-bundles/${deleteItemId}/permanent`;
             } else {
                 endpoint = `/api/admin/archived/${deleteItemType}s/${deleteItemId}/permanent`;
             }
@@ -545,6 +598,7 @@
                 deleteModal.style.display = 'none';
                 const itemTypeName = deleteItemType === 'product' ? 'Product' : 
                                     deleteItemType === 'material' ? 'Material' : 
+                                    deleteItemType === 'bom-bundle' ? 'BOM Bundle' :
                                     deleteItemType === 'inventory-product' ? 'Product Inventory' : 'Item';
                 showSuccessPopup(`${itemTypeName} deleted successfully!`);
                 

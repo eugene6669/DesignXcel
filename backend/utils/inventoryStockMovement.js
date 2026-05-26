@@ -11,6 +11,7 @@ const MOVEMENT_LABELS = {
     restock_available: 'Restock → Available',
     restock_variation: 'Restock variation',
     restock_product: 'Restock product',
+    return_received: 'Return received',
     status_adjustment: 'Status adjustment'
 };
 
@@ -177,6 +178,92 @@ async function logRestockProductMovement(pool, payload) {
         notes: payload.notes || ('Restock product (+' + quantity + ')'),
         createdBy: payload.userId || null
     });
+}
+
+async function resolveInventoryVariationForReturnPool(pool, productId, variationId) {
+    const invResult = await pool.request()
+        .input('productId', sql.Int, productId)
+        .query(`
+            SELECT TOP 1 InventoryProductID
+            FROM InventoryProducts
+            WHERE ProductID = @productId AND IsActive = 1
+            ORDER BY InventoryProductID DESC
+        `);
+    if (!invResult.recordset.length) return null;
+    const inventoryProductId = invResult.recordset[0].InventoryProductID;
+
+    if (variationId) {
+        const byId = await pool.request()
+            .input('inventoryProductId', sql.Int, inventoryProductId)
+            .input('variationId', sql.Int, variationId)
+            .query(`
+                SELECT TOP 1 VariationID, InventoryProductID
+                FROM InventoryProductVariations
+                WHERE InventoryProductID = @inventoryProductId AND VariationID = @variationId AND IsActive = 1
+            `);
+        if (byId.recordset.length) return byId.recordset[0];
+
+        const byPv = await pool.request()
+            .input('inventoryProductId', sql.Int, inventoryProductId)
+            .input('variationId', sql.Int, variationId)
+            .input('productId', sql.Int, productId)
+            .query(`
+                SELECT TOP 1 ipv.VariationID, ipv.InventoryProductID
+                FROM InventoryProductVariations ipv
+                INNER JOIN ProductVariations pv ON pv.VariationID = ipv.VariationID AND pv.ProductID = @productId
+                WHERE ipv.InventoryProductID = @inventoryProductId AND pv.VariationID = @variationId AND ipv.IsActive = 1
+            `);
+        if (byPv.recordset.length) return byPv.recordset[0];
+    }
+
+    const singleVar = await pool.request()
+        .input('inventoryProductId', sql.Int, inventoryProductId)
+        .query(`
+            SELECT TOP 1 VariationID, InventoryProductID
+            FROM InventoryProductVariations
+            WHERE InventoryProductID = @inventoryProductId AND IsActive = 1
+            ORDER BY VariationID
+        `);
+    if (singleVar.recordset.length === 1) return singleVar.recordset[0];
+    return { VariationID: null, InventoryProductID: inventoryProductId };
+}
+
+/** Log when returned order items are marked received (Awaiting Inspection). */
+async function logReturnOrderReceivedMovements(pool, payload) {
+    const orderId = parseInt(payload.orderId, 10);
+    if (!orderId) return;
+
+    let items = [];
+    try {
+        const raw = payload.returnItemsJson;
+        items = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (e) {
+        return;
+    }
+    if (!Array.isArray(items)) return;
+
+    for (const item of items) {
+        const catalogProductId = parseInt(item.productId || item.ProductID, 10);
+        const catalogVariationId = item.variationId != null && item.variationId !== ''
+            ? parseInt(item.variationId || item.VariationID, 10)
+            : null;
+        const qty = parseInt(item.quantity || item.Quantity, 10) || 0;
+        if (!catalogProductId || qty <= 0) continue;
+
+        const resolved = await resolveInventoryVariationForReturnPool(pool, catalogProductId, catalogVariationId);
+        if (!resolved || !resolved.InventoryProductID) continue;
+
+        await insertStockMovement(pool, {
+            inventoryProductId: resolved.InventoryProductID,
+            variationId: resolved.VariationID || null,
+            movementType: 'return_received',
+            fromStatus: 'customer',
+            toStatus: 'pending_inspection',
+            quantity: qty,
+            notes: 'Return order #' + orderId + ' received',
+            createdBy: payload.userId || null
+        });
+    }
 }
 
 function bindMovementFilters(request, options) {
@@ -433,6 +520,7 @@ module.exports = {
     fetchInventoryStockMovementsGrouped,
     logRestockVariationMovement,
     logRestockProductMovement,
+    logReturnOrderReceivedMovements,
     movementLabel,
     MOVEMENT_LABELS
 };

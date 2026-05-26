@@ -228,6 +228,7 @@
         var PI_SVG_ARCHIVE = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>';
         var PI_SVG_REPAIR = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>';
         var PI_SVG_AVAILABLE = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+        var PI_SVG_STOREFRONT = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
 
         function buildReturnRepairActionButtons(variationId, variationName, qtySnapshot, damagedQty, repairedQty, storedReturnedQty) {
             if (!shouldShowReturnWorkflowPage() || !variationId) return '';
@@ -632,7 +633,16 @@ const urlParams = new URLSearchParams(window.location.search);
                 && variation.ShowOnStorefront !== '0';
         }
 
-        async function setProductStorefrontVisibility(inventoryProductId, showOnStorefront, checkboxEl) {
+        function updateStorefrontButtonState(btn, showOnStorefront) {
+            if (!btn) return;
+            const visible = !!showOnStorefront;
+            btn.setAttribute('data-show-on-storefront', visible ? '1' : '0');
+            btn.classList.toggle('is-visible', visible);
+            btn.title = visible ? 'Visible on storefront — click to hide' : 'Hidden from storefront — click to show';
+            btn.setAttribute('aria-label', visible ? 'Hide from storefront' : 'Show on storefront');
+        }
+
+        async function setProductStorefrontVisibility(inventoryProductId, showOnStorefront, uiEl) {
             try {
                 const res = await fetch('/api/admin/inventory-products/' + inventoryProductId + '/storefront', {
                     method: 'POST',
@@ -642,18 +652,19 @@ const urlParams = new URLSearchParams(window.location.search);
                 });
                 const result = await res.json();
                 if (result.success) {
+                    updateStorefrontButtonState(uiEl, showOnStorefront);
                     showCustomPopup(result.message || (showOnStorefront ? 'Product shown on storefront.' : 'Product hidden from storefront.'));
-                } else {
-                    if (checkboxEl) checkboxEl.checked = !showOnStorefront;
-                    showCustomPopup(result.message || 'Failed to update storefront visibility.', true);
+                    return true;
                 }
+                showCustomPopup(result.message || 'Failed to update storefront visibility.', true);
+                return false;
             } catch (err) {
-                if (checkboxEl) checkboxEl.checked = !showOnStorefront;
                 showCustomPopup('Failed to update storefront visibility.', true);
+                return false;
             }
         }
 
-        async function setVariationStorefrontVisibility(variationId, showOnStorefront, checkboxEl) {
+        async function setVariationStorefrontVisibility(variationId, showOnStorefront, uiEl) {
             try {
                 const res = await fetch('/api/admin/inventory-product-variations/' + variationId + '/storefront', {
                     method: 'POST',
@@ -663,14 +674,15 @@ const urlParams = new URLSearchParams(window.location.search);
                 });
                 const result = await res.json();
                 if (result.success) {
+                    updateStorefrontButtonState(uiEl, showOnStorefront);
                     showCustomPopup(result.message || (showOnStorefront ? 'Shown on storefront.' : 'Hidden from storefront.'));
-                } else {
-                    if (checkboxEl) checkboxEl.checked = !showOnStorefront;
-                    showCustomPopup(result.message || 'Failed to update storefront visibility.', true);
+                    return true;
                 }
+                showCustomPopup(result.message || 'Failed to update storefront visibility.', true);
+                return false;
             } catch (err) {
-                if (checkboxEl) checkboxEl.checked = !showOnStorefront;
                 showCustomPopup('Failed to update storefront visibility.', true);
+                return false;
             }
         }
 
@@ -963,21 +975,28 @@ const urlParams = new URLSearchParams(window.location.search);
         }
         window.notifyInventoryStockChanged = notifyInventoryStockChanged;
 
-        document.addEventListener('change', function(e) {
-            const sfToggle = e.target.closest('.variation-storefront-toggle');
-            if (sfToggle) {
-                const vid = parseInt(sfToggle.getAttribute('data-variation-id'), 10);
-                if (vid) setVariationStorefrontVisibility(vid, sfToggle.checked, sfToggle);
+        document.addEventListener('click', function(e) {
+            const storefrontBtn = e.target.closest('.product-storefront-btn, .variation-storefront-btn');
+            if (storefrontBtn && isProductsListingPage) {
+                const nextShow = storefrontBtn.getAttribute('data-show-on-storefront') !== '1';
+                const itemName = storefrontBtn.getAttribute('data-product-name')
+                    || storefrontBtn.getAttribute('data-variation-name')
+                    || 'this item';
+                const vid = parseInt(storefrontBtn.getAttribute('data-variation-id'), 10);
+                const ipid = parseInt(storefrontBtn.getAttribute('data-inventory-product-id'), 10);
+                const msg = nextShow
+                    ? 'Show "' + itemName + '" on the customer storefront?'
+                    : 'Hide "' + itemName + '" from the customer storefront?';
+                showStorefrontConfirmModal(msg, async function() {
+                    if (vid) {
+                        await setVariationStorefrontVisibility(vid, nextShow, storefrontBtn);
+                    } else if (ipid) {
+                        await setProductStorefrontVisibility(ipid, nextShow, storefrontBtn);
+                    }
+                });
                 return;
             }
-            const productSfToggle = e.target.closest('.product-storefront-toggle');
-            if (productSfToggle) {
-                const ipid = parseInt(productSfToggle.getAttribute('data-inventory-product-id'), 10);
-                if (ipid) setProductStorefrontVisibility(ipid, productSfToggle.checked, productSfToggle);
-            }
-        });
 
-        document.addEventListener('click', function(e) {
             const toggleBtn = e.target.closest('.toggle-variations-btn');
             if (toggleBtn) {
                 const inventoryProductId = toggleBtn.getAttribute('data-inventory-product-id');
@@ -1249,6 +1268,41 @@ const urlParams = new URLSearchParams(window.location.search);
         }
 
         let pendingRestockAction = null;
+        let pendingStorefrontAction = null;
+
+        function initStorefrontConfirmModal() {
+            const modal = document.getElementById('storefrontConfirmModal');
+            if (!modal) return;
+            const cancelBtn = document.getElementById('cancelStorefrontConfirm');
+            const confirmBtn = document.getElementById('confirmStorefrontConfirm');
+            const closeModal = function() {
+                modal.classList.remove('show');
+                pendingStorefrontAction = null;
+            };
+            if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', async function() {
+                    const action = pendingStorefrontAction;
+                    closeModal();
+                    if (typeof action === 'function') await action();
+                });
+            }
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) closeModal();
+            });
+        }
+
+        function showStorefrontConfirmModal(message, onConfirm) {
+            const modal = document.getElementById('storefrontConfirmModal');
+            const textEl = document.getElementById('storefrontConfirmText');
+            if (!modal || !textEl) {
+                if (window.confirm(message)) return onConfirm();
+                return;
+            }
+            textEl.textContent = message;
+            pendingStorefrontAction = onConfirm;
+            modal.classList.add('show');
+        }
 
         function initRestockConfirmModal() {
             const modal = document.getElementById('restockConfirmModal');
@@ -1484,7 +1538,21 @@ const urlParams = new URLSearchParams(window.location.search);
                         html: buildVariationDiscountCellHtml(Number(variation.Price) || 0, rowFlags.discountMeta)
                     };
                 case 'storefront':
-                    return { className: 'var-col-action', style: center, html: '' };
+                    if (!rowFlags.showSf) {
+                        return { className: 'var-col-storefront', style: center, html: '' };
+                    }
+                    return {
+                        className: 'var-col-storefront pi-storefront-col',
+                        style: center,
+                        html: '<button type="button" class="variation-storefront-btn pi-icon-storefront-btn' +
+                            (ctx.showStorefront ? ' is-visible' : '') +
+                            '" data-variation-id="' + ctx.variationId +
+                            '" data-show-on-storefront="' + (ctx.showStorefront ? '1' : '0') +
+                            '" data-variation-name="' + attrQuote(ctx.variationName) +
+                            '" title="' + (ctx.showStorefront ? 'Visible on storefront — click to hide' : 'Hidden from storefront — click to show') +
+                            '" aria-label="' + (ctx.showStorefront ? 'Hide from storefront' : 'Show on storefront') +
+                            '">' + PI_SVG_STOREFRONT + '</button>'
+                    };
                 case 'last-added':
                     return {
                         className: 'last-added-cell var-col-date',
@@ -1527,15 +1595,10 @@ const urlParams = new URLSearchParams(window.location.search);
                         };
                     }
                     if (isProductsListingPage && rowFlags.showVarAct) {
-                        const sfHtml = rowFlags.showSf
-                            ? '<label class="storefront-toggle-label" title="Include on customer storefront">' +
-                                '<input type="checkbox" class="variation-storefront-toggle" data-variation-id="' + ctx.variationId + '"' +
-                                (ctx.showStorefront ? ' checked' : '') + '> Storefront</label>'
-                            : '';
                         return {
                             className: 'var-col-action',
                             style: center,
-                            html: '<div class="pi-actions-cell">' + sfHtml +
+                            html: '<div class="pi-actions-cell">' +
                                 '<button type="button" class="edit-variation-status-btn pi-icon-edit-btn" data-mode="catalog" data-variation-id="' + ctx.variationId +
                                 '" title="Edit variation catalog" aria-label="Edit variation catalog">' + PI_SVG_EDIT + '</button>' +
                                 '</div>'
@@ -2805,7 +2868,10 @@ const urlParams = new URLSearchParams(window.location.search);
             });
         }
 
-        if (isProductsListingPage) initEditInventoryProductModal();
+        if (isProductsListingPage) {
+            initEditInventoryProductModal();
+            initStorefrontConfirmModal();
+        }
         if (isInventoryPage) initEditInventoryProductQuickModal();
         if (isInventoryPage) initRestockConfirmModal();
         if (isInventoryPage) initVariationRestockModal();

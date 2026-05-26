@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cancelled Orders - Admin</title>
+    <title>Orders - Admin</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="/css/Employee/Admin/admin-orders-compact.css?v=20260524a">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
@@ -761,12 +763,12 @@
 <body>
     <div class="dashboard-container">
         <div class="sidebar">
-            <%- include('partials/sidebar', { activePage: 'orders-cancelled' }) %>
+            <%- include('partials/sidebar', { activePage: typeof activePage !== 'undefined' ? activePage : 'orders' }) %>
         </div>
         <div class="main-content">
             <div class="header orders-header">
                 <div>
-                    <h2>Cancelled Orders</h2>
+                    <h2>Orders</h2>
                     <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem;">
                         <div class="orders-count-badge">
                             <span class="icon icon-box" aria-hidden="true">
@@ -796,6 +798,9 @@
                     </div>
                 </div>
             </div>
+
+            <%- include('partials/admin-orders-tabs', { ordersTab: typeof ordersTab !== 'undefined' ? ordersTab : 'cancelled' }) %>
+
             <div class="content-area">
                 <!-- Filters Section -->
                 <div class="filters-section">
@@ -845,7 +850,7 @@
                 </div>
 
                 <!-- View Toggle and Pagination Info -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                <div class="orders-view-toggle-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
                         <span style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">View:</span>
                         <div style="display: flex; background: #f3f4f6; border-radius: 8px; padding: 2px;">
@@ -873,7 +878,7 @@
                 </div>
 
                 <% if (orders && orders.length > 0) { %>
-                    <div class="orders-grid" id="ordersGrid">
+                    <div class="orders-grid" id="ordersGrid" style="display: none;">
                         <% orders.forEach(function(order) { %>
                             <div class="order-card collapsed <%= order.IsBulkOrder ? 'has-bulk-badge' : '' %>" 
                                  data-order-id="<%= order.OrderID %>"
@@ -967,7 +972,7 @@
                                                             <% if (item.ImageURL) { %>
                                                                 <img src="<%= item.ImageURL %>" alt="<%= item.Name %>">
                                                             <% } else { %>
-                                                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem;">ðŸ–¼ï¸</div>
+                                                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem;">🖼️</div>
                                                             <% } %>
                                                         </div>
                                                         <div class="order-product-details">
@@ -991,7 +996,7 @@
                                             <div>
                                                 Payment Method:
                                                 <strong><%= order.PaymentMethod || 'N/A' %></strong>
-                                                <% if (order.StripeSessionID || order.TransactionID || String((order.PaymentMethodDisplay||order.PaymentMethod||'')).toLowerCase().includes('cash')) { %>
+                                                <% if (order.StripeSessionID) { %>
                                                     <button
                                                         type="button"
                                                         class="btn-filter btn-filter-primary js-check-payment"
@@ -1003,7 +1008,7 @@
                                                 <% } %>
                                             </div>
                                             <% if (order.TransactionID) { %>
-                                            <div>Payment ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                            <div>Transaction ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
                                             <% } %>
                                             <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
                                             <div>Delivery Cost: <strong>₱<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
@@ -1043,7 +1048,7 @@
                             <div class="payment-modal-content">
                                 <div class="payment-modal-header">
                                     <h3>Payment Details</h3>
-                                    <button class="payment-modal-close" onclick="closePaymentModal(<%= order.OrderID %>)">Ã—</button>
+                                    <button class="payment-modal-close" onclick="closePaymentModal(<%= order.OrderID %>)">×</button>
                                 </div>
                                 <div class="payment-modal-body" id="payment-modal-body-<%= order.OrderID %>">
                                     <div style="text-align: center; padding: 2rem;">
@@ -1059,8 +1064,8 @@
                     <% }); %>
 
                     <!-- Orders Table (Hidden by default) -->
-                    <div id="ordersTable" style="display: none; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
-                        <table style="width: 100%; border-collapse: collapse;">
+                    <div id="ordersTable" style="display: block; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
+                        <table class="admin-orders-compact-table">
                             <thead style="background: #f8f9fa; border-bottom: 2px solid #e5e7eb;">
                                 <tr>
                                     <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Order #</th>
@@ -1176,7 +1181,7 @@
                                                                         <% } else if (item.ImageURL) { %>
                                                                             <img src="<%= item.ImageURL %>" alt="<%= item.Name %>" style="width: 100%; height: 100%; object-fit: cover;">
                                                                         <% } else { %>
-                                                                            <div style="color: #94a3b8; font-size: 1.5rem;">ðŸ–¼ï¸</div>
+                                                                            <div style="color: #94a3b8; font-size: 1.5rem;">🖼️</div>
                                                                         <% } %>
                                                                     </div>
                                                                     <div style="flex: 1; min-width: 0;">
@@ -1208,12 +1213,12 @@
                                                     <div style="font-size: 0.875rem; color: #111827; line-height: 1.6; display: flex; flex-direction: column; gap: 0.5rem;">
                                                         <div>
                                                             Payment Method: <strong><%= order.PaymentMethod || 'N/A' %></strong>
-                                                            <% if (order.StripeSessionID || order.TransactionID || String((order.PaymentMethodDisplay||order.PaymentMethod||'')).toLowerCase().includes('cash')) { %>
+                                                            <% if (order.StripeSessionID) { %>
                                                                 <button type="button" class="btn-filter btn-filter-primary js-check-payment" style="padding:0.35rem 0.65rem;font-size:0.7rem;margin-left:0.5rem;" data-order-id="<%= order.OrderID %>">Check Payment</button>
                                                             <% } %>
                                                         </div>
                                                         <% if (order.TransactionID) { %>
-                                                        <div>Payment ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                                        <div>Transaction ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
                                                         <% } %>
                                                         <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
                                                         <% if ((order.DeliveryTypeName === 'Pick up' || order.DeliveryType === 'pickup') && order.PickupDate) { %>
@@ -1319,7 +1324,8 @@
     <div id="order-success-popup"></div>
 
     <!-- Loading Spinner Utility -->
-    <script src="/js/Employee/InventoryManager/admin-loading-spinner.js"></script>
+    <script src="/js/Employee/Admin/admin-loading-spinner.js"></script>
+    <script src="/js/Employee/Admin/admin-orders-compact.js?v=20260524a"></script>
     
     <script>
         // Loading Spinner Helper (if utility not loaded)
@@ -1802,7 +1808,7 @@
                     `;
                     
                     const paymentIdentifier = details.PaymentIdentifier || details.StripeSessionID || details.TransactionID;
-                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment / transaction ID';
+                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment ID';
                     if (paymentIdentifier) {
                         html += `
                             <div class="payment-info-row">
@@ -1832,7 +1838,8 @@
                         const orderTotalNum = Number(details.TotalAmount || 0);
                         const amountPhp = (Number.isFinite(cents) && cents > 0) ? (cents / 100) : orderTotalNum;
                         const pmLabel = (details.DisplayPaymentMethod || details.PaymentMethod || '').toString();
-                        const gwTitle = pmLabel.toLowerCase().includes('stripe') ? 'Stripe Details' : pmLabel.toLowerCase().includes('paymongo') ? 'PayMongo Details' : 'Gateway Details';
+                        const gwTitle = details.gatewayDetailsSectionTitle ||
+                            (pmLabel.toLowerCase().includes('stripe') ? 'Stripe Details' : pmLabel.toLowerCase().includes('paymongo') ? 'PayMongo Details' : 'Gateway Details');
                         const custEmail = gw.customer_email || details.CustomerEmail || 'N/A';
                         
                         html += `
@@ -1864,7 +1871,7 @@
                 } else {
                     modalBody.innerHTML = `
                         <div style="text-align: center; padding: 2rem;">
-                            <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">âš ï¸</div>
+                            <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
                             <p style="color: #6b7280; font-size: 1rem;">${result.message || 'Failed to retrieve payment details'}</p>
                         </div>
                     `;
@@ -1873,7 +1880,7 @@
                 console.error('Error checking payment status:', error);
                 modalBody.innerHTML = `
                     <div style="text-align: center; padding: 2rem;">
-                        <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">âš ï¸</div>
+                        <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
                         <p style="color: #6b7280; font-size: 1rem;">Error checking payment status. Please try again.</p>
                     </div>
                 `;

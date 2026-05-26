@@ -2,6 +2,11 @@
  * Sales report metrics for furniture / manufacturing (standard P&L layout).
  */
 
+const {
+    countsTowardGrossSales,
+    countsTowardNetRevenue
+} = require('./orderStatusDisplay');
+
 async function columnExists(pool, tableName, columnName) {
     const result = await pool.request()
         .input('table', tableName)
@@ -177,7 +182,7 @@ async function computeMerchandiseCostMetrics(pool, sql, orderIds, hasCostPrice, 
         const q = `
             SELECT
                 SUM(CASE
-                    WHEN o.Status NOT IN ('Cancelled', 'Refunded', 'Completed Returned')
+                    WHEN o.Status IN ('Received', 'Completed')
                     THEN ISNULL(oi.Quantity, 0) * (${unitCost})
                     ELSE 0
                 END) AS Cogs,
@@ -321,6 +326,8 @@ function aggregateSalesReportFromOrders(recordset, options = {}) {
     let productRefunds = 0;
     let deliveryRevenueGross = 0;
     let deliveryRefunds = 0;
+    let netRecognizedMerchandise = 0;
+    let netRecognizedDelivery = 0;
 
     recordset.forEach(order => {
         if (normalizeStatus(order.Status) === 'cancelled') return;
@@ -330,20 +337,28 @@ function aggregateSalesReportFromOrders(recordset, options = {}) {
         const delivery = orderDelivery(order);
         const reversals = getRefundReversalAmounts(order);
 
-        // Gross = list product value (subtotal + discounts); net product = gross − discounts
+        productRefunds += reversals.productRefund;
+        deliveryRefunds += reversals.deliveryRefund;
+
+        if (!countsTowardGrossSales(order)) return;
+
+        // Gross = list product value (subtotal + discounts) for paid / in-fulfillment orders
         grossProductSales += merchandise + discount;
         totalDiscounts += discount;
         deliveryRevenueGross += delivery;
-        productRefunds += reversals.productRefund;
-        deliveryRefunds += reversals.deliveryRefund;
+
+        if (countsTowardNetRevenue(order)) {
+            netRecognizedMerchandise += merchandise;
+            netRecognizedDelivery += delivery;
+        }
     });
 
-    // Sales module: net product = gross − discounts only (refunds are separate reversals)
+    // Pipeline product value (gross − discounts) across gross-eligible statuses
     const netProductSales = Math.max(0, grossProductSales - totalDiscounts);
 
-    // Recognized revenue after reversals (used for net revenue & profit — never negative)
-    const recognizedProductRevenue = Math.max(0, netProductSales - productRefunds);
-    const netDeliveryRevenue = Math.max(0, deliveryRevenueGross - deliveryRefunds);
+    // Accounting net revenue: only Received + Completed, after refund reversals
+    const recognizedProductRevenue = Math.max(0, netRecognizedMerchandise - productRefunds);
+    const netDeliveryRevenue = Math.max(0, netRecognizedDelivery - deliveryRefunds);
     const netRevenue = recognizedProductRevenue + netDeliveryRevenue;
 
     const returnLogistics = computeReturnLogisticsCosts(recordset);
@@ -446,7 +461,36 @@ function applySalesReportOrderRowDisplay(order, items) {
     return order;
 }
 
+/** Flat summary rows for UI table and Excel export (matches aggregateSalesReportFromOrders). */
+function buildSalesReportSummaryRows(stats) {
+    const n = (v) => parseFloat(v || 0);
+    const i = (v) => parseInt(v || 0, 10);
+    return [
+        { label: 'Gross Product Sales', value: n(stats.grossProductSales || stats.grossSales), currency: true, note: 'Paid orders: Pending Verification through Completed (excl. returns)' },
+        { label: 'Discounts', value: n(stats.totalDiscounts), currency: true, note: 'Promotions on gross-eligible orders' },
+        { label: 'Net Product Sales', value: n(stats.netProductSales), currency: true, note: 'Gross product − discounts (collected, pre-recognition)' },
+        { label: 'Delivery Revenue', value: n(stats.deliveryRevenueGross || stats.deliveryRevenue), currency: true, note: 'Delivery fees charged (gross-eligible orders)' },
+        { label: 'Delivery Refunds', value: n(stats.deliveryRefunds), currency: true, note: 'Revenue reversal — not a loss' },
+        { label: 'Net Delivery Revenue', value: n(stats.netDeliveryRevenue), currency: true, note: 'Delivery after refunds' },
+        { label: 'Product Refunds', value: n(stats.productRefunds), currency: true, note: 'Revenue reversal — not a loss' },
+        { label: 'Net Revenue', value: n(stats.netRevenue), currency: true, note: 'Recognized: Received & Completed only, after refunds' },
+        { label: 'Recognized Product Revenue', value: n(stats.recognizedProductRevenue ?? stats.netSales), currency: true, note: 'Product revenue after refunds (recognized statuses)' },
+        { label: 'Return Shipping Expense', value: n(stats.returnShippingExpense || stats.returnShipping), currency: true, note: 'Direct cash expense (seller-paid)' },
+        { label: 'Damage Cost', value: n(stats.damageInventoryCost), currency: true, note: 'Inventory write-off at item cost' },
+        { label: 'COGS', value: n(stats.cogs), currency: true, note: 'Item cost for Received & Completed orders' },
+        { label: 'Replacement Cost', value: n(stats.replacementCost), currency: true, note: 'Replacement units at item cost' },
+        { label: 'Gross Profit', value: n(stats.grossProfit), currency: true, note: 'Net revenue − COGS − return shipping − damage − replacement' },
+        { label: 'Gross Margin', value: n(stats.grossMargin), percent: true, note: 'Gross profit ÷ net revenue' },
+        { label: 'Refund Rate', value: n(stats.refundRate), percent: true, note: 'Product refunds ÷ gross product sales' },
+        { label: 'Return Rate', value: n(stats.returnRate), percent: true, note: 'Returned orders ÷ total orders' },
+        { label: 'Total Orders', value: i(stats.totalOrders), currency: false, note: 'Orders matching filters' },
+        { label: 'Total Customers', value: i(stats.totalCustomers), currency: false, note: 'Unique customer emails' },
+        { label: 'Average Order Value', value: n(stats.averageOrderValue), currency: true, note: 'Mean total amount (excl. cancelled/returns)' }
+    ];
+}
+
 module.exports = {
+    buildSalesReportSummaryRows,
     detectSalesReportSchema,
     isRefundMerchandiseOrder,
     isReplacementFulfillmentOrder,

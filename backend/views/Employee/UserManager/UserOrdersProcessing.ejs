@@ -3,12 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Processing Orders - Admin</title>
+    <title>Orders - Admin</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="/css/Employee/Admin/admin-orders-compact.css?v=20260524a">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
     <style>
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-menu {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .logout-section {
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            margin-top: 20px;
+            text-align: center;
+            position: relative;
+        }
+        .logout-button {
+            display: inline-block;
+            width: auto;
+            padding: 12px 25px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .logout-button:hover {
+            background-color: #c82333;
+        }
         * {
             box-sizing: border-box;
         }
@@ -966,12 +1003,12 @@
 <body>
     <div class="dashboard-container">
         <div class="sidebar">
-            <%- include('partials/sidebar', { activePage: 'orders-processing' }) %>
+            <%- include('partials/sidebar', { activePage: typeof activePage !== 'undefined' ? activePage : 'orders' }) %>
         </div>
         <div class="main-content">
             <div class="header orders-header">
                 <div>
-                    <h2>Processing Orders</h2>
+                    <h2>Orders</h2>
                     <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem;">
                         <div class="orders-count-badge">
                             <span class="icon icon-box" aria-hidden="true">
@@ -1001,6 +1038,9 @@
                     </div>
                 </div>
             </div>
+
+            <%- include('partials/admin-orders-tabs', { ordersTab: typeof ordersTab !== 'undefined' ? ordersTab : 'processing' }) %>
+
             <div class="content-area">
                 <!-- Filters Section -->
                 <div class="filters-section">
@@ -1050,7 +1090,7 @@
                 </div>
 
                 <!-- View Toggle and Pagination Info -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                <div class="orders-view-toggle-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
                         <span style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">View:</span>
                         <div style="display: flex; background: #f3f4f6; border-radius: 8px; padding: 2px;">
@@ -1086,7 +1126,7 @@
                 </div>
 
                 <% if (orders && orders.length > 0) { %>
-                    <div class="orders-grid" id="ordersGrid">
+                    <div class="orders-grid" id="ordersGrid" style="display: none;">
                         <% orders.forEach(function(order) { %>
                             <div
                                 class="order-card collapsed <%= order.IsBulkOrder ? 'has-bulk-badge' : '' %><%= order.ActionType === 'replacement' ? ' has-replacement-badge' : '' %>"
@@ -1264,7 +1304,7 @@
                                         <div class="order-section-body" style="display:flex;flex-direction:column;gap:0.5rem;">
                                             <div>
                                                 Payment Method:
-                                                <strong><%= order.PaymentMethod || 'N/A' %></strong>
+                                                <strong><%= order.PaymentMethodDisplay || order.PaymentMethod || 'N/A' %></strong>
                                                 <% if (order.StripeSessionID || order.TransactionID || String((order.PaymentMethodDisplay||order.PaymentMethod||'')).toLowerCase().includes('cash')) { %>
                                                     <button
                                                         type="button"
@@ -1277,7 +1317,7 @@
                                                 <% } %>
                                             </div>
                                             <% if (order.TransactionID) { %>
-                                            <div>Payment ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                            <div>Payment Reference: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
                                             <% } %>
                                             <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
                                             <% if ((order.DeliveryTypeName === 'Pick up' || order.DeliveryType === 'pickup') && order.PickupDate) { %>
@@ -1388,8 +1428,8 @@
                     <% }); %>
 
                     <!-- Orders Table (Hidden by default) -->
-                    <div id="ordersTable" style="display: none; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
-                        <table style="width: 100%; border-collapse: collapse;">
+                    <div id="ordersTable" style="display: block; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
+                        <table class="admin-orders-compact-table">
                             <thead style="background: #f8f9fa; border-bottom: 2px solid #e5e7eb;">
                                 <tr>
                                     <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Order #</th>
@@ -1458,7 +1498,7 @@
                                             <span class="order-card-status <%= statusClass %>" style="display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;"><%= statusDisplay %></span>
                                         </td>
                                         <td style="padding: 1rem; font-size: 0.875rem; color: #6b7280;">
-                                            <%= order.PaymentMethod || 'N/A' %>
+                                            <%= order.PaymentMethodDisplay || order.PaymentMethod || 'N/A' %>
                                         </td>
                                         <td style="padding: 1rem; text-align: right; font-weight: 700; color: #111827;">
                                             ₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
@@ -1538,13 +1578,13 @@
                                                     <h4 style="font-size: 0.875rem; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 0.75rem; letter-spacing: 0.05em;">Payment & Delivery</h4>
                                                     <div style="font-size: 0.875rem; color: #111827; line-height: 1.6; display: flex; flex-direction: column; gap: 0.5rem;">
                                                         <div>
-                                                            Payment Method: <strong><%= order.PaymentMethod || 'N/A' %></strong>
+                                                            Payment Method: <strong><%= order.PaymentMethodDisplay || order.PaymentMethod || 'N/A' %></strong>
                                                             <% if (order.StripeSessionID || order.TransactionID || String((order.PaymentMethodDisplay||order.PaymentMethod||'')).toLowerCase().includes('cash')) { %>
                                                                 <button type="button" class="btn-filter btn-filter-primary js-check-payment" style="padding:0.35rem 0.65rem;font-size:0.7rem;margin-left:0.5rem;" data-order-id="<%= order.OrderID %>">Check Payment</button>
                                                             <% } %>
                                                         </div>
                                                         <% if (order.TransactionID) { %>
-                                                        <div>Payment ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                                        <div>Payment Reference: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
                                                         <% } %>
                                                         <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
                                                         <% if ((order.DeliveryTypeName === 'Pick up' || order.DeliveryType === 'pickup') && order.PickupDate) { %>
@@ -2124,7 +2164,7 @@
                             <div class="payment-section-title">Payment Information</div>
                             <div class="payment-info-row">
                                 <span class="payment-info-label">Payment Method</span>
-                                <span class="payment-info-value">${details.PaymentMethod || 'N/A'}</span>
+                                <span class="payment-info-value">${details.DisplayPaymentMethod || details.PaymentMethod || 'N/A'}</span>
                             </div>
                             <div class="payment-info-row">
                                 <span class="payment-info-label">Payment Status</span>
@@ -2147,7 +2187,7 @@
                     `;
                     
                     const paymentIdentifier = details.PaymentIdentifier || details.StripeSessionID || details.TransactionID;
-                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment / transaction ID';
+                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment ID';
                     if (paymentIdentifier) {
                         html += `
                             <div class="payment-info-row">
@@ -2243,8 +2283,8 @@
         // Handle Actions
         function handleAction(orderId, action) {
             const url = action === 'proceed'
-                ? `/Employee/UserManager/UserOrdersProcessing/Proceed/${orderId}`
-                : `/Employee/UserManager/UserOrdersProcessing/Cancel/${orderId}`;
+                ? `/Employee/UserManager/OrdersProcessing/Proceed/${orderId}`
+                : `/Employee/UserManager/OrdersProcessing/Cancel/${orderId}`;
             
             // Show loading spinner
             showLoadingSpinner('orders-loading-spinner', action === 'proceed' ? 'Processing order...' : 'Cancelling order...');
@@ -2260,8 +2300,8 @@
                             const confirmBtn = document.querySelector(`.js-confirm-order-action[data-order-id="${orderId}"][data-action="proceed"]`);
                             const deliveryType = confirmBtn ? confirmBtn.getAttribute('data-delivery-type') : 'delivery';
                             const nextPage = deliveryType === 'pickup' 
-                                ? '/Employee/UserManager/UserOrdersReceive' 
-                                : '/Employee/UserManager/UserOrdersShipping';
+                                ? '/Employee/UserManager/Orders?tab=receive' 
+                                : '/Employee/UserManager/Orders?tab=shipping';
                             // Keep spinner visible during redirect
                             setTimeout(() => {
                                 window.location.href = nextPage;
@@ -2299,5 +2339,6 @@
         }
     </script>
 
+    <script src="/js/Employee/Admin/admin-orders-compact.js?v=20260524a"></script>
 </body>
 </html> 

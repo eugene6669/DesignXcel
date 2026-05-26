@@ -60,6 +60,7 @@ const {
     logInventoryStockMovementFromVariationUpdate,
     logRestockVariationMovement,
     logRestockProductMovement,
+    logReturnOrderReceivedMovements,
     fetchInventoryStockMovements,
     fetchInventoryStockMovementsGrouped
 } = require('./utils/inventoryStockMovement');
@@ -75,8 +76,18 @@ const {
     computeMerchandiseCostMetrics,
     computeInventoryLossAtCost,
     aggregateSalesReportFromOrders,
-    applySalesReportOrderRowDisplay
+    applySalesReportOrderRowDisplay,
+    buildSalesReportSummaryRows
 } = require('./utils/salesReportMetrics');
+const { countsTowardGrossSales, countsTowardNetRevenue, getOrderStatusLabel } = require('./utils/orderStatusDisplay');
+const {
+    ROLE_MANAGER_MODULES,
+    ALL_ROLE_PERMISSION_KEYS,
+    DEFAULT_ROLE_PERMISSIONS,
+    permissionsToModuleMatrix,
+    flattenMatrixToPermissions
+} = require('./utils/rolePermissionModules');
+const { autoFitWorksheetColumns, autoFitWorksheetRows, rowsToCsv } = require('./utils/excelAutoFit');
 const { resolveProductId } = require('./utils/productIdResolver');
 const { formatInventoryDate } = require('./utils/formatInventoryDate');
 const { generateRawMaterialSKU, generateBomBundleCode } = require('./utils/generateMaterialIdentifiers');
@@ -240,28 +251,6 @@ module.exports = function (sql, pool, getStripe = null) {
         const row = worksheet.getRow(rowNumber);
         row.height = 5;
         return row;
-    }
-
-    /** Rows for Excel/CSV sales report summary (matches on-screen metrics). */
-    function buildSalesReportSummaryRows(stats) {
-        const n = (v) => parseFloat(v || 0);
-        const i = (v) => parseInt(v || 0, 10);
-        return [
-            { label: '1. Sales — Gross Product Sales', value: n(stats.grossProductSales || stats.grossSales), currency: true },
-            { label: '1. Sales — Discounts', value: n(stats.totalDiscounts), currency: true },
-            { label: '1. Sales — Net Product Sales', value: n(stats.netProductSales || stats.netSales), currency: true },
-            { label: '1. Sales — Net Delivery Revenue', value: n(stats.netDeliveryRevenue), currency: true },
-            { label: '1. Sales — Net Revenue', value: n(stats.netRevenue), currency: true },
-            { label: '2. Returns — Product Refunds (reversal)', value: n(stats.productRefunds), currency: true },
-            { label: '2. Returns — Delivery Refunds (reversal)', value: n(stats.deliveryRefunds), currency: true },
-            { label: '2. Returns — Return Shipping Expense', value: n(stats.returnShippingExpense || stats.returnShipping), currency: true },
-            { label: '2. Returns — Damage Cost', value: n(stats.damageInventoryCost), currency: true },
-            { label: '3. Inventory — COGS', value: n(stats.cogs), currency: true },
-            { label: '3. Inventory — Replacement Cost', value: n(stats.replacementCost), currency: true },
-            { label: '4. Profit — Gross Profit', value: n(stats.grossProfit), currency: true },
-            { label: '4. Profit — Gross Margin', value: n(stats.grossMargin), percent: true },
-            { label: 'Orders', value: i(stats.totalOrders), currency: false }
-        ];
     }
 
     // Helper function to sync variation stock from InventoryProductVariations to ProductVariations (for CMS display)
@@ -14662,6 +14651,232 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
+    async function ensureRolePermissionsTable() {
+        try {
+            await pool.request().query('SELECT TOP 1 RolePermissionID FROM RolePermissions');
+        } catch (tableErr) {
+            const fs = require('fs');
+            const path = require('path');
+            const sqlPath = path.join(__dirname, 'database', 'create_role_permissions.sql');
+            if (!fs.existsSync(sqlPath)) throw tableErr;
+            const raw = fs.readFileSync(sqlPath, 'utf8');
+            const batches = raw.split(/\bGO\b/i).map(s => s.trim()).filter(s => s.length > 0);
+            for (const batch of batches) {
+                await pool.request().query(batch);
+            }
+        }
+    }
+
+    async function seedRolePermissionsIfEmpty(roleId, roleName) {
+        const existing = await pool.request()
+            .input('roleId', sql.Int, roleId)
+            .query('SELECT COUNT(*) AS cnt FROM RolePermissions WHERE RoleID = @roleId');
+        if ((existing.recordset[0]?.cnt || 0) > 0) return;
+
+        const keys = DEFAULT_ROLE_PERMISSIONS[roleName] || [];
+        for (const permissionName of ALL_ROLE_PERMISSION_KEYS) {
+            const canAccess = keys.includes(permissionName) ? 1 : 0;
+            await pool.request()
+                .input('roleId', sql.Int, roleId)
+                .input('permissionName', sql.NVarChar, permissionName)
+                .input('canAccess', sql.Bit, canAccess)
+                .query(`
+                    INSERT INTO RolePermissions (RoleID, PermissionName, CanAccess)
+                    VALUES (@roleId, @permissionName, @canAccess)
+                `);
+        }
+    }
+
+    router.get('/Employee/Admin/ManageUsers/Roles', isAuthenticated, checkPermission('users_manage_users'), async (req, res) => {
+        try {
+            await pool.connect();
+            await ensureRolePermissionsTable();
+
+            const rolesResult = await pool.request().query(`
+                SELECT RoleID, RoleName FROM Roles ORDER BY RoleName
+            `);
+
+            const roles = [];
+            for (const role of rolesResult.recordset) {
+                await seedRolePermissionsIfEmpty(role.RoleID, role.RoleName);
+                const permResult = await pool.request()
+                    .input('roleId', sql.Int, role.RoleID)
+                    .query(`
+                        SELECT PermissionName, CanAccess FROM RolePermissions WHERE RoleID = @roleId
+                    `);
+                const permMap = {};
+                permResult.recordset.forEach(p => {
+                    permMap[p.PermissionName] = !!p.CanAccess;
+                });
+                roles.push({
+                    roleId: role.RoleID,
+                    roleName: role.RoleName,
+                    modules: permissionsToModuleMatrix(permMap),
+                    isSystemRole: role.RoleName === 'Admin'
+                });
+            }
+
+            res.json({
+                success: true,
+                modules: ROLE_MANAGER_MODULES.map(m => ({ key: m.key, label: m.label })),
+                roles
+            });
+        } catch (error) {
+            console.error('Error loading roles:', error);
+            res.status(500).json({ success: false, message: 'Failed to load roles' });
+        }
+    });
+
+    router.post('/Employee/Admin/ManageUsers/Roles', isAuthenticated, checkPermission('users_manage_users'), async (req, res) => {
+        try {
+            const roleName = String(req.body.roleName || '').trim();
+            if (!roleName) {
+                return res.status(400).json({ success: false, message: 'Role name is required' });
+            }
+            await pool.connect();
+            await ensureRolePermissionsTable();
+
+            const dup = await pool.request()
+                .input('roleName', sql.NVarChar, roleName)
+                .query('SELECT RoleID FROM Roles WHERE RoleName = @roleName');
+            if (dup.recordset.length > 0) {
+                return res.status(400).json({ success: false, message: 'Role already exists' });
+            }
+
+            const insert = await pool.request()
+                .input('roleName', sql.NVarChar, roleName)
+                .query(`
+                    INSERT INTO Roles (RoleName) OUTPUT INSERTED.RoleID VALUES (@roleName)
+                `);
+            const roleId = insert.recordset[0].RoleID;
+            for (const permissionName of ALL_ROLE_PERMISSION_KEYS) {
+                await pool.request()
+                    .input('roleId', sql.Int, roleId)
+                    .input('permissionName', sql.NVarChar, permissionName)
+                    .query(`
+                        INSERT INTO RolePermissions (RoleID, PermissionName, CanAccess)
+                        VALUES (@roleId, @permissionName, 0)
+                    `);
+            }
+
+            res.json({ success: true, roleId, roleName });
+        } catch (error) {
+            console.error('Error creating role:', error);
+            res.status(500).json({ success: false, message: 'Failed to create role' });
+        }
+    });
+
+    router.put('/Employee/Admin/ManageUsers/Roles/:roleId', isAuthenticated, checkPermission('users_manage_users'), async (req, res) => {
+        try {
+            const roleId = parseInt(req.params.roleId, 10);
+            const roleName = String(req.body.roleName || '').trim();
+            if (!roleId || !roleName) {
+                return res.status(400).json({ success: false, message: 'Invalid role data' });
+            }
+            await pool.connect();
+            const roleRow = await pool.request()
+                .input('roleId', sql.Int, roleId)
+                .query('SELECT RoleName FROM Roles WHERE RoleID = @roleId');
+            if (!roleRow.recordset.length) {
+                return res.status(404).json({ success: false, message: 'Role not found' });
+            }
+            if (roleRow.recordset[0].RoleName === 'Admin') {
+                return res.status(400).json({ success: false, message: 'Cannot rename Admin role' });
+            }
+            await pool.request()
+                .input('roleId', sql.Int, roleId)
+                .input('roleName', sql.NVarChar, roleName)
+                .query('UPDATE Roles SET RoleName = @roleName WHERE RoleID = @roleId');
+            res.json({ success: true });
+        } catch (error) {
+            console.error('Error updating role:', error);
+            res.status(500).json({ success: false, message: 'Failed to update role' });
+        }
+    });
+
+    router.delete('/Employee/Admin/ManageUsers/Roles/:roleId', isAuthenticated, checkPermission('users_manage_users'), async (req, res) => {
+        try {
+            const roleId = parseInt(req.params.roleId, 10);
+            await pool.connect();
+            const roleRow = await pool.request()
+                .input('roleId', sql.Int, roleId)
+                .query('SELECT RoleName FROM Roles WHERE RoleID = @roleId');
+            if (!roleRow.recordset.length) {
+                return res.status(404).json({ success: false, message: 'Role not found' });
+            }
+            const roleName = roleRow.recordset[0].RoleName;
+            if (roleName === 'Admin') {
+                return res.status(400).json({ success: false, message: 'Cannot delete Admin role' });
+            }
+            const usersWithRole = await pool.request()
+                .input('roleId', sql.Int, roleId)
+                .query('SELECT COUNT(*) AS cnt FROM Users WHERE RoleID = @roleId');
+            if ((usersWithRole.recordset[0]?.cnt || 0) > 0) {
+                return res.status(400).json({ success: false, message: 'Cannot delete role assigned to users' });
+            }
+            await pool.request().input('roleId', sql.Int, roleId).query('DELETE FROM RolePermissions WHERE RoleID = @roleId');
+            await pool.request().input('roleId', sql.Int, roleId).query('DELETE FROM Roles WHERE RoleID = @roleId');
+            res.json({ success: true });
+        } catch (error) {
+            console.error('Error deleting role:', error);
+            res.status(500).json({ success: false, message: 'Failed to delete role' });
+        }
+    });
+
+    router.post('/Employee/Admin/ManageUsers/Roles/:roleId/Permissions', isAuthenticated, checkPermission('users_manage_users'), async (req, res) => {
+        try {
+            const roleId = parseInt(req.params.roleId, 10);
+            const { modules } = req.body || {};
+            if (!roleId || !modules || typeof modules !== 'object') {
+                return res.status(400).json({ success: false, message: 'Invalid permissions data' });
+            }
+            await pool.connect();
+            await ensureRolePermissionsTable();
+
+            const roleRow = await pool.request()
+                .input('roleId', sql.Int, roleId)
+                .query('SELECT RoleName FROM Roles WHERE RoleID = @roleId');
+            if (!roleRow.recordset.length) {
+                return res.status(404).json({ success: false, message: 'Role not found' });
+            }
+
+            const updates = flattenMatrixToPermissions(modules);
+            for (const { permissionName, canAccess } of updates) {
+                const existing = await pool.request()
+                    .input('roleId', sql.Int, roleId)
+                    .input('permissionName', sql.NVarChar, permissionName)
+                    .query(`
+                        SELECT RolePermissionID FROM RolePermissions
+                        WHERE RoleID = @roleId AND PermissionName = @permissionName
+                    `);
+                if (existing.recordset.length > 0) {
+                    await pool.request()
+                        .input('roleId', sql.Int, roleId)
+                        .input('permissionName', sql.NVarChar, permissionName)
+                        .input('canAccess', sql.Bit, canAccess ? 1 : 0)
+                        .query(`
+                            UPDATE RolePermissions SET CanAccess = @canAccess, UpdatedAt = GETDATE()
+                            WHERE RoleID = @roleId AND PermissionName = @permissionName
+                        `);
+                } else {
+                    await pool.request()
+                        .input('roleId', sql.Int, roleId)
+                        .input('permissionName', sql.NVarChar, permissionName)
+                        .input('canAccess', sql.Bit, canAccess ? 1 : 0)
+                        .query(`
+                            INSERT INTO RolePermissions (RoleID, PermissionName, CanAccess)
+                            VALUES (@roleId, @permissionName, @canAccess)
+                        `);
+                }
+            }
+
+            res.json({ success: true, message: 'Role permissions updated' });
+        } catch (error) {
+            console.error('Error updating role permissions:', error);
+            res.status(500).json({ success: false, message: 'Failed to update role permissions' });
+        }
+    });
+
     // Get Current User Permissions API
     router.get('/api/user-permissions', isAuthenticated, async (req, res) => {
         try {
@@ -15506,6 +15721,16 @@ module.exports = function (sql, pool, getStripe = null) {
                 user: req.session.user
             });
         }
+    });
+
+    [
+        { segment: 'TransactionManager', prefix: 'Transaction' },
+        { segment: 'UserManager', prefix: 'User' },
+        { segment: 'OrderSupport', prefix: 'Order' }
+    ].forEach(({ segment, prefix }) => {
+        router.get(`/Employee/${segment}/${prefix}Reports`, isAuthenticated, checkPermission('inventory_reports'), (req, res) => {
+            res.render(`Employee/${segment}/${prefix}Reports`, { user: req.session.user });
+        });
     });
 
     // Inventory Report Data (aligned with Product Inventory products + raw materials tabs)
@@ -17597,10 +17822,7 @@ module.exports = function (sql, pool, getStripe = null) {
             let revenueCompositionByCategory = [];
             try {
                 const compositionOrderIds = result.recordset
-                    .filter(o => {
-                        const s = (o.Status || '').toLowerCase().trim();
-                        return s !== 'cancelled' && s !== 'refunded' && s !== 'completed returned';
-                    })
+                    .filter(o => countsTowardGrossSales(o))
                     .map(o => o.OrderID);
 
                 if (compositionOrderIds.length > 0) {
@@ -17618,7 +17840,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             INNER JOIN Orders o ON oi.OrderID = o.OrderID
                             LEFT JOIN Products p ON oi.ProductID = p.ProductID
                             WHERE oi.OrderID IN (${orderIdParams})
-                            AND o.Status NOT IN ('Cancelled', 'Refunded', 'Completed Returned')
+                            AND o.Status IN ('Pending', 'Processing', 'Processing (Pickup)', 'Shipping', 'Delivery', 'Received', 'Completed')
                             GROUP BY ISNULL(p.Category, 'Uncategorized')
                         `;
 
@@ -18106,226 +18328,20 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
-            // Calculate comprehensive statistics for Sales Report Statistics table
-            // Calculate Gross Sales (sum of all order gross sales)
-            const totalGrossSales = Object.values(orderGrossSales).reduce((sum, val) => sum + val, 0);
-
-            // Calculate Total Discounts (sum of all order discounts)
-            const totalDiscounts = Object.values(orderDiscounts).reduce((sum, val) => sum + val, 0);
-
-            // Calculate Net Sales = Gross Sales - Total Discounts
-            const netSales = totalGrossSales - totalDiscounts;
-
-            // Calculate Total Taxes (including returns)
-            const returnedOrders = result.recordset.filter(o => {
-                const status = o.Status ? o.Status.toLowerCase() : '';
-                return status === 'returned' || status === 'return';
+            result.recordset.forEach(order => {
+                const oid = order.OrderID;
+                const items = (orderItemsMap[oid] || []).map(it => ({
+                    name: it.name,
+                    quantity: it.quantity,
+                    price: parseFloat(it.price) || 0
+                }));
+                order.TotalDiscounts = orderDiscounts[oid] || 0;
+                order.OrderItems = items;
+                applySalesReportOrderRowDisplay(order, items);
             });
 
-            const totalTaxes = Object.values(orderTaxes).reduce((sum, val) => sum + val, 0);
-
-            // Calculate Delivery Revenues (excluding returns)
-            const deliveryRevenues = result.recordset
-                .filter(o => {
-                    const status = o.Status ? o.Status.toLowerCase() : '';
-                    return status !== 'returned' && status !== 'return' && status !== 'cancelled';
-                })
-                .reduce((sum, o) => {
-                    return sum + parseFloat(o.DeliveryCost || 0) + parseFloat(o.ExtraDeliveryFee || 0);
-                }, 0);
-
-            // Calculate Returns
-            // Returns should be calculated at original price (before discount) + delivery fees
-            // This matches the main sales report calculation
-            let returns = 0;
-
-            if (returnedOrders.length > 0) {
-                try {
-                    const returnedOrderIds = returnedOrders.map(o => o.OrderID);
-                    const batchSize = 1000;
-
-                    // Build original price expression (same as Gross Sales)
-                    let originalPriceExpression;
-                    try {
-                        const productPriceCheck = await pool.request().query(`
-                            SELECT COLUMN_NAME
-                            FROM INFORMATION_SCHEMA.COLUMNS 
-                            WHERE TABLE_NAME = 'Products' AND COLUMN_NAME = 'Price'
-                        `);
-                        const variationPriceCheck = await pool.request().query(`
-                            SELECT COLUMN_NAME
-                            FROM INFORMATION_SCHEMA.COLUMNS 
-                            WHERE TABLE_NAME = 'ProductVariations' AND COLUMN_NAME = 'Price'
-                        `);
-
-                        const hasProductPrice = productPriceCheck.recordset.length > 0;
-                        const hasVariationPrice = variationPriceCheck.recordset.length > 0;
-
-                        if (hasVariationPrice && hasProductPrice) {
-                            originalPriceExpression = `CASE 
-                                WHEN oi.VariationID IS NOT NULL AND pv.Price IS NOT NULL AND pv.Price > 0 
-                                THEN pv.Price
-                                ELSE ISNULL(p.Price, 0)
-                            END`;
-                        } else if (hasVariationPrice) {
-                            originalPriceExpression = `CASE 
-                                WHEN oi.VariationID IS NOT NULL THEN ISNULL(pv.Price, 0)
-                                ELSE 0
-                            END`;
-                        } else if (hasProductPrice) {
-                            originalPriceExpression = `ISNULL(p.Price, 0)`;
-                        } else {
-                            originalPriceExpression = `ISNULL(oi.PriceAtPurchase, 0)`;
-                            console.warn('[CSV EXPORT] No Price columns found for returns - using PriceAtPurchase');
-                        }
-                    } catch (priceCheckError) {
-                        originalPriceExpression = `ISNULL(oi.PriceAtPurchase, 0)`;
-                        console.log('[CSV EXPORT] Price column check failed for returns:', priceCheckError.message);
-                    }
-
-                    for (let i = 0; i < returnedOrderIds.length; i += batchSize) {
-                        const batch = returnedOrderIds.slice(i, i + batchSize);
-                        const orderIdParams = batch.map((id, idx) => `@orderId${i + idx}`).join(',');
-
-                        // First, get orders with ReturnItems for partial return handling
-                        const ordersWithReturnItemsQuery = `
-                            SELECT 
-                                o.OrderID,
-                                o.ReturnItems,
-                                o.DeliveryCost,
-                                o.ExtraDeliveryFee
-                            FROM Orders o
-                            WHERE o.OrderID IN (${orderIdParams})
-                            AND (o.Status = 'Returned' OR o.Status = 'Return' OR o.Status = 'Refunded' OR o.Status = 'Completed Returned')
-                            ${hasReturnItemsColumn ? 'AND o.ReturnItems IS NOT NULL' : ''}
-                        `;
-
-                        const ordersRequest = pool.request();
-                        batch.forEach((id, idx) => {
-                            ordersRequest.input(`orderId${i + idx}`, sql.Int, id);
-                        });
-
-                        const ordersWithReturnItems = await ordersRequest.query(ordersWithReturnItemsQuery);
-                        const orderReturnItemsMap = new Map();
-                        const orderDeliveryFeesMap = new Map();
-
-                        // Process orders with ReturnItems (partial returns)
-                        for (const order of ordersWithReturnItems.recordset) {
-                            if (order.ReturnItems) {
-                                try {
-                                    const returnItemsJson = typeof order.ReturnItems === 'string'
-                                        ? JSON.parse(order.ReturnItems)
-                                        : order.ReturnItems;
-                                    if (Array.isArray(returnItemsJson) && returnItemsJson.length > 0) {
-                                        orderReturnItemsMap.set(order.OrderID, returnItemsJson);
-                                        orderDeliveryFeesMap.set(order.OrderID, {
-                                            deliveryCost: parseFloat(order.DeliveryCost || 0),
-                                            extraDeliveryFee: parseFloat(order.ExtraDeliveryFee || 0)
-                                        });
-                                    }
-                                } catch (e) {
-                                    console.error(`[CSV EXPORT] Error parsing ReturnItems for order ${order.OrderID}:`, e);
-                                }
-                            }
-                        }
-
-                        const returnsQuery = `
-                            SELECT 
-                                oi.OrderID,
-                                oi.ProductID,
-                                oi.VariationID,
-                                oi.Quantity,
-                                ${originalPriceExpression} AS OriginalPrice,
-                                o.DeliveryCost,
-                                o.ExtraDeliveryFee
-                            FROM OrderItems oi
-                            LEFT JOIN Products p ON oi.ProductID = p.ProductID
-                            LEFT JOIN ProductVariations pv ON oi.VariationID = pv.VariationID
-                            INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                            WHERE oi.OrderID IN (${orderIdParams})
-                            AND (o.Status = 'Returned' OR o.Status = 'Return' OR o.Status = 'Refunded' OR o.Status = 'Completed Returned')
-                        `;
-
-                        const returnsRequest = pool.request();
-                        batch.forEach((id, idx) => {
-                            returnsRequest.input(`orderId${i + idx}`, sql.Int, id);
-                        });
-
-                        const returnsResult = await returnsRequest.query(returnsQuery);
-
-                        // Track delivery fees per order to avoid double counting
-                        const orderDeliveryFees = new Map();
-                        const processedOrders = new Set();
-
-                        // Calculate returns with partial return support
-                        returnsResult.recordset.forEach(item => {
-                            const orderId = item.OrderID;
-                            const returnItems = orderReturnItemsMap.get(orderId);
-
-                            // Check if this is a partial return
-                            if (returnItems && Array.isArray(returnItems) && returnItems.length > 0) {
-                                // Find matching return item
-                                const returnItem = returnItems.find(ri => {
-                                    const returnProductId = ri.productId || ri.ProductID;
-                                    const returnVariationId = ri.variationId || ri.VariationID || null;
-                                    const itemProductId = item.ProductID;
-                                    const itemVariationId = item.VariationID || null;
-
-                                    const productMatch = String(returnProductId) === String(itemProductId);
-                                    const variationMatch = (returnVariationId == null && (itemVariationId == null || itemVariationId === undefined)) ||
-                                        (returnVariationId != null && itemVariationId != null && String(returnVariationId) === String(itemVariationId));
-                                    return productMatch && variationMatch;
-                                });
-
-                                if (returnItem) {
-                                    // Partial return: use returned quantity
-                                    const originalPrice = parseFloat(item.OriginalPrice || 0);
-                                    const returnQty = parseInt(returnItem.quantity || returnItem.Quantity || 0);
-                                    const itemReturnValue = originalPrice * returnQty;
-                                    returns += itemReturnValue;
-
-                                    // Add proportional delivery fee for partial returns
-                                    if (!processedOrders.has(orderId)) {
-                                        processedOrders.add(orderId);
-                                        const fees = orderDeliveryFeesMap.get(orderId);
-                                        if (fees) {
-                                            const totalDeliveryFee = fees.deliveryCost + fees.extraDeliveryFee;
-                                            orderDeliveryFees.set(orderId, totalDeliveryFee);
-                                        }
-                                    }
-                                }
-                            } else {
-                                // Full return: use all items
-                                const originalPrice = parseFloat(item.OriginalPrice || 0);
-                                const quantity = parseFloat(item.Quantity || 0);
-                                const itemReturnValue = originalPrice * quantity;
-                                returns += itemReturnValue;
-
-                                // Store delivery fees for this order (will be added once per order)
-                                if (!orderDeliveryFees.has(orderId)) {
-                                    const deliveryCost = parseFloat(item.DeliveryCost || 0);
-                                    const extraDeliveryFee = parseFloat(item.ExtraDeliveryFee || 0);
-                                    orderDeliveryFees.set(orderId, deliveryCost + extraDeliveryFee);
-                                }
-                            }
-                        });
-
-                        // Add delivery fees for all returned orders in this batch
-                        orderDeliveryFees.forEach((deliveryFee, orderId) => {
-                            returns += deliveryFee;
-                        });
-                    }
-                } catch (returnsError) {
-                    console.error('[CSV EXPORT] Error calculating returns at original price:', returnsError);
-                    // Fallback to TotalAmount if calculation fails
-                    returns = returnedOrders.reduce((sum, o) => {
-                        return sum + parseFloat(o.TotalAmount || 0);
-                    }, 0);
-                }
-            }
-            const returnedOrdersCount = returnedOrders.length;
             const totalOrders = result.recordset.length;
-            const returnRate = totalOrders > 0 ? (returnedOrdersCount / totalOrders) * 100 : 0;
+            const totalCustomers = new Set(result.recordset.map(o => o.CustomerEmail)).size;
 
             let inventoryLoss = 0;
             const damageReturnOrdersExport = result.recordset.filter(o => {
@@ -18347,41 +18363,6 @@ module.exports = function (sql, pool, getStripe = null) {
                     console.error('[SALES REPORT EXPORT] Error calculating inventory loss at cost:', inventoryLossError);
                 }
             }
-
-            // Export stats — same formulas as on-screen Sales/Data report
-            const totalRefundsExport = sumRefundMerchandise(result.recordset);
-
-            const sumOrderDiscountsExport = Object.values(orderDiscounts).reduce((s, v) => s + parseFloat(v || 0), 0);
-            const finalDiscountsExport = sumOrderDiscountsExport;
-
-            const finalTotalTaxesExport = totalTaxes;
-
-            const grossSalesFromMerchandiseExport = result.recordset.reduce((sum, order) => {
-                return sum + parseFloat(order.Subtotal || 0) + parseFloat(orderDiscounts[order.OrderID] || 0);
-            }, 0);
-
-            const grossSalesValue = totalGrossSales > 0 ? totalGrossSales : grossSalesFromMerchandiseExport;
-            const salesReturnsExport = totalRefundsExport > 0 ? totalRefundsExport : returns;
-            const netSalesValue = grossSalesValue - finalDiscountsExport - salesReturnsExport;
-
-            const deliveryFeesAllSalesOrders = result.recordset.reduce((sum, order) => {
-                return sum + parseFloat(order.DeliveryCost || 0) + parseFloat(order.ExtraDeliveryFee || 0);
-            }, 0);
-
-            const deliveryFeesValidExport = result.recordset
-                .filter(o => {
-                    const status = (o.Status || '').toLowerCase().trim();
-                    return status !== 'refunded' && status !== 'completed returned' && o.IsRefunded !== 1 && o.IsRefunded !== true;
-                })
-                .reduce((sum, order) => sum + parseFloat(order.DeliveryCost || 0) + parseFloat(order.ExtraDeliveryFee || 0), 0);
-
-            const grossRevenueValue = grossSalesValue + deliveryFeesAllSalesOrders;
-            const netRevenueValue = grossRevenueValue - finalDiscountsExport - salesReturnsExport;
-            const totalRevenueExport = netSalesValue + deliveryFeesValidExport;
-
-            const refundedOrdersCountExport = countRefundMerchandiseOrders(result.recordset);
-
-            const replacementOrdersCountExport = result.recordset.filter(o => o.ActionType === 'replacement').length;
 
             let cogsExport = 0;
             let replacementCogsExport = 0;
@@ -18406,56 +18387,25 @@ module.exports = function (sql, pool, getStripe = null) {
                 returnedOrdersCount: countReturnedOrders(result.recordset)
             });
 
-            // Calculate Total Customers
-            const totalCustomers = new Set(result.recordset.map(o => o.CustomerEmail)).size;
-
-            // Calculate Average Order Value = Sum of TotalAmount / Total Orders (excluding returns)
-            // AOV should use the actual amount customers paid (TotalAmount), not calculated revenue
             const ordersForAovExport = result.recordset.filter(o => {
-                const status = o.Status ? o.Status.toLowerCase() : '';
-                return status !== 'cancelled' && status !== 'returned' && status !== 'refunded' && status !== 'completed returned';
+                const s = (o.Status || '').toLowerCase();
+                return s !== 'cancelled' && s !== 'returned' && s !== 'refunded' && s !== 'completed returned';
             });
-            const totalAmountSum = ordersForAovExport.reduce((sum, o) => {
-                return sum + parseFloat(o.TotalAmount || 0);
-            }, 0);
-            const averageOrderValue = ordersForAovExport.length > 0 ? totalAmountSum / ordersForAovExport.length : 0;
+            const averageOrderValue = ordersForAovExport.length > 0
+                ? ordersForAovExport.reduce((sum, o) => sum + parseFloat(o.TotalAmount || 0), 0) / ordersForAovExport.length
+                : 0;
 
-            const formatExportStatus = (orderStatus) => {
-                if (!orderStatus) return '';
-                if (orderStatus === 'Completed Returned') return 'Replacement';
-                return orderStatus;
-            };
-
-            const exportSummaryStats = {
-                grossSales: reportMetricsExport.grossSales,
-                grossProductSales: reportMetricsExport.grossProductSales,
-                netProductSales: reportMetricsExport.netProductSales,
-                netSales: reportMetricsExport.netSales,
-                netRevenue: reportMetricsExport.netRevenue,
-                deliveryRevenue: reportMetricsExport.deliveryRevenue,
-                productRefunds: reportMetricsExport.productRefunds,
-                salesReturns: salesReturnsExport,
-                totalDiscounts: finalDiscountsExport,
-                totalTaxes: finalTotalTaxesExport,
-                returnShippingExpense: reportMetricsExport.returnShippingExpense,
-                returnRate: reportMetricsExport.returnRate,
-                refundRate: reportMetricsExport.refundRate,
-                damageInventoryCost: reportMetricsExport.damageInventoryCost,
-                replacementCost: reportMetricsExport.replacementCost,
-                cogs: reportMetricsExport.cogs,
-                grossProfit: reportMetricsExport.grossProfit,
-                grossMargin: reportMetricsExport.grossMargin,
-                deliveryRevenues: reportMetricsExport.deliveryRevenue,
-                totalOrders: totalOrders,
-                totalCustomers: totalCustomers,
-                averageOrderValue: averageOrderValue,
-                refundedOrdersCount: refundedOrdersCountExport,
+            const exportSummaryStats = Object.assign({}, reportMetricsExport, {
+                totalOrders,
+                totalCustomers,
+                averageOrderValue,
                 returnedOrdersCount: countReturnedOrders(result.recordset),
-                replacementOrdersCount: replacementOrdersCountExport
-            };
+                refundedOrdersCount: countRefundMerchandiseOrders(result.recordset),
+                replacementOrdersCount: result.recordset.filter(o => String(o.ActionType || '').toLowerCase() === 'replacement').length
+            });
 
             const filterParts = [];
-            if (status) filterParts.push(`Status: ${status === 'Completed Returned' ? 'Replacement' : status}`);
+            if (status) filterParts.push(`Status: ${getOrderStatusLabel(status)}`);
             if (payment) filterParts.push(`Payment: ${payment}`);
             if (dateFrom) filterParts.push(`From: ${dateFrom}`);
             if (dateTo) filterParts.push(`To: ${dateTo}`);
@@ -18474,7 +18424,8 @@ module.exports = function (sql, pool, getStripe = null) {
                 };
             };
 
-            const ORDER_COL_COUNT = 10;
+            const ORDER_COL_COUNT = 15;
+            const SUMMARY_COL_COUNT = 3;
             const ExcelJS = getExcelJS();
             const workbook = new ExcelJS.Workbook();
             workbook.creator = 'Design Excellence';
@@ -18504,12 +18455,12 @@ module.exports = function (sql, pool, getStripe = null) {
             worksheet.mergeCells(currentRow - 1, 1, currentRow - 1, ORDER_COL_COUNT);
             currentRow++;
 
-            createExcelSectionHeader(worksheet, currentRow++, 'Summary', 2);
-            createExcelHeaderRow(worksheet, currentRow++, ['Metric', 'Amount (PHP)'], 1);
+            createExcelSectionHeader(worksheet, currentRow++, 'Summary', SUMMARY_COL_COUNT);
+            createExcelHeaderRow(worksheet, currentRow++, ['Metric', 'Amount (PHP)', 'Description'], 1);
 
             const summaryRows = buildSalesReportSummaryRows(exportSummaryStats);
 
-            summaryRows.forEach(({ label, value, currency, percent }) => {
+            summaryRows.forEach(({ label, value, currency, percent, note }) => {
                 const dataRow = worksheet.getRow(currentRow++);
                 dataRow.getCell(1).value = label;
                 dataRow.getCell(1).font = { bold: true };
@@ -18522,12 +18473,16 @@ module.exports = function (sql, pool, getStripe = null) {
                     dataRow.getCell(2).numFmt = '#,##0';
                 }
                 dataRow.getCell(2).alignment = { horizontal: 'right' };
-                applyThinBorder(dataRow.getCell(1));
-                applyThinBorder(dataRow.getCell(2));
+                dataRow.getCell(3).value = note || '';
+                dataRow.getCell(3).alignment = { wrapText: true, vertical: 'top' };
+                for (let c = 1; c <= SUMMARY_COL_COUNT; c++) {
+                    applyThinBorder(dataRow.getCell(c));
+                }
             });
 
-            worksheet.getColumn(1).width = 24;
-            worksheet.getColumn(2).width = 20;
+            worksheet.getColumn(1).width = 28;
+            worksheet.getColumn(2).width = 18;
+            worksheet.getColumn(3).width = 52;
             currentRow += 2;
 
             createExcelSectionHeader(worksheet, currentRow++, 'Orders', ORDER_COL_COUNT);
@@ -18537,37 +18492,31 @@ module.exports = function (sql, pool, getStripe = null) {
                 'Reference',
                 'Date',
                 'Customer',
+                'Email',
                 'Status',
                 'Products',
                 'Subtotal',
+                'Discount',
+                'Extra Delivery',
                 'Delivery',
                 'Total',
-                'Payment'
+                'Payment',
+                'In Gross Sales',
+                'In Net Revenue'
             ], 1);
 
             result.recordset.forEach((row, index) => {
                 const dataRow = worksheet.getRow(currentRow++);
-                const orderStatus = row.Status ? row.Status.toLowerCase() : '';
-                const isRefunded = orderStatus === 'refunded' || orderStatus === 'completed returned' || row.IsRefunded === 1;
-                const hasRefundAmount = parseFloat(row.RefundAmount || 0) > 0;
-                const refundedItems = orderItemsMap[row.OrderID] || [];
-                const shouldUseRefundedValues = isRefunded && (hasRefundAmount || (row.ReturnItems && hasReturnItemsColumn));
-
-                const productsList = shouldUseRefundedValues && refundedItems.length > 0
-                    ? refundedItems.map(item => `${item.name} (×${item.quantity})`)
-                    : (orderProductsQty[row.OrderID] || []);
+                const productsList = orderProductsQty[row.OrderID] || [];
                 const productsText = productsList.length > 0
                     ? productsList.join('; ')
                     : (row.TotalItems ? `${row.TotalItems} item(s)` : '—');
 
-                const exportItems = refundedItems.map(item => ({
-                    price: parseFloat(item.price) || 0,
-                    quantity: parseInt(item.quantity, 10) || 0
-                }));
-                const exportRow = applySalesReportOrderRowDisplay({ ...row }, exportItems);
-                const subtotal = parseFloat(exportRow.Subtotal || 0);
-                const deliveryFee = parseFloat(exportRow.DeliveryCost || 0) + parseFloat(exportRow.ExtraDeliveryFee || 0);
-                const totalAmount = parseFloat(exportRow.TotalAmount || 0);
+                const subtotal = parseFloat(row.Subtotal || 0);
+                const discount = parseFloat(row.TotalDiscounts || 0);
+                const extraDelivery = parseFloat(row.ExtraDeliveryFee || 0);
+                const deliveryCost = parseFloat(row.DeliveryCost || 0);
+                const totalAmount = parseFloat(row.TotalAmount || 0);
 
                 dataRow.getCell(1).value = row.OrderID || '';
                 dataRow.getCell(2).value = row.ReferenceNumber || '';
@@ -18576,21 +18525,31 @@ module.exports = function (sql, pool, getStripe = null) {
                     dataRow.getCell(3).numFmt = 'mmm d, yyyy h:mm AM/PM';
                 }
                 dataRow.getCell(4).value = row.CustomerName || '';
-                dataRow.getCell(5).value = formatExportStatus(row.Status);
-                dataRow.getCell(6).value = productsText;
-                dataRow.getCell(7).value = subtotal;
-                dataRow.getCell(7).numFmt = '₱#,##0.00';
-                dataRow.getCell(8).value = deliveryFee;
+                dataRow.getCell(5).value = row.CustomerEmail || '';
+                dataRow.getCell(6).value = getOrderStatusLabel(row.Status);
+                dataRow.getCell(7).value = productsText;
+                dataRow.getCell(8).value = subtotal;
                 dataRow.getCell(8).numFmt = '₱#,##0.00';
-                dataRow.getCell(9).value = totalAmount;
+                dataRow.getCell(9).value = discount;
                 dataRow.getCell(9).numFmt = '₱#,##0.00';
-                dataRow.getCell(10).value = row.PaymentMethod || '';
+                dataRow.getCell(10).value = extraDelivery;
+                dataRow.getCell(10).numFmt = '₱#,##0.00';
+                dataRow.getCell(11).value = deliveryCost;
+                dataRow.getCell(11).numFmt = '₱#,##0.00';
+                dataRow.getCell(12).value = totalAmount;
+                dataRow.getCell(12).numFmt = '₱#,##0.00';
+                dataRow.getCell(13).value = row.PaymentMethod || '';
+                dataRow.getCell(14).value = countsTowardGrossSales(row) ? 'Yes' : 'No';
+                dataRow.getCell(15).value = countsTowardNetRevenue(row) ? 'Yes' : 'No';
 
                 for (let col = 1; col <= ORDER_COL_COUNT; col++) {
                     const cell = dataRow.getCell(col);
                     cell.alignment = { wrapText: true, vertical: 'top' };
-                    if (col >= 7 && col <= 9) {
-                        cell.alignment.horizontal = 'right';
+                    if (col >= 8 && col <= 12) {
+                        cell.alignment = { wrapText: true, vertical: 'top', horizontal: 'right' };
+                    }
+                    if (col >= 14) {
+                        cell.alignment = { horizontal: 'center', vertical: 'top' };
                     }
                     applyThinBorder(cell);
                     if (index % 2 === 0) {
@@ -18601,23 +18560,95 @@ module.exports = function (sql, pool, getStripe = null) {
             });
 
             worksheet.getColumn(1).width = 10;
-            worksheet.getColumn(2).width = 18;
-            worksheet.getColumn(3).width = 20;
-            worksheet.getColumn(4).width = 26;
-            worksheet.getColumn(5).width = 18;
-            worksheet.getColumn(6).width = 40;
-            worksheet.getColumn(7).width = 14;
-            worksheet.getColumn(8).width = 14;
-            worksheet.getColumn(9).width = 14;
-            worksheet.getColumn(10).width = 16;
+            worksheet.getColumn(2).width = 16;
+            worksheet.getColumn(3).width = 18;
+            worksheet.getColumn(4).width = 22;
+            worksheet.getColumn(5).width = 26;
+            worksheet.getColumn(6).width = 20;
+            worksheet.getColumn(7).width = 36;
+            worksheet.getColumn(8).width = 12;
+            worksheet.getColumn(9).width = 12;
+            worksheet.getColumn(10).width = 12;
+            worksheet.getColumn(11).width = 12;
+            worksheet.getColumn(12).width = 12;
+            worksheet.getColumn(13).width = 14;
+            const summaryEndRow = currentRow - 1;
+            autoFitWorksheetColumns(worksheet, { minWidth: 10, maxWidth: 56 });
+            autoFitWorksheetRows(worksheet, 1, summaryEndRow, { minHeight: 16, maxHeight: 80 });
+            autoFitWorksheetRows(worksheet, ordersHeaderRow, currentRow - 1, { minHeight: 18, maxHeight: 80 });
 
             worksheet.views = [{ state: 'frozen', ySplit: ordersHeaderRow, activeCell: 'A1' }];
 
             const exportDate = new Date().toISOString().split('T')[0];
-            const buffer = await workbook.xlsx.writeBuffer();
-            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', `attachment; filename=sales-report-${exportDate}.xlsx`);
-            res.send(buffer);
+            const format = String(req.query.format || 'csv').toLowerCase();
+
+            if (format === 'xlsx') {
+                const buffer = await workbook.xlsx.writeBuffer();
+                res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                res.setHeader('Content-Disposition', `attachment; filename=sales-report-${exportDate}.xlsx`);
+                return res.send(buffer);
+            }
+
+            const fmtMoney = (n) => {
+                const v = parseFloat(n || 0);
+                return '₱' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            };
+            const fmtPct = (n) => `${Number(n || 0).toFixed(1)}%`;
+            const csvSections = [];
+            csvSections.push(['Sales Report']);
+            csvSections.push([`Generated: ${timestamp}`]);
+            csvSections.push([filterSummary]);
+            csvSections.push([]);
+            csvSections.push(['Summary']);
+            csvSections.push(['Metric', 'Amount (PHP)', 'Description']);
+            summaryRows.forEach(({ label, value, currency, percent, note }) => {
+                let display = value;
+                if (percent) display = fmtPct(value);
+                else if (currency) display = fmtMoney(value);
+                else display = String(value ?? '');
+                csvSections.push([label, display, note || '']);
+            });
+            csvSections.push([]);
+            csvSections.push(['Orders']);
+            csvSections.push([
+                'Order #', 'Reference', 'Date', 'Customer', 'Email', 'Status', 'Products',
+                'Subtotal', 'Discount', 'Extra Delivery', 'Delivery', 'Total', 'Payment',
+                'In Gross Sales', 'In Net Revenue'
+            ]);
+            result.recordset.forEach((row) => {
+                const productsList = orderProductsQty[row.OrderID] || [];
+                const productsText = productsList.length > 0
+                    ? productsList.join('; ')
+                    : (row.TotalItems ? `${row.TotalItems} item(s)` : '—');
+                const orderDate = row.OrderDate
+                    ? new Date(row.OrderDate).toLocaleString('en-PH', {
+                        year: 'numeric', month: 'short', day: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                    })
+                    : '';
+                csvSections.push([
+                    row.OrderID || '',
+                    row.ReferenceNumber || '',
+                    orderDate,
+                    row.CustomerName || '',
+                    row.CustomerEmail || '',
+                    getOrderStatusLabel(row.Status),
+                    productsText,
+                    fmtMoney(row.Subtotal),
+                    fmtMoney(row.TotalDiscounts),
+                    fmtMoney(row.ExtraDeliveryFee),
+                    fmtMoney(row.DeliveryCost),
+                    fmtMoney(row.TotalAmount),
+                    row.PaymentMethod || '',
+                    countsTowardGrossSales(row) ? 'Yes' : 'No',
+                    countsTowardNetRevenue(row) ? 'Yes' : 'No'
+                ]);
+            });
+
+            const csvBody = rowsToCsv(csvSections);
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename=sales-report-${exportDate}.csv`);
+            res.send('\ufeff' + csvBody);
         } catch (err) {
             console.error('Error exporting sales report:', err);
             res.status(500).send('Error exporting sales report');
@@ -30175,6 +30206,15 @@ module.exports = function (sql, pool, getStripe = null) {
             await pool.request()
                 .input('orderId', sql.Int, orderId)
                 .query(`UPDATE Orders SET Status = 'Awaiting Inspection' WHERE OrderID = @orderId`);
+            try {
+                await logReturnOrderReceivedMovements(pool, {
+                    orderId,
+                    returnItemsJson,
+                    userId: req.session.user?.id
+                });
+            } catch (movementLogErr) {
+                console.warn('[STOCK MOVEMENT] return received log failed:', movementLogErr.message);
+            }
             return res.json({ success: true, message: 'Marked as received. Proceed to inspect returned items.' });
         } catch (err) {
             console.error('Error advancing return receiving:', err);

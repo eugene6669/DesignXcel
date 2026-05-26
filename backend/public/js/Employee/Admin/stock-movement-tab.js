@@ -45,6 +45,7 @@
 
     function movementTypeBadgeClass(type) {
         var t = String(type || '');
+        if (t === 'return_received') return 'stock-mv-badge-returned';
         if (t === 'returned_to_damaged') return 'stock-mv-badge-damaged';
         if (t === 'damaged_to_repaired') return 'stock-mv-badge-repaired';
         if (t === 'repaired_to_available') return 'stock-mv-badge-available';

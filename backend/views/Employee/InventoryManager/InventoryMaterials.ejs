@@ -5,11 +5,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Raw Materials - Design Excellence</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
 
     <style>
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-menu {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .logout-section {
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            margin-top: 20px;
+            text-align: center;
+            position: relative;
+        }
+        .logout-button {
+            display: inline-block;
+            width: auto;
+            padding: 12px 25px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .logout-button:hover {
+            background-color: #c82333;
+        }
         /* Custom Confirmation Modal Styles */
         .modal-overlay {
             position: fixed;
@@ -86,6 +122,41 @@
         }
     </style>
     <style>
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-menu {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .logout-section {
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            margin-top: 20px;
+            text-align: center;
+            position: relative;
+        }
+        .logout-button {
+            display: inline-block;
+            width: auto;
+            padding: 12px 25px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .logout-button:hover {
+            background-color: #c82333;
+        }
         /* Basic table styling */
         table {
             width: 100%;
@@ -311,7 +382,7 @@
     <!-- Custom Success/Error Popup -->
     <div id="customPopup" class="custom-popup">
         <div class="custom-popup-content">
-            <span class="custom-popup-icon">âœ“</span>
+            <span class="custom-popup-icon">✓</span>
             <span class="custom-popup-message"></span>
         </div>
     </div>
@@ -364,7 +435,7 @@
                     <div class="modal-content">
                         <span class="close-button">&times;</span>
                         <h3>Add New Raw Material</h3>
-                        <form action="/Employee/InventoryManager/InventoryMaterials/Add" method="POST">
+                        <form action="/Employee/InventoryManager/RawMaterials/Add" method="POST">
                             <label for="name">Material Name:</label>
                             <input type="text" id="name" name="name" required><br><br>
 
@@ -440,7 +511,7 @@
                                         >
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 20h9"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.5 3.5a2.121 2.121 0 113 3L7 19.5 3 21l1.5-4L16.5 3.5z"/></svg>
                                         </button>
-                                        <form action="/Employee/InventoryManager/InventoryMaterials/Delete/<%= material.MaterialID %>" method="POST" style="display:inline;">
+                                        <form action="/Employee/InventoryManager/RawMaterials/Delete/<%= material.MaterialID %>" method="POST" style="display:inline;">
                                             <button type="submit" class="delete-material-btn" title="Archive">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
                                             </button>
@@ -462,7 +533,7 @@
         <div class="modal-content">
             <span class="close-button" id="closeEditMaterialModal">&times;</span>
             <h3>Edit Raw Material</h3>
-            <form id="editMaterialForm" action="/Employee/InventoryManager/InventoryMaterials/Edit" method="POST">
+            <form id="editMaterialForm" action="/Employee/InventoryManager/RawMaterials/Edit" method="POST">
                 <input type="hidden" id="editMaterialID" name="materialid">
                 <label for="editMaterialName">Material Name:</label>
                 <input type="text" id="editMaterialName" name="name" required><br><br>
@@ -789,7 +860,7 @@
                         formData.append('quantity', '0');
                         formData.append('unit', material.unit);
 
-                        const response = await fetch('/Employee/InventoryManager/InventoryMaterials/Add', {
+                        const response = await fetch('/Employee/InventoryManager/RawMaterials/Add', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -854,7 +925,7 @@
 
             // Set message and icon
             popupMessage.textContent = message;
-            popupIcon.textContent = isError ? 'âœ•' : 'âœ“';
+            popupIcon.textContent = isError ? '✕' : '✓';
             
             // Set style based on type
             popup.className = 'custom-popup' + (isError ? ' error' : '');

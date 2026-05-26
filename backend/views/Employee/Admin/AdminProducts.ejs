@@ -1067,8 +1067,23 @@
         .products-listing-table th, .products-listing-table td { padding: 10px; border: 1px solid #dee2e6; vertical-align: middle; }
         .products-listing-table thead th { background: #f2f2f2; font-weight: 600; }
         .last-added-cell { white-space: nowrap; font-size: 0.9em; color: #444; }
-        .storefront-toggle-label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82em; cursor: pointer; user-select: none; }
-        .storefront-toggle-label input { width: 16px; height: 16px; cursor: pointer; }
+        .pi-icon-storefront-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background: #f8f9fa;
+            color: #94a3b8;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+        }
+        .pi-icon-storefront-btn:hover { background: #eef2ff; border-color: #a5b4fc; color: #4f46e5; }
+        .pi-icon-storefront-btn.is-visible { background: #eef2ff; border-color: #818cf8; color: #4f46e5; }
+        .pi-storefront-col { text-align: center; width: 72px; }
         .toggle-variations-btn.expanded .toggle-icon { transform: rotate(90deg); }
         .add-inventory-discount-btn {
             background: #F0B21B;
@@ -1412,6 +1427,17 @@
     <%- include('partials/edit-variation-status-modal') %>
     <%- include('partials/admin-variations-modal') %>
 
+    <div id="storefrontConfirmModal" class="inventory-confirmation-modal">
+        <div class="inventory-confirmation-content">
+            <h3>Storefront visibility</h3>
+            <p id="storefrontConfirmText" style="text-align:center;margin:12px 0 16px;font-size:1.05em;font-weight:600;color:#333;"></p>
+            <div class="inventory-confirmation-buttons">
+                <button type="button" class="inventory-cancel-btn" id="cancelStorefrontConfirm">Cancel</button>
+                <button type="button" class="inventory-confirm-btn" id="confirmStorefrontConfirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
     <div id="inventory-discount-modal" class="modal">
         <div class="modal-content" style="max-width:480px;">
             <span class="close-button" id="closeInventoryDiscountModal">&times;</span>
@@ -1601,7 +1627,7 @@
         })();
     </script>
 
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260527b" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260529a" defer></script>
     <% if (locals.error && locals.error.length > 0) { %>
     <script>
         document.addEventListener('DOMContentLoaded', function() {

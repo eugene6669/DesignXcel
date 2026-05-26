@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Walk In - Admin</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
@@ -238,6 +239,37 @@
         .address-modal-btn-secondary:hover {
             background: #4b5563;
         }
+        #walkInDetailsModal.payment-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2100;
+        }
+        #walkInDetailsModal.payment-modal-overlay.show { display: flex; }
+        .payment-modal-panel {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 440px;
+            width: 92%;
+            box-shadow: 0 12px 40px rgba(0,0,0,.15);
+        }
+        .payment-modal-panel h3 { margin: 0 0 12px; font-size: 1.25rem; color: #111827; }
+        .payment-modal-panel .hint { font-size: 0.875rem; color: #4b5563; margin-bottom: 14px; line-height: 1.45; }
+        .payment-modal-panel label { display: block; font-weight: 600; font-size: 0.85rem; color: #374151; margin-bottom: 6px; }
+        .payment-modal-panel input[type="text"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            margin-bottom: 14px;
+            box-sizing: border-box;
+        }
+        .payment-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
     </style>
 </head>
 <body>
@@ -254,7 +286,7 @@
                     <div class="error-message"><%= error %></div>
                 <% } %>
                 <button id="toggleNewBulkForm" style="background:#f59e0b;color:#111;border:none;border-radius:6px;padding:10px 14px;font-weight:700;margin-bottom:12px;">New Walk In</button>
-                <form id="simpleBulkForm" action="/Employee/OrderSupport/OrderWalkIn/Add" method="POST" style="display:none;background:#fff;padding:16px;border-radius:8px;border:1px solid #e5e7eb;margin-bottom:18px;">
+                <form id="simpleBulkForm" action="/Employee/OrderSupport/WalkIn/Add" method="POST" style="display:none;background:#fff;padding:16px;border-radius:8px;border:1px solid #e5e7eb;margin-bottom:18px;">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
                         <div>
                             <label>Customer Name</label>
@@ -277,8 +309,10 @@
                             <label>Payment Method</label>
                             <select name="paymentMethod" id="paymentMethod" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:4px;">
                                 <option value="cash">Cash</option>
-                                <option value="stripe">Stripe</option>
+                                <option value="stripe">Stripe (card)</option>
+                                <option value="paymongo">PayMongo (card / GCash / Maya)</option>
                             </select>
+                            <div id="paymentMethodHint" style="font-size:0.8em;color:#64748b;margin-top:4px;">Pickup: Cash only. Delivery: Cash, Stripe, or PayMongo.</div>
                         </div>
                         <div style="grid-column:1 / -1;">
                             <label>Address</label>
@@ -291,6 +325,8 @@
                             <input type="hidden" id="addressCity" name="addressCity">
                             <input type="hidden" id="addressBarangay" name="addressBarangay">
                             <input type="hidden" id="addressPostalCode" name="addressPostalCode">
+                            <input type="hidden" id="addressHouseNumber" name="addressHouseNumber">
+                            <input type="hidden" id="addressStreet" name="addressStreet">
                         </div>
                         <div>
                             <label>Delivery Type</label>
@@ -324,8 +360,9 @@
                     <input type="hidden" name="stripeSessionId" id="stripeSessionIdField" />
                     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
                         <div><label>Subtotal:</label> <span id="subtotalDisplay">₱0.00</span></div>
-                        <div><label>Discount:</label> <span id="discountDisplay">0%</span></div>
-                        <div><label>Grand Total:</label> <span id="grandTotalDisplay">₱0.00</span></div>
+                        <div id="walkInShippingRow" style="display:none;"><label>Shipping Fee:</label> <span id="shippingFeeDisplay">₱0.00</span></div>
+                        <div><label>Discount:</label> <span id="discountDisplay">₱0.00</span></div>
+                        <div><label>Total:</label> <span id="grandTotalDisplay">₱0.00</span></div>
                         <input type="hidden" name="totalAmount" id="totalAmountField" />
                     </div>
                     <div style="margin-top:12px;display:flex;gap:8px;">
@@ -342,11 +379,51 @@
                                 <div style="font-weight:700;">#<%= order.BulkOrderID %> - <%= order.CustomerName %></div>
                                 <span style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:14px;padding:2px 10px;font-size:.9em;"><%= order.Status %></span>
                             </div>
-                            <div style="font-size:.95em;color:#444;margin-bottom:6px;">Total: ₱<%= Number(order.TotalAmount).toLocaleString(undefined,{minimumFractionDigits:2}) %> (Disc: ₱<%= Number(order.Discount||0).toLocaleString(undefined,{minimumFractionDigits:2}) %>)</div>
-                            <div style="font-size:.9em;color:#666;margin-bottom:6px;">Type: <%= order.DeliveryType === 'delivery' ? 'Delivery' : 'Pickup' %> | ETA: <%= order.ExpectedArrival ? new Date(order.ExpectedArrival).toLocaleString() : '-' %> | Completed: <%= order.CompletedAt ? new Date(order.CompletedAt).toLocaleString() : '-' %></div>
-                            <div style="font-size:.9em;color:#666;margin-bottom:6px;">Order No: <%= order.OrderNumber || order.LinkedOrderNumber || '-' %> | Txn ID: <%= order.TransactionID || order.LinkedTransactionID || '-' %></div>
+                            <% 
+                                var __wiSub = 0;
+                                try {
+                                    var __wiArr = JSON.parse(order.OrderedProducts || '[]');
+                                    (__wiArr || []).forEach(function(it) {
+                                        __wiSub += Number(it.unitPrice || 0) * Number(it.quantity || 0);
+                                    });
+                                } catch (e) { __wiSub = 0; }
+                                var __wiShip = Number(order.WalkInShippingFee || 0);
+                                var __dtRaw = String(order.DeliveryType || '').toLowerCase();
+                                var __isDelivery = (__dtRaw === 'delivery' || __dtRaw.indexOf('rate_') === 0);
+                            %>
+                            <div style="font-size:.95em;color:#444;margin-bottom:6px;">
+                                Subtotal: ₱<%= __wiSub.toLocaleString(undefined,{minimumFractionDigits:2}) %>
+                                <% if (__isDelivery) { %>
+                                · Shipping: ₱<%= __wiShip.toLocaleString(undefined,{minimumFractionDigits:2}) %>
+                                <% } %>
+                                · Total: ₱<%= Number(order.TotalAmount).toLocaleString(undefined,{minimumFractionDigits:2}) %> (Disc: ₱<%= Number(order.Discount||0).toLocaleString(undefined,{minimumFractionDigits:2}) %>)
+                            </div>
+                            <div style="font-size:.9em;color:#666;margin-bottom:6px;">Type: <%= __isDelivery ? 'Delivery' : 'Pickup' %> | ETA: <%= order.ExpectedArrival ? new Date(order.ExpectedArrival).toLocaleString() : '-' %> | Completed: <%= order.CompletedAt ? new Date(order.CompletedAt).toLocaleString() : '-' %></div>
+                            <div style="font-size:.9em;color:#666;margin-bottom:6px;">Payment status: <%= order.PaymentStatus || '—' %><% if (order.LinkedOrderPaymentStatus) { %> · Linked order: <%= order.LinkedOrderPaymentStatus %><% } %></div>
+                            <% if ((/stripe|paymongo/i).test(String(order.PaymentMethod||'')) && String(order.PaymentStatus||'') === 'Pending') { %>
+                            <div style="font-size:0.8em;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 8px;margin-bottom:6px;">Gateway payment is not marked paid yet. Finish checkout in the tab you opened, then open the success return URL so the transaction ID and payment status update.</div>
+                            <% } %>
+                            <% 
+                                var __txnWalk = String(order.TransactionID || '').trim();
+                                var __txnLinked = String(order.LinkedTransactionID || '').trim();
+                                var __txnDisp = __txnWalk;
+                                if (/^(pay_|pi_|ch_)/i.test(__txnWalk)) __txnDisp = __txnWalk;
+                                else if (/^(pay_|pi_|ch_)/i.test(__txnLinked)) __txnDisp = __txnLinked;
+                                else if (__txnWalk) __txnDisp = __txnWalk;
+                                else if (__txnLinked) __txnDisp = __txnLinked;
+                                else __txnDisp = '-';
+                            %>
+                            <div style="font-size:.9em;color:#666;margin-bottom:6px;">Order No: <%= order.OrderNumber || order.LinkedOrderNumber || '-' %> | Transaction ID: <%= __txnDisp %></div>
                             <div style="font-size:.9em;color:#666;margin-bottom:6px;">Contact: <%= order.ContactNumber || '-' %> | <%= order.ContactEmail || '-' %></div>
-                            <div style="font-size:.9em;color:#666;margin-bottom:6px;">Address: <%= [order.Address, order.AddressBarangay, order.AddressCity, order.AddressProvince, order.AddressRegion, order.AddressPostalCode].filter(Boolean).join(', ') || '-' %></div>
+                            <% 
+                                var __addrParts = [];
+                                if (order.AddressHouseNumber) __addrParts.push(order.AddressHouseNumber);
+                                if (order.AddressStreet) __addrParts.push(order.AddressStreet);
+                                if (!order.AddressHouseNumber && !order.AddressStreet && order.Address) __addrParts.push(order.Address);
+                                [order.AddressBarangay, order.AddressCity, order.AddressProvince, order.AddressRegion, order.AddressPostalCode].forEach(function(p){ if (p) __addrParts.push(p); });
+                                var __addrLine = __addrParts.length ? __addrParts.join(', ') : '-';
+                            %>
+                            <div style="font-size:.9em;color:#666;margin-bottom:6px;">Shipping address: <%= __addrLine %></div>
                             <details style="margin:6px 0;">
                                 <summary style="cursor:pointer;">View Ordered Products</summary>
                                 <% let __items = []; try { __items = JSON.parse(order.OrderedProducts || '[]'); } catch(e) { __items = []; } %>
@@ -377,17 +454,18 @@
                                     <div style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:8px;margin-top:6px;color:#666;">No items</div>
                                 <% } %>
                             </details>
-                            <div style="display:flex;gap:8px;margin-top:8px;">
-                                <% if (order.Status === 'Processing') { %>
-                                    <% if (order.DeliveryType === 'pickup') { %>
-                                        <button class="bo-complete" data-id="<%= order.BulkOrderID %>" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:600;">Mark Completed</button>
-                                    <% } else { %>
-                                        <button class="bo-proceed" data-id="<%= order.BulkOrderID %>" style="background:#10b981;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:600;">Mark On delivery</button>
-                                    <% } %>
-                                <% } %>
-                                <% if (order.Status === 'On delivery') { %>
-                                    <button class="bo-complete" data-id="<%= order.BulkOrderID %>" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:600;">Mark Completed</button>
-                                <% } %>
+                            <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+                                <button type="button" class="bo-walkin-pay-details address-modal-btn address-modal-btn-secondary" style="border:1px solid #cbd5e1;background:#fff;color:#0f172a;"
+                                    data-customer-name="<%= String(order.CustomerName||'').replace(/"/g, '&quot;') %>"
+                                    data-payment-method="<%= String(order.PaymentMethod||'').replace(/"/g, '&quot;') %>"
+                                    data-payment-status="<%= String(order.PaymentStatus||'').replace(/"/g, '&quot;') %>"
+                                    data-subtotal="<%= __wiSub %>"
+                                    data-shipping="<%= __wiShip %>"
+                                    data-total="<%= Number(order.TotalAmount||0) %>"
+                                    data-session="<%= String(order.StripeSessionID||'').replace(/"/g, '&quot;') %>"
+                                    data-payment-id="<%= String(__txnDisp === '-' ? '' : __txnDisp).replace(/"/g, '&quot;') %>"
+                                    data-linked-ref="<%= String(order.LinkedOrderNumber||'').replace(/"/g, '&quot;') %>"
+                                >Payment details</button>
                                 <button class="bo-remove" data-id="<%= order.BulkOrderID %>" style="background:#dc2626;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:600;">Remove Order</button>
                             </div>
                         </div>
@@ -480,7 +558,17 @@
                         </form>
                     </div>
                 </div>
-                
+
+                <div id="walkInDetailsModal" class="payment-modal-overlay" onclick="if(event.target === this) document.getElementById('walkInDetailsModal').classList.remove('show')">
+                    <div class="payment-modal-panel" onclick="event.stopPropagation()" style="max-width:440px;">
+                        <h3>Payment details</h3>
+                        <div id="walkInDetailsBody" style="font-size:0.9rem;color:#374151;line-height:1.55;"></div>
+                        <div class="payment-modal-actions">
+                            <button type="button" class="address-modal-btn address-modal-btn-primary" onclick="document.getElementById('walkInDetailsModal').classList.remove('show')">Close</button>
+                        </div>
+                    </div>
+                </div>
+
                 <script>
                 // Email validation function
                 function validateEmailInput(input) {
@@ -803,6 +891,9 @@
                     } catch (err) {
                         console.error('Failed to calculate delivery rate:', err);
                     }
+                    if (typeof window.__walkInRecalculateTotals === 'function') {
+                        window.__walkInRecalculateTotals();
+                    }
                 }
 
                 (function(){
@@ -816,6 +907,8 @@
                     const subtotalDisplay = document.getElementById('subtotalDisplay');
                     const discountDisplay = document.getElementById('discountDisplay');
                     const grandTotalDisplay = document.getElementById('grandTotalDisplay');
+                    const walkInShippingRow = document.getElementById('walkInShippingRow');
+                    const shippingFeeDisplay = document.getElementById('shippingFeeDisplay');
                     const orderedProductsField = document.getElementById('orderedProductsField');
                     const totalAmountField = document.getElementById('totalAmountField');
                     const stripeSessionIdField = document.getElementById('stripeSessionIdField');
@@ -871,6 +964,7 @@
                         toggleBtn.addEventListener('click', function() {
                             simpleForm.style.display = 'block';
                             fetchProducts();
+                            syncWalkInPaymentOptions();
                         });
                     }
 
@@ -991,6 +1085,16 @@
                         calculateTotals();
                     }
 
+                    function getSelectedDeliveryFee() {
+                        const dt = document.getElementById('deliveryType')?.value || 'pickup';
+                        if (dt !== 'delivery') return 0;
+                        const sel = document.getElementById('deliveryRateSelect');
+                        if (!sel || !sel.value) return 0;
+                        const opt = sel.options[sel.selectedIndex];
+                        const p = parseFloat(opt?.dataset?.price || '0');
+                        return Number.isFinite(p) ? p : 0;
+                    }
+
                     function calculateTotals() {
                         let subtotal = 0;
                         const rows = [...productsList.children];
@@ -1018,15 +1122,23 @@
 
                         const discountPercent = parseFloat(discountInput.value || 0);
                         const discountAmount = subtotal * (discountPercent / 100);
-                        const grandTotal = subtotal - discountAmount;
+                        const shippingFee = getSelectedDeliveryFee();
+                        const grandTotal = subtotal - discountAmount + shippingFee;
 
                         subtotalDisplay.textContent = currency(subtotal);
                         discountDisplay.textContent = currency(discountAmount);
+                        if (walkInShippingRow && shippingFeeDisplay) {
+                            const showShip = (document.getElementById('deliveryType')?.value === 'delivery') && shippingFee > 0;
+                            walkInShippingRow.style.display = showShip ? 'block' : 'none';
+                            shippingFeeDisplay.textContent = currency(shippingFee);
+                        }
                         grandTotalDisplay.textContent = currency(grandTotal);
                         
                         orderedProductsField.value = JSON.stringify(list);
                         totalAmountField.value = grandTotal.toFixed(2);
                     }
+
+                    window.__walkInRecalculateTotals = calculateTotals;
 
                     function currency(n) { 
                         return '₱' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }); 
@@ -1042,6 +1154,26 @@
                     // Discount input change
                     if (discountInput) {
                         discountInput.addEventListener('input', calculateTotals);
+                    }
+
+                    function syncWalkInPaymentOptions() {
+                        const dt = document.getElementById('deliveryType')?.value || 'pickup';
+                        const pm = document.getElementById('paymentMethod');
+                        const hint = document.getElementById('paymentMethodHint');
+                        if (!pm) return;
+                        const stripeOpt = pm.querySelector('option[value="stripe"]');
+                        const paymongoOpt = pm.querySelector('option[value="paymongo"]');
+                        if (dt === 'pickup') {
+                            if (stripeOpt) stripeOpt.disabled = true;
+                            if (paymongoOpt) paymongoOpt.disabled = true;
+                            if (pm.value !== 'cash') pm.value = 'cash';
+                            if (hint) hint.textContent = 'Pickup: Cash only.';
+                        } else {
+                            if (stripeOpt) stripeOpt.disabled = false;
+                            if (paymongoOpt) paymongoOpt.disabled = false;
+                            if (hint) hint.textContent = 'Delivery: Cash, Stripe, or PayMongo.';
+                        }
+                        calculateTotals();
                     }
 
                     // Form submission
@@ -1096,6 +1228,16 @@
                                 }
                             }
                             
+                            if (selectedDeliveryType === 'delivery') {
+                                const hn = document.getElementById('addressHouseNumber')?.value?.trim();
+                                const st = document.getElementById('addressStreet')?.value?.trim();
+                                if (!hn && !st) {
+                                    e.preventDefault();
+                                    alert('Delivery requires House/Unit and/or Street. Use Add Address and fill Street (or House number).');
+                                    return;
+                                }
+                            }
+
                             if (!orderedProductsField.value || orderedProductsField.value === '[]') {
                                 e.preventDefault();
                                 alert('Please add at least one product.');
@@ -1103,24 +1245,39 @@
                             }
 
                             const paymentMethod = document.getElementById('paymentMethod')?.value || 'cash';
-                            if (paymentMethod === 'stripe') {
+                            if (selectedDeliveryType === 'delivery' && (paymentMethod === 'stripe' || paymentMethod === 'paymongo')) {
+                                const dr = document.getElementById('deliveryRateSelect')?.value || '';
+                                if (!dr) {
+                                    e.preventDefault();
+                                    alert('Select a delivery rate before paying with Stripe or PayMongo.');
+                                    return;
+                                }
+                            }
+                            if (paymentMethod === 'stripe' || paymentMethod === 'paymongo') {
                                 e.preventDefault();
                                 try {
                                     const payload = {
                                         customerName: document.querySelector('input[name="customerName"]')?.value || '',
                                         contactEmail: contactEmail.value || '',
                                         orderedProducts: orderedProductsField.value || '[]',
-                                        totalAmount: totalAmountField.value || '0'
+                                        totalAmount: totalAmountField.value || '0',
+                                        discount: (document.querySelector('input[name="discount"]')?.value || '0'),
+                                        shippingFee: String(getSelectedDeliveryFee()),
+                                        deliveryType: selectedDeliveryType
                                     };
 
-                                    const stripeRes = await fetch('/api/admin/walkin/create-checkout-session', {
+                                    const endpoint = paymentMethod === 'stripe'
+                                        ? '/api/admin/walkin/create-checkout-session'
+                                        : '/api/admin/walkin/create-paymongo-checkout';
+
+                                    const stripeRes = await fetch(endpoint, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify(payload)
                                     });
                                     const stripeData = await stripeRes.json();
                                     if (!stripeRes.ok || !stripeData.success || !stripeData.url) {
-                                        alert(stripeData.message || 'Failed to open Stripe checkout.');
+                                        alert(stripeData.message || 'Failed to open payment checkout.');
                                         return;
                                     }
                                     if (stripeSessionIdField && stripeData.sessionId) {
@@ -1129,8 +1286,8 @@
                                     window.open(stripeData.url, '_blank');
                                     HTMLFormElement.prototype.submit.call(form);
                                 } catch (stripeErr) {
-                                    console.error('Stripe checkout init failed:', stripeErr);
-                                    alert('Unable to connect to Stripe gateway.');
+                                    console.error('Payment checkout init failed:', stripeErr);
+                                    alert('Unable to connect to payment gateway.');
                                 }
                                 return;
                             }
@@ -1201,34 +1358,52 @@
                     // Initial fetch of products
                     fetchProducts();
 
-                    // Walk in order action buttons
-                    document.querySelectorAll('.bo-proceed').forEach(btn => {
-                        btn.addEventListener('click', function() {
-                            const id = this.getAttribute('data-id');
-                            fetch(`/Employee/OrderSupport/OrderWalkIn/ProceedToDelivery/${id}`, { method: 'POST' })
-                                .then(r => r.json()).then(d => { 
-                                    if(d.success) location.reload(); 
-                                    else alert('Update failed'); 
-                                });
-                        });
-                    });
+                    syncWalkInPaymentOptions();
 
-                    document.querySelectorAll('.bo-complete').forEach(btn => {
-                        btn.addEventListener('click', function() {
-                            const id = this.getAttribute('data-id');
-                            fetch(`/Employee/OrderSupport/OrderWalkIn/Complete/${id}`, { method: 'POST' })
-                                .then(r => r.json()).then(d => { 
-                                    if(d.success) location.reload(); 
-                                    else alert('Update failed'); 
-                                });
-                        });
+                    document.getElementById('walkInOrdersContainer')?.addEventListener('click', function(ev) {
+                        const btn = ev.target.closest('.bo-walkin-pay-details');
+                        if (!btn) return;
+                        ev.preventDefault();
+                        const fmt = (v) => '₱' + Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        const esc = (s) => String(s || '')
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/"/g, '&quot;');
+                        const customerName = btn.getAttribute('data-customer-name') || '';
+                        const pm = btn.getAttribute('data-payment-method') || '';
+                        const ps = btn.getAttribute('data-payment-status') || '';
+                        const sub = btn.getAttribute('data-subtotal') || '0';
+                        const ship = btn.getAttribute('data-shipping') || '0';
+                        const tot = btn.getAttribute('data-total') || '0';
+                        const sess = btn.getAttribute('data-session') || '';
+                        const payId = btn.getAttribute('data-payment-id') || '';
+                        const linkedRef = btn.getAttribute('data-linked-ref') || '';
+                        let lines = '';
+                        lines += '<div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5e7eb;padding:6px 0;"><span>Customer</span><strong>' + esc(customerName) + '</strong></div>';
+                        lines += '<div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5e7eb;padding:6px 0;"><span>Payment method</span><strong>' + esc(pm) + '</strong></div>';
+                        lines += '<div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5e7eb;padding:6px 0;"><span>Payment status</span><strong>' + esc(ps) + '</strong></div>';
+                        lines += '<div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5e7eb;padding:6px 0;"><span>Subtotal</span><strong>' + fmt(sub) + '</strong></div>';
+                        lines += '<div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5e7eb;padding:6px 0;"><span>Shipping fee</span><strong>' + fmt(ship) + '</strong></div>';
+                        lines += '<div style="display:flex;justify-content:space-between;border-bottom:1px solid #e5e7eb;padding:6px 0;"><span>Total</span><strong>' + fmt(tot) + '</strong></div>';
+                        lines += '<div style="margin-top:10px;"><span style="color:#64748b;display:block;margin-bottom:4px;">Transaction ID</span><span style="font-family:ui-monospace,monospace;font-size:0.85rem;word-break:break-all;">' + esc(payId || '—') + '</span></div>';
+                        if (sess) {
+                            lines += '<div style="margin-top:10px;"><span style="color:#64748b;display:block;margin-bottom:4px;">Checkout session</span><span style="font-family:ui-monospace,monospace;font-size:0.82rem;word-break:break-all;">' + esc(sess) + '</span></div>';
+                        }
+                        if (linkedRef) {
+                            lines += '<div style="margin-top:10px;"><span style="color:#64748b;display:block;margin-bottom:4px;">Linked customer order</span><strong>' + esc(linkedRef) + '</strong></div>';
+                        }
+                        const body = document.getElementById('walkInDetailsBody');
+                        const modal = document.getElementById('walkInDetailsModal');
+                        if (body) body.innerHTML = lines;
+                        if (modal) modal.classList.add('show');
                     });
 
                     document.querySelectorAll('.bo-remove').forEach(btn => {
                         btn.addEventListener('click', function() {
                             const id = this.getAttribute('data-id');
                             if (!confirm('Remove this walk-in order? This cannot be undone.')) return;
-                            fetch(`/Employee/OrderSupport/OrderWalkIn/Remove/${id}`, { method: 'POST' })
+                            fetch(`/Employee/OrderSupport/WalkIn/Remove/${id}`, { method: 'POST' })
                                 .then(r => r.json()).then(d => {
                                     if (d.success) location.reload();
                                     else alert(d.message || 'Remove failed');
@@ -1298,7 +1473,14 @@
                             const region = document.getElementById('modalRegion')?.value;
                             const postalCode = document.getElementById('modalPostalCode')?.value;
                             const country = document.getElementById('modalCountry')?.value;
-                            
+
+                            const deliveryTypeNow = document.getElementById('deliveryType')?.value || 'pickup';
+                            if (deliveryTypeNow === 'delivery') {
+                                if (!String(houseNumber || '').trim() && !String(street || '').trim()) {
+                                    alert('Delivery requires House/Unit number and/or Street in the address.');
+                                    return;
+                                }
+                            }
                             try {
                                 const response = await fetch('/api/admin/walkin/address', {
                                     method: 'POST',
@@ -1324,12 +1506,16 @@
                                 const cityInput = document.getElementById('addressCity');
                                 const barangayInput = document.getElementById('addressBarangay');
                                 const postalCodeInput = document.getElementById('addressPostalCode');
+                                const houseHidden = document.getElementById('addressHouseNumber');
+                                const streetHidden = document.getElementById('addressStreet');
 
                                 if (regionInput) regionInput.value = region || '';
                                 if (provinceInput) provinceInput.value = province || '';
                                 if (cityInput) cityInput.value = city || '';
                                 if (barangayInput) barangayInput.value = barangay || '';
                                 if (postalCodeInput) postalCodeInput.value = postalCode || '';
+                                if (houseHidden) houseHidden.value = (houseNumber || '').trim();
+                                if (streetHidden) streetHidden.value = (street || '').trim();
 
                                 if (Array.isArray(data.availableServiceTypes) && deliveryRateSelect) {
                                     deliveryRateSelect.innerHTML = '<option value="">Select delivery rate...</option>' +
@@ -1363,6 +1549,7 @@
                     const deliveryRateField = document.getElementById('deliveryRateField');
                     if (deliveryTypeSelect && etaField && deliveryRateField) {
                         deliveryTypeSelect.addEventListener('change', function() {
+                            syncWalkInPaymentOptions();
                             if (this.value === 'delivery') {
                                 etaField.style.display = 'block';
                                 deliveryRateField.style.display = 'block';
@@ -1379,6 +1566,7 @@
                                 etaField.style.display = 'none';
                                 deliveryRateField.style.display = 'none';
                             }
+                            calculateTotals();
                         });
                     }
 
@@ -1388,6 +1576,7 @@
                             if (!selected || !selected.value) return;
                             const serviceType = selected.dataset.serviceType || '';
                             setExpectedArrivalFromServiceType(serviceType);
+                            calculateTotals();
                         });
                     }
                     

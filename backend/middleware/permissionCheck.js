@@ -47,6 +47,9 @@ const PERMISSION_ALIASES = {
     orders_returned: ['orders_returned', 'orders_orders_returned'],
     orders_completed_returned: ['orders_completed_returned', 'orders_orders_completed_returned'],
     users_manage_users: ['manage_users'],
+    dashboard_access: ['dashboard'],
+    inventory_product_inventory: ['product_inventory', 'inventory_products'],
+    inventory_product_listing: ['product_listing', 'products_listing', 'inventory_products'],
     reviews_reviews: ['reviews'],
     chat_chat_support: ['chat_support'],
     content_cms: ['cms'],
@@ -127,6 +130,24 @@ async function getUserPermissions(userId, session) {
     let perms = {};
     try {
         const pool = await getPool();
+        try {
+            const roleResult = await pool.request()
+                .input('userId', sql.Int, userId)
+                .query(`
+                    SELECT rp.PermissionName, rp.CanAccess
+                    FROM RolePermissions rp
+                    INNER JOIN Users u ON u.RoleID = rp.RoleID
+                    WHERE u.UserID = @userId
+                `);
+            roleResult.recordset.forEach(p => {
+                perms[p.PermissionName] = !!p.CanAccess;
+            });
+        } catch (rolePermErr) {
+            if (!String(rolePermErr.message || '').includes('RolePermissions')) {
+                console.warn('[Permissions] RolePermissions load skipped:', rolePermErr.message);
+            }
+        }
+
         const result = await pool.request()
             .input('userId', sql.Int, userId)
             .query(`

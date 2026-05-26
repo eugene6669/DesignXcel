@@ -100,7 +100,7 @@
         </ul>
         <li class="sidebar-section-label <%= ordersPages.includes(active) ? 'active' : '' %>">Orders Section</li>
         <ul class="sidebar-submenu">
-            <li><a href="/Employee/Admin/Orders?tab=pending" <%=active==='orders' ? 'class="active"' : '' %>>
+            <li><a href="/Employee/Admin/Orders" <%=active==='orders' ? 'class="active"' : '' %>>
                     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
                         <path
@@ -210,9 +210,20 @@
                     var href = link.getAttribute('href');
                     if (!href) return;
 
-                    var normalizedHref = href.replace(/\/+$/, '') || '/';
+                    var linkPath = (href.split('?')[0] || '/').replace(/\/+$/, '') || '/';
+                    var isActive = false;
 
-                    if (currentPath === normalizedHref || (normalizedHref !== '/' && currentPath.startsWith(normalizedHref + '/'))) {
+                    if (linkPath === '/Employee/Admin/Orders') {
+                        isActive = currentPath === '/Employee/Admin/Orders';
+                    } else if (linkPath === '/Employee/Admin/ReturnedOrders') {
+                        isActive = currentPath === '/Employee/Admin/ReturnedOrders';
+                    } else if (currentPath === linkPath) {
+                        isActive = true;
+                    } else if (linkPath !== '/' && currentPath.startsWith(linkPath + '/')) {
+                        isActive = true;
+                    }
+
+                    if (isActive) {
                         link.classList.add('active');
 
                         var sectionLabel = link.closest('.sidebar-submenu');

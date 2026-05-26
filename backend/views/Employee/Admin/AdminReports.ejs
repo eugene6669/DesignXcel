@@ -989,7 +989,7 @@
                             <label for="sales-status">Order Status</label>
                             <select id="sales-status">
                                 <option value="">All Status</option>
-                                <option value="Pending">Pending</option>
+                                <option value="Pending">Pending Verification (Paid)</option>
                                 <option value="Processing">Processing</option>
                                 <option value="Processing (Pickup)">Processing (Pickup)</option>
                                 <option value="Shipping">Shipping</option>
@@ -1053,9 +1053,6 @@
                     </div>
                 </div>
                 <div class="reports-table-section">
-                    <div class="reports-stats" id="sales-stats"></div>
-                    
-                    <!-- Stats Table -->
                     <details style="background: #ffffff; border-radius: 12px; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e5e7eb;">
                         <summary class="section-title" style="display: flex; align-items: center; gap: 0.5rem; padding: 1.5rem; cursor: pointer; list-style: none;">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1068,17 +1065,19 @@
                             Sales Report Statistics
                         </summary>
                         <div style="padding: 0 1.5rem 1.5rem;">
-                            <div id="stats-table-container" style="width: 100%; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch;">
-                                <table id="stats-table" style="width: 100%; border-collapse: collapse; min-width: 1600px;">
+                            <div class="reports-stats" id="sales-stats"></div>
+                            <div id="stats-table-container" style="width: 100%; overflow-x: auto; margin-top: 1rem;">
+                                <table id="stats-table" class="sales-summary-stats-table" style="width: 100%; border-collapse: collapse; min-width: 720px;">
                                     <thead id="stats-thead">
                                         <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
-                                            <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: #111827; font-size: 0.875rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; border-right: 1px solid #e5e7eb;">Metric</th>
-                                            <th colspan="17" style="padding: 0.5rem; text-align: center; color: #6b7280; font-size: 0.75rem;">Loading statistics...</th>
+                                            <th style="padding: 0.75rem; text-align: left;">Metric</th>
+                                            <th style="padding: 0.75rem; text-align: right;">Value</th>
+                                            <th style="padding: 0.75rem; text-align: left;">Description</th>
                                         </tr>
                                     </thead>
                                     <tbody id="stats-tbody">
                                         <tr>
-                                            <td colspan="18" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics...</td>
+                                            <td colspan="3" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics…</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -1821,9 +1820,10 @@
                 if (data.success) {
                     renderSalesTable(data.data);
                     renderSalesStats(data.stats);
-                    const salesStatsEl = document.getElementById('sales-stats');
-                    if (salesStatsEl) {
-                        salesStatsEl.dataset.revenueComposition = JSON.stringify(data.revenueComposition || null);
+                    const salesMeta = document.getElementById('stats-table-container');
+                    if (salesMeta) {
+                        salesMeta.dataset.stats = JSON.stringify(data.stats || {});
+                        salesMeta.dataset.revenueComposition = JSON.stringify(data.revenueComposition || null);
                     }
                     renderSalesCharts(data.stats, data.revenueComposition);
                 } else {
@@ -1839,10 +1839,25 @@
             }
         }
 
+        const ORDER_STATUS_LABELS_JS = {
+            Pending: 'Pending Verification',
+            Processing: 'Processing',
+            'Processing (Pickup)': 'Processing (Pickup)',
+            Shipping: 'Shipping',
+            Delivery: 'Delivery',
+            Received: 'Received',
+            Completed: 'Completed',
+            Cancelled: 'Cancelled',
+            Returned: 'Returned',
+            Return: 'Returned',
+            Refunded: 'Completed Refunded',
+            'Completed Returned': 'Replacement',
+            Declined: 'Declined'
+        };
+
         function formatSalesOrderStatus(status) {
             if (!status) return 'N/A';
-            if (status === 'Completed Returned') return 'Replacement';
-            return status;
+            return ORDER_STATUS_LABELS_JS[status] || status;
         }
 
         function formatSalesSummaryValue(stats, key, opts = {}) {
@@ -1852,26 +1867,44 @@
             return String(v ?? 0);
         }
 
+        function formatSalesSummaryRowValue(val, opts) {
+            if (opts && opts.percent) return `${Number(val || 0).toFixed(1)}%`;
+            if (opts && opts.currency) return '₱' + Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2 });
+            return String(val ?? 0);
+        }
+
+        const SALES_SUMMARY_ROWS = [
+            { key: 'grossProductSales', alt: 'grossSales', currency: true, label: 'Gross Product Sales', note: 'Paid orders: Pending Verification through Completed (excl. returns)' },
+            { key: 'totalDiscounts', currency: true, label: 'Discounts', note: 'Promotions on gross-eligible orders' },
+            { key: 'netProductSales', currency: true, label: 'Net Product Sales', note: 'Gross product − discounts (collected, pre-recognition)' },
+            { key: 'deliveryRevenueGross', alt: 'deliveryRevenue', currency: true, label: 'Delivery Revenue', note: 'Delivery fees charged (gross-eligible orders)' },
+            { key: 'deliveryRefunds', currency: true, label: 'Delivery Refunds', note: 'Revenue reversal — not a loss' },
+            { key: 'netDeliveryRevenue', currency: true, label: 'Net Delivery Revenue', note: 'Delivery after refunds' },
+            { key: 'productRefunds', currency: true, label: 'Product Refunds', note: 'Revenue reversal — not a loss' },
+            { key: 'netRevenue', currency: true, label: 'Net Revenue', note: 'Recognized: Received & Completed only, after refunds' },
+            { key: 'recognizedProductRevenue', alt: 'netSales', currency: true, label: 'Recognized Product Revenue', note: 'Product revenue after refunds (recognized statuses)' },
+            { key: 'returnShippingExpense', alt: 'returnShipping', currency: true, label: 'Return Shipping Expense', note: 'Direct cash expense (seller-paid)' },
+            { key: 'damageInventoryCost', currency: true, label: 'Damage Cost', note: 'Inventory write-off at item cost' },
+            { key: 'cogs', currency: true, label: 'COGS', note: 'Item cost for Received & Completed orders' },
+            { key: 'replacementCost', currency: true, label: 'Replacement Cost', note: 'Replacement units at item cost' },
+            { key: 'grossProfit', currency: true, label: 'Gross Profit', note: 'Net revenue − COGS − return shipping − damage − replacement' },
+            { key: 'grossMargin', percent: true, label: 'Gross Margin', note: 'Gross profit ÷ net revenue' },
+            { key: 'refundRate', percent: true, label: 'Refund Rate', note: 'Product refunds ÷ gross product sales' },
+            { key: 'returnRate', percent: true, label: 'Return Rate', note: 'Returned orders ÷ total orders' },
+            { key: 'totalOrders', label: 'Total Orders', note: 'Orders matching filters' },
+            { key: 'totalCustomers', label: 'Total Customers', note: 'Unique customer emails' },
+            { key: 'averageOrderValue', currency: true, label: 'Average Order Value', note: 'Mean total amount (excl. cancelled/returns)' }
+        ];
+
         function buildSalesSummaryTableRows(stats) {
-            const rows = [
-                ['Sales', 'Gross Product Sales', formatSalesSummaryValue(stats, 'grossProductSales', { currency: true }), 'List product value (subtotal + discounts)'],
-                ['Sales', 'Discounts', formatSalesSummaryValue(stats, 'totalDiscounts', { currency: true }), 'Promotions / price reductions'],
-                ['Sales', 'Net Product Sales', formatSalesSummaryValue(stats, 'netProductSales', { currency: true }), 'Gross product − discounts (= product subtotal)'],
-                ['Sales', 'Net Revenue', formatSalesSummaryValue(stats, 'netRevenue', { currency: true }), 'Recognized product + delivery after reversals'],
-                ['Delivery', 'Delivery Revenue', formatSalesSummaryValue(stats, 'deliveryRevenueGross', { currency: true }), 'Delivery fees charged'],
-                ['Delivery', 'Delivery Refunds', formatSalesSummaryValue(stats, 'deliveryRefunds', { currency: true }), 'Revenue reversal — not a loss'],
-                ['Delivery', 'Net Delivery Revenue', formatSalesSummaryValue(stats, 'netDeliveryRevenue', { currency: true }), 'Delivery after refunds'],
-                ['Returns', 'Product Refunds', formatSalesSummaryValue(stats, 'productRefunds', { currency: true }), 'Revenue reversal — not a loss'],
-                ['Returns', 'Return Shipping Expense', formatSalesSummaryValue(stats, 'returnShippingExpense', { currency: true }), 'Direct cash expense (seller-paid)'],
-                ['Returns', 'Damage Cost', formatSalesSummaryValue(stats, 'damageInventoryCost', { currency: true }), 'Inventory write-off at item cost'],
-                ['Returns', 'Refund Rate', formatSalesSummaryValue(stats, 'refundRate', { percent: true }), 'Product refunds ÷ gross product sales'],
-                ['Returns', 'Return Rate', formatSalesSummaryValue(stats, 'returnRate', { percent: true }), 'Returned orders ÷ total orders'],
-                ['Profit', 'COGS', formatSalesSummaryValue(stats, 'cogs', { currency: true }), 'Cost of fulfilled products sold'],
-                ['Profit', 'Replacement Cost', formatSalesSummaryValue(stats, 'replacementCost', { currency: true }), 'Replacement units at item cost'],
-                ['Profit', 'Gross Profit', formatSalesSummaryValue(stats, 'grossProfit', { currency: true }), 'Net revenue − COGS − return shipping − damage − replacement'],
-                ['Profit', 'Gross Margin', formatSalesSummaryValue(stats, 'grossMargin', { percent: true }), 'Gross profit ÷ net revenue']
-            ];
-            return rows;
+            return SALES_SUMMARY_ROWS.map(function(row) {
+                const val = stats[row.key] != null ? stats[row.key] : (row.alt ? stats[row.alt] : 0);
+                return [
+                    row.label,
+                    formatSalesSummaryRowValue(val, { currency: row.currency, percent: row.percent }),
+                    row.note
+                ];
+            });
         }
 
         function renderSalesTable(data) {
@@ -1935,76 +1968,44 @@
 
         function renderSalesStats(stats) {
             if (!stats) return;
-            
-            // Store stats data for resize handler
-            const container = document.getElementById('sales-stats');
-            if (container) {
-                container.dataset.stats = JSON.stringify(stats);
+
+            const salesCards = document.getElementById('sales-stats');
+            if (salesCards) {
+                const cardDefs = [
+                    { label: 'Gross Product Sales', key: 'grossProductSales', alt: 'grossSales', currency: true },
+                    { label: 'Net Revenue', key: 'netRevenue', currency: true },
+                    { label: 'Gross Profit', key: 'grossProfit', currency: true },
+                    { label: 'Gross Margin', key: 'grossMargin', percent: true },
+                    { label: 'Total Orders', key: 'totalOrders' },
+                    { label: 'Total Customers', key: 'totalCustomers' },
+                    { label: 'Average Order Value', key: 'averageOrderValue', currency: true },
+                    { label: 'Product Refunds', key: 'productRefunds', currency: true }
+                ];
+                salesCards.innerHTML = cardDefs.map(function(def) {
+                    const raw = stats[def.key] != null ? stats[def.key] : (def.alt ? stats[def.alt] : 0);
+                    const value = formatSalesSummaryRowValue(raw, { currency: def.currency, percent: def.percent });
+                    return '<div class="stat-card">' +
+                        '<div class="stat-label">' + def.label + '</div>' +
+                        '<div class="stat-value">' + value + '</div>' +
+                        '</div>';
+                }).join('');
             }
-            
-            const fmt = (v, type) => {
-                if (type === 'percent') return Number(v || 0).toFixed(1) + '%';
-                if (type === 'currency') return '₱' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2 });
-                return String(v ?? 0);
-            };
 
-            const sections = [
-                {
-                    title: 'Sales',
-                    cards: [
-                        { label: 'Gross Product Sales', value: fmt(stats.grossProductSales || stats.grossSales, 'currency'), hint: 'List value: subtotal + discounts' },
-                        { label: 'Discounts', value: fmt(stats.totalDiscounts, 'currency'), hint: 'Price reductions' },
-                        { label: 'Net Product Sales', value: fmt(stats.netProductSales, 'currency'), hint: 'Gross − discounts (product subtotal)' },
-                        { label: 'Net Revenue', value: fmt(stats.netRevenue, 'currency'), hint: 'Recognized revenue after all reversals' }
-                    ]
-                },
-                {
-                    title: 'Delivery',
-                    cards: [
-                        { label: 'Delivery Revenue', value: fmt(stats.deliveryRevenueGross || stats.deliveryRevenue, 'currency'), hint: 'Fees charged to customer' },
-                        { label: 'Delivery Refunds', value: fmt(stats.deliveryRefunds, 'currency'), hint: 'Revenue reversal — not a loss' },
-                        { label: 'Net Delivery Revenue', value: fmt(stats.netDeliveryRevenue, 'currency'), hint: 'Delivery after refunds' },
-                        { label: 'Product Refunds', value: fmt(stats.productRefunds, 'currency'), hint: 'Revenue reversal — not a loss' }
-                    ]
-                },
-                {
-                    title: 'Returns (expenses)',
-                    cards: [
-                        { label: 'Return Shipping Expense', value: fmt(stats.returnShippingExpense || stats.returnShipping, 'currency'), hint: 'Direct cash out — real loss' },
-                        { label: 'Damage Cost', value: fmt(stats.damageInventoryCost, 'currency'), hint: 'Inventory write-off — real loss' },
-                        { label: 'Refund Rate', value: fmt(stats.refundRate, 'percent'), hint: 'Product refunds ÷ gross product sales' },
-                        { label: 'Return Rate', value: fmt(stats.returnRate, 'percent'), hint: 'Returned orders ÷ total orders' }
-                    ]
-                },
-                {
-                    title: 'Profit',
-                    cards: [
-                        { label: 'COGS', value: fmt(stats.cogs, 'currency'), hint: 'Cost of products sold' },
-                        { label: 'Replacement Cost', value: fmt(stats.replacementCost, 'currency'), hint: 'Replacement units at cost' },
-                        { label: 'Gross Profit', value: fmt(stats.grossProfit, 'currency'), hint: 'Net revenue − COGS − return shipping − damage − replacement' },
-                        { label: 'Gross Margin', value: fmt(stats.grossMargin, 'percent'), hint: 'Gross profit ÷ net revenue' }
-                    ]
-                }
-            ];
-
-            container.innerHTML = sections.map(sec => `
-                <div style="grid-column:1/-1;font-weight:700;font-size:0.9rem;color:#374151;margin:0.5rem 0 0.25rem;padding-top:0.5rem;border-top:1px solid #e5e7eb;">${sec.title}</div>
-                ${sec.cards.map(c => `
-                <div class="stat-card">
-                    <div class="stat-label">${c.label}</div>
-                    <div class="stat-value">${c.value}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">${c.hint}</div>
-                </div>`).join('')}
-            `).join('');
-
-            const statsTableHead = document.getElementById('stats-thead');
             const statsTableBody = document.getElementById('stats-tbody');
-            if (statsTableHead && statsTableBody) {
-                const rows = buildSalesSummaryTableRows(stats);
-                statsTableHead.innerHTML = '<tr style="background:#f9fafb;border-bottom:2px solid #e5e7eb;"><th style="padding:0.75rem;text-align:left;">Section</th><th style="padding:0.75rem;text-align:left;">Metric</th><th style="padding:0.75rem;text-align:right;">Value</th><th style="padding:0.75rem;text-align:left;">Formula</th></tr>';
-                statsTableBody.innerHTML = rows.map(([section, name, val, formula]) =>
-                    `<tr><td style="padding:0.75rem;color:#6b7280;">${section}</td><td style="padding:0.75rem;font-weight:600;color:#374151;">${name}</td><td style="padding:0.75rem;text-align:right;font-weight:600;">${val}</td><td style="padding:0.75rem;color:#6b7280;font-size:0.8rem;">${formula}</td></tr>`
-                ).join('');
+            if (!statsTableBody) return;
+
+            const rows = buildSalesSummaryTableRows(stats);
+            statsTableBody.innerHTML = rows.map(function(cells) {
+                return '<tr>' +
+                    '<td style="padding:0.75rem;font-weight:600;color:#374151;">' + cells[0] + '</td>' +
+                    '<td style="padding:0.75rem;text-align:right;font-weight:600;white-space:nowrap;">' + cells[1] + '</td>' +
+                    '<td style="padding:0.75rem;color:#6b7280;font-size:0.85rem;">' + cells[2] + '</td>' +
+                    '</tr>';
+            }).join('');
+
+            const chartCanvas = document.getElementById('sales-revenue-chart');
+            if (chartCanvas) {
+                chartCanvas.dataset.stats = JSON.stringify(stats);
             }
         }
 
@@ -2267,10 +2268,10 @@
         }
 
         function refreshCSVPreviewData() {
-            const statsContainer = document.getElementById('sales-stats');
+            const statsContainer = document.getElementById('stats-table-container');
             let stats = null;
             try {
-                stats = statsContainer?.dataset.stats ? JSON.parse(statsContainer.dataset.stats) : null;
+                stats = statsContainer && statsContainer.dataset.stats ? JSON.parse(statsContainer.dataset.stats) : null;
             } catch (e) {
                 stats = null;
             }
@@ -2340,22 +2341,25 @@
             if (csvPreviewData && csvPreviewData.stats) {
                 const stats = csvPreviewData.stats;
                 const summaryRowsHtml = buildSalesSummaryTableRows(stats)
-                    .map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`)
+                    .map(function(cells) {
+                        return '<tr><td>' + cells[0] + '</td><td style="text-align:right">' + cells[1] + '</td><td style="color:#64748b;font-size:0.85em">' + cells[2] + '</td></tr>';
+                    })
                     .join('');
                 previewBody.innerHTML = `
                     <div class="csv-preview-section">
                         <h3>Summary (included in file)</h3>
                         <table class="csv-preview-table">
-                            ${summaryRowsHtml}
+                            <thead><tr><th>Metric</th><th style="text-align:right">Value</th><th>Description</th></tr></thead>
+                            <tbody>${summaryRowsHtml}</tbody>
                         </table>
                     </div>
                     <div class="csv-preview-section">
                         <h3>Orders sheet</h3>
                         <p style="margin: 0 0 0.5rem 0; color: var(--text-light); font-size: 0.9rem;">
-                            ${csvPreviewData.rowCount || 0} order(s): Order #, Reference, Date, Customer, Status, Products, Subtotal, Delivery, Total, Payment
+                            ${csvPreviewData.rowCount || 0} order(s): Order #, Reference, Date, Customer, Email, Status, Products, Subtotal, Discount, Extra Delivery, Delivery, Total, Payment, In Gross Sales, In Net Revenue
                         </p>
                         <p style="margin: 0; font-size: 0.85rem; color: var(--text-light);">
-                            <strong>Format:</strong> Excel (.xlsx) &nbsp;•&nbsp;
+                            <strong>Format:</strong> CSV (UTF-8, opens in Excel) &nbsp;•&nbsp;
                             <strong>Filters:</strong> ${filterSummary}
                         </p>
                     </div>
@@ -2377,6 +2381,7 @@
         function downloadCSV() {
             closeCSVPreview();
             const params = new URLSearchParams(salesFilters);
+            params.set('format', 'csv');
             window.location.href = `/Employee/Admin/Reports/Sales/Export?${params}`;
         }
 
@@ -2608,8 +2613,7 @@
                         }
                     }
                 } else if (activeTab && activeTab.id === 'sales-tab') {
-                    // Reload charts if sales tab is active
-                    const statsContainer = document.getElementById('sales-stats');
+                    const statsContainer = document.getElementById('stats-table-container');
                     if (statsContainer && statsContainer.dataset.stats) {
                         const stats = JSON.parse(statsContainer.dataset.stats);
                         let revenueComposition = null;
@@ -2622,7 +2626,6 @@
                         }
                         renderSalesCharts(stats, revenueComposition);
                     } else {
-                        // If no stored data, reload
                         loadSalesData();
                     }
                 }

@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Returned Orders - Admin</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="/css/Employee/Admin/admin-orders-compact.css?v=20260524a">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
@@ -470,6 +472,189 @@
             color: #d97706;
         }
 
+        .status-appealed {
+            background: rgba(139, 92, 246, 0.18);
+            color: #6d28d9;
+        }
+
+        .appealed-label {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: rgba(139, 92, 246, 0.15);
+            color: #6d28d9;
+            border: 1px solid rgba(139, 92, 246, 0.35);
+        }
+
+        .status-replaced {
+            background: rgba(16, 185, 129, 0.15);
+            color: #047857;
+        }
+        .status-pickup-received {
+            background: rgba(99, 102, 241, 0.15);
+            color: #4338ca;
+        }
+        .status-awaiting-inspection {
+            background: rgba(14, 165, 233, 0.15);
+            color: #0369a1;
+        }
+        .status-inspection-complete {
+            background: rgba(34, 197, 94, 0.15);
+            color: #15803d;
+        }
+        .return-inspect-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 10050;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .return-inspect-overlay.show { display: flex; }
+        #returnInspectConfirmModal,
+        #returnInspectStartModal,
+        #returnPickupProceedModal,
+        #returnReceiveConfirmModal,
+        #refundConfirmModal,
+        #replacementConfirmModal,
+        #successModal {
+            z-index: 10060;
+        }
+        .return-inspect-panel {
+            background: #fff;
+            border: 2px solid #F0B21B;
+            border-radius: 10px;
+            max-width: 720px;
+            width: 100%;
+            max-height: 88vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 12px 32px rgba(240, 178, 27, 0.28);
+        }
+        .return-inspect-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(180, 130, 10, 0.35);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(180deg, #f5c84a 0%, #F0B21B 100%);
+        }
+        .return-inspect-header h3 {
+            margin: 0;
+            font-size: 1.05rem;
+            color: #333;
+        }
+        .return-inspect-header button {
+            color: #333 !important;
+        }
+        .return-inspect-body {
+            padding: 14px 16px;
+            overflow-y: auto;
+            flex: 1;
+            background: #fff;
+        }
+        .return-inspect-hero {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            padding: 10px;
+            background: #fffbeb;
+            border: 1px solid rgba(240, 178, 27, 0.45);
+            border-radius: 8px;
+        }
+        .return-inspect-hero img {
+            width: 96px;
+            height: 96px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid rgba(240, 178, 27, 0.45);
+        }
+        .return-inspect-variant {
+            border: 1px solid rgba(240, 178, 27, 0.35);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            background: #fff;
+        }
+        .return-inspect-variant.selected {
+            border-color: #F0B21B;
+            background: #fffbeb;
+            box-shadow: 0 0 0 1px #F0B21B;
+        }
+        .return-inspect-qty-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+            align-items: flex-end;
+        }
+        .return-inspect-qty-row label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 3px;
+            color: #92400e;
+        }
+        .return-inspect-qty-row input {
+            width: 64px;
+            padding: 5px 6px;
+            border: 1px solid #F0B21B;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        .return-inspect-actions {
+            padding: 12px 16px;
+            border-top: 1px solid rgba(240, 178, 27, 0.35);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-wrap: wrap;
+            background: #fdf2f4;
+        }
+        #returnInspectCustomerReason {
+            background: #fdf2f4 !important;
+            border-color: rgba(175, 11, 33, 0.25) !important;
+            color: #5c0a14 !important;
+        }
+        #returnInspectHint {
+            color: #7a0a18 !important;
+            font-size: 0.85em !important;
+            margin-bottom: 10px !important;
+        }
+        .return-workflow-step {
+            padding: 12px 14px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        .return-workflow-step strong { display: block; margin-bottom: 4px; color: #334155; }
+        .return-workflow-step p { margin: 0 0 10px; color: #64748b; font-size: 0.9em; }
+        .return-type-label.refunded {
+            background: rgba(245, 158, 11, 0.15);
+            color: #b45309;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+        .return-type-label.replacement {
+            background: rgba(16, 185, 129, 0.15);
+            color: #047857;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
         .status-refunded {
             background: rgba(16, 185, 129, 0.18);
             color: #059669;
@@ -1042,7 +1227,7 @@
 <body>
     <div class="dashboard-container">
         <div class="sidebar">
-            <%- include('partials/sidebar', { activePage: 'orders-returned' }) %>
+            <%- include('partials/sidebar', { activePage: typeof activePage !== 'undefined' ? activePage : 'orders-returned' }) %>
         </div>
         <div class="main-content">
             <div class="header orders-header">
@@ -1126,14 +1311,14 @@
                 </div>
 
                 <!-- View Toggle and Pagination Info -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                <div class="orders-view-toggle-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
                         <span style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">View:</span>
                         <div style="display: flex; background: #f3f4f6; border-radius: 8px; padding: 2px;">
-                            <button id="viewCardsBtn" class="view-toggle-btn active" onclick="switchView('cards')" style="padding: 0.5rem 1rem; border: none; background: #F0B21B; color: white; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;">
+                            <button id="viewCardsBtn" class="view-toggle-btn" onclick="switchView('cards')" style="padding: 0.5rem 1rem; border: none; background: transparent; color: #6b7280; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;">
                                 Cards
                             </button>
-                            <button id="viewTableBtn" class="view-toggle-btn" onclick="switchView('table')" style="padding: 0.5rem 1rem; border: none; background: transparent; color: #6b7280; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;">
+                            <button id="viewTableBtn" class="view-toggle-btn active" onclick="switchView('table')" style="padding: 0.5rem 1rem; border: none; background: #F0B21B; color: white; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;">
                                 Table
                             </button>
                         </div>
@@ -1154,7 +1339,7 @@
                 </div>
 
                 <% if (orders && orders.length > 0) { %>
-                    <div class="orders-grid" id="ordersGrid">
+                    <div class="orders-grid" id="ordersGrid" style="display: none;">
                         <% orders.forEach(function(order) { %>
                             <div class="order-card collapsed <%= order.IsBulkOrder ? 'has-bulk-badge' : '' %>" 
                                  data-order-id="<%= order.OrderID %>"
@@ -1196,18 +1381,15 @@
                                     <div class="order-card-summary-main">
                                         <div class="order-card-title"><%= order.ReferenceNumber ? `Order ${order.ReferenceNumber}` : 'Order' %></div>
                                         <div class="order-card-meta">
-                                            <span class="order-card-status <%= 
-                                                order.Status === 'Refunded' ? 'status-refunded' : 
-                                                order.Status === 'Declined' ? 'status-declined' : 
-                                                (order.Status === 'Processing' || order.Status === 'Processing (Pickup)') ? 'status-processing' : 
-                                                'status-returned' 
-                                            %>">
-                                                <%= order.Status === 'Refunded' ? 'Refunded' : 
-                                                    order.Status === 'Declined' ? 'Declined' : 
-                                                    (order.Status === 'Processing' || order.Status === 'Processing (Pickup)') ? 'Processing (Pickup)' : 
-                                                    'Returned' 
-                                                %>
+                                            <span class="order-card-status <%= returnedOrderStatusClass(order) %>">
+                                                <%= returnedOrderStatusLabel(order) %>
                                             </span>
+                                            <% if (order.ReturnReason && String(order.ReturnReason).trim().startsWith('APPEALED:')) { %>
+                                            <span class="appealed-label">Appealed</span>
+                                            <% } %>
+                                            <% if (returnedOrderTypeClass(order)) { %>
+                                            <span class="return-type-label <%= returnedOrderTypeClass(order) %>"><%= returnedOrderTypeLabel(order) %></span>
+                                            <% } %>
                                             <span>Placed: <%= order.FormattedOrderDate || new Date(order.OrderDate).toLocaleString('en-US') %></span>
                                         </div>
                                     </div>
@@ -1316,7 +1498,7 @@
                                                 <% } %>
                                             </div>
                                             <% if (order.TransactionID) { %>
-                                            <div>Payment ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                            <div>Payment Reference: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
                                             <% } %>
                                             <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
                                             <div>Delivery Cost: <strong>₱<%= Number(order.DeliveryCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }) %></strong></div>
@@ -1337,39 +1519,33 @@
                                     </div>
 
                                     <% 
-                                        const returnReason = order.ReturnReason || order.ReturnDescription;
+                                        const rawReturnReason = order.ReturnReason || order.ReturnDescription;
+                                        const returnReason = typeof stripReturnReasonPrefix === 'function'
+                                            ? stripReturnReasonPrefix(rawReturnReason)
+                                            : rawReturnReason;
                                         const actionType = order.ActionType;
                                         const returnType = order.ReturnType;
                                     %>
-                                    <% if (actionType) { %>
-                                        <div class="order-section">
-                                            <span class="order-section-title">Action Type</span>
-                                            <div class="order-section-body">
-                                                <div style="display: flex; align-items: center; gap: 8px;">
-                                                    <% if (actionType === 'refund') { %>
-                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px; color: #f59e0b;">
-                                                            <line x1="12" y1="1" x2="12" y2="23"></line>
-                                                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                                                        </svg>
-                                                        <strong style="color: #f59e0b;">Refund</strong>
-                                                    <% } else if (actionType === 'replacement') { %>
-                                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px; color: #10b981;">
-                                                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                                                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                                                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
-                                                        </svg>
-                                                        <strong style="color: #10b981;">Replacement</strong>
-                                                    <% } else { %>
-                                                        <strong><%= actionType %></strong>
-                                                    <% } %>
-                                                </div>
-                                            </div>
+                                    <div class="order-section">
+                                        <span class="order-section-title">Return Type</span>
+                                        <div class="order-section-body">
+                                            <% if (returnedOrderTypeClass(order)) { %>
+                                                <span class="return-type-label <%= returnedOrderTypeClass(order) %>"><%= returnedOrderTypeLabel(order) %></span>
+                                            <% } else { %>
+                                                <span style="color:#9ca3af;">Not set</span>
+                                            <% } %>
                                         </div>
-                                    <% } %>
+                                    </div>
+                                    <div class="order-section">
+                                        <span class="order-section-title">Status</span>
+                                        <div class="order-section-body">
+                                            <span class="order-card-status <%= returnedOrderStatusClass(order) %>" style="display:inline-flex;padding:4px 12px;border-radius:999px;font-size:0.75rem;font-weight:700;text-transform:uppercase;"><%= returnedOrderStatusLabel(order) %></span>
+                                        </div>
+                                    </div>
                                     <% if (returnType) { %>
                                         <div class="order-section">
                                             <span class="order-section-title">Return Reason Type</span>
-                                            <div class="order-section-body"><strong><%= returnType === 'damage' ? 'Damaged Item' : 'Other Reason' %></strong></div>
+                                            <div class="order-section-body"><strong><%= typeof returnReasonTypeLabel === 'function' ? returnReasonTypeLabel(returnType) : (returnType === 'damage' ? 'Damaged Item' : returnType === 'wrong_item' ? 'Wrong Item' : 'Other Reason') %></strong></div>
                                         </div>
                                     <% } %>
                                     <% if (returnReason) { %>
@@ -1380,8 +1556,10 @@
                                     <% } %>
                                     
                                     <% 
-                                        const isDeclined = returnReason && returnReason.startsWith('DECLINED:');
-                                        const declineReason = isDeclined ? returnReason.replace('DECLINED:', '').trim() : null;
+                                        const isDeclined = order.Status === 'Declined' || (rawReturnReason && String(rawReturnReason).trim().startsWith('DECLINED:'));
+                                        const declineReason = isDeclined && rawReturnReason
+                                            ? String(rawReturnReason).replace(/^DECLINED:\s*/, '').trim()
+                                            : null;
                                     %>
                                     
                                     <% if (isDeclined) { %>
@@ -1488,9 +1666,9 @@
                                         </div>
                                     <% } %>
                                     
-                                    <% if (order.Status === 'Returned') { %>
+                                    <% if (order.Status === 'Return' || order.Status === 'Returned') { %>
                                         <div class="order-section">
-                                            <span class="order-section-title">Review Actions</span>
+                                            <span class="order-section-title">Step 1 — Approve Return</span>
                                             <div class="order-section-body" style="display: flex; gap: 12px; flex-wrap: wrap;">
                                                 <button 
                                                     type="button"
@@ -1515,54 +1693,64 @@
                                                 </button>
                                             </div>
                                         </div>
-                                    <% } else if ((order.Status === 'Processing' || order.Status === 'Processing (Pickup)') && actionType === 'refund') { %>
+                                    <% } else if (order.Status === 'Processing (Pickup)' || (order.Status === 'Processing' && actionType)) { %>
                                         <div class="order-section">
-                                            <span class="order-section-title">Refund Actions</span>
-                                            <div class="order-section-body" style="display: flex; gap: 12px; flex-wrap: wrap;">
-                                                <p style="margin: 0; color: #6b7280; font-size: 14px;">
-                                                    Order approved. Waiting for pickup. After pickup, process refund below.
-                                                </p>
-                                                <button 
-                                                    type="button"
-                                                    onclick="openRefundModal(<%= order.OrderID %>)"
-                                                    class="btn-action btn-refund"
-                                                >
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                        <line x1="12" y1="1" x2="12" y2="23"></line>
-                                                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                                                    </svg>
-                                                    Process Refund (After Pickup)
-                                                </button>
+                                            <span class="order-section-title">Step 2 — Process Pickup</span>
+                                            <div class="order-section-body return-workflow-step">
+                                                <strong>Arrange customer return pickup</strong>
+                                                <p>When returned items arrive at the warehouse, click Receive Item to start inspection.</p>
+                                                <button type="button" onclick="openReturnReceiveConfirmModal(<%= order.OrderID %>)" class="btn-action btn-approve">Receive Item</button>
                                             </div>
                                         </div>
-                                    <% } else if ((order.Status === 'Processing' || order.Status === 'Processing (Pickup)') && actionType === 'replacement') { %>
+                                    <% } else if (order.Status === 'Awaiting Inspection') { %>
                                         <div class="order-section">
-                                            <span class="order-section-title">Replacement Actions</span>
-                                            <div class="order-section-body" style="display: flex; gap: 12px; flex-wrap: wrap;">
-                                                <p style="margin: 0; color: #6b7280; font-size: 14px;">
-                                                    Order approved. Waiting for pickup. After pickup, proceed to processing replacement below.
-                                                </p>
-                                                <button 
-                                                    type="button"
-                                                    onclick="openReplacementModal(<%= order.OrderID %>)"
-                                                    class="btn-action btn-replacement"
-                                                >
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                                                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-                                                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
-                                                    </svg>
-                                                    Proceed to Processing Replacement
-                                                </button>
+                                            <span class="order-section-title">Step 3 — Waiting for Inspection</span>
+                                            <div class="order-section-body return-workflow-step">
+                                                <strong>Inspect returned items</strong>
+                                                <p>Record damaged vs wrong item quantities. Product Returns inventory updates only when you complete inspection.</p>
+                                                <button type="button" onclick="openReturnInspectStartConfirm(<%= order.OrderID %>)" class="btn-action" style="background:#0ea5e9;color:#fff;">Inspect Items</button>
+                                            </div>
+                                        </div>
+                                    <% } else if (order.Status === 'Inspection Complete' && actionType) { %>
+                                        <div class="order-section">
+                                            <span class="order-section-title">Step 4 — <%= (actionType || '').toLowerCase() === 'refund' ? 'Process Refund' : (actionType || '').toLowerCase() === 'replacement' ? 'Process Replacement' : 'Next Step' %></span>
+                                            <div class="order-section-body return-workflow-step">
+                                                <strong>Inspection complete</strong>
+                                                <p>Stock has been applied to Product Returns. Confirm pickup and proceed.</p>
+                                                <button type="button" onclick="openReturnPickupProceedModal(<%= order.OrderID %>, '<%= (actionType || '').toLowerCase() %>')" class="btn-action btn-approve"><%=
+                                                    (actionType || '').toLowerCase() === 'refund' ? 'Process Refund' :
+                                                    (actionType || '').toLowerCase() === 'replacement' ? 'Process Replacement' : 'Proceed'
+                                                %></button>
+                                            </div>
+                                        </div>
+                                    <% } else if (order.Status === 'Pickup Received' && actionType === 'refund') { %>
+                                        <div class="order-section">
+                                            <span class="order-section-title">Step 5 — Process Refund</span>
+                                            <div class="order-section-body" style="display: flex; gap: 12px; flex-wrap: wrap; flex-direction: column; align-items: flex-start;">
+                                                <p style="margin: 0; color: #6b7280; font-size: 14px;">Pickup received. Process the customer refund.</p>
+                                                <button type="button" onclick="openRefundModal(<%= order.OrderID %>)" class="btn-action btn-refund">Process Refund</button>
+                                            </div>
+                                        </div>
+                                    <% } else if (order.Status === 'Pickup Received' && actionType === 'replacement') { %>
+                                        <div class="order-section">
+                                            <span class="order-section-title">Step 5 — Process Replacement</span>
+                                            <div class="order-section-body" style="display: flex; gap: 12px; flex-wrap: wrap; flex-direction: column; align-items: flex-start;">
+                                                <p style="margin: 0; color: #6b7280; font-size: 14px;">Pickup received. Process the replacement order.</p>
+                                                <button type="button" onclick="openReplacementModal(<%= order.OrderID %>)" class="btn-action btn-replacement">Process Replacement</button>
                                             </div>
                                         </div>
                                     <% } else if (order.Status === 'Refunded') { %>
                                         <div class="order-section">
                                             <span class="order-section-title">Refund Status</span>
                                             <div class="order-section-body" style="padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
-                                                <p style="margin: 0; color: #059669; font-weight: 600; font-size: 14px;">
-                                                    ✅ Order has been refunded. Payment refunded in Stripe Dashboard.
-                                                </p>
+                                                <p style="margin: 0; color: #059669; font-weight: 600; font-size: 14px;">Refunded.</p>
+                                            </div>
+                                        </div>
+                                    <% } else if (order.Status === 'Completed Returned') { %>
+                                        <div class="order-section">
+                                            <span class="order-section-title">Replacement Status</span>
+                                            <div class="order-section-body" style="padding: 12px; background: #f0fdf4; border: 1px solid #10b981; border-radius: 6px;">
+                                                <p style="margin: 0; color: #059669; font-weight: 600; font-size: 14px;">Replaced.</p>
                                             </div>
                                         </div>
                                     <% } else if (order.Status === 'Declined') { %>
@@ -1662,7 +1850,7 @@
                                 </svg>
                             </div>
                             <h3>Process Refund</h3>
-                            <p>Are you sure you want to process a refund for this order? The money will be refunded to the customer via Stripe. A refund receipt email will be sent to the customer.</p>
+                            <p>Confirm process the customer refund? The money will be refunded to the customer via Stripe. A refund receipt email will be sent to the customer.</p>
                             <div class="modal-buttons">
                                 <button class="modal-button cancel" onclick="closeRefundModal()">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1704,8 +1892,100 @@
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                         <polyline points="20 6 9 17 4 12"></polyline>
                                     </svg>
-                                    Approve Return
+                                    Approve &amp; Proceed
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Return receive confirmation -->
+                    <div id="returnReceiveConfirmModal" class="modal-overlay">
+                        <div class="modal-content">
+                            <div class="modal-icon approve">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </div>
+                            <h3>Receive Return Items</h3>
+                            <p>The order will move to <strong>Waiting for Inspection</strong>.</p>
+                            <div class="modal-buttons">
+                                <button type="button" class="modal-button cancel" onclick="closeReturnReceiveConfirmModal()">Cancel</button>
+                                <button type="button" class="modal-button confirm approve-btn" id="returnReceiveConfirmBtn" onclick="executeReturnReceivingProceed()">Receive Item</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Return inspection apply confirmation -->
+                    <div id="returnInspectConfirmModal" class="modal-overlay">
+                        <div class="modal-content">
+                            <div class="modal-icon approve" style="background:#e0f2fe;color:#0284c7;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 11l3 3L22 4"></path>
+                                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                                </svg>
+                            </div>
+                            <h3>Apply Inspection Results</h3>
+                            <p>Apply inspection results to inventory? Good items restock to available; bad or damaged units go to damaged stock on Product Returns.</p>
+                            <div class="modal-buttons">
+                                <button type="button" class="modal-button cancel" onclick="closeReturnInspectConfirmModal()">Cancel</button>
+                                <button type="button" class="modal-button confirm approve-btn" id="returnInspectConfirmBtn" onclick="executeReturnInspectProceed()">Apply &amp; Complete</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Proceed to refund/replacement after inspection -->
+                    <div id="returnPickupProceedModal" class="modal-overlay">
+                        <div class="modal-content">
+                            <div class="modal-icon approve" style="background:#fef3c7;color:#d97706;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                </svg>
+                            </div>
+                            <h3 id="returnPickupProceedTitle">Proceed</h3>
+                            <p id="returnPickupProceedMessage">Confirm and proceed?</p>
+                            <div class="modal-buttons">
+                                <button type="button" class="modal-button cancel" onclick="closeReturnPickupProceedModal()">Cancel</button>
+                                <button type="button" class="modal-button confirm approve-btn" id="returnPickupProceedBtn" onclick="executeReturnPickupProceed()">Proceed</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Confirm before opening inspection (Waiting for Inspection) -->
+                    <div id="returnInspectStartModal" class="modal-overlay">
+                        <div class="modal-content">
+                            <div class="modal-icon approve" style="background:#e0f2fe;color:#0369a1;">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 11l3 3L22 4"></path>
+                                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                                </svg>
+                            </div>
+                            <h3>Start Inspection?</h3>
+                            <p>Items are at the warehouse and waiting for inspection. Classify each returned variant as good, bad, or damaged based on the return reason.</p>
+                            <div class="modal-buttons">
+                                <button type="button" class="modal-button cancel" onclick="closeReturnInspectStartModal()">Cancel</button>
+                                <button type="button" class="modal-button confirm approve-btn" onclick="confirmReturnInspectStart()">Start Inspection</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Return inspection modal (Step 3) -->
+                    <div id="returnInspectModal" class="return-inspect-overlay" role="dialog" aria-modal="true" aria-labelledby="returnInspectTitle">
+                        <div class="return-inspect-panel">
+                            <div class="return-inspect-header">
+                                <h3 id="returnInspectTitle" style="margin:0;">Inspect Return Items</h3>
+                                <button type="button" onclick="closeReturnInspectModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;line-height:1;">&times;</button>
+                            </div>
+                            <div class="return-inspect-body">
+                                <div id="returnInspectCustomerReason" style="display:none;margin:0 0 16px;padding:12px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:0.9em;color:#0c4a6e;"></div>
+                                <p id="returnInspectHint" style="margin:0 0 16px;color:#64748b;font-size:0.9em;"></p>
+                                <div id="returnInspectHero" class="return-inspect-hero"></div>
+                                <div id="returnInspectVariants"></div>
+                                <p id="returnInspectError" style="display:none;color:#dc2626;font-size:0.9em;margin:12px 0 0;"></p>
+                            </div>
+                            <div class="return-inspect-actions">
+                                <button type="button" class="modal-button cancel" onclick="closeReturnInspectModal()">Cancel</button>
+                                <button type="button" class="modal-button confirm approve-btn" id="returnInspectProceedBtn" onclick="proceedReturnInspectDirect()">Proceed</button>
                             </div>
                         </div>
                     </div>
@@ -1802,14 +2082,15 @@
                     </div>
 
                     <!-- Orders Table (Hidden by default) -->
-                    <div id="ordersTable" style="display: none; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
-                        <table style="width: 100%; border-collapse: collapse;">
+                    <div id="ordersTable" style="display: block; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
+                        <table class="admin-orders-compact-table">
                             <thead style="background: #f8f9fa; border-bottom: 2px solid #e5e7eb;">
                                 <tr>
                                     <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Order #</th>
                                     <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Customer</th>
                                     <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Date</th>
                                     <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Status</th>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Return Type</th>
                                     <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Payment</th>
                                     <th style="padding: 1rem; text-align: right; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Total</th>
                                     <th style="padding: 1rem; text-align: center; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Actions</th>
@@ -1858,35 +2139,55 @@
                                             <%= order.FormattedOrderDate || new Date(order.OrderDate).toLocaleString('en-US') %>
                                         </td>
                                         <td style="padding: 1rem;">
-                                            <% 
-                                                const status = (order.Status || 'Returned').toString().toLowerCase();
-                                                const statusClass = status === 'pending' ? 'status-pending' : 
-                                                                    status === 'processing' || status === 'processing (pickup)' ? 'status-processing' :
-                                                                    status === 'shipping' ? 'status-shipping' :
-                                                                    status === 'delivery' ? 'status-delivery' :
-                                                                    status === 'received' || status === 'receive' ? 'status-receive' :
-                                                                    status === 'completed' ? 'status-completed' :
-                                                                    status === 'cancelled' ? 'status-cancelled' :
-                                                                    status === 'returned' ? 'status-returned' : 'status-returned';
-                                                const statusDisplay = (order.Status === 'Processing (Pickup)' || order.Status === 'Processing') && order.ActionType === 'refund' 
-                                                    ? 'Processing (Pickup)' 
-                                                    : (order.Status || 'Returned');
-                                            %>
-                                            <span class="order-card-status <%= statusClass %>" style="display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;"><%= statusDisplay %></span>
+                                            <span class="order-card-status <%= returnedOrderStatusClass(order) %>" style="display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 12px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;"><%= returnedOrderStatusLabel(order) %></span>
+                                            <% if (order.ReturnReason && String(order.ReturnReason).trim().startsWith('APPEALED:')) { %>
+                                            <span class="appealed-label">Appealed</span>
+                                            <% } %>
+                                        </td>
+                                        <td style="padding: 1rem;">
+                                            <% if (returnedOrderTypeClass(order)) { %>
+                                            <span class="return-type-label <%= returnedOrderTypeClass(order) %>"><%= returnedOrderTypeLabel(order) %></span>
+                                            <% } else { %>
+                                            <span style="color:#9ca3af;">—</span>
+                                            <% } %>
                                         </td>
                                         <td style="padding: 1rem; font-size: 0.875rem; color: #6b7280;">
                                             <%= order.PaymentMethod || 'N/A' %>
                                         </td>
                                         <td style="padding: 1rem; text-align: right; font-weight: 700; color: #111827;">
-                                            ₱<%= Number(order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
+                                            <% const showRefundAmount = order.Status === 'Refunded' && order.RefundAmount > 0; %>
+                                            ₱<%= Number(showRefundAmount ? order.RefundAmount : order.TotalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 }) %>
                                         </td>
-                                        <td style="padding: 1rem; text-align: center;">
-                                            <button class="order-card-toggle" type="button" data-toggle-target="<%= order.OrderID %>" style="background: #F0B21B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem;" onclick="toggleOrderDetails(<%= order.OrderID %>)">View</button>
+                                        <td class="orders-actions-cell" style="padding: 1rem; text-align: center;">
+                                            <div class="table-action-buttons">
+                                                <button class="order-card-toggle table-action-btn" type="button" data-toggle-target="<%= order.OrderID %>" style="background: #F0B21B; color: white;" onclick="toggleOrderDetails(<%= order.OrderID %>)">View</button>
+                                                <% if (order.Status === 'Return' || order.Status === 'Returned') { %>
+                                                    <button type="button" onclick="openApproveModal(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Approve</button>
+                                                    <button type="button" onclick="openDeclineModal(<%= order.OrderID %>)" class="btn-action btn-decline table-action-btn">Decline</button>
+                                                <% } else if (order.Status === 'Processing (Pickup)' || (order.Status === 'Processing' && order.ActionType)) { %>
+                                                    <button type="button" onclick="openReturnReceiveConfirmModal(<%= order.OrderID %>)" class="btn-action btn-approve table-action-btn">Receive Item</button>
+                                                <% } else if (order.Status === 'Awaiting Inspection') { %>
+                                                    <button type="button" onclick="openReturnInspectStartConfirm(<%= order.OrderID %>)" class="btn-action table-action-btn" style="background:#0ea5e9;color:#fff;">Inspect</button>
+                                                <% } else if (order.Status === 'Inspection Complete') { %>
+                                                    <button type="button" onclick="openReturnPickupProceedModal(<%= order.OrderID %>, '<%= (order.ActionType || '').toLowerCase() %>')" class="btn-action btn-approve table-action-btn"><%=
+                                                        (order.ActionType || '').toLowerCase() === 'refund' ? 'Process Refund' :
+                                                        (order.ActionType || '').toLowerCase() === 'replacement' ? 'Process Replacement' : 'Proceed'
+                                                    %></button>
+                                                <% } else if (order.Status === 'Pickup Received' && (order.ActionType || '').toLowerCase() === 'refund') { %>
+                                                    <button type="button" onclick="openRefundModal(<%= order.OrderID %>)" class="btn-action btn-refund table-action-btn">Process Refund</button>
+                                                <% } else if (order.Status === 'Pickup Received' && (order.ActionType || '').toLowerCase() === 'replacement') { %>
+                                                    <button type="button" onclick="openReplacementModal(<%= order.OrderID %>)" class="btn-action btn-replacement table-action-btn">Replace</button>
+                                                <% } else if (order.Status === 'Refunded') { %>
+                                                    <span class="od-return-status-msg od-return-status-msg--success">Refunded</span>
+                                                <% } else if (order.Status === 'Completed Returned') { %>
+                                                    <span class="od-return-status-msg od-return-status-msg--success">Replaced</span>
+                                                <% } %>
+                                            </div>
                                         </td>
                                     </tr>
                                     <!-- Order Details Row (Hidden by default) -->
                                     <tr id="table-details-<%= order.OrderID %>" style="display: none; background: #f9fafb;">
-                                        <td colspan="7" style="padding: 1.5rem;">
+                                        <td colspan="8" style="padding: 1.5rem;">
                                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
                                                 <!-- Customer Section -->
                                                 <div>
@@ -1934,7 +2235,7 @@
                                                                     </div>
                                                                     <div style="flex: 1; min-width: 0;">
                                                                         <div style="font-weight: 600; color: #111827; margin-bottom: 0.25rem;"><%= item.Name %></div>
-                                                                        <div style="display: flex; flex-wrap: gap: 0.5rem; font-size: 0.8rem; color: #6b7280;">
+                                                                        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; font-size: 0.8rem; color: #6b7280;">
                                                                             <% if (item.VariationName) { %>
                                                                                 <span>Variation: <%= item.VariationName %></span>
                                                                             <% } %>
@@ -1975,7 +2276,7 @@
                                                             <% } %>
                                                         </div>
                                                         <% if (order.TransactionID) { %>
-                                                        <div>Payment ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                                        <div>Payment Reference: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
                                                         <% } %>
                                                         <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
                                                         <% if ((order.DeliveryTypeName === 'Pick up' || order.DeliveryType === 'pickup') && order.PickupDate) { %>
@@ -2028,6 +2329,8 @@
                                                         </div>
                                                     </div>
                                                 </div>
+
+                                                <%- include('partials/admin-returned-order-actions', { order: order }) %>
                                             </div>
                                         </td>
                                     </tr>
@@ -2037,30 +2340,35 @@
                     </div>
 
                     <!-- Pagination Controls -->
-                    <% if (pagination && pagination.totalPages > 1) { %>
+                    <% if (pagination && pagination.totalPages > 1) {
+                        const pgBtnBase = 'padding: 0.625rem 1rem; border: 1px solid #e5e7eb; border-radius: 6px; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;';
+                        const pgBtnDisabled = pgBtnBase + ' background: #f3f4f6; color: #9ca3af; cursor: not-allowed;';
+                        const pgBtnEnabled = pgBtnBase + ' background: #ffffff; color: #374151; cursor: pointer;';
+                        const pgPageStart = Math.max(1, pagination.currentPage - 2);
+                        const pgPageEnd = Math.min(pagination.totalPages, pagination.currentPage + 2);
+                    %>
                         <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 2rem; flex-wrap: wrap;">
-                            <button onclick="goToPage(<%= pagination.currentPage - 1 %>)" 
-                                    <%= pagination.currentPage === 1 ? 'disabled' : '' %>
-                                    style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= pagination.currentPage === 1 ? '#f3f4f6' : '#ffffff' %>; color: <%= pagination.currentPage === 1 ? '#9ca3af' : '#374151' %>; border-radius: 6px; cursor: <%= pagination.currentPage === 1 ? 'not-allowed' : 'pointer' %>; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;"
-                                    <%= pagination.currentPage === 1 ? 'onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'#f3f4f6\'"' : 'onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'#ffffff\'"' %>>
-                                Previous
-                            </button>
-                            
-                            <% for (let i = Math.max(1, pagination.currentPage - 2); i <= Math.min(pagination.totalPages, pagination.currentPage + 2); i++) { %>
-                                <button onclick="goToPage(<%= i %>)" 
-                                        style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= i === pagination.currentPage ? '#F0B21B' : '#ffffff' %>; color: <%= i === pagination.currentPage ? '#ffffff' : '#374151' %>; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: all 0.2s; min-width: 40px;"
-                                        onmouseover="<%= i === pagination.currentPage ? '' : 'this.style.background=\'#f9fafb\'' %>"
-                                        onmouseout="<%= i === pagination.currentPage ? '' : 'this.style.background=\'#ffffff\'' %>">
-                                    <%= i %>
-                                </button>
+                            <% if (pagination.currentPage === 1) { %>
+                            <button type="button" disabled style="<%= pgBtnDisabled %>">Previous</button>
+                            <% } else { %>
+                            <button type="button" class="pagination-go-btn" data-page="<%= pagination.currentPage - 1 %>" style="<%= pgBtnEnabled %>" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#ffffff'">Previous</button>
                             <% } %>
-                            
-                            <button onclick="goToPage(<%= pagination.currentPage + 1 %>)" 
-                                    <%= pagination.currentPage === pagination.totalPages ? 'disabled' : '' %>
-                                    style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= pagination.currentPage === pagination.totalPages ? '#f3f4f6' : '#ffffff' %>; color: <%= pagination.currentPage === pagination.totalPages ? '#9ca3af' : '#374151' %>; border-radius: 6px; cursor: <%= pagination.currentPage === pagination.totalPages ? 'not-allowed' : 'pointer' %>; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;"
-                                    <%= pagination.currentPage === pagination.totalPages ? 'onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'#f3f4f6\'"' : 'onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'#ffffff\'"' %>>
-                                Next
-                            </button>
+
+                            <% for (let i = pgPageStart; i <= pgPageEnd; i++) {
+                                const isCurrentPage = i === pagination.currentPage;
+                            %>
+                                <% if (isCurrentPage) { %>
+                                <button type="button" disabled style="<%= pgBtnBase %> background: #F0B21B; color: #ffffff; cursor: default; min-width: 40px;"><%= i %></button>
+                                <% } else { %>
+                                <button type="button" class="pagination-go-btn" data-page="<%= i %>" style="<%= pgBtnEnabled %> min-width: 40px;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#ffffff'"><%= i %></button>
+                                <% } %>
+                            <% } %>
+
+                            <% if (pagination.currentPage === pagination.totalPages) { %>
+                            <button type="button" disabled style="<%= pgBtnDisabled %>">Next</button>
+                            <% } else { %>
+                            <button type="button" class="pagination-go-btn" data-page="<%= pagination.currentPage + 1 %>" style="<%= pgBtnEnabled %>" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#ffffff'">Next</button>
+                            <% } %>
                         </div>
                     <% } %>
                 <% } else { %>
@@ -2081,7 +2389,8 @@
     <div id="order-success-popup"></div>
 
     <!-- Loading Spinner Utility -->
-    <script src="/js/Employee/OrderSupport/admin-loading-spinner.js"></script>
+    <script src="/js/Employee/Admin/admin-loading-spinner.js"></script>
+    <script src="/js/Employee/Admin/admin-orders-compact.js?v=20260524a"></script>
     
     <script>
         // Loading Spinner Helper (if utility not loaded)
@@ -2105,7 +2414,7 @@
         }
         
         // View Toggle Functions
-        let currentView = 'cards';
+        let currentView = 'table';
         
         function switchView(view) {
             currentView = view;
@@ -2145,6 +2454,13 @@
             url.searchParams.set('page', page);
             window.location.href = url.toString();
         }
+
+        document.querySelectorAll('.pagination-go-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const page = parseInt(btn.getAttribute('data-page'), 10);
+                if (!Number.isNaN(page)) goToPage(page);
+            });
+        });
         
         // Toggle Order Details in Table View
         function toggleOrderDetails(orderId) {
@@ -2564,7 +2880,7 @@
                     `;
                     
                     const paymentIdentifier = details.PaymentIdentifier || details.StripeSessionID || details.TransactionID;
-                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment / transaction ID';
+                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment ID';
                     if (paymentIdentifier) {
                         html += `
                             <div class="payment-info-row">
@@ -2756,9 +3072,7 @@
                     }
                     showSuccessModal(message, detailsHtml);
                     closeApproveModal();
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 3000);
+                    window.__pendingSuccessReload = true;
                 } else {
                     alert(result.message || 'Failed to approve return request.');
                     if (confirmBtn) {
@@ -2910,11 +3224,9 @@
                 const result = await response.json();
 
                 if (result.success) {
+                    window.__pendingSuccessReload = true;
                     showSuccessModal('Return request declined successfully. A decline email has been sent to the customer.', '', 'decline');
                     closeDeclineModal();
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 3000);
                 } else {
                     alert(result.message || 'Failed to decline return request.');
                     if (confirmBtn) {
@@ -2930,6 +3242,23 @@
                     confirmBtn.textContent = 'Decline Return';
                 }
             }
+        }
+
+        function closeAllReturnModals() {
+            document.querySelectorAll('.modal-overlay.show').forEach(function (el) {
+                el.classList.remove('show');
+            });
+            const inspectOverlay = document.getElementById('returnInspectModal');
+            if (inspectOverlay) inspectOverlay.classList.remove('show');
+            if (typeof closeRefundModal === 'function') closeRefundModal();
+            if (typeof closeReplacementModal === 'function') closeReplacementModal();
+            if (typeof closeReturnInspectModal === 'function') closeReturnInspectModal();
+            if (typeof closeReturnPickupProceedModal === 'function') closeReturnPickupProceedModal();
+        }
+
+        function reloadReturnedOrdersPage() {
+            closeAllReturnModals();
+            window.location.reload();
         }
 
         // Success Modal Functions
@@ -3001,6 +3330,10 @@
             if (modal) {
                 modal.classList.remove('show');
             }
+            if (window.__pendingSuccessReload) {
+                window.__pendingSuccessReload = false;
+                reloadReturnedOrdersPage();
+            }
         }
 
         // Close modals when clicking outside
@@ -3009,6 +3342,10 @@
             const approveModal = document.getElementById('approveReturnModal');
             const refundModal = document.getElementById('refundConfirmModal');
             const replacementModal = document.getElementById('replacementConfirmModal');
+            const returnReceiveModal = document.getElementById('returnReceiveConfirmModal');
+            const returnInspectConfirmModal = document.getElementById('returnInspectConfirmModal');
+            const returnInspectStartModal = document.getElementById('returnInspectStartModal');
+            const returnPickupProceedModal = document.getElementById('returnPickupProceedModal');
             const successModal = document.getElementById('successModal');
             if (declineModal && event.target === declineModal) {
                 closeDeclineModal();
@@ -3022,12 +3359,24 @@
             if (replacementModal && event.target === replacementModal) {
                 closeReplacementModal();
             }
+            if (returnReceiveModal && event.target === returnReceiveModal) {
+                closeReturnReceiveConfirmModal();
+            }
+            if (returnInspectConfirmModal && event.target === returnInspectConfirmModal) {
+                closeReturnInspectConfirmModal();
+            }
+            if (returnInspectStartModal && event.target === returnInspectStartModal) {
+                if (typeof closeReturnInspectStartModal === 'function') closeReturnInspectStartModal();
+            }
+            if (returnPickupProceedModal && event.target === returnPickupProceedModal) {
+                closeReturnPickupProceedModal();
+            }
             if (successModal && event.target === successModal) {
                 closeSuccessModal();
             }
         });
 
-        // Replacement Handler (for processing after approval)
+        // Replacement Handler (after pickup confirmed)
         let currentReplacementOrderId = null;
 
         function openReplacementModal(orderId) {
@@ -3070,11 +3419,8 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    showSuccessModal('Replacement processed successfully. The order has been moved to processing and damaged items have been added to inventory.', '', 'replacement');
                     closeReplacementModal();
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 3000);
+                    reloadReturnedOrdersPage();
                 } else {
                     alert(result.message || 'Failed to process replacement.');
                     if (confirmBtn) {
@@ -3140,18 +3486,17 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    let message = 'Refund processed successfully. The money has been refunded to the customer.';
-                    if (result.refundAmount) {
-                        message += ` Refund Amount: ₱${Number(result.refundAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-                    }
-                    if (result.stripeRefundId) {
-                        message += ` Stripe Refund ID: ${result.stripeRefundId}`;
-                    }
-                    showSuccessModal(message, '', 'refund');
                     closeRefundModal();
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 3000);
+                    window.__pendingSuccessReload = true;
+                    let refundDetails = '';
+                    if (result.paymentId) {
+                        refundDetails = '<p style="margin:8px 0 0;font-size:14px;color:#374151;"><strong>Payment ID:</strong> <code style="word-break:break-all;">' + result.paymentId + '</code></p>';
+                    }
+                    showSuccessModal(
+                        result.message || 'Refund processed successfully. A receipt email has been sent to the customer.',
+                        refundDetails,
+                        'refund'
+                    );
                 } else {
                     alert(result.message || 'Failed to process refund.');
                     if (confirmBtn) {
@@ -3174,6 +3519,7 @@
             openRefundModal(orderId);
         }
     </script>
+    <script src="/js/Employee/Admin/return-order-workflow.js?v=20260524m" defer></script>
 
 </body>
 </html> 

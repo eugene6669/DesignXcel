@@ -612,6 +612,102 @@
             display: block;
         }
 
+        #sales-composition-chart {
+            width: 200px;
+            height: 200px;
+            display: block;
+            flex-shrink: 0;
+        }
+
+        .composition-donut-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 1.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .composition-legend {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            font-size: 0.875rem;
+            color: var(--text-dark);
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .composition-legend li {
+            margin-bottom: 0.75rem;
+            line-height: 1.4;
+        }
+
+        .composition-swatch {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+
+        .composition-legend-value {
+            color: var(--text-light);
+            font-size: 0.8rem;
+        }
+
+        .chart-subtitle {
+            margin: -0.5rem 0 1rem 0;
+            font-size: 0.8rem;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+
+        .composition-subheading {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin: 0 0 0.35rem 0;
+            font-family: var(--font-display);
+        }
+
+        .composition-cat-caption {
+            font-size: 0.75rem;
+            color: var(--text-light);
+            margin: 0 0 0.75rem 0;
+        }
+
+        .composition-cat-row {
+            margin-bottom: 0.65rem;
+        }
+
+        .composition-cat-label {
+            font-size: 0.8rem;
+            color: var(--text-dark);
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+
+        .composition-cat-bar-wrap {
+            height: 8px;
+            background: #f1f5f9;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 0.2rem;
+        }
+
+        .composition-cat-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #F0B21B, #e6a017);
+            border-radius: 4px;
+            min-width: 2px;
+        }
+
+        .composition-cat-meta {
+            font-size: 0.72rem;
+            color: var(--text-light);
+        }
+
         .chart-title {
             display: flex;
             align-items: center;
@@ -750,9 +846,9 @@
                             <select id="inv-status">
                                 <option value="">All Status</option>
                                 <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
                                 <option value="low-stock">Low Stock</option>
                                 <option value="out-of-stock">Out of Stock</option>
+                                <option value="no-available-stock">No Available Stock</option>
                             </select>
                         </div>
                         <div class="filter-group">
@@ -828,10 +924,12 @@
                             <table id="inventory-table">
                                 <thead>
                                     <tr>
+                                        <th>Type</th>
                                         <th>Product Name</th>
                                         <th>SKU</th>
                                         <th>Category</th>
-                                        <th>Stock Quantity</th>
+                                        <th>Available Stock</th>
+                                        <th>Total Stock</th>
                                         <th>Price</th>
                                         <th>Status</th>
                                         <th>Last Updated</th>
@@ -839,7 +937,7 @@
                                 </thead>
                                 <tbody id="inventory-tbody">
                                     <tr>
-                                        <td colspan="7" class="loading">Loading inventory data...</td>
+                                        <td colspan="9" class="loading">Loading inventory data...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -860,6 +958,7 @@
                                 <thead>
                                     <tr>
                                         <th>Material Name</th>
+                                        <th>SKU</th>
                                         <th>Unit</th>
                                         <th>Available Quantity</th>
                                         <th>Status</th>
@@ -868,7 +967,7 @@
                                 </thead>
                                 <tbody id="raw-materials-tbody">
                                     <tr>
-                                        <td colspan="5" class="loading">Loading raw materials data...</td>
+                                        <td colspan="6" class="loading">Loading raw materials data...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -890,10 +989,17 @@
                             <label for="sales-status">Order Status</label>
                             <select id="sales-status">
                                 <option value="">All Status</option>
+                                <option value="Pending">Pending Verification (Paid)</option>
+                                <option value="Processing">Processing</option>
+                                <option value="Processing (Pickup)">Processing (Pickup)</option>
+                                <option value="Shipping">Shipping</option>
+                                <option value="Delivery">Delivery</option>
+                                <option value="Received">Received</option>
                                 <option value="Completed">Completed</option>
+                                <option value="Cancelled">Cancelled</option>
                                 <option value="Returned">Returned</option>
-                                <option value="Refunded">Refunded</option>
-                                <option value="Completed Returned">Completed Returned</option>
+                                <option value="Refunded">Completed Refunded</option>
+                                <option value="Completed Returned">Replacement</option>
                                 <option value="Declined">Declined</option>
                             </select>
                         </div>
@@ -902,6 +1008,7 @@
                             <select id="sales-payment">
                                 <option value="">All Methods</option>
                                 <option value="E-Wallet">E-Wallet</option>
+                                <option value="Bank Card">Bank Card</option>
                             </select>
                         </div>
                         <div class="filter-group">
@@ -946,9 +1053,6 @@
                     </div>
                 </div>
                 <div class="reports-table-section">
-                    <div class="reports-stats" id="sales-stats"></div>
-                    
-                    <!-- Stats Table -->
                     <details style="background: #ffffff; border-radius: 12px; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e5e7eb;">
                         <summary class="section-title" style="display: flex; align-items: center; gap: 0.5rem; padding: 1.5rem; cursor: pointer; list-style: none;">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -961,17 +1065,19 @@
                             Sales Report Statistics
                         </summary>
                         <div style="padding: 0 1.5rem 1.5rem;">
-                            <div id="stats-table-container" style="width: 100%; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch;">
-                                <table id="stats-table" style="width: 100%; border-collapse: collapse; min-width: 1200px;">
+                            <div class="reports-stats" id="sales-stats"></div>
+                            <div id="stats-table-container" style="width: 100%; overflow-x: auto; margin-top: 1rem;">
+                                <table id="stats-table" class="sales-summary-stats-table" style="width: 100%; border-collapse: collapse; min-width: 720px;">
                                     <thead id="stats-thead">
                                         <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
-                                            <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: #111827; font-size: 0.875rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; border-right: 1px solid #e5e7eb;">Metric</th>
-                                            <th colspan="13" style="padding: 0.5rem; text-align: center; color: #6b7280; font-size: 0.75rem;">Loading statistics...</th>
+                                            <th style="padding: 0.75rem; text-align: left;">Metric</th>
+                                            <th style="padding: 0.75rem; text-align: right;">Value</th>
+                                            <th style="padding: 0.75rem; text-align: left;">Description</th>
                                         </tr>
                                     </thead>
                                     <tbody id="stats-tbody">
                                         <tr>
-                                            <td colspan="14" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics...</td>
+                                            <td colspan="3" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics…</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -997,13 +1103,12 @@
                                     <th>Delivery</th>
                                     <th>Total Amount</th>
                                     <th>Discounts</th>
-                                    <th>Taxes</th>
                                     <th>Payment Method</th>
                                 </tr>
                             </thead>
                             <tbody id="sales-tbody">
                                 <tr>
-                                    <td colspan="15" class="loading">Loading sales data...</td>
+                                    <td colspan="14" class="loading">Loading sales data...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1020,6 +1125,23 @@
                                 Revenue Breakdown
                             </h3>
                             <canvas id="sales-revenue-chart" height="300"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h3 class="chart-title">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M12 6v12M6 12h12"/>
+                                </svg>
+                                Revenue composition
+                            </h3>
+                            <p class="chart-subtitle">Share of gross revenue: merchandise subtotals versus delivery fees (same filters as the sales table).</p>
+                            <div class="composition-donut-wrap">
+                                <canvas id="sales-composition-chart" width="200" height="200"></canvas>
+                                <ul class="composition-legend" id="sales-composition-legend"></ul>
+                            </div>
+                            <h4 class="composition-subheading">By product category</h4>
+                            <p class="composition-cat-caption">Line revenue (price paid × quantity) on completed and declined orders.</p>
+                            <div id="sales-composition-by-category"></div>
                         </div>
                     </div>
                 </div>
@@ -1258,58 +1380,124 @@
         async function loadInventoryData() {
             try {
                 const params = new URLSearchParams(inventoryFilters);
-                const response = await fetch(`/Employee/Admin/Reports/Inventory/Data?${params}`);
+                const response = await fetch(`/Employee/OrderSupport/Reports/Inventory/Data?${params}`);
                 const data = await response.json();
                 
                 if (data.success) {
+                    populateInventoryCategoryFilter(data.categories || []);
                     renderInventoryTable(data.data);
                     renderRawMaterialsTable(data.rawMaterials || []);
                     renderInventoryStats(data.stats);
                     renderInventoryChart(data.stats);
                 } else {
                     document.getElementById('inventory-tbody').innerHTML = 
-                        `<tr><td colspan="7" class="empty-state">${data.error || 'Error loading inventory data'}</td></tr>`;
+                        `<tr><td colspan="9" class="empty-state">${data.error || 'Error loading inventory data'}</td></tr>`;
                 }
             } catch (error) {
                 console.error('Error loading inventory:', error);
                 document.getElementById('inventory-tbody').innerHTML = 
-                    `<tr><td colspan="7" class="empty-state">Error loading inventory data</td></tr>`;
+                    `<tr><td colspan="9" class="empty-state">Error loading inventory data</td></tr>`;
             }
+        }
+
+        function populateInventoryCategoryFilter(categories) {
+            const select = document.getElementById('inv-category');
+            if (!select) return;
+            const current = select.value;
+            select.innerHTML = '<option value="">All Categories</option>';
+            (categories || []).forEach(function(cat) {
+                if (!cat) return;
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = cat;
+                select.appendChild(opt);
+            });
+            if (current) select.value = current;
+        }
+
+        function renderInventoryStatusBadge(status) {
+            const normalizedStatus = String(status || '').toLowerCase();
+            const statusClass = normalizedStatus.includes('out') ? 'badge-danger'
+                : normalizedStatus.includes('low') ? 'badge-warning'
+                : normalizedStatus.includes('no available') ? 'badge-info'
+                : 'badge-success';
+            return `<span class="badge ${statusClass}">${status || 'Active'}</span>`;
         }
 
         function renderInventoryTable(data) {
             const tbody = document.getElementById('inventory-tbody');
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No inventory data found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No inventory data found</td></tr>';
                 return;
             }
 
-            tbody.innerHTML = data.map(item => {
-                const statusClass = item.StockQuantity === 0 ? 'badge-danger' : 
-                                   item.StockQuantity < 10 ? 'badge-warning' : 
-                                   item.IsActive ? 'badge-success' : 'badge-info';
-                const statusText = item.StockQuantity === 0 ? 'Out of Stock' : 
-                                  item.StockQuantity < 10 ? 'Low Stock' : 
-                                  item.IsActive ? 'Active' : 'Inactive';
-                
-                return `
-                    <tr>
-                        <td>${item.Name || 'N/A'}</td>
-                        <td>${item.SKU || 'N/A'}</td>
-                        <td>${item.CategoryName || 'N/A'}</td>
-                        <td>${item.StockQuantity || 0}</td>
-                        <td>₱${Number(item.Price || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                        <td><span class="badge ${statusClass}">${statusText}</span></td>
-                        <td>${item.LastUpdated ? new Date(item.LastUpdated).toLocaleDateString() : 'N/A'}</td>
+            const parents = data.filter(item => (item.RowType || 'Parent') === 'Parent');
+            const variationsByParent = {};
+            data.filter(item => item.RowType === 'Variation').forEach(v => {
+                const pid = v.InventoryProductID;
+                if (!variationsByParent[pid]) variationsByParent[pid] = [];
+                variationsByParent[pid].push(v);
+            });
+
+            const rowsHtml = [];
+            parents.forEach(parent => {
+                const pid = parent.InventoryProductID;
+                const variations = variationsByParent[pid] || [];
+                const hasChildren = parent.HasVariations && variations.length > 0;
+                const toggleBtn = hasChildren
+                    ? `<button type="button" class="inv-report-toggle" data-parent-id="${pid}" aria-expanded="false" title="Show variations" style="background:none;border:none;cursor:pointer;padding:0 6px 0 0;font-size:12px;line-height:1;">▶</button>`
+                    : '<span style="display:inline-block;width:18px;"></span>';
+                rowsHtml.push(`
+                    <tr class="inv-parent-row" data-parent-id="${pid}">
+                        <td><span class="badge badge-success">Parent</span></td>
+                        <td>${toggleBtn}<strong>${parent.Name || 'N/A'}</strong>${hasChildren ? ` <span style="color:#6b7280;font-size:0.85em;">(${variations.length} variation${variations.length === 1 ? '' : 's'})</span>` : ''}</td>
+                        <td>—</td>
+                        <td>${parent.CategoryName || 'N/A'}</td>
+                        <td>${parent.AvailableQuantity ?? 0}</td>
+                        <td>${parent.StockQuantity || 0}</td>
+                        <td>—</td>
+                        <td>${renderInventoryStatusBadge(parent.Status)}</td>
+                        <td>${parent.LastUpdated ? new Date(parent.LastUpdated).toLocaleDateString() : 'N/A'}</td>
                     </tr>
-                `;
-            }).join('');
+                `);
+                if (hasChildren) {
+                    variations.forEach(v => {
+                        rowsHtml.push(`
+                            <tr class="inv-var-row" data-parent-id="${pid}" style="display:none;">
+                                <td><span class="badge badge-info">Variation</span></td>
+                                <td><span style="padding-left:28px;color:#555;">↳ ${v.Name || 'N/A'}</span></td>
+                                <td>${v.SKU || '—'}</td>
+                                <td>${v.CategoryName || parent.CategoryName || 'N/A'}</td>
+                                <td>${v.AvailableQuantity ?? 0}</td>
+                                <td>${v.StockQuantity || 0}</td>
+                                <td>₱${Number(v.Price || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                                <td>${renderInventoryStatusBadge(v.Status)}</td>
+                                <td>${v.LastUpdated ? new Date(v.LastUpdated).toLocaleDateString() : 'N/A'}</td>
+                            </tr>
+                        `);
+                    });
+                }
+            });
+
+            tbody.innerHTML = rowsHtml.join('');
+
+            tbody.querySelectorAll('.inv-report-toggle').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const parentId = btn.getAttribute('data-parent-id');
+                    const expanded = btn.getAttribute('aria-expanded') === 'true';
+                    btn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+                    btn.textContent = expanded ? '▶' : '▼';
+                    tbody.querySelectorAll(`tr.inv-var-row[data-parent-id="${parentId}"]`).forEach(row => {
+                        row.style.display = expanded ? 'none' : '';
+                    });
+                });
+            });
         }
 
         function renderRawMaterialsTable(data) {
             const tbody = document.getElementById('raw-materials-tbody');
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No raw materials data found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No raw materials data found</td></tr>';
                 return;
             }
 
@@ -1324,6 +1512,7 @@
                 return `
                     <tr>
                         <td>${item.Name || 'N/A'}</td>
+                        <td>${item.SKU || '—'}</td>
                         <td>${item.Unit || 'N/A'}</td>
                         <td>${item.QuantityAvailable || 0}</td>
                         <td><span class="badge ${statusClass}">${statusText}</span></td>
@@ -1613,7 +1802,7 @@
         async function exportInventoryCSV() {
             try {
                 const params = new URLSearchParams(inventoryFilters);
-                window.location.href = `/Employee/Admin/Reports/Inventory/Export?${params}`;
+                window.location.href = `/Employee/OrderSupport/Reports/Inventory/Export?${params}`;
             } catch (error) {
                 console.error('Export error:', error);
                 alert('Error exporting inventory data');
@@ -1625,38 +1814,104 @@
         async function loadSalesData() {
             try {
                 const params = new URLSearchParams(salesFilters);
-                const response = await fetch(`/Employee/Admin/Reports/Sales/Data?${params}`);
+                const response = await fetch(`/Employee/OrderSupport/Reports/Sales/Data?${params}`);
                 const data = await response.json();
                 
                 if (data.success) {
                     renderSalesTable(data.data);
                     renderSalesStats(data.stats);
-                    renderSalesCharts(data.stats);
+                    const salesMeta = document.getElementById('stats-table-container');
+                    if (salesMeta) {
+                        salesMeta.dataset.stats = JSON.stringify(data.stats || {});
+                        salesMeta.dataset.revenueComposition = JSON.stringify(data.revenueComposition || null);
+                    }
+                    renderSalesCharts(data.stats, data.revenueComposition);
                 } else {
                     document.getElementById('sales-tbody').innerHTML = 
-                        `<tr><td colspan="15" class="empty-state">${data.error || 'Error loading sales data'}</td></tr>`;
+                        `<tr><td colspan="14" class="empty-state">${data.error || 'Error loading sales data'}</td></tr>`;
                 }
+                return data;
             } catch (error) {
                 console.error('Error loading sales:', error);
                 document.getElementById('sales-tbody').innerHTML = 
-                    `<tr><td colspan="15" class="empty-state">Error loading sales data</td></tr>`;
+                    `<tr><td colspan="14" class="empty-state">Error loading sales data</td></tr>`;
+                return { success: false };
             }
+        }
+
+        const ORDER_STATUS_LABELS_JS = {
+            Pending: 'Pending Verification',
+            Processing: 'Processing',
+            'Processing (Pickup)': 'Processing (Pickup)',
+            Shipping: 'Shipping',
+            Delivery: 'Delivery',
+            Received: 'Received',
+            Completed: 'Completed',
+            Cancelled: 'Cancelled',
+            Returned: 'Returned',
+            Return: 'Returned',
+            Refunded: 'Completed Refunded',
+            'Completed Returned': 'Replacement',
+            Declined: 'Declined'
+        };
+
+        function formatSalesOrderStatus(status) {
+            if (!status) return 'N/A';
+            return ORDER_STATUS_LABELS_JS[status] || status;
+        }
+
+        function formatSalesSummaryValue(stats, key, opts = {}) {
+            const v = stats[key];
+            if (opts.percent) return `${Number(v || 0).toFixed(1)}%`;
+            if (opts.currency) return '₱' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2 });
+            return String(v ?? 0);
+        }
+
+        function formatSalesSummaryRowValue(val, opts) {
+            if (opts && opts.percent) return `${Number(val || 0).toFixed(1)}%`;
+            if (opts && opts.currency) return '₱' + Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2 });
+            return String(val ?? 0);
+        }
+
+        const SALES_SUMMARY_ROWS = [
+            { key: 'grossProductSales', alt: 'grossSales', currency: true, label: 'Gross Product Sales', note: 'Paid orders: Pending Verification through Completed (excl. returns)' },
+            { key: 'totalDiscounts', currency: true, label: 'Discounts', note: 'Promotions on gross-eligible orders' },
+            { key: 'netProductSales', currency: true, label: 'Net Product Sales', note: 'Gross product − discounts (collected, pre-recognition)' },
+            { key: 'deliveryRevenueGross', alt: 'deliveryRevenue', currency: true, label: 'Delivery Revenue', note: 'Delivery fees charged (gross-eligible orders)' },
+            { key: 'deliveryRefunds', currency: true, label: 'Delivery Refunds', note: 'Revenue reversal — not a loss' },
+            { key: 'netDeliveryRevenue', currency: true, label: 'Net Delivery Revenue', note: 'Delivery after refunds' },
+            { key: 'productRefunds', currency: true, label: 'Product Refunds', note: 'Revenue reversal — not a loss' },
+            { key: 'netRevenue', currency: true, label: 'Net Revenue', note: 'Recognized: Received & Completed only, after refunds' },
+            { key: 'recognizedProductRevenue', alt: 'netSales', currency: true, label: 'Recognized Product Revenue', note: 'Product revenue after refunds (recognized statuses)' },
+            { key: 'returnShippingExpense', alt: 'returnShipping', currency: true, label: 'Return Shipping Expense', note: 'Direct cash expense (seller-paid)' },
+            { key: 'damageInventoryCost', currency: true, label: 'Damage Cost', note: 'Inventory write-off at item cost' },
+            { key: 'cogs', currency: true, label: 'COGS', note: 'Item cost for Received & Completed orders' },
+            { key: 'replacementCost', currency: true, label: 'Replacement Cost', note: 'Replacement units at item cost' },
+            { key: 'grossProfit', currency: true, label: 'Gross Profit', note: 'Net revenue − COGS − return shipping − damage − replacement' },
+            { key: 'grossMargin', percent: true, label: 'Gross Margin', note: 'Gross profit ÷ net revenue' },
+            { key: 'refundRate', percent: true, label: 'Refund Rate', note: 'Product refunds ÷ gross product sales' },
+            { key: 'returnRate', percent: true, label: 'Return Rate', note: 'Returned orders ÷ total orders' },
+            { key: 'totalOrders', label: 'Total Orders', note: 'Orders matching filters' },
+            { key: 'totalCustomers', label: 'Total Customers', note: 'Unique customer emails' },
+            { key: 'averageOrderValue', currency: true, label: 'Average Order Value', note: 'Mean total amount (excl. cancelled/returns)' }
+        ];
+
+        function buildSalesSummaryTableRows(stats) {
+            return SALES_SUMMARY_ROWS.map(function(row) {
+                const val = stats[row.key] != null ? stats[row.key] : (row.alt ? stats[row.alt] : 0);
+                return [
+                    row.label,
+                    formatSalesSummaryRowValue(val, { currency: row.currency, percent: row.percent }),
+                    row.note
+                ];
+            });
         }
 
         function renderSalesTable(data) {
             const tbody = document.getElementById('sales-tbody');
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="15" class="empty-state">No sales data found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="14" class="empty-state">No sales data found</td></tr>';
                 return;
-            }
-
-            // Debug: Log first order to see what data we're receiving
-            if (data.length > 0) {
-                console.log('[SALES REPORT FRONTEND] First order data:', data[0]);
-                console.log('[SALES REPORT FRONTEND] First order TotalDiscounts:', data[0].TotalDiscounts);
-                console.log('[SALES REPORT FRONTEND] First order OrderItems:', data[0].OrderItems);
-                console.log('[SALES REPORT FRONTEND] First order OrderItems type:', typeof data[0].OrderItems);
-                console.log('[SALES REPORT FRONTEND] First order OrderItems length:', data[0].OrderItems ? data[0].OrderItems.length : 'N/A');
             }
 
             tbody.innerHTML = data.map(item => {
@@ -1668,15 +1923,6 @@
                 // If TotalDiscounts is not available, fallback to 0
                 const discount = item.TotalDiscounts || 0;
                 
-                // Use TotalTaxes directly from API response (calculated from OrderItems)
-                // If TotalTaxes is not available, fallback to 0
-                const tax = item.TotalTaxes || 0;
-                
-                // Debug: Log if discount is 0 but we expect it to have a value
-                if (item.OrderID && discount === 0 && item.TotalAmount > 0) {
-                    console.log(`[SALES REPORT FRONTEND] Order ${item.OrderID} has TotalDiscounts:`, item.TotalDiscounts, 'TotalAmount:', item.TotalAmount);
-                }
-                
                 // Format order items count for display
                 let orderItemsCount = item.TotalItems || 0;
                 if (item.OrderItems && Array.isArray(item.OrderItems)) {
@@ -1685,11 +1931,6 @@
                 
                 // Format product names and quantities for display
                 let productNamesQuantitiesHtml = 'N/A';
-                
-                // Debug: Log the item structure
-                if (item.OrderID && !item.OrderItems) {
-                    console.log(`[SALES REPORT FRONTEND] Order ${item.OrderID} has no OrderItems property. Available keys:`, Object.keys(item));
-                }
                 
                 if (item.OrderItems && Array.isArray(item.OrderItems) && item.OrderItems.length > 0) {
                     productNamesQuantitiesHtml = item.OrderItems.map(orderItem => {
@@ -1701,8 +1942,6 @@
                     // Fallback message if OrderItems array is not available
                     productNamesQuantitiesHtml = `${item.TotalItems} item(s) - Details not available`;
                 } else if (item.OrderItems && !Array.isArray(item.OrderItems)) {
-                    // Handle case where OrderItems might be an object or string
-                    console.warn(`[SALES REPORT FRONTEND] Order ${item.OrderID} has OrderItems but it's not an array:`, typeof item.OrderItems, item.OrderItems);
                     productNamesQuantitiesHtml = item.TotalItems ? `${item.TotalItems} item(s) - Details not available` : 'N/A';
                 }
                 
@@ -1713,7 +1952,7 @@
                         <td>${item.CustomerName || 'N/A'}</td>
                         <td>${item.CustomerEmail || 'N/A'}</td>
                         <td>${item.OrderDate ? new Date(item.OrderDate).toLocaleDateString() : 'N/A'}</td>
-                        <td><span class="badge ${statusClass}">${item.Status || 'N/A'}</span></td>
+                        <td><span class="badge ${statusClass}">${formatSalesOrderStatus(item.Status)}</span></td>
                         <td>${orderItemsCount}</td>
                         <td style="max-width: 300px; word-wrap: break-word; line-height: 1.5;">${productNamesQuantitiesHtml}</td>
                         <td>₱${Number(item.Subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
@@ -1721,7 +1960,6 @@
                         <td>₱${Number(item.DeliveryCost || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                         <td>₱${Number(item.TotalAmount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                         <td>₱${Number(discount).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                        <td>₱${Number(tax).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                         <td>${item.PaymentMethod || 'N/A'}</td>
                     </tr>
                 `;
@@ -1730,221 +1968,141 @@
 
         function renderSalesStats(stats) {
             if (!stats) return;
-            
-            // Store stats data for resize handler
-            const container = document.getElementById('sales-stats');
-            if (container) {
-                container.dataset.stats = JSON.stringify(stats);
-            }
-            
-            // Render stat cards (keep existing cards)
-            container.innerHTML = `
-                <!-- Revenue Metrics (Updated Formulas) -->
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="2" x2="12" y2="22"/>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Gross Sales</div>
-                    <div class="stat-value">₱${Number(stats.grossSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Total price of items sold (before discounts & returns)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="2" x2="12" y2="22"/>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Net Sales</div>
-                    <div class="stat-value">₱${Number(stats.netSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Gross Sales – (Discounts + Returns)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="2" x2="12" y2="22"/>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Gross Revenue</div>
-                    <div class="stat-value">₱${Number(stats.grossRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Gross Sales + Delivery Fees</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z"/>
-                            <path d="M16 17l-3-3-3 3" stroke-width="2"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Returns</div>
-                    <div class="stat-value">₱${Number(stats.salesReturns || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.7rem; color: var(--text-light); margin-top: 0.2rem;">${stats.returnedOrdersCount || 0} orders (${Number(stats.returnRate || 0).toFixed(1)}%)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Total Discounts</div>
-                    <div class="stat-value">₱${Number(stats.totalDiscounts || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">All discounts applied</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="2" x2="12" y2="22"/>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Net Revenue</div>
-                    <div class="stat-value">₱${Number(stats.netRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Gross Revenue – (Discounts + Returns)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M9 12l2 2 4-4"/>
-                            <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/>
-                            <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Inventory Loss</div>
-                    <div class="stat-value">₱${Number(stats.inventoryLoss || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Value of returned/damaged items</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M9 11l3 3L22 4"/>
-                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Total Taxes</div>
-                    <div class="stat-value">₱${Number(stats.totalTaxes || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Price before Tax item × (12% / 100)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M1 3h15v13H1zM5 21h19"/>
-                            <path d="M8 21V11M16 21V11"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Delivery Revenues</div>
-                    <div class="stat-value">₱${Number(stats.deliveryRevenues || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-light); margin-top: 0.25rem;">Delivery + Extra Delivery (excluding returns)</div>
-                </div>
-                <!-- Total Orders Section -->
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="9" cy="21" r="1"/>
-                            <circle cx="20" cy="21" r="1"/>
-                            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Total Orders</div>
-                    <div class="stat-value">${stats.totalOrders || 0}</div>
-                </div>
-                
-                <!-- Total Customers Section -->
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-                            <circle cx="9" cy="7" r="4"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Total Customers</div>
-                    <div class="stat-value">${stats.totalCustomers || 0}</div>
-                </div>
-                
-                <!-- Average Order Value Section -->
-                <div class="stat-card">
-                    <div class="stat-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="1" x2="12" y2="23"/>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
-                    </div>
-                    <div class="stat-label">Average Order Value</div>
-                    <div class="stat-value">₱${Number(stats.averageOrderValue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
-                </div>
-            `;
-            
-            // Render stats table - vertical columns layout
-            const statsTableHead = document.getElementById('stats-thead');
-            const statsTableBody = document.getElementById('stats-tbody');
-            if (statsTableHead && statsTableBody) {
-                // Build header row with metric names as columns
-                const metrics = [
-                    { name: 'Gross Sales', isSection: false },
-                    { name: 'Net Sales', isSection: false },
-                    { name: 'Gross Revenue', isSection: false },
-                    { name: 'Net Revenue', isSection: false },
-                    { name: 'Returns', isSection: false },
-                    { name: 'Total Discounts', isSection: false },
-                    { name: 'Inventory Loss', isSection: false },
-                    { name: 'Total Taxes', isSection: false },
-                    { name: 'Delivery Revenues', isSection: false },
-                    { name: 'Total Orders', isSection: true },
-                    { name: 'Total Customers', isSection: true },
-                    { name: 'Average Order Value', isSection: true }
+
+            const salesCards = document.getElementById('sales-stats');
+            if (salesCards) {
+                const cardDefs = [
+                    { label: 'Gross Product Sales', key: 'grossProductSales', alt: 'grossSales', currency: true },
+                    { label: 'Net Revenue', key: 'netRevenue', currency: true },
+                    { label: 'Gross Profit', key: 'grossProfit', currency: true },
+                    { label: 'Gross Margin', key: 'grossMargin', percent: true },
+                    { label: 'Total Orders', key: 'totalOrders' },
+                    { label: 'Total Customers', key: 'totalCustomers' },
+                    { label: 'Average Order Value', key: 'averageOrderValue', currency: true },
+                    { label: 'Product Refunds', key: 'productRefunds', currency: true }
                 ];
+                salesCards.innerHTML = cardDefs.map(function(def) {
+                    const raw = stats[def.key] != null ? stats[def.key] : (def.alt ? stats[def.alt] : 0);
+                    const value = formatSalesSummaryRowValue(raw, { currency: def.currency, percent: def.percent });
+                    return '<div class="stat-card">' +
+                        '<div class="stat-label">' + def.label + '</div>' +
+                        '<div class="stat-value">' + value + '</div>' +
+                        '</div>';
+                }).join('');
+            }
 
-                let headerHTML = '<tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;"><th style="padding: 0.75rem; text-align: left; font-weight: 600; color: #111827; font-size: 0.875rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; border-right: 1px solid #e5e7eb; background: #f9fafb;">Metric</th>';
-                metrics.forEach(metric => {
-                    const bgColor = metric.isSection ? '#f3f4f6' : '#f9fafb';
-                    headerHTML += `<th style="padding: 0.75rem; text-align: center; font-weight: 600; color: #111827; font-size: 0.75rem; border-bottom: 2px solid #e5e7eb; white-space: nowrap; background: ${bgColor}; border-left: 1px solid #e5e7eb;">${metric.name}</th>`;
-                });
-                headerHTML += '</tr>';
-                statsTableHead.innerHTML = headerHTML;
+            const statsTableBody = document.getElementById('stats-tbody');
+            if (!statsTableBody) return;
 
-                // Build value row
-                let valueRow = '<tr style="border-bottom: 1px solid #e5e7eb;"><td style="padding: 0.75rem; font-weight: 600; color: #374151; border-right: 1px solid #e5e7eb; background: #f9fafb;">Value</td>';
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.grossSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.netSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.grossRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.netRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.salesReturns || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.totalDiscounts || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.inventoryLoss || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.totalTaxes || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb;">₱${Number(stats.deliveryRevenues || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.totalOrders || 0}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">${stats.totalCustomers || 0}</td>`;
-                valueRow += `<td style="padding: 0.75rem; text-align: right; font-weight: 600; color: #111827; border-left: 1px solid #e5e7eb; background: #f3f4f6;">₱${Number(stats.averageOrderValue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>`;
-                valueRow += '</tr>';
+            const rows = buildSalesSummaryTableRows(stats);
+            statsTableBody.innerHTML = rows.map(function(cells) {
+                return '<tr>' +
+                    '<td style="padding:0.75rem;font-weight:600;color:#374151;">' + cells[0] + '</td>' +
+                    '<td style="padding:0.75rem;text-align:right;font-weight:600;white-space:nowrap;">' + cells[1] + '</td>' +
+                    '<td style="padding:0.75rem;color:#6b7280;font-size:0.85rem;">' + cells[2] + '</td>' +
+                    '</tr>';
+            }).join('');
 
-                // Build formula row
-                let formulaRow = '<tr><td style="padding: 0.75rem; font-weight: 600; color: #374151; border-right: 1px solid #e5e7eb; background: #f9fafb;">Formula</td>';
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Total price of items sold (before discounts & returns)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Gross Sales – (Discounts + Returns)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Gross Sales + Delivery Fees</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Gross Revenue – (Discounts + Returns)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">${stats.returnedOrdersCount || 0} orders (${Number(stats.returnRate || 0).toFixed(1)}%)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">All discounts applied</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Value of returned/damaged items</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Price before Tax item × (12% / 100)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb;">Delivery + Extra Delivery (excluding returns)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Total number of orders (excluding returns)</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Unique customers with orders</td>`;
-                formulaRow += `<td style="padding: 0.75rem; color: #6b7280; font-size: 0.75rem; border-left: 1px solid #e5e7eb; background: #f3f4f6;">Sum of TotalAmount / Total Orders</td>`;
-                formulaRow += '</tr>';
-
-                statsTableBody.innerHTML = valueRow + formulaRow;
+            const chartCanvas = document.getElementById('sales-revenue-chart');
+            if (chartCanvas) {
+                chartCanvas.dataset.stats = JSON.stringify(stats);
             }
         }
 
-        function renderSalesCharts(stats) {
+        function renderSalesCharts(stats, revenueComposition) {
             if (!stats) return;
             
             renderRevenueChart(stats);
+            renderRevenueComposition(revenueComposition);
+        }
+
+        function escapeCompositionLabel(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function renderRevenueComposition(composition) {
+            const canvas = document.getElementById('sales-composition-chart');
+            const legendEl = document.getElementById('sales-composition-legend');
+            const categoryEl = document.getElementById('sales-composition-by-category');
+            if (!canvas || !legendEl || !categoryEl) return;
+
+            const merch = composition ? parseFloat(composition.merchandise || 0) : 0;
+            const delivery = composition ? parseFloat(composition.delivery || 0) : 0;
+            const total = merch + delivery;
+
+            const wrap = canvas.parentElement;
+            const rawSize = (wrap && wrap.clientWidth ? Math.min(wrap.clientWidth - 240, 220) : 200);
+            const size = Math.max(160, Math.min(220, rawSize > 0 ? rawSize : 200));
+            canvas.width = size;
+            canvas.height = size;
+
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, size, size);
+
+            const fmtPhp = (v) => '₱' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2 });
+            const pct = (part) => (total > 0 ? ((part / total) * 100).toFixed(1) : '0.0');
+
+            legendEl.innerHTML = `
+                <li><span class="composition-swatch" style="background:#10b981"></span>Merchandise <strong>${pct(merch)}%</strong><div class="composition-legend-value">${fmtPhp(merch)} — subtotal (no delivery)</div></li>
+                <li><span class="composition-swatch" style="background:#06b6d4"></span>Delivery &amp; extra <strong>${pct(delivery)}%</strong><div class="composition-legend-value">${fmtPhp(delivery)}</div></li>
+            `;
+
+            const cx = size / 2;
+            const cy = size / 2;
+            const outerR = Math.min(cx, cy) * 0.85;
+            const innerR = outerR * 0.58;
+
+            const drawArcSlice = (start, sweep, color) => {
+                if (sweep <= 0 || total <= 0) return;
+                const end = start + sweep;
+                ctx.beginPath();
+                ctx.arc(cx, cy, outerR, start, end);
+                ctx.arc(cx, cy, innerR, end, start, true);
+                ctx.closePath();
+                ctx.fillStyle = color;
+                ctx.fill();
+            };
+
+            if (total <= 0) {
+                ctx.beginPath();
+                ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+                ctx.strokeStyle = '#e5e7eb';
+                ctx.lineWidth = outerR - innerR;
+                ctx.stroke();
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '12px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('No revenue', cx, cy);
+                categoryEl.innerHTML = '<p class="empty-state" style="margin:0;font-size:0.85rem;color:var(--text-light);">No category breakdown for this filter.</p>';
+                return;
+            }
+
+            let angle = -Math.PI / 2;
+            drawArcSlice(angle, (merch / total) * Math.PI * 2, '#10b981');
+            angle += (merch / total) * Math.PI * 2;
+            drawArcSlice(angle, (delivery / total) * Math.PI * 2, '#06b6d4');
+
+            const byCat = (composition && Array.isArray(composition.byCategory)) ? composition.byCategory : [];
+            if (!byCat.length) {
+                categoryEl.innerHTML = '<p class="empty-state" style="margin:0;font-size:0.85rem;color:var(--text-light);">No category breakdown for this filter.</p>';
+                return;
+            }
+
+            categoryEl.innerHTML = byCat.map(row => {
+                const w = Math.min(100, Math.max(0, row.percent || 0));
+                const label = escapeCompositionLabel(row.category || 'Uncategorized');
+                return `
+                    <div class="composition-cat-row">
+                        <div class="composition-cat-label">${label}</div>
+                        <div class="composition-cat-bar-wrap"><div class="composition-cat-bar" style="width:${w}%"></div></div>
+                        <div class="composition-cat-meta">${Number(row.percent || 0).toFixed(1)}% · ${fmtPhp(row.revenue || 0)}</div>
+                    </div>
+                `;
+            }).join('');
         }
 
         function renderRevenueChart(stats) {
@@ -1966,11 +2124,11 @@
 
             // Chart data
             const revenueData = [
-                { label: 'Gross Revenue', value: parseFloat(stats.grossSales || 0), color: '#F0B21B' },
-                { label: 'Net Revenue', value: parseFloat(stats.netSales || 0), color: '#10b981' },
-                { label: 'Total Revenue', value: parseFloat(stats.totalRevenue || 0), color: '#3b82f6' },
-                { label: 'Taxes', value: parseFloat(stats.totalTaxes || 0), color: '#8b5cf6' },
-                { label: 'Delivery', value: parseFloat(stats.deliveryRevenues || 0), color: '#06b6d4' }
+                { label: 'Gross Product', value: parseFloat(stats.grossProductSales || stats.grossSales || 0), color: '#F0B21B' },
+                { label: 'Net Product', value: parseFloat(stats.netProductSales || 0), color: '#10b981' },
+                { label: 'Recognized', value: parseFloat(stats.recognizedProductRevenue ?? stats.netSales ?? 0), color: '#8b5cf6' },
+                { label: 'Net Revenue', value: parseFloat(stats.netRevenue || 0), color: '#3b82f6' },
+                { label: 'Net Delivery', value: parseFloat(stats.netDeliveryRevenue || stats.deliveryRevenues || 0), color: '#06b6d4' }
             ];
 
             const maxValue = Math.max(...revenueData.map(d => d.value), 1);
@@ -2073,7 +2231,7 @@
                 amountMin: document.getElementById('sales-amount-min').value,
                 amountMax: document.getElementById('sales-amount-max').value
             };
-            loadSalesData();
+            loadSalesData().then(() => refreshCSVPreviewIfOpen());
         }
 
         function clearSalesFilters() {
@@ -2085,97 +2243,125 @@
             document.getElementById('sales-amount-min').value = '';
             document.getElementById('sales-amount-max').value = '';
             salesFilters = {};
-            loadSalesData();
+            loadSalesData().then(() => refreshCSVPreviewIfOpen());
+        }
+
+        function formatSalesFiltersSummary(filters) {
+            if (!filters) return 'None';
+            const parts = [];
+            if (filters.search) parts.push(`Search: ${filters.search}`);
+            if (filters.status) {
+                parts.push(`Status: ${filters.status === 'Completed Returned' ? 'Replacement' : filters.status}`);
+            }
+            if (filters.payment) parts.push(`Payment: ${filters.payment}`);
+            if (filters.dateFrom) parts.push(`From: ${filters.dateFrom}`);
+            if (filters.dateTo) parts.push(`To: ${filters.dateTo}`);
+            if (filters.amountMin) parts.push(`Min: ₱${Number(filters.amountMin).toLocaleString('en-US', { minimumFractionDigits: 2 })}`);
+            if (filters.amountMax) parts.push(`Max: ₱${Number(filters.amountMax).toLocaleString('en-US', { minimumFractionDigits: 2 })}`);
+            return parts.length ? parts.join(' · ') : 'None';
+        }
+
+        function countSalesTableRows() {
+            const table = document.getElementById('sales-tbody');
+            if (!table) return 0;
+            return Array.from(table.querySelectorAll('tr')).filter(tr => !tr.querySelector('.empty-state')).length;
+        }
+
+        function refreshCSVPreviewData() {
+            const statsContainer = document.getElementById('stats-table-container');
+            let stats = null;
+            try {
+                stats = statsContainer && statsContainer.dataset.stats ? JSON.parse(statsContainer.dataset.stats) : null;
+            } catch (e) {
+                stats = null;
+            }
+            return {
+                stats,
+                rowCount: countSalesTableRows(),
+                filters: { ...salesFilters }
+            };
+        }
+
+        function isCSVPreviewOpen() {
+            const modal = document.getElementById('csv-preview-modal');
+            return modal && modal.style.display === 'flex';
+        }
+
+        async function refreshCSVPreviewIfOpen() {
+            if (!isCSVPreviewOpen()) return;
+            const previewBody = document.getElementById('csv-preview-body');
+            if (previewBody) previewBody.innerHTML = '<p>Updating preview…</p>';
+            csvPreviewData = refreshCSVPreviewData();
+            displayCSVPreview();
         }
 
         // CSV Preview Modal
         let csvPreviewData = null;
-        function showCSVPreview() {
-            if (!csvPreviewData) {
-                // Fetch preview data
-                loadSalesData().then(() => {
-                    const statsContainer = document.getElementById('sales-stats');
-                    const stats = statsContainer?.dataset.stats ? JSON.parse(statsContainer.dataset.stats) : null;
-                    const table = document.getElementById('sales-tbody');
-                    const rows = table?.querySelectorAll('tr') || [];
-                    
-                    // Build preview data
-                    csvPreviewData = {
-                        stats: stats,
-                        rowCount: rows.length,
-                        filters: salesFilters
-                    };
-                    displayCSVPreview();
-                });
-            } else {
-                displayCSVPreview();
-            }
+
+        async function showCSVPreview() {
+            ensureCSVPreviewModal();
+            const csvModal = document.getElementById('csv-preview-modal');
+            const previewBody = document.getElementById('csv-preview-body');
+            csvModal.style.display = 'flex';
+            previewBody.innerHTML = '<p>Loading preview…</p>';
+
+            await loadSalesData();
+            csvPreviewData = refreshCSVPreviewData();
+            displayCSVPreview();
+        }
+
+        function ensureCSVPreviewModal() {
+            if (document.getElementById('csv-preview-modal')) return;
+            const modalHTML = `
+                <div id="csv-preview-modal" class="csv-preview-overlay" style="display: none;">
+                    <div class="csv-preview-content">
+                        <div class="csv-preview-header">
+                            <h2>CSV Export Preview</h2>
+                            <button type="button" class="csv-preview-close" onclick="closeCSVPreview()" aria-label="Close">&times;</button>
+                        </div>
+                        <div class="csv-preview-body" id="csv-preview-body">
+                            <p>Loading preview…</p>
+                        </div>
+                        <div class="csv-preview-footer">
+                            <button type="button" class="btn-filter btn-filter-secondary" onclick="closeCSVPreview()">Cancel</button>
+                            <button type="button" class="btn-filter btn-export" onclick="downloadCSV()">Download CSV</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
         }
 
         function displayCSVPreview() {
-            let csvModal = document.getElementById('csv-preview-modal');
-            if (!csvModal) {
-                // Create modal if it doesn't exist
-                const modalHTML = `
-                    <div id="csv-preview-modal" class="csv-preview-overlay" style="display: none;">
-                        <div class="csv-preview-content">
-                            <div class="csv-preview-header">
-                                <h2>CSV Export Preview</h2>
-                                <button class="csv-preview-close" onclick="closeCSVPreview()">&times;</button>
-                            </div>
-                            <div class="csv-preview-body" id="csv-preview-body">
-                                <p>Loading preview...</p>
-                            </div>
-                            <div class="csv-preview-footer">
-                                <button class="btn-filter btn-filter-secondary" onclick="closeCSVPreview()">Cancel</button>
-                                <button class="btn-filter btn-export" onclick="downloadCSV()">Download CSV</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                document.body.insertAdjacentHTML('beforeend', modalHTML);
-                csvModal = document.getElementById('csv-preview-modal');
-            }
+            ensureCSVPreviewModal();
+            const csvModal = document.getElementById('csv-preview-modal');
             const previewBody = document.getElementById('csv-preview-body');
-            
+            const filterSummary = formatSalesFiltersSummary(csvPreviewData?.filters);
+
             if (csvPreviewData && csvPreviewData.stats) {
                 const stats = csvPreviewData.stats;
+                const summaryRowsHtml = buildSalesSummaryTableRows(stats)
+                    .map(function(cells) {
+                        return '<tr><td>' + cells[0] + '</td><td style="text-align:right">' + cells[1] + '</td><td style="color:#64748b;font-size:0.85em">' + cells[2] + '</td></tr>';
+                    })
+                    .join('');
                 previewBody.innerHTML = `
                     <div class="csv-preview-section">
-                        <h3>Sales Report Statistics</h3>
+                        <h3>Summary (included in file)</h3>
                         <table class="csv-preview-table">
-                            <tr><td><strong>Gross Sales</strong></td><td>₱${Number(stats.grossSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Net Sales</strong></td><td>₱${Number(stats.netSales || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Gross Revenue</strong></td><td>₱${Number(stats.grossRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Net Revenue</strong></td><td>₱${Number(stats.netRevenue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Returns</strong></td><td>₱${Number(stats.salesReturns || 0).toLocaleString('en-US', {minimumFractionDigits: 2})} (${stats.returnedOrdersCount || 0} orders, ${Number(stats.returnRate || 0).toFixed(1)}%)</td></tr>
-                            <tr><td><strong>Total Discounts</strong></td><td>₱${Number(stats.totalDiscounts || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Inventory Loss</strong></td><td>₱${Number(stats.inventoryLoss || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Total Taxes</strong></td><td>₱${Number(stats.totalTaxes || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                            <tr><td><strong>Delivery Revenues</strong></td><td>₱${Number(stats.deliveryRevenues || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
+                            <thead><tr><th>Metric</th><th style="text-align:right">Value</th><th>Description</th></tr></thead>
+                            <tbody>${summaryRowsHtml}</tbody>
                         </table>
                     </div>
                     <div class="csv-preview-section">
-                        <h3>Order Summary</h3>
-                        <table class="csv-preview-table">
-                            <tr><td><strong>Total Orders</strong></td><td>${stats.totalOrders || 0} (including returns)</td></tr>
-                            <tr><td><strong>Total Customers</strong></td><td>${stats.totalCustomers || 0}</td></tr>
-                            <tr><td><strong>Average Order Value</strong></td><td>₱${Number(stats.averageOrderValue || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td></tr>
-                        </table>
-                    </div>
-                    <div class="csv-preview-section">
-                        <h3>Export Details</h3>
-                        <p><strong>Total Records:</strong> ${csvPreviewData.rowCount || 0} orders</p>
-                        <p><strong>Filters Applied:</strong> ${Object.keys(csvPreviewData.filters || {}).length > 0 ? 'Yes' : 'No'}</p>
-                        <p><strong>Export Format:</strong> Excel (.xlsx)</p>
-                        <p><em>The Excel file will include:</em></p>
-                        <ul style="margin: 0.5rem 0; padding-left: 1.5rem;">
-                            <li>Sales Report Statistics with formulas</li>
-                            <li>Orders by Status breakdown</li>
-                            <li>Revenue by Payment Method</li>
-                            <li>Additional Summary Statistics</li>
-                            <li>Detailed Order Transactions (${csvPreviewData.rowCount || 0} orders)</li>
-                        </ul>
+                        <h3>Orders sheet</h3>
+                        <p style="margin: 0 0 0.5rem 0; color: var(--text-light); font-size: 0.9rem;">
+                            ${csvPreviewData.rowCount || 0} order(s): Order #, Reference, Date, Customer, Email, Status, Products, Subtotal, Discount, Extra Delivery, Delivery, Total, Payment, In Gross Sales, In Net Revenue
+                        </p>
+                        <p style="margin: 0; font-size: 0.85rem; color: var(--text-light);">
+                            <strong>Format:</strong> CSV (UTF-8, opens in Excel) &nbsp;•&nbsp;
+                            <strong>Filters:</strong> ${filterSummary}
+                        </p>
                     </div>
                 `;
             } else {
@@ -2195,7 +2381,8 @@
         function downloadCSV() {
             closeCSVPreview();
             const params = new URLSearchParams(salesFilters);
-            window.location.href = `/Employee/Admin/Reports/Sales/Export?${params}`;
+            params.set('format', 'csv');
+            window.location.href = `/Employee/OrderSupport/Reports/Sales/Export?${params}`;
         }
 
         async function exportSalesCSV() {
@@ -2212,7 +2399,7 @@
         async function loadMasterlistData() {
             try {
                 const params = new URLSearchParams(masterlistFilters);
-                const response = await fetch(`/Employee/Admin/Reports/Masterlist/Data?${params}`);
+                const response = await fetch(`/Employee/OrderSupport/Reports/Masterlist/Data?${params}`);
                 const data = await response.json();
                 
                 if (data.success) {
@@ -2384,7 +2571,7 @@
         async function exportMasterlistCSV() {
             try {
                 const params = new URLSearchParams(masterlistFilters);
-                window.location.href = `/Employee/Admin/Reports/Masterlist/Export?${params}`;
+                window.location.href = `/Employee/OrderSupport/Reports/Masterlist/Export?${params}`;
             } catch (error) {
                 console.error('Export error:', error);
                 alert('Error exporting masterlist data');
@@ -2426,13 +2613,19 @@
                         }
                     }
                 } else if (activeTab && activeTab.id === 'sales-tab') {
-                    // Reload charts if sales tab is active
-                    const statsContainer = document.getElementById('sales-stats');
+                    const statsContainer = document.getElementById('stats-table-container');
                     if (statsContainer && statsContainer.dataset.stats) {
                         const stats = JSON.parse(statsContainer.dataset.stats);
-                        renderSalesCharts(stats);
+                        let revenueComposition = null;
+                        try {
+                            if (statsContainer.dataset.revenueComposition) {
+                                revenueComposition = JSON.parse(statsContainer.dataset.revenueComposition);
+                            }
+                        } catch (e) {
+                            revenueComposition = null;
+                        }
+                        renderSalesCharts(stats, revenueComposition);
                     } else {
-                        // If no stored data, reload
                         loadSalesData();
                     }
                 }

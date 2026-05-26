@@ -3800,6 +3800,9 @@ app.post('/logout', (req, res) => {
 // Make database connection available to middleware
 app.locals.pool = pool;
 app.locals.sql = sql;
+const { getOrderStatusLabel, SALES_REPORT_STATUS_RULES } = require('./utils/orderStatusDisplay');
+app.locals.getOrderStatusLabel = getOrderStatusLabel;
+app.locals.SALES_REPORT_STATUS_RULES = SALES_REPORT_STATUS_RULES;
 
 // Lazy load routes - only load when first request comes in (faster startup)
 let employeeRoutes, apiRoutes;

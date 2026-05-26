@@ -9,6 +9,7 @@
     <meta http-equiv="Expires" content="0">
     <title>Manage Users - Design Excellence</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css?v=<%= Date.now() %>">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
 
     <style>
         /* General table styling */
@@ -421,6 +422,8 @@
                         id="tab-employee-accounts">Employee Accounts</button>
                     <button class="cms-tab-btn" onclick="showTab('customer-accounts')"
                         id="tab-customer-accounts">Customer Accounts</button>
+                    <button class="cms-tab-btn" onclick="showTab('role-manager')"
+                        id="tab-role-manager">Role Manager</button>
                 </div>
 
                 <div class="content-area">
@@ -579,6 +582,24 @@
                         </div>
                     </div>
 
+                    <!-- Role Manager Tab -->
+                    <div class="cms-tab-content" id="tab-content-role-manager" style="display:none;">
+                        <div class="role-manager-toolbar">
+                            <button type="button" class="btn-add-role" id="btnAddRole">ADD ROLE</button>
+                            <div class="role-search-wrap">
+                                <input type="search" id="roleSearchInput" placeholder="Search Roles" aria-label="Search roles">
+                            </div>
+                        </div>
+                        <div class="role-matrix-wrap">
+                            <table class="role-matrix-table" id="roleMatrixTable">
+                                <thead id="roleMatrixHead">
+                                    <tr><th colspan="2">Loading roles…</th></tr>
+                                </thead>
+                                <tbody id="roleMatrixBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <!-- Customer Accounts Tab Content -->
                     <div class="cms-tab-content" id="tab-content-customer-accounts" style="display:none;">
                         <div class="manage-users-section">
@@ -656,7 +677,7 @@
                             <h3>Edit User</h3>
                             <span class="close-button" id="closeEditUserModal">&times;</span>
                         </div>
-                        <form id="editUserForm" method="POST" action="/Employee/UserManager/UserManageUsers/Users/Edit"
+                        <form id="editUserForm" method="POST" action="/Employee/UserManager/Users/Edit"
                             class="edit-user-form">
                             <input type="hidden" id="editUserID" name="userId">
 
@@ -759,7 +780,7 @@
                 </div>
             </div>
 
-            <script src="/js/Employee/UserManager/AdminManageUsers.js?v=<%= Date.now() %>"></script>
+            <script src="/js/Employee/Admin/AdminManageUsers.js?v=<%= Date.now() %>"></script>
             <div id="users-data" style="display: none;" data-users='<%- JSON.stringify(users || []) %>'></div>
             <script>
                 // Wait for DOM to be fully loaded
@@ -878,7 +899,8 @@
                                 { key: 'orders_cancelled', name: 'Cancelled Orders' },
                                 { key: 'orders_completed', name: 'Completed Orders' },
                                 { key: 'orders_returned', name: 'Returned Orders' },
-                                { key: 'orders_completed_returned', name: 'Completed Returned' }
+                                { key: 'orders_completed_refunded', name: 'Completed Refunded' },
+                                { key: 'orders_completed_returned', name: 'Completed Replacement' }
                             ]
                         },
                         {
@@ -980,9 +1002,9 @@
                     async function loadUserPermissions(userId) {
                         try {
                             console.log('Loading permissions for user ID:', userId);
-                            console.log('Making request to:', '/Employee/Admin/ManageUsers/Permissions/' + userId + '');
+                            console.log('Making request to:', '/Employee/UserManager/ManageUsers/Permissions/' + userId + '');
 
-                            const response = await fetch('/Employee/Admin/ManageUsers/Permissions/' + userId + '', {
+                            const response = await fetch('/Employee/UserManager/ManageUsers/Permissions/' + userId + '', {
                                 method: 'GET',
                                 credentials: 'include', // Include cookies for session
                                 headers: {
@@ -1146,7 +1168,7 @@
 
                         console.log('Saving permissions:', changedPermissions);
 
-                        fetch('/Employee/Admin/ManageUsers/Permissions/' + currentUserId + '/Update', {
+                        fetch('/Employee/UserManager/ManageUsers/Permissions/' + currentUserId + '/Update', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json'
@@ -1216,7 +1238,7 @@
 
                         // Determine if this is a customer or user based on whether role is empty
                         const isCustomer = !data.roleId || data.roleId === '';
-                        const endpoint = isCustomer ? '/Employee/UserManager/UserManageUsers/Customers/Edit' : '/Employee/UserManager/UserManageUsers/Users/Edit';
+                        const endpoint = isCustomer ? '/Employee/UserManager/Customers/Edit' : '/Employee/UserManager/Users/Edit';
                         const successMessage = isCustomer ? 'Customer updated successfully!' : 'User updated successfully!';
 
                         // For customers, rename userId to customerId
@@ -1319,12 +1341,107 @@
                     border-radius: 0 0 4px 4px;
                     min-height: 400px;
                 }
+                .role-manager-toolbar {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 1rem;
+                    margin-bottom: 1rem;
+                    flex-wrap: wrap;
+                }
+                .btn-add-role {
+                    background: #2563eb;
+                    color: #fff;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 0.65rem 1.25rem;
+                    font-weight: 700;
+                    cursor: pointer;
+                    letter-spacing: 0.02em;
+                }
+                .btn-add-role:hover { background: #1d4ed8; }
+                .role-search-wrap input {
+                    min-width: 220px;
+                    padding: 0.55rem 0.75rem;
+                    border: 1px solid #d1d5db;
+                    border-radius: 6px;
+                }
+                .role-matrix-wrap {
+                    overflow: auto;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    max-height: 70vh;
+                }
+                .role-matrix-table {
+                    width: max-content;
+                    min-width: 100%;
+                    border-collapse: collapse;
+                    font-size: 0.9rem;
+                }
+                .role-matrix-table th,
+                .role-matrix-table td {
+                    border: 1px solid #e5e7eb;
+                    padding: 0.55rem 0.65rem;
+                    text-align: center;
+                    white-space: nowrap;
+                }
+                .role-matrix-table thead th {
+                    background: #ede9fe;
+                    color: #4c1d95;
+                    font-weight: 600;
+                    position: sticky;
+                    top: 0;
+                    z-index: 2;
+                }
+                .role-matrix-table th.role-col,
+                .role-matrix-table td.role-col {
+                    text-align: left;
+                    position: sticky;
+                    left: 0;
+                    background: #f5f3ff;
+                    z-index: 1;
+                    min-width: 180px;
+                }
+                .role-matrix-table thead th.role-col { z-index: 3; }
+                .role-matrix-table input[type="checkbox"] {
+                    width: 18px;
+                    height: 18px;
+                    accent-color: #7c3aed;
+                    cursor: pointer;
+                }
+                .role-actions-btn {
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    padding: 0 0.35rem;
+                    color: #6b7280;
+                    vertical-align: middle;
+                }
+                .role-actions-menu {
+                    position: absolute;
+                    background: #fff;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 6px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+                    z-index: 10;
+                    min-width: 100px;
+                }
+                .role-actions-menu button {
+                    display: block;
+                    width: 100%;
+                    text-align: left;
+                    padding: 0.5rem 0.75rem;
+                    border: none;
+                    background: none;
+                    cursor: pointer;
+                }
+                .role-actions-menu button:hover { background: #f3f4f6; }
             `;
                     document.head.appendChild(style);
 
                     // Tab functionality
                     window.showTab = function (tab) {
-                        const tabs = ['employee-accounts', 'customer-accounts'];
+                        const tabs = ['employee-accounts', 'customer-accounts', 'role-manager'];
                         tabs.forEach(t => {
                             const tabContent = document.getElementById('tab-content-' + t);
                             const tabBtn = document.getElementById('tab-' + t);
@@ -1335,16 +1452,18 @@
                             }
                         });
 
-                        // Load customer data when customer accounts tab is shown
                         if (tab === 'customer-accounts') {
                             loadCustomerAccounts();
+                        }
+                        if (tab === 'role-manager' && window.RoleManager) {
+                            window.RoleManager.load();
                         }
                     };
 
                     // Function to load customer accounts
                     async function loadCustomerAccounts() {
                         try {
-                            const response = await fetch('/Employee/UserManager/UserManageUsers/Customers');
+                            const response = await fetch('/Employee/UserManager/ManageUsers/Customers');
                             const data = await response.json();
 
                             const tbody = document.querySelector('#customerAccountsTable tbody');
@@ -1450,7 +1569,7 @@
 
                         try {
                             const newStatus = userToDeactivate.currentStatus ? 0 : 1;
-                            const response = await fetch('/Employee/UserManager/UserManageUsers/ToggleActive/' + userToDeactivate.id + '/' + newStatus, {
+                            const response = await fetch('/Employee/UserManager/ManageUsers/ToggleActive/' + userToDeactivate.id + '/' + newStatus, {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json'
@@ -1559,7 +1678,7 @@
                     // Function to archive customer (soft delete)
                     async function archiveCustomer(customerId, fullName) {
                         try {
-                            const response = await fetch('/Employee/UserManager/UserManageUsers/Customers/Archive', {
+                            const response = await fetch('/Employee/UserManager/Customers/Archive', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json'
@@ -1587,7 +1706,7 @@
                     // Function to permanently delete customer
                     async function deleteCustomer(customerId, fullName) {
                         try {
-                            const response = await fetch('/Employee/UserManager/UserManageUsers/Customers/Delete/' + customerId, {
+                            const response = await fetch('/Employee/UserManager/Customers/Delete/' + customerId, {
                                 method: 'DELETE',
                                 headers: {
                                     'Content-Type': 'application/json'
@@ -1684,7 +1803,7 @@ Consider archiving instead if you want to preserve the data.`;
                     // Function to dearchive customer (restore archived customer)
                     async function dearchiveCustomer(customerId, fullName) {
                         try {
-                            const response = await fetch('/Employee/UserManager/UserManageUsers/Customers/Dearchive', {
+                            const response = await fetch('/Employee/UserManager/Customers/Dearchive', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json'
@@ -1712,7 +1831,7 @@ Consider archiving instead if you want to preserve the data.`;
                     // Function to permanently delete customer (updated with better error handling)
                     async function deleteCustomer(customerId, fullName) {
                         try {
-                            const response = await fetch('/Employee/UserManager/UserManageUsers/Customers/Delete/' + customerId, {
+                            const response = await fetch('/Employee/UserManager/Customers/Delete/' + customerId, {
                                 method: 'DELETE',
                                 headers: {
                                     'Content-Type': 'application/json'
@@ -2002,22 +2121,26 @@ Consider archiving instead if you want to preserve the data.`;
 
                 // Global showTab function for tab navigation
                 window.showTab = function (tab) {
-                    const tabs = ['employee-accounts', 'customer-accounts'];
-                    tabs.forEach(t => {
-                        const tabContent = document.getElementById('tab-content-' + t);
-                        const tabBtn = document.getElementById('tab-' + t);
+                        const tabs = ['employee-accounts', 'customer-accounts', 'role-manager'];
+                        tabs.forEach(t => {
+                            const tabContent = document.getElementById('tab-content-' + t);
+                            const tabBtn = document.getElementById('tab-' + t);
 
-                        if (tabContent && tabBtn) {
-                            tabContent.style.display = (t === tab) ? '' : 'none';
-                            tabBtn.classList.toggle('active', t === tab);
-                        }
-                    });
+                            if (tabContent && tabBtn) {
+                                tabContent.style.display = (t === tab) ? '' : 'none';
+                                tabBtn.classList.toggle('active', t === tab);
+                            }
+                        });
 
                     if (tab === 'customer-accounts') {
                         loadCustomerAccounts();
                     }
+                    if (tab === 'role-manager' && window.RoleManager) {
+                        window.RoleManager.load();
+                    }
                 };
             </script>
+            <script src="/js/Employee/Admin/role-manager.js?v=<%= Date.now() %>"></script>
 
 </body>
 

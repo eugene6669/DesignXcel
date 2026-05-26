@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Receive Orders - Admin</title>
+    <title>Orders - Admin</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="/css/Employee/Admin/admin-orders-compact.css?v=20260524a">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
@@ -631,6 +633,48 @@
             color: #475569;
             line-height: 1.5;
         }
+        .order-card-footer {
+            display: flex;
+            gap: 12px;
+            padding-top: 10px;
+        }
+        .order-card-action {
+            flex: 1 1 auto;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 16px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .order-card-action.proceed {
+            background: #10b981;
+            color: #ffffff;
+            box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
+        }
+        .order-card-action.proceed:hover {
+            filter: brightness(1.05);
+            transform: translateY(-1px);
+        }
+        .order-card-action.cancel {
+            background: #ef4444;
+            color: #ffffff;
+            box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
+        }
+        .order-card-action.cancel:hover {
+            filter: brightness(1.05);
+            transform: translateY(-1px);
+        }
+        @media (max-width: 640px) {
+            .order-card-footer {
+                flex-direction: column;
+            }
+        }
         .order-products {
             display: flex;
             flex-direction: column;
@@ -1027,12 +1071,12 @@
 <body>
     <div class="dashboard-container">
         <div class="sidebar">
-            <%- include('partials/sidebar', { activePage: 'orders-receive' }) %>
+            <%- include('partials/sidebar', { activePage: typeof activePage !== 'undefined' ? activePage : 'orders' }) %>
         </div>
         <div class="main-content">
             <div class="header orders-header">
                 <div>
-                <h2>Receive Orders</h2>
+                <h2>Orders</h2>
                     <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem;">
                         <div class="orders-count-badge">
                             <span class="icon icon-box" aria-hidden="true">
@@ -1062,6 +1106,9 @@
                     </div>
                 </div>
             </div>
+
+            <%- include('partials/admin-orders-tabs', { ordersTab: typeof ordersTab !== 'undefined' ? ordersTab : 'receive' }) %>
+
             <div class="content-area">
                 <!-- Filters Section -->
                 <div class="filters-section">
@@ -1089,10 +1136,10 @@
                             <label for="amountFilter">Amount Range</label>
                             <select id="amountFilter">
                                 <option value="">All Amounts</option>
-                                <option value="0-1000">₱0 - ₱1,000</option>
-                                <option value="1000-5000">₱1,000 - ₱5,000</option>
-                                <option value="5000-10000">₱5,000 - ₱10,000</option>
-                                <option value="10000+">₱10,000+</option>
+                                <option value="0-1000">?0 - ?1,000</option>
+                                <option value="1000-5000">?1,000 - ?5,000</option>
+                                <option value="5000-10000">?5,000 - ?10,000</option>
+                                <option value="10000+">?10,000+</option>
                             </select>
                         </div>
                         <div class="filter-group">
@@ -1111,7 +1158,7 @@
                 </div>
 
                 <!-- View Toggle and Pagination Info -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                <div class="orders-view-toggle-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
                         <span style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">View:</span>
                         <div style="display: flex; background: #f3f4f6; border-radius: 8px; padding: 2px;">
@@ -1139,7 +1186,7 @@
                 </div>
 
                 <% if (orders && orders.length > 0) { %>
-                    <div class="orders-grid" id="ordersGrid">
+                    <div class="orders-grid" id="ordersGrid" style="display: none;">
                         <% orders.forEach(function(order) { %>
                             <div class="order-card collapsed <%= order.IsBulkOrder ? 'has-bulk-badge' : '' %>" 
                                  data-order-id="<%= order.OrderID %>"
@@ -1210,7 +1257,7 @@
                                         data-toggle-target="<%= order.OrderID %>"
                                         aria-expanded="false"
                                     >
-                                        <span class="toggle-icon">⌄</span>
+                                        <span class="toggle-icon">?</span>
                                         <span class="toggle-label">View Details</span>
                                     </button>
                                 </div>
@@ -1242,7 +1289,7 @@
                                                             <% } else if (item.ImageURL) { %>
                                                                 <img src="<%= item.ImageURL %>" alt="<%= item.Name %>">
                                                             <% } else { %>
-                                                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem;">ðŸ–¼ï¸</div>
+                                                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:1.2rem;">🖼️</div>
                                                             <% } %>
                                                         </div>
                                                         <div class="order-product-details">
@@ -1283,7 +1330,7 @@
                                     </div>
                                     <% if (order.TransactionID) { %>
                                     <div class="order-section">
-                                        <span class="order-section-title">Payment ID</span>
+                                        <span class="order-section-title">Payment Reference</span>
                                         <div class="order-section-body" style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></div>
                                     </div>
                                     <% } %>
@@ -1306,6 +1353,22 @@
                                         <div class="order-section-body">₱<%= extraFee.toLocaleString(undefined, { minimumFractionDigits: 2 }) %></div>
                                     </div>
                                     <% } %>
+
+                                    <div class="order-card-footer">
+                                        <% const canAutoConfirm = !!order.CanAutoConfirmReceive; const daysLeft = order.DaysUntilAutoConfirm || 0; %>
+                                        <button
+                                            class="order-card-action proceed js-open-order-modal<%= canAutoConfirm ? '' : ' is-disabled' %>"
+                                            type="button"
+                                            data-order-id="<%= order.OrderID %>"
+                                            data-action="proceed"
+                                            data-can-auto-confirm="<%= canAutoConfirm ? '1' : '0' %>"
+                                            data-days-left="<%= daysLeft %>"
+                                            <%= canAutoConfirm ? '' : 'disabled' %>
+                                            title="<%= canAutoConfirm ? 'Confirm after the 7-day customer return window' : ('Available in ' + daysLeft + ' day(s)') %>"
+                                        >
+                                            <%= canAutoConfirm ? 'Receive' : ('Wait ' + daysLeft + 'd') %>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1314,43 +1377,46 @@
 
                     <!-- Modals (Outside grid for table view access) -->
                     <% orders.forEach(function(order) { %>
+                        <% const modalCanAutoConfirm = !!order.CanAutoConfirmReceive; const modalDaysLeft = order.DaysUntilAutoConfirm || 0; const confirmDays = typeof autoConfirmReceiveDays !== 'undefined' ? autoConfirmReceiveDays : 7; %>
                         <div id="modal-<%= order.OrderID %>-proceed" class="order-modal-overlay">
                             <div class="order-modal-content">
-                                <h4>Complete Order?</h4>
-                                <p>Are you sure you want to mark order <strong><%= order.ReferenceNumber || order.OrderID %></strong> as <strong>Completed</strong>?<br>This action cannot be undone.</p>
+                                <% if (modalCanAutoConfirm) { %>
+                                <h4>Auto-confirm order received?</h4>
+                                <p>
+                                    The customer <strong><%= confirmDays %>-day</strong> return window has passed for order
+                                    <strong><%= order.ReferenceNumber || order.OrderID %></strong>.
+                                    Confirm this order as received and mark it <strong>Completed</strong>?
+                                </p>
+                                <p style="font-size:0.875rem;color:#6b7280;margin-top:0.75rem;">This action cannot be undone.</p>
+                                <% } else { %>
+                                <h4>Not eligible yet</h4>
+                                <p>
+                                    Order <strong><%= order.ReferenceNumber || order.OrderID %></strong> can be auto-confirmed after
+                                    <strong><%= confirmDays %> days</strong> in To Receive status.
+                                    <strong><%= modalDaysLeft %> day(s)</strong> remaining in the customer return window.
+                                </p>
+                                <% } %>
                                 <div class="modal-btns">
                                     <button class="btn-filter btn-filter-secondary js-close-order-modal"
                                         data-order-id="<%= order.OrderID %>"
                                         data-action="proceed">Cancel</button>
+                                    <% if (modalCanAutoConfirm) { %>
                                     <button class="btn-filter btn-filter-primary confirm-btn js-confirm-order-action"
                                         data-order-id="<%= order.OrderID %>"
-                                        data-action="proceed">Complete</button>
+                                        data-action="proceed"
+                                        data-can-auto-confirm="1">Confirm Received</button>
+                                    <% } %>
                                 </div>
                             </div>
                         </div>
 
-                        <div id="modal-<%= order.OrderID %>-cancel" class="order-modal-overlay">
-                            <div class="order-modal-content">
-                                <h4>Cancel Order?</h4>
-                                <p>Are you sure you want to cancel order <strong><%= order.ReferenceNumber || order.OrderID %></strong>?<br>This action will restore inventory and cannot be undone.</p>
-                                <div class="modal-btns">
-                                    <button class="btn-filter btn-filter-secondary js-close-order-modal"
-                                        data-order-id="<%= order.OrderID %>"
-                                        data-action="cancel">No, Go Back</button>
-                                    <button class="btn-filter confirm-btn js-confirm-order-action"
-                                        style="background: #ef4444; color: white;"
-                                        data-order-id="<%= order.OrderID %>"
-                                        data-action="cancel">Cancel Order</button>
-                                </div>
-                            </div>
-                        </div>
 
                         <!-- Payment Modal -->
                         <div id="payment-modal-<%= order.OrderID %>" class="payment-modal-overlay">
                             <div class="payment-modal-content">
                                 <div class="payment-modal-header">
                                     <h3>Payment Details</h3>
-                                    <button class="payment-modal-close" onclick="closePaymentModal(<%= order.OrderID %>)">Ã—</button>
+                                    <button class="payment-modal-close" onclick="closePaymentModal(<%= order.OrderID %>)">×</button>
                                 </div>
                                 <div class="payment-modal-body" id="payment-modal-body-<%= order.OrderID %>">
                                     <div style="text-align: center; padding: 2rem;">
@@ -1370,7 +1436,7 @@
                             <div class="return-media-modal-content">
                                 <div class="return-media-modal-header">
                                     <h3><%= order.ReturnImageURL ? 'Return Image' : 'Return Video' %></h3>
-                                    <button class="return-media-modal-close" onclick="closeReturnMediaModal(<%= order.OrderID %>)">Ã—</button>
+                                    <button class="return-media-modal-close" onclick="closeReturnMediaModal(<%= order.OrderID %>)">×</button>
                                 </div>
                                 <div class="return-media-modal-body" id="return-media-body-<%= order.OrderID %>">
                                     <!-- Content will be loaded dynamically -->
@@ -1381,8 +1447,8 @@
                     <% }); %>
 
                     <!-- Orders Table (Hidden by default) -->
-                    <div id="ordersTable" style="display: none; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
-                        <table style="width: 100%; border-collapse: collapse;">
+                    <div id="ordersTable" style="display: block; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb;">
+                        <table class="admin-orders-compact-table">
                             <thead style="background: #f8f9fa; border-bottom: 2px solid #e5e7eb;">
                                 <tr>
                                     <th style="padding: 1rem; text-align: left; font-weight: 600; font-size: 0.875rem; color: #374151; text-transform: uppercase; letter-spacing: 0.05em;">Order #</th>
@@ -1458,8 +1524,8 @@
                                         </td>
                                         <td style="padding: 1rem; text-align: center;">
                                             <button class="order-card-toggle" type="button" data-toggle-target="<%= order.OrderID %>" style="background: #F0B21B; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; margin-right: 0.5rem;" onclick="toggleOrderDetails(<%= order.OrderID %>)">View</button>
-                                            <button class="order-card-action proceed js-open-order-modal" type="button" data-order-id="<%= order.OrderID %>" data-action="proceed" style="background: #10b981; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; margin-right: 0.5rem;">Proceed</button>
-                                            <button class="order-card-action cancel js-open-order-modal" type="button" data-order-id="<%= order.OrderID %>" data-action="cancel" style="background: #ef4444; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem;">Cancel</button>
+                                            <% const tableCanAutoConfirm = !!order.CanAutoConfirmReceive; const tableDaysLeft = order.DaysUntilAutoConfirm || 0; %>
+                                            <button class="order-card-action proceed js-open-order-modal" type="button" data-order-id="<%= order.OrderID %>" data-action="proceed" data-can-auto-confirm="<%= tableCanAutoConfirm ? '1' : '0' %>" data-days-left="<%= tableDaysLeft %>" <%= tableCanAutoConfirm ? '' : 'disabled' %> title="<%= tableCanAutoConfirm ? 'Confirm after the 7-day customer return window' : ('Available in ' + tableDaysLeft + ' day(s)') %>" style="background: <%= tableCanAutoConfirm ? '#10b981' : '#9ca3af' %>; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: <%= tableCanAutoConfirm ? 'pointer' : 'not-allowed' %>; font-weight: 600; font-size: 0.875rem;"><%= tableCanAutoConfirm ? 'Receive' : ('Wait ' + tableDaysLeft + 'd') %></button>
                                         </td>
                                     </tr>
                                     <!-- Order Details Row (Hidden by default) -->
@@ -1500,7 +1566,7 @@
                                                                         <% } else if (item.ImageURL) { %>
                                                                             <img src="<%= item.ImageURL %>" alt="<%= item.Name %>" style="width: 100%; height: 100%; object-fit: cover;">
                                                                         <% } else { %>
-                                                                            <div style="color: #94a3b8; font-size: 1.5rem;">ðŸ–¼ï¸</div>
+                                                                            <div style="color: #94a3b8; font-size: 1.5rem;">🖼️</div>
                                                                         <% } %>
                                                                     </div>
                                                                     <div style="flex: 1; min-width: 0;">
@@ -1537,7 +1603,7 @@
                                                             <% } %>
                                                         </div>
                                                         <% if (order.TransactionID) { %>
-                                                        <div>Payment ID: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
+                                                        <div>Payment Reference: <strong style="font-family: monospace; font-size: 0.9em; color: #64748b;"><%= order.TransactionID %></strong></div>
                                                         <% } %>
                                                         <div>Service Type: <strong><%= order.DeliveryTypeName || 'Pick up' %></strong></div>
                                                         <% if ((order.DeliveryTypeName === 'Pick up' || order.DeliveryType === 'pickup') && order.PickupDate) { %>
@@ -1643,7 +1709,8 @@
     <div id="order-success-popup"></div>
 
     <!-- Loading Spinner Utility -->
-    <script src="/js/Employee/InventoryManager/admin-loading-spinner.js"></script>
+    <script src="/js/Employee/Admin/admin-loading-spinner.js"></script>
+    <script src="/js/Employee/Admin/admin-orders-compact.js?v=20260524a"></script>
     
     <script>
         // Loading Spinner Helper (if utility not loaded)
@@ -1803,7 +1870,7 @@
                 if (amountFilter) {
                     const [min, max] = amountFilter === '10000+' 
                         ? [10000, Infinity]
-                        : amountFilter.split('-').map(v => v.replace(/[₱,]/g, ''));
+                        : amountFilter.split('-').map(v => v.replace(/[?,]/g, ''));
                     if (amount < parseFloat(min) || (max !== 'Infinity' && amount > parseFloat(max))) {
                         shouldShow = false;
                     }
@@ -1897,7 +1964,7 @@
                 if (amountFilter) {
                     const [min, max] = amountFilter === '10000+' 
                         ? [10000, Infinity]
-                        : amountFilter.split('-').map(v => v.replace(/[₱,]/g, ''));
+                        : amountFilter.split('-').map(v => v.replace(/[?,]/g, ''));
                     if (amount < parseFloat(min) || (max !== 'Infinity' && amount > parseFloat(max))) {
                         shouldShow = false;
                     }
@@ -2035,6 +2102,12 @@
             if (openTrigger) {
                 const orderId = openTrigger.getAttribute('data-order-id');
                 const action = openTrigger.getAttribute('data-action');
+                const canAutoConfirm = openTrigger.getAttribute('data-can-auto-confirm') === '1';
+                const daysLeft = parseInt(openTrigger.getAttribute('data-days-left') || '0', 10);
+                if (!canAutoConfirm) {
+                    alert(`This order can be confirmed after the 7-day customer return window (${daysLeft} day(s) remaining).`);
+                    return;
+                }
                 if (orderId && action) {
                     showModal(orderId, action);
                 }
@@ -2116,7 +2189,7 @@
                             </div>
                             <div class="payment-info-row">
                                 <span class="payment-info-label">Total Amount</span>
-                                <span class="payment-info-value amount">₱${Number(details.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                <span class="payment-info-value amount">?${Number(details.TotalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div class="payment-info-row">
                                 <span class="payment-info-label">Order Date</span>
@@ -2131,7 +2204,7 @@
                     `;
                     
                     const paymentIdentifier = details.PaymentIdentifier || details.StripeSessionID || details.TransactionID;
-                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment / transaction ID';
+                    const paymentIdentifierLabel = details.PaymentIdentifierLabel || 'Payment ID';
                     if (paymentIdentifier) {
                         html += `
                             <div class="payment-info-row">
@@ -2174,7 +2247,7 @@
                                     </div>
                                     <div class="payment-info-row">
                                         <span class="payment-info-label">Amount Paid</span>
-                                        <span class="payment-info-value amount">₱${amountPhp.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        <span class="payment-info-value amount">?${amountPhp.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
                                     <div class="payment-info-row">
                                         <span class="payment-info-label">Currency</span>
@@ -2193,7 +2266,7 @@
                 } else {
                     modalBody.innerHTML = `
                         <div style="text-align: center; padding: 2rem;">
-                            <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">âš ï¸</div>
+                            <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
                             <p style="color: #6b7280; font-size: 1rem;">${result.message || 'Failed to retrieve payment details'}</p>
                         </div>
                     `;
@@ -2202,7 +2275,7 @@
                 console.error('Error checking payment status:', error);
                 modalBody.innerHTML = `
                     <div style="text-align: center; padding: 2rem;">
-                        <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">âš ï¸</div>
+                        <div style="color: #ef4444; font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
                         <p style="color: #6b7280; font-size: 1rem;">Error checking payment status. Please try again.</p>
                     </div>
                 `;
@@ -2237,30 +2310,24 @@
 
         // Handle Actions
         function handleAction(orderId, action) {
-            const url = action === 'proceed'
-                ? `/Employee/Admin/OrdersReceive/Proceed/${orderId}`
-                : `/Employee/Admin/OrdersReceive/Cancel/${orderId}`;
-            
-            // Show loading spinner
-            showLoadingSpinner('orders-loading-spinner', action === 'proceed' ? 'Completing order...' : 'Cancelling order...');
-            
+            if (action !== 'proceed') return;
+
+            const url = `/Employee/InventoryManager/OrdersReceive/Proceed/${orderId}`;
+
+            showLoadingSpinner('orders-loading-spinner', 'Receiving order...');
+
             fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
                         closeModal(orderId, action);
-                        showOrderSuccess(action === 'proceed' ? 'âœ“ Order completed successfully!' : 'âœ“ Order cancelled successfully!');
-                        if (action === 'proceed') {
-                            // Redirect to completed orders page
-                            setTimeout(() => {
-                                window.location.href = '/Employee/InventoryManager/InventoryCompletedOrders';
-                            }, 1500);
-                        } else {
-                            setTimeout(() => {
-                                hideLoadingSpinner('orders-loading-spinner');
-                                location.reload();
-                            }, 2000);
-                        }
+                        const dest = '/Employee/InventoryManager/Orders?tab=completed';
+                        showOrderSuccess(data.status === 'Completed Returned'
+                            ? 'Replacement order auto-confirmed and completed!'
+                            : 'Order auto-confirmed after 7-day return window!');
+                        setTimeout(() => {
+                            window.location.href = dest;
+                        }, 1500);
                     } else {
                         hideLoadingSpinner('orders-loading-spinner');
                         alert(data.message || 'Action failed.');
