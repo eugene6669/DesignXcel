@@ -133,7 +133,7 @@ function resolveVariationMediaUrls(media, urlFn) {
     const thumbUrls = (media.thumbFiles || []).map((f) => urlFn(f)).filter(Boolean);
     const mainUrl = media.mainFile
         ? urlFn(media.mainFile)
-        : (thumbUrls[0] || null);
+        : null;
     const model3dUrl = media.modelFile ? urlFn(media.modelFile) : null;
     return {
         imageUrl: mainUrl,

@@ -466,26 +466,12 @@ function buildSalesReportSummaryRows(stats) {
     const n = (v) => parseFloat(v || 0);
     const i = (v) => parseInt(v || 0, 10);
     return [
-        { label: 'Gross Product Sales', value: n(stats.grossProductSales || stats.grossSales), currency: true, note: 'Paid orders: Pending Verification through Completed (excl. returns)' },
-        { label: 'Discounts', value: n(stats.totalDiscounts), currency: true, note: 'Promotions on gross-eligible orders' },
-        { label: 'Net Product Sales', value: n(stats.netProductSales), currency: true, note: 'Gross product − discounts (collected, pre-recognition)' },
-        { label: 'Delivery Revenue', value: n(stats.deliveryRevenueGross || stats.deliveryRevenue), currency: true, note: 'Delivery fees charged (gross-eligible orders)' },
-        { label: 'Delivery Refunds', value: n(stats.deliveryRefunds), currency: true, note: 'Revenue reversal — not a loss' },
-        { label: 'Net Delivery Revenue', value: n(stats.netDeliveryRevenue), currency: true, note: 'Delivery after refunds' },
-        { label: 'Product Refunds', value: n(stats.productRefunds), currency: true, note: 'Revenue reversal — not a loss' },
-        { label: 'Net Revenue', value: n(stats.netRevenue), currency: true, note: 'Recognized: Received & Completed only, after refunds' },
-        { label: 'Recognized Product Revenue', value: n(stats.recognizedProductRevenue ?? stats.netSales), currency: true, note: 'Product revenue after refunds (recognized statuses)' },
-        { label: 'Return Shipping Expense', value: n(stats.returnShippingExpense || stats.returnShipping), currency: true, note: 'Direct cash expense (seller-paid)' },
-        { label: 'Damage Cost', value: n(stats.damageInventoryCost), currency: true, note: 'Inventory write-off at item cost' },
-        { label: 'COGS', value: n(stats.cogs), currency: true, note: 'Item cost for Received & Completed orders' },
-        { label: 'Replacement Cost', value: n(stats.replacementCost), currency: true, note: 'Replacement units at item cost' },
-        { label: 'Gross Profit', value: n(stats.grossProfit), currency: true, note: 'Net revenue − COGS − return shipping − damage − replacement' },
-        { label: 'Gross Margin', value: n(stats.grossMargin), percent: true, note: 'Gross profit ÷ net revenue' },
-        { label: 'Refund Rate', value: n(stats.refundRate), percent: true, note: 'Product refunds ÷ gross product sales' },
-        { label: 'Return Rate', value: n(stats.returnRate), percent: true, note: 'Returned orders ÷ total orders' },
         { label: 'Total Orders', value: i(stats.totalOrders), currency: false, note: 'Orders matching filters' },
         { label: 'Total Customers', value: i(stats.totalCustomers), currency: false, note: 'Unique customer emails' },
-        { label: 'Average Order Value', value: n(stats.averageOrderValue), currency: true, note: 'Mean total amount (excl. cancelled/returns)' }
+        { label: 'Total Discounts', value: n(stats.totalDiscounts), currency: true, note: 'Sum of order discounts' },
+        { label: 'Delivery Total', value: n(stats.deliveryTotal), currency: true, note: 'Sum of delivery fees (display amounts)' },
+        { label: 'Sales Total', value: n(stats.salesTotal), currency: true, note: 'Sum of order totals (display amounts)' },
+        { label: 'Average Order Value', value: n(stats.averageOrderValue), currency: true, note: 'Sales total ÷ total orders' }
     ];
 }
 

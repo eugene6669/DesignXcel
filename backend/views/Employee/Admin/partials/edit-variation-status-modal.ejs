@@ -63,7 +63,7 @@
                         </div>
                         <div class="variation-edit-main-image-wrap" style="margin-top:10px;">
                             <div id="editVariationStatusMainImagePreview" class="pi-media-preview-main" style="margin:6px 0;"></div>
-                            <label for="editVariationStatusMainImage">Main Image</label>
+                            <label for="editVariationStatusMainImage">Variation Main Image</label>
                             <input type="file" id="editVariationStatusMainImage" accept="image/*">
                         </div>
                     </div>
@@ -101,11 +101,14 @@
                         </div>
                         <p class="pi-media-preview-label" style="margin:8px 0 4px;">Preview</p>
                         <div id="editVariationCatalogMainImagePreview" class="pi-media-preview-main" style="margin:0 0 8px;"></div>
-                        <label for="editVariationCatalogMainImage">Main Image</label>
+                        <label for="editVariationCatalogMainImage">Variation Main Image</label>
                         <input type="file" id="editVariationCatalogMainImage" accept="image/*">
                         <div id="editVariationStatusMediaPreview" class="variation-catalog-media-preview" style="margin:12px 0;"></div>
                         <label for="editVariationStatusThumbnails">Thumbnails (up to 4)</label>
                         <input type="file" id="editVariationStatusThumbnails" accept="image/*" multiple>
+                        <div id="editVariationStatusModel3dPreview" class="variation-catalog-model-preview" style="margin:12px 0 6px;"></div>
+                        <label for="editVariationStatusModel3d">3D Model (GLB/GLTF)</label>
+                        <input type="file" id="editVariationStatusModel3d" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
                     </div>
                 </div>
 
@@ -114,13 +117,6 @@
                         <h4>Manufacturing Raw Materials</h4>
                         <div id="editVariationBomBundleDisplay" class="pi-recipe-bom-label" style="font-size:0.9em;margin-bottom:8px;color:#444;"></div>
                         <div id="editVariationRecipeReadonlyList" class="pi-recipe-materials-list" style="font-size:0.9em;color:#333;"></div>
-                    </div>
-                </div>
-
-                <div class="variation-edit-catalog-3d variation-edit-products-catalog" style="display:none;">
-                    <div class="form-group pi-section">
-                        <label for="editVariationStatusModel3d">3D Model (GLB/GLTF)</label>
-                        <input type="file" id="editVariationStatusModel3d" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
                     </div>
                 </div>
 

@@ -753,7 +753,7 @@ async function enrichProductDetailFromInventory(pool, product) {
         ? materialNames.join(', ')
         : (product.material || null);
 
-    const parentMedia = buildParentStorefrontMedia(
+    let parentMedia = buildParentStorefrontMedia(
         product,
         invRow.ImageURL,
         invRow.ThumbnailURLs,

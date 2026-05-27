@@ -4385,8 +4385,8 @@ app.get('/api/products/:id', async (req, res) => {
             WHERE p.SKU IS NOT NULL
         `);
 
-        // Set cache headers for product detail (2 minutes - products change less frequently)
-        res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
+        // Product detail is edited frequently via Admin; avoid stale thumbnails/main image.
+        res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
 
         // Determine if identifier is UUID, slug, SKU, or legacy numeric ID
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identifier);

@@ -1791,11 +1791,14 @@ let currentSelectedProductId = null;
             const opts = options || {};
             const includeMain = opts.includeMain !== false;
             const mainId = opts.mainImageId;
-            const main = rowOrForm.querySelector?.('.create-variation-main-image') ||
+            // IMPORTANT: when editing from Storefront/Products (catalog mode),
+            // the main image input is `mainId` (e.g. `editVariationCatalogMainImage`).
+            // Prefer that first; otherwise we accidentally read the hidden inventory input.
+            const main = (mainId && document.getElementById(mainId)) ||
+                rowOrForm.querySelector?.('.create-variation-main-image') ||
                 rowOrForm.querySelector?.('.variation-main-image') ||
                 rowOrForm.querySelector?.('#variationMainImage') ||
                 rowOrForm.querySelector?.('#editVariationStatusMainImage') ||
-                (mainId && document.getElementById(mainId)) ||
                 (!mainId && document.getElementById('editVariationStatusMainImage'));
             const thumbs = rowOrForm.querySelector?.('.variation-thumbnails') || rowOrForm.querySelector?.('#variationThumbnails') || rowOrForm.querySelector?.('#editVariationStatusThumbnails');
             const model = rowOrForm.querySelector?.('.variation-model3d') || rowOrForm.querySelector?.('#variationModel3d') || rowOrForm.querySelector?.('#editVariationStatusModel3d');
@@ -1813,6 +1816,7 @@ let currentSelectedProductId = null;
             if (!container) return;
             const opts = options || {};
             const showMain = opts.showMain !== false;
+            const showModel3d = opts.showModel3d !== false;
             let html = '';
             if (showMain && data.mainImage) {
                 html += buildMediaImgHtml(data.mainImage, { label: 'Main image', style: 'max-width:100px;max-height:100px;object-fit:cover;border-radius:6px;border:1px solid #dee2e6;margin-bottom:8px;' });
@@ -1825,11 +1829,21 @@ let currentSelectedProductId = null;
                 });
                 html += '</div>';
             }
-            if (data.model3d) {
+            if (showModel3d && data.model3d) {
                 const modelName = String(data.model3d).split('/').pop();
                 html += '<p class="pi-media-preview-label">Current 3D model</p><span class="pi-model3d-badge">' + escapeHtml(modelName) + '</span>';
             }
             container.innerHTML = html || '<em style="color:#888;">No media uploaded yet</em>';
+        }
+
+        function renderVariationModel3dPreview(container, model3dUrl) {
+            if (!container) return;
+            if (model3dUrl) {
+                const modelName = String(model3dUrl).split('/').pop();
+                container.innerHTML = '<p class="pi-media-preview-label">Current 3D model</p><span class="pi-model3d-badge">' + escapeHtml(modelName) + '</span>';
+            } else {
+                container.innerHTML = '<em style="color:#888;">No 3D model uploaded</em>';
+            }
         }
 
         function renderMainImagePreview(container, imageUrl) {
@@ -3453,19 +3467,6 @@ let currentSelectedProductId = null;
                     document.getElementById('editInventoryProductId').value = productId;
                     document.getElementById('editInventoryProductName').value = p.Name || '';
                     document.getElementById('editInventoryProductCurrentImage').value = p.ImageURL || '';
-                    const saleEl = document.getElementById('editInventoryProductSalePrice');
-                    if (saleEl) {
-                        const sp = p.Price != null && p.Price !== '' && !isNaN(parseFloat(p.Price)) ? parseFloat(p.Price) : '';
-                        saleEl.value = sp !== '' ? sp.toFixed(2) : '';
-                        bindProductPriceInput(saleEl);
-                    }
-                    const costEl = document.getElementById('editInventoryProductCostPrice');
-                    if (costEl) {
-                        const cp = p.CostPrice != null && p.CostPrice !== '' && !isNaN(parseFloat(p.CostPrice))
-                            ? parseFloat(p.CostPrice) : '';
-                        costEl.value = cp !== '' ? cp.toFixed(2) : '';
-                        bindProductPriceInput(costEl);
-                    }
                     const descEl = document.getElementById('editInventoryProductDescription');
                     if (descEl) descEl.value = p.Description || '';
                     const thumbsHidden = document.getElementById('editInventoryProductCurrentThumbnails');
@@ -3502,8 +3503,6 @@ let currentSelectedProductId = null;
             const modal = document.getElementById('editInventoryProductModal');
             const form = document.getElementById('editInventoryProductForm');
             if (!modal || !form) return;
-            bindProductPriceInput(document.getElementById('editInventoryProductSalePrice'));
-            bindProductPriceInput(document.getElementById('editInventoryProductCostPrice'));
             const close = function() { modal.style.display = 'none'; form.reset(); };
             ['closeEditInventoryProductModal', 'cancelEditInventoryProduct'].forEach(function(id) {
                 const el = document.getElementById(id);
@@ -3512,18 +3511,7 @@ let currentSelectedProductId = null;
             form.addEventListener('submit', async function(e) {
                 e.preventDefault();
                 const id = document.getElementById('editInventoryProductId').value;
-                const saleEl = document.getElementById('editInventoryProductSalePrice');
-                const costEl = document.getElementById('editInventoryProductCostPrice');
-                const priceValidation = validateSaleCostPair(saleEl, costEl);
-                if (priceValidation) {
-                    showCustomPopup(priceValidation, true);
-                    return;
-                }
-                const unitPrice = getProductUnitPriceFromEl(saleEl);
-                const unitCost = getProductUnitPriceFromEl(costEl, true);
                 const fd = new FormData(form);
-                fd.set('price', unitPrice.toFixed(2));
-                fd.set('costPrice', unitCost.toFixed(2));
                 const thumbInput = document.getElementById('editInventoryProductThumbnails');
                 if (thumbInput && thumbInput.files && thumbInput.files.length) {
                     fd.delete('productThumbnail');
@@ -4317,6 +4305,7 @@ let currentSelectedProductId = null;
                 document.getElementById('editVariationStatusDisposedQuantity').value = currentDisposed;
                 
                 const mediaPreview = document.getElementById('editVariationStatusMediaPreview');
+                const model3dPreview = document.getElementById('editVariationStatusModel3dPreview');
                 if (!isProductReturnsPage && (isProductsListingPage || isStorefrontPage || isInventoryPage)) {
                     const catalogMedia = variationCatalogMode;
                     renderVariationMediaPreviews(mediaPreview, {
@@ -4325,10 +4314,17 @@ let currentSelectedProductId = null;
                         model3d: variationData.Model3D || null
                     }, {
                         showMain: false,
+                        showModel3d: !catalogMedia,
                         thumbnailsLabel: catalogMedia ? 'Current thumbnails' : 'Thumbnails'
                     });
+                    if (catalogMedia && model3dPreview) {
+                        renderVariationModel3dPreview(model3dPreview, variationData.Model3D || null);
+                    } else if (model3dPreview) {
+                        model3dPreview.innerHTML = '';
+                    }
                 } else if (mediaPreview) {
                     mediaPreview.innerHTML = '';
+                    if (model3dPreview) model3dPreview.innerHTML = '';
                 }
 
                 // Removed Notes field for compact modal

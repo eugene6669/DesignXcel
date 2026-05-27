@@ -17745,77 +17745,20 @@ module.exports = function (sql, pool, getStripe = null) {
             // Prices are VAT-inclusive; do not show a separate tax/VAT breakdown
             const finalTotalTaxes = 0;
 
-            let cogsNetSales = 0;
-            let replacementCogs = 0;
-            try {
-                const costMetrics = await computeMerchandiseCostMetrics(
-                    pool,
-                    sql,
-                    orderIds,
-                    salesReportSchema.hasCostPrice
-                );
-                cogsNetSales = costMetrics.cogs;
-                replacementCogs = costMetrics.replacementCost;
-            } catch (cogsErr) {
-                console.error('[SALES REPORT] Error calculating COGS:', cogsErr);
-            }
-
-            const returnedOrdersCountForRate = countReturnedOrders(result.recordset);
-            const reportMetrics = aggregateSalesReportFromOrders(result.recordset, {
-                cogs: cogsNetSales,
-                damageInventoryCost: inventoryLoss,
-                replacementCost: replacementCogs,
-                totalOrders,
-                returnedOrdersCount: returnedOrdersCountForRate
-            });
+            // Simple Sales Report Statistics (remove broad accounting/COGS/return-cost calculations)
+            const totalCustomersSimple = new Set(result.recordset.map(o => o.CustomerEmail)).size;
+            const deliveryTotal = result.recordset.reduce((sum, order) => sum + parseFloat(order.DeliveryCost || 0), 0);
+            const salesTotal = result.recordset.reduce((sum, order) => sum + parseFloat(order.TotalAmount || 0), 0);
+            const avgOrderValueSimple = totalOrders > 0 ? (salesTotal / totalOrders) : 0;
 
             const stats = {
-                grossSales: reportMetrics.grossSales,
-                grossProductSales: reportMetrics.grossProductSales,
-                netSales: reportMetrics.netSales,
-                netProductSales: reportMetrics.netProductSales,
-                recognizedProductRevenue: reportMetrics.recognizedProductRevenue,
-                grossRevenue: reportMetrics.grossProductSales + reportMetrics.deliveryRevenueGross,
-                netRevenue: reportMetrics.netRevenue,
-                deliveryRevenue: reportMetrics.deliveryRevenue,
-                deliveryRevenueGross: reportMetrics.deliveryRevenueGross,
-                netDeliveryRevenue: reportMetrics.netDeliveryRevenue,
-                salesReturns: reportMetrics.productRefunds,
-                productRefunds: reportMetrics.productRefunds,
-                deliveryRefunds: reportMetrics.deliveryRefunds,
-                totalRefunds: totalRefunds,
-                refundedOrdersCount: refundedOrdersCount,
-                returnedOrdersCount: returnedOrdersCountForRate,
-                returnRate: reportMetrics.returnRate,
-                refundRate: reportMetrics.refundRate,
-                totalDiscounts: reportMetrics.totalDiscounts,
-                totalTaxes: finalTotalTaxes,
-                deliveryRevenues: reportMetrics.netDeliveryRevenue,
-                recognizedProductRevenue: reportMetrics.recognizedProductRevenue,
-                returnShippingExpense: reportMetrics.returnShippingExpense,
-                returnShipping: reportMetrics.returnShipping,
-                replacementShipping: reportMetrics.replacementShipping,
-                deliveryRevenuesLostFromReturns: deliveryRevenuesFromReturns,
-                deliveryRevenuesLostFromRefunds: deliveryRevenuesFromRefunds,
-                inventoryLoss: reportMetrics.damageInventoryCost,
-                damageInventoryCost: reportMetrics.damageInventoryCost,
-                cogs: reportMetrics.cogs,
-                replacementCost: reportMetrics.replacementCost,
-                grossProfit: reportMetrics.grossProfit,
-                grossMargin: reportMetrics.grossMargin,
-                totalRevenue: reportMetrics.netRevenue,
-                totalUnitsSold: totalUnitsSold,
-                totalUnitsReturned: totalUnitsReturned,
-                totalUnitsDamaged: totalUnitsDamaged,
-                totalUnitsReplaced: totalUnitsReplaced,
-                replacementOrdersCount: replacementOrdersCount,
-                inventoryTurnoverRate: totalUnitsSold > 0 ? (totalUnitsSold / (totalUnitsSold + totalUnitsReturned)) : 0,
-                damageRate: totalUnitsReturned > 0 ? (totalUnitsDamaged / totalUnitsReturned) * 100 : 0,
-                returnRateByUnits: totalUnitsSold > 0 ? (totalUnitsReturned / totalUnitsSold) * 100 : 0,
-                replacementRate: totalUnitsReturned > 0 ? (totalUnitsReplaced / totalUnitsReturned) * 100 : 0,
                 totalOrders: totalOrders,
-                totalCustomers: new Set(result.recordset.map(o => o.CustomerEmail)).size,
-                averageOrderValue: averageOrderValue
+                totalCustomers: totalCustomersSimple,
+                totalDiscounts: finalTotalDiscounts,
+                totalTaxes: finalTotalTaxes,
+                deliveryTotal: deliveryTotal,
+                salesTotal: salesTotal,
+                averageOrderValue: avgOrderValueSimple
             };
 
             console.log('[SALES REPORT] Final stats:', {
@@ -18356,66 +18299,20 @@ module.exports = function (sql, pool, getStripe = null) {
             const totalOrders = result.recordset.length;
             const totalCustomers = new Set(result.recordset.map(o => o.CustomerEmail)).size;
 
-            let inventoryLoss = 0;
-            const damageReturnOrdersExport = result.recordset.filter(o => {
-                const s = (o.Status || '').toLowerCase().trim();
-                return (s === 'refunded' || s === 'completed returned' || s === 'returned')
-                    && String(o.ReturnType || '').toLowerCase() === 'damage';
-            });
-            if (damageReturnOrdersExport.length > 0) {
-                try {
-                    const costLossExport = await computeInventoryLossAtCost(
-                        pool,
-                        sql,
-                        damageReturnOrdersExport,
-                        hasReturnItemsColumn,
-                        exportReportSchema.hasCostPrice
-                    );
-                    inventoryLoss = costLossExport.damageInventoryCost;
-                } catch (inventoryLossError) {
-                    console.error('[SALES REPORT EXPORT] Error calculating inventory loss at cost:', inventoryLossError);
-                }
-            }
+            // Simple export summary (remove broad accounting/COGS/return-cost calculations)
+            const sumOrderDiscounts = result.recordset.reduce((sum, order) => sum + parseFloat(order.TotalDiscounts || 0), 0);
+            const deliveryTotal = result.recordset.reduce((sum, order) => sum + parseFloat(order.DeliveryCost || 0), 0);
+            const salesTotal = result.recordset.reduce((sum, order) => sum + parseFloat(order.TotalAmount || 0), 0);
+            const averageOrderValue = totalOrders > 0 ? (salesTotal / totalOrders) : 0;
 
-            let cogsExport = 0;
-            let replacementCogsExport = 0;
-            try {
-                const costMetricsExport = await computeMerchandiseCostMetrics(
-                    pool,
-                    sql,
-                    orderIds,
-                    exportReportSchema.hasCostPrice
-                );
-                cogsExport = costMetricsExport.cogs;
-                replacementCogsExport = costMetricsExport.replacementCost;
-            } catch (cogsExportErr) {
-                console.error('[SALES REPORT EXPORT] COGS calculation failed:', cogsExportErr);
-            }
-
-            const reportMetricsExport = aggregateSalesReportFromOrders(result.recordset, {
-                cogs: cogsExport,
-                damageInventoryCost: inventoryLoss,
-                replacementCost: replacementCogsExport,
-                totalOrders,
-                returnedOrdersCount: countReturnedOrders(result.recordset)
-            });
-
-            const ordersForAovExport = result.recordset.filter(o => {
-                const s = (o.Status || '').toLowerCase();
-                return s !== 'cancelled' && s !== 'returned' && s !== 'refunded' && s !== 'completed returned';
-            });
-            const averageOrderValue = ordersForAovExport.length > 0
-                ? ordersForAovExport.reduce((sum, o) => sum + parseFloat(o.TotalAmount || 0), 0) / ordersForAovExport.length
-                : 0;
-
-            const exportSummaryStats = Object.assign({}, reportMetricsExport, {
+            const exportSummaryStats = {
                 totalOrders,
                 totalCustomers,
-                averageOrderValue,
-                returnedOrdersCount: countReturnedOrders(result.recordset),
-                refundedOrdersCount: countRefundMerchandiseOrders(result.recordset),
-                replacementOrdersCount: result.recordset.filter(o => String(o.ActionType || '').toLowerCase() === 'replacement').length
-            });
+                totalDiscounts: sumOrderDiscounts,
+                deliveryTotal,
+                salesTotal,
+                averageOrderValue
+            };
 
             const filterParts = [];
             if (status) filterParts.push(`Status: ${getOrderStatusLabel(status)}`);

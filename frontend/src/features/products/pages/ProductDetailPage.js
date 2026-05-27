@@ -289,23 +289,27 @@ const ProductDetail = () => {
       product.image ||
       null;
 
-    const parentThumbs = normalizedThumbnails.filter(
-      (url) => url && !isSameAssetUrl(url, productMain)
-    );
-
     if (selectedVariation) {
-      const variationMain = selectedVariation.imageUrl || null;
-      const main = variationMain || productMain;
-      const varThumbs = (Array.isArray(selectedVariation.thumbnails)
+      const variationThumbs = (Array.isArray(selectedVariation.thumbnails)
         ? selectedVariation.thumbnails
         : []
-      ).filter((url) => url && !isSameAssetUrl(url, main));
-      const strip = [...new Set([...varThumbs, ...parentThumbs])]
-        .filter((url) => !isSameAssetUrl(url, main))
-        .slice(0, 4);
+      ).filter((url) => url);
+
+      // If VariationImageURL is missing, use the first uploaded thumbnail as the main image.
+      const variationMain = selectedVariation.imageUrl || null;
+      const main = variationMain || (variationThumbs[0] || null) || productMain;
+
+      const varThumbs = variationThumbs.filter(
+        (url) => url && !isSameAssetUrl(url, main)
+      );
+
+      const strip = varThumbs.slice(0, 4);
       return main ? [main, ...strip] : strip;
     }
 
+    const parentThumbs = normalizedThumbnails.filter(
+      (url) => url && !isSameAssetUrl(url, productMain)
+    );
     const strip = parentThumbs.slice(0, 4);
     return productMain ? [productMain, ...strip] : strip;
   }, [product, normalizedThumbnails, selectedVariation]);
