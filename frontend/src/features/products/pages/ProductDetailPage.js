@@ -537,10 +537,32 @@ const ProductDetail = () => {
     return isLowStock ? `Low Stock (${stockQuantity} available)` : 'In Stock';
   })();
 
-  const additionalInfoColors =
-    (Array.isArray(product?.colors) && product.colors.length > 0)
-      ? product.colors.join(', ')
-      : (selectedVariation?.color || product?.color || 'N/A');
+  const additionalInfoDimensions = (() => {
+    const specs = product?.specifications;
+    if (!specs || typeof specs !== 'object') return 'N/A';
+    const fmt = (v) => {
+      if (v == null || v === '') return null;
+      const n = Number(v);
+      return Number.isNaN(n) ? String(v) : (Number.isInteger(n) ? String(n) : n.toFixed(1));
+    };
+    const l = fmt(specs.length);
+    const w = fmt(specs.width);
+    const h = fmt(specs.height);
+    if (l == null && w == null && h == null) return 'N/A';
+    const unit = specs.unit || 'cm';
+    return `${l != null ? l : '—'}×${w != null ? w : '—'}×${h != null ? h : '—'} ${unit}`;
+  })();
+
+  const additionalInfoColors = (() => {
+    if (hasVariations && variations.length > 0) {
+      const names = variations.map((v) => v.name).filter(Boolean);
+      return names.length ? names.join(', ') : 'N/A';
+    }
+    if (Array.isArray(product?.colors) && product.colors.length > 0) {
+      return product.colors.join(', ');
+    }
+    return selectedVariation?.color || product?.color || 'N/A';
+  })();
 
   const additionalInfoMaterial =
     product?.material
@@ -1078,8 +1100,8 @@ const ProductDetail = () => {
                     <td>{product?.categoryName || 'N/A'}</td>
                   </tr>
                   <tr>
-                    <td>Brand</td>
-                    <td>{product?.brand || 'DesignXcel'}</td>
+                    <td>Dimensions</td>
+                    <td>{additionalInfoDimensions}</td>
                   </tr>
                   <tr>
                     <td>SKU</td>

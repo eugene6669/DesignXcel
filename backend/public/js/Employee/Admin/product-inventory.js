@@ -78,6 +78,21 @@
             }, 0);
         }
 
+        /** Product Details modal: unit price/cost × total on-hand per variation. */
+        function sumVariationsSalePriceTotalByOnHand(variations) {
+            return (variations || []).reduce(function(sum, v) {
+                const unitPrice = Number(v.Price) || 0;
+                return sum + unitPrice * resolveVariationStockTotals(v).totalQty;
+            }, 0);
+        }
+
+        function sumVariationsItemCostTotalByOnHand(variations) {
+            return (variations || []).reduce(function(sum, v) {
+                const unitCost = Number(v.CostPrice) || 0;
+                return sum + unitCost * resolveVariationStockTotals(v).totalQty;
+            }, 0);
+        }
+
         function sumVariationUnitSalePrices(variations) {
             return (variations || []).reduce(function(sum, v) {
                 return sum + (Number(v.Price) || 0);
@@ -92,12 +107,12 @@
 
         function variationLineSalePriceTotal(variation) {
             const unitPrice = Number(variation && variation.Price) || 0;
-            return unitPrice * resolveVariationSellableQty(variation);
+            return unitPrice * resolveVariationStockTotals(variation).totalQty;
         }
 
         function variationLineCostPriceTotal(variation) {
             const unitCost = Number(variation && variation.CostPrice) || 0;
-            return unitCost * resolveVariationSellableQty(variation);
+            return unitCost * resolveVariationStockTotals(variation).totalQty;
         }
 
         function sumVariationsReturnedDisplay(variations) {
@@ -3759,12 +3774,6 @@ let currentSelectedProductId = null;
                 const variations = Array.isArray(p.Variations) ? p.Variations : [];
                 const unitSalePrice = Number(p.Price) || 0;
                 const unitCost = Number(p.CostPrice) || 0;
-                let salePriceTotal = variations.length
-                    ? sumVariationUnitSalePrices(variations)
-                    : unitSalePrice;
-                let costPriceTotal = variations.length
-                    ? sumVariationUnitCosts(variations)
-                    : unitCost;
                 const summary = summaryJson.summary || summaryJson;
                 const stock = buildDetailsStockSummary({
                     availableQty: summary.availableQuantity,
@@ -3772,6 +3781,12 @@ let currentSelectedProductId = null;
                     damagedQty: summary.damagedQuantity,
                     repairedQty: summary.repairedQuantity
                 });
+                let salePriceTotal = variations.length
+                    ? sumVariationsSalePriceTotalByOnHand(variations)
+                    : unitSalePrice * stock.total;
+                let costPriceTotal = variations.length
+                    ? sumVariationsItemCostTotalByOnHand(variations)
+                    : unitCost * stock.total;
                 populateInventoryDetailsModal({
                     title: 'Product Details',
                     isVariationDetail: false,
