@@ -139,7 +139,20 @@ const INVENTORY_PRODUCT_LIST_CORE = `
             WHEN CAST(ISNULL(pLinked.IsActive, 0) AS INT) = 1 THEN 1
             ELSE 0
         END AS ShowOnStorefront,
+        COALESCE(
+            ip.StorefrontDisplayQuantity,
+            CASE
+                WHEN vagg.HasActiveVariations = 1 AND vagg.VariationStorefrontDisplaySum > 0
+                    THEN vagg.VariationStorefrontDisplaySum
+                ELSE NULL
+            END,
+            NULLIF(pLinked.StockQuantity, 0),
+            CASE WHEN vagg.HasActiveVariations = 1 THEN vagg.VariationSellableSum
+                ELSE COALESCE(ip.AvailableQuantity, 0) END,
+            0
+        ) AS StorefrontStockQuantity,
         ip.Dimensions,
+        COALESCE(NULLIF(LTRIM(RTRIM(ip.ListingStage)), ''), 'built') AS ListingStage,
         ip.InventoryNotes as Notes,
         ip.DateUpdated,
         ip.ProductID as LinkedProductID,
@@ -204,6 +217,13 @@ const INVENTORY_PRODUCT_LIST_CORE = `
                 WHERE iv6.InventoryProductID = ip.InventoryProductID AND iv6.IsActive = 1
             ), 0) AS VariationDisposedSum,
             ISNULL((
+                SELECT SUM(COALESCE(pvDisp.Quantity, 0))
+                FROM InventoryProductVariations ivDisp
+                INNER JOIN ProductVariations pvDisp
+                    ON pvDisp.VariationID = ivDisp.VariationID AND pvDisp.IsActive = 1
+                WHERE ivDisp.InventoryProductID = ip.InventoryProductID AND ivDisp.IsActive = 1
+            ), 0) AS VariationStorefrontDisplaySum,
+            ISNULL((
                 SELECT SUM(lineCostTotal)
                 FROM (
                     SELECT
@@ -215,7 +235,18 @@ const INVENTORY_PRODUCT_LIST_CORE = `
                     FROM InventoryProductVariations iv7
                     WHERE iv7.InventoryProductID = ip.InventoryProductID AND iv7.IsActive = 1
                 ) costLines
-            ), 0) AS InventoryItemCostTotal
+            ), 0) AS InventoryItemCostTotal,
+            ISNULL((
+                SELECT SUM(COALESCE(iv8.Price, 0))
+                FROM InventoryProductVariations iv8
+                WHERE iv8.InventoryProductID = ip.InventoryProductID AND iv8.IsActive = 1
+            ), CASE
+                WHEN EXISTS (
+                    SELECT 1 FROM InventoryProductVariations iv0
+                    WHERE iv0.InventoryProductID = ip.InventoryProductID AND iv0.IsActive = 1
+                ) THEN 0
+                ELSE COALESCE(ip.Price, 0)
+            END) AS InventoryItemSalePriceTotal
     ) vagg
     OUTER APPLY (
         SELECT TOP 1
@@ -417,11 +448,18 @@ function applyReturnAggregatesToRow(row, agg) {
     };
 }
 
+function applyListingStageFilter(request, listingStage) {
+    if (!listingStage) return '';
+    request.input('listingStage', sql.NVarChar, listingStage);
+    return ' AND COALESCE(NULLIF(LTRIM(RTRIM(ip.ListingStage)), \'\'), \'built\') = @listingStage ';
+}
+
 async function countInventoryProducts(pool, filters = {}, options = {}) {
     const request = pool.request();
-    const filterClause = options.returnsOnly
+    const stageClause = applyListingStageFilter(request, options.listingStage);
+    const filterClause = (options.returnsOnly
         ? applyReturnsListFilters(request, filters)
-        : applyInventoryListFilters(request, filters);
+        : applyInventoryListFilters(request, filters)) + stageClause;
     const result = await request.query(`
         SELECT COUNT(*) as total
         FROM InventoryProducts ip
@@ -437,9 +475,10 @@ async function fetchInventoryProductsPage(pool, filters = {}, options = {}) {
     const offset = (page - 1) * limit;
 
     const request = pool.request();
-    const filterClause = options.returnsOnly
+    const stageClause = applyListingStageFilter(request, options.listingStage);
+    const filterClause = (options.returnsOnly
         ? applyReturnsListFilters(request, filters)
-        : applyInventoryListFilters(request, filters);
+        : applyInventoryListFilters(request, filters)) + stageClause;
     request.input('offset', sql.Int, offset);
     request.input('limit', sql.Int, limit);
 
@@ -517,6 +556,7 @@ async function loadProductInventoryPageData(pool, options = {}) {
 
     const { ensureBomBundleSchema, loadActiveBomBundles } = require('./bomBundleSchema');
     await ensureBomBundleSchema(pool);
+    await ensureStorefrontDisplayQuantityColumn(pool);
 
     const [materials, units, categories, totalCount, pageResult, bomBundles] = await Promise.all([
         cacheLoad('admin:rawMaterials', () =>
@@ -531,8 +571,8 @@ async function loadProductInventoryPageData(pool, options = {}) {
             `).then((r) => r.recordset || [])
         ),
         fetchProductCategoriesList(pool),
-        countInventoryProducts(pool, filters),
-        fetchInventoryProductsPage(pool, filters),
+        countInventoryProducts(pool, filters, { listingStage: options.listingStage }),
+        fetchInventoryProductsPage(pool, filters, { listingStage: options.listingStage }),
         loadActiveBomBundles(pool)
     ]);
 
@@ -565,6 +605,38 @@ async function loadProductInventoryPageData(pool, options = {}) {
         inventoryProductIdFocus: focusId || null,
         bomBundles: bomBundles || []
     };
+}
+
+async function ensureStorefrontDisplayQuantityColumn(pool) {
+    const check = await pool.request().query(`
+        SELECT 1 AS ok FROM sys.columns
+        WHERE object_id = OBJECT_ID(N'dbo.InventoryProducts') AND name = 'StorefrontDisplayQuantity'
+    `);
+    if (check.recordset.length) return;
+    await pool.request().query(`
+        ALTER TABLE dbo.InventoryProducts
+        ADD StorefrontDisplayQuantity INT NULL
+    `);
+}
+
+async function ensureListingStageColumn(pool) {
+    const check = await pool.request().query(`
+        SELECT 1 AS ok FROM sys.columns
+        WHERE object_id = OBJECT_ID(N'dbo.InventoryProducts') AND name = 'ListingStage'
+    `);
+    if (check.recordset.length) return;
+    await pool.request().query(`
+        ALTER TABLE dbo.InventoryProducts
+        ADD ListingStage NVARCHAR(20) NOT NULL
+            CONSTRAINT DF_InventoryProducts_ListingStage DEFAULT ('built')
+    `);
+}
+
+async function loadStorefrontPageData(pool, options = {}) {
+    return loadProductInventoryPageData(pool, {
+        ...options,
+        listingStage: 'built'
+    });
 }
 
 async function loadProductReturnsPageData(pool, options = {}) {
@@ -1081,6 +1153,9 @@ module.exports = {
     getOrdersSchemaFlags,
     attachOrderItemsBatch,
     loadProductInventoryPageData,
+    ensureListingStageColumn,
+    ensureStorefrontDisplayQuantityColumn,
+    loadStorefrontPageData,
     loadProductReturnsPageData,
     INVENTORY_LIST_PAGE_SIZE,
     countInventoryProducts,

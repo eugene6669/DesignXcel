@@ -71,6 +71,35 @@
             }, 0);
         }
 
+        function sumVariationsSalePriceTotal(variations) {
+            return (variations || []).reduce(function(sum, v) {
+                const unitPrice = Number(v.Price) || 0;
+                return sum + unitPrice * resolveVariationSellableQty(v);
+            }, 0);
+        }
+
+        function sumVariationUnitSalePrices(variations) {
+            return (variations || []).reduce(function(sum, v) {
+                return sum + (Number(v.Price) || 0);
+            }, 0);
+        }
+
+        function sumVariationUnitCosts(variations) {
+            return (variations || []).reduce(function(sum, v) {
+                return sum + (Number(v.CostPrice) || 0);
+            }, 0);
+        }
+
+        function variationLineSalePriceTotal(variation) {
+            const unitPrice = Number(variation && variation.Price) || 0;
+            return unitPrice * resolveVariationSellableQty(variation);
+        }
+
+        function variationLineCostPriceTotal(variation) {
+            const unitCost = Number(variation && variation.CostPrice) || 0;
+            return unitCost * resolveVariationSellableQty(variation);
+        }
+
         function sumVariationsReturnedDisplay(variations) {
             return (variations || []).reduce(function(sum, v) {
                 const pending = Number(v.PendingInspectionQty) || 0;
@@ -91,18 +120,57 @@
             }, 0);
         }
 
+        function resolveVariationStorefrontDisplayQty(variation) {
+            if (variation.StorefrontDisplayQuantity != null && variation.StorefrontDisplayQuantity !== '') {
+                const stored = Number(variation.StorefrontDisplayQuantity);
+                if (!Number.isNaN(stored)) return Math.max(0, stored);
+            }
+            const pvQty = variation.ProductVariationQuantity;
+            if (pvQty != null && pvQty !== '') {
+                const n = Number(pvQty);
+                if (!Number.isNaN(n)) return Math.max(0, n);
+            }
+            if (document.body.classList.contains('page-storefront')) {
+                return 0;
+            }
+            return resolveVariationSellableQty(variation);
+        }
+
+        function sumVariationsStorefrontDisplay(variations) {
+            return (variations || []).reduce(function(sum, v) {
+                return sum + resolveVariationStorefrontDisplayQty(v);
+            }, 0);
+        }
+
         function updateParentProductRowTotals(inventoryProductId, variations) {
             const parentRow = document.querySelector(
                 'tr[data-inventory-product-id="' + inventoryProductId + '"]:not(.variations-row)'
             );
             if (!parentRow) return;
-            const qtyEl = parentRow.querySelector('td.qty-col .stock-qty');
-            if (qtyEl) {
+            const qtyCells = parentRow.querySelectorAll('td.qty-col .stock-qty');
+            if (isStorefrontPage && qtyCells.length >= 2) {
+                const actualSum = sumVariationsAvailable(variations);
+                const attrDisplayRaw = parentRow.getAttribute('data-storefront-display-qty');
+                const attrDisplay = attrDisplayRaw != null && attrDisplayRaw !== ''
+                    ? parseInt(attrDisplayRaw, 10) : null;
+                let displaySum = variations && variations.length
+                    ? sumVariationsStorefrontDisplay(variations)
+                    : null;
+                if (displaySum == null || Number.isNaN(displaySum)) {
+                    displaySum = !Number.isNaN(attrDisplay) ? attrDisplay : actualSum;
+                } else if (!Number.isNaN(attrDisplay) && attrDisplay !== actualSum && displaySum === actualSum) {
+                    displaySum = attrDisplay;
+                }
+                qtyCells[0].textContent = String(displaySum);
+                qtyCells[0].className = 'stock-qty ' + getStockQtyClass(displaySum);
+                qtyCells[1].textContent = String(actualSum);
+                qtyCells[1].className = 'stock-qty ' + getStockQtyClass(actualSum);
+            } else if (qtyCells.length) {
                 const qty = (isProductsListingPage && !isProductReturnsPage)
                     ? sumVariationsAvailable(variations)
                     : sumVariationsTotalOnHand(variations);
-                qtyEl.textContent = String(qty);
-                qtyEl.className = 'stock-qty ' + getStockQtyClass(qty);
+                qtyCells[0].textContent = String(qty);
+                qtyCells[0].className = 'stock-qty ' + getStockQtyClass(qty);
             }
             const returnedEl = parentRow.querySelector('.return-qty-col-returned .return-qty');
             if (returnedEl) {
@@ -125,6 +193,10 @@
             const costTotalEl = parentRow.querySelector('td.item-cost-total-col');
             if (costTotalEl && isProductsListingPage && !isProductReturnsPage) {
                 costTotalEl.textContent = formatPhpMoney(sumVariationsItemCostTotal(variations));
+            }
+            const saleTotalEl = parentRow.querySelector('td.parent-sale-total-col');
+            if (saleTotalEl && isProductsListingPage && !isProductReturnsPage) {
+                saleTotalEl.textContent = formatPhpMoney(sumVariationUnitSalePrices(variations));
             }
         }
 
@@ -229,6 +301,7 @@
         var PI_SVG_REPAIR = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>';
         var PI_SVG_AVAILABLE = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
         var PI_SVG_STOREFRONT = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+        var PI_SVG_DETAILS = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
 
         function buildReturnRepairActionButtons(variationId, variationName, qtySnapshot, damagedQty, repairedQty, storedReturnedQty) {
             if (!shouldShowReturnWorkflowPage() || !variationId) return '';
@@ -320,10 +393,46 @@
         window.showCustomPopup = showCustomPopup;
         window.showVariationModalNotification = showVariationModalNotification;
 
-        function archiveVariation(variationId, variationName) {
-            if (!confirm('Are you sure you want to archive "' + (variationName || 'this variation') + '"? This will move it to the Archived page.')) {
+        let pendingArchiveAction = null;
+
+        function initArchiveConfirmModal() {
+            const modal = document.getElementById('archiveConfirmModal');
+            if (!modal || modal.getAttribute('data-listener-attached')) return;
+            const cancelBtn = document.getElementById('cancelArchiveConfirm');
+            const confirmBtn = document.getElementById('confirmArchiveConfirm');
+            const closeModal = function() {
+                modal.classList.remove('show');
+                pendingArchiveAction = null;
+            };
+            if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', function() {
+                    const action = pendingArchiveAction;
+                    closeModal();
+                    if (typeof action === 'function') action();
+                });
+            }
+            modal.setAttribute('data-listener-attached', '1');
+        }
+
+        function showArchiveConfirmModal(itemLabel, onConfirm) {
+            initArchiveConfirmModal();
+            const modal = document.getElementById('archiveConfirmModal');
+            const titleEl = document.getElementById('archiveConfirmTitle');
+            const messageEl = document.getElementById('archiveConfirmMessage');
+            if (!modal || !messageEl) {
+                if (window.confirm('Archive "' + (itemLabel || 'this item') + '"?')) onConfirm();
                 return;
             }
+            if (titleEl) titleEl.textContent = 'Archive item?';
+            messageEl.innerHTML = 'Archive <strong>' + escapeHtml(itemLabel || 'this item') + '</strong>?';
+            pendingArchiveAction = onConfirm;
+            modal.classList.add('show');
+        }
+        window.showArchiveConfirmModal = showArchiveConfirmModal;
+
+        function archiveVariation(variationId, variationName) {
+            showArchiveConfirmModal(variationName || 'this variation', function () {
             fetch('/api/admin/inventory-product-variations/archive/' + variationId, { method: 'POST' })
                 .then(function (response) { return response.json(); })
                 .then(function (result) {
@@ -341,10 +450,12 @@
                     console.error('Error archiving variation:', error);
                     showCustomPopup('Failed to archive variation', true);
                 });
+            });
         }
         window.archiveVariation = archiveVariation;
 
         const isProductsListingPage = document.body.classList.contains('page-products-listing');
+        const isStorefrontPage = document.body.classList.contains('page-storefront');
         const isProductReturnsPage = document.body.classList.contains('page-product-returns');
         const isInventoryPage = document.body.classList.contains('page-inventory');
 
@@ -364,15 +475,17 @@
             const inventoryDetailsBlocks = document.querySelectorAll('.variation-edit-inventory-details');
             const rawMaterialBlocks = document.querySelectorAll('.variation-edit-raw-materials');
             const recipeViewBlocks = document.querySelectorAll('.variation-edit-recipe-view');
+            const storefrontStockBlocks = document.querySelectorAll('.variation-edit-storefront-stock');
             const title = document.getElementById('editVariationStatusModalTitle');
             const submitBtn = document.getElementById('submitEditVariationStatus');
             const nameInput = document.getElementById('editVariationStatusName');
             const mainImageWrap = document.querySelector('.variation-edit-main-image-wrap');
             const skuWrap = document.getElementById('editVariationStatusSku')?.parentElement;
-            const mode = window._variationEditMode || (isInventoryPage ? 'inventory' : (isProductsListingPage ? 'catalog' : 'status'));
+            const mode = window._variationEditMode || (isInventoryPage ? 'inventory' : ((isProductsListingPage || isStorefrontPage) ? 'catalog' : 'status'));
 
             rawMaterialBlocks.forEach(function(el) { el.style.display = 'none'; });
             recipeViewBlocks.forEach(function(el) { el.style.display = 'none'; });
+            storefrontStockBlocks.forEach(function(el) { el.style.display = 'none'; });
 
             if (mode === 'inventory' || (isInventoryPage && mode !== 'catalog')) {
                 statusBlocks.forEach(function(el) { el.style.display = 'none'; });
@@ -391,12 +504,15 @@
                     nameInput.readOnly = true;
                     nameInput.style.backgroundColor = '#f5f5f5';
                 }
-            } else if (isProductsListingPage && mode === 'catalog') {
+            } else if ((isProductsListingPage || isStorefrontPage) && mode === 'catalog') {
                 statusBlocks.forEach(function(el) { el.style.display = 'none'; });
                 catalogBlocks.forEach(function(el) { el.style.display = ''; });
                 restockBlocks.forEach(function(el) { el.style.display = 'none'; });
-                inventoryDetailsBlocks.forEach(function(el) { el.style.display = ''; });
+                inventoryDetailsBlocks.forEach(function(el) { el.style.display = 'none'; });
                 recipeViewBlocks.forEach(function(el) { el.style.display = ''; });
+                storefrontStockBlocks.forEach(function(el) {
+                    el.style.display = isStorefrontPage ? '' : 'none';
+                });
                 if (mainImageWrap) mainImageWrap.style.display = 'none';
                 if (skuWrap) skuWrap.style.display = 'none';
                 if (title) title.textContent = 'Edit Variation';
@@ -468,7 +584,6 @@
             const variationName = variation.VariationName || 'N/A';
             const variationId = variation.VariationID || 0;
             const variationSku = variation.SKU || '—';
-            const color = variation.Color || '—';
             const stock = resolveVariationStockTotals(variation);
             const availableQty = stock.availableQty;
             const damagedQty = stock.damagedQty;
@@ -483,7 +598,7 @@
             let cols = '<tr class="variation-flat-row" data-parent-product-id="' + productId + '" data-variation-id="' + variationId + '">' +
                 '<td><span class="row-type-badge row-type-variation">Variation</span></td>' +
                 '<td>' + escapeHtml(variationName) + '</td>' +
-                '<td><code style="font-size:0.85em;">' + escapeHtml(variationSku) + '</code> · ' + escapeHtml(color) + '</td>' +
+                '<td><code style="font-size:0.85em;">' + escapeHtml(variationSku) + '</code></td>' +
                 '<td class="qty-col">' + formatStockQty(totalQty) + '</td>';
 
             if (!isProductReturnsPage) {
@@ -584,9 +699,9 @@
 let currentSelectedProductId = null;
         let currentSelectedProductName = null;
 
-        if (addInventoryItemBtn && isProductsListingPage) addInventoryItemBtn.style.display = 'inline-block';
-const urlParams = new URLSearchParams(window.location.search);
+        const urlParams = new URLSearchParams(window.location.search);
         const urlInventoryProductId = urlParams.get('inventoryProductId');
+        const urlVariationId = urlParams.get('variationId');
 
         function escapeHtml(str) {
             if (str == null) return '';
@@ -868,7 +983,8 @@ const urlParams = new URLSearchParams(window.location.search);
                 const cells = columnKeys.map(function(key) {
                     return renderVariationCellByKey(key, ctx);
                 });
-                return '<tr>' + cells.map(variationRowTd).join('') + '</tr>';
+                return '<tr class="product-listing-variation-row" data-variation-id="' + ctx.variationId + '">' +
+                    cells.map(variationRowTd).join('') + '</tr>';
             }).join('');
 
             if (loadingDiv) loadingDiv.style.display = 'none';
@@ -876,6 +992,16 @@ const urlParams = new URLSearchParams(window.location.search);
             if (emptyDiv) emptyDiv.style.display = 'none';
             bindRestockVariationButtons(tableBody);
             updateParentProductRowTotals(inventoryProductId, variations);
+        }
+
+        function highlightVariationRow(variationId) {
+            if (!variationId) return;
+            const row = document.querySelector(
+                '.variations-table-body tr[data-variation-id="' + variationId + '"]'
+            );
+            if (!row) return;
+            row.classList.add('inventory-focus-row');
+            row.scrollIntoView({ block: 'center', behavior: 'smooth' });
         }
 
         async function loadInventoryProductVariations(inventoryProductId) {
@@ -917,6 +1043,7 @@ const urlParams = new URLSearchParams(window.location.search);
                         inventoryProductId,
                         filterVariationsForListSearch(variations)
                     );
+                    return variations;
                 } else {
                     if (loadingDiv) {
                         loadingDiv.style.display = 'block';
@@ -930,6 +1057,7 @@ const urlParams = new URLSearchParams(window.location.search);
                     loadingDiv.innerHTML = '<p style="color:#dc3545;">Error loading variations. Please try again.</p>';
                 }
             }
+            return null;
         }
 
         function refreshProductVariationsUI(inventoryProductId) {
@@ -977,7 +1105,7 @@ const urlParams = new URLSearchParams(window.location.search);
 
         document.addEventListener('click', function(e) {
             const storefrontBtn = e.target.closest('.product-storefront-btn, .variation-storefront-btn');
-            if (storefrontBtn && isProductsListingPage) {
+            if (storefrontBtn && isStorefrontPage) {
                 const nextShow = storefrontBtn.getAttribute('data-show-on-storefront') !== '1';
                 const itemName = storefrontBtn.getAttribute('data-product-name')
                     || storefrontBtn.getAttribute('data-variation-name')
@@ -1061,8 +1189,8 @@ const urlParams = new URLSearchParams(window.location.search);
             if (editVarBtn && !isProductReturnsPage) {
                 const vid = parseInt(editVarBtn.dataset.variationId, 10);
                 if (vid && typeof window.editVariationStatus === 'function') {
-                    window._variationEditMode = isProductsListingPage
-                        ? 'catalog'
+                    window._variationEditMode = (isProductsListingPage || isStorefrontPage)
+                        ? (editVarBtn.getAttribute('data-mode') || 'catalog')
                         : (editVarBtn.getAttribute('data-mode') || (isInventoryPage ? 'inventory' : 'catalog'));
                     window.editVariationStatus(vid);
                 }
@@ -1080,16 +1208,17 @@ const urlParams = new URLSearchParams(window.location.search);
         });
 
         function expandInventoryProductVariations(inventoryProductId, openModal) {
-            if (!inventoryProductId) return;
+            if (!inventoryProductId) return Promise.resolve();
             const toggleBtn = document.querySelector('.toggle-variations-btn[data-inventory-product-id="' + inventoryProductId + '"]');
             const variationsRow = document.querySelector('tr.variations-row[data-inventory-product-id="' + inventoryProductId + '"]');
+            let loadPromise = Promise.resolve();
             if (variationsRow) {
                 variationsRow.style.display = 'table-row';
                 if (toggleBtn) {
                     toggleBtn.classList.add('expanded');
                     toggleBtn.setAttribute('aria-expanded', 'true');
                 }
-                loadInventoryProductVariations(inventoryProductId);
+                loadPromise = loadInventoryProductVariations(inventoryProductId) || Promise.resolve();
             }
             currentSelectedProductId = inventoryProductId;
             if (openModal) {
@@ -1097,11 +1226,18 @@ const urlParams = new URLSearchParams(window.location.search);
                 const productName = productRow ? (productRow.getAttribute('data-product-name') || 'Product') : 'Product';
                 openAddVariationModal(inventoryProductId, productName, false);
             }
+            return loadPromise;
         }
 
         if (urlInventoryProductId) {
             document.addEventListener('DOMContentLoaded', function() {
-                expandInventoryProductVariations(urlInventoryProductId, urlParams.has('variationID') || urlParams.get('tab') === 'variations');
+                const openAddModal = urlParams.has('variationID') || urlParams.get('tab') === 'variations';
+                const loadPromise = expandInventoryProductVariations(urlInventoryProductId, openAddModal);
+                if (urlVariationId && !openAddModal && loadPromise && typeof loadPromise.then === 'function') {
+                    loadPromise.then(function() {
+                        highlightVariationRow(urlVariationId);
+                    });
+                }
             });
         }
 
@@ -1148,23 +1284,391 @@ const urlParams = new URLSearchParams(window.location.search);
 
         bindCreateProductPriceInput();
 
+        function clearBuildFromPlannedUI() {
+            const form = document.getElementById('addProductForm');
+            if (form) {
+                form.removeAttribute('data-build-from-planned');
+                delete form.dataset.hasPlannedMainImage;
+            }
+            const hint = document.getElementById('buildVariationsHint');
+            if (hint) hint.textContent = 'At least one variation with name, dimensions, and opening qty.';
+            const mainPreview = document.getElementById('createProductMainImagePreview');
+            if (mainPreview) mainPreview.innerHTML = '';
+        }
+
+        function parseProductDimensionsJson(dimStr) {
+            if (!dimStr) return {};
+            try {
+                return typeof dimStr === 'string' ? JSON.parse(dimStr) : (dimStr || {});
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function formatVariationDimensionsCompact(dimSource) {
+            const d = parseProductDimensionsJson(dimSource);
+            const fmt = function(v) {
+                if (v == null || v === '') return null;
+                const n = Number(v);
+                return isNaN(n) ? String(v) : (Number.isInteger(n) ? String(n) : n.toFixed(1));
+            };
+            const l = fmt(d.length);
+            const w = fmt(d.width);
+            const h = fmt(d.height);
+            if (l == null && w == null && h == null) return '—';
+            return (l != null ? l : '—') + '×' + (w != null ? w : '—') + '×' + (h != null ? h : '—');
+        }
+
+        function variationDimsInlineHtml() {
+            return `
+                <div class="pi-var-dims-inline">
+                    <label>L</label>
+                    <input type="number" class="create-variation-length" step="0.1" min="0" placeholder="cm">
+                    <label>W</label>
+                    <input type="number" class="create-variation-width" step="0.1" min="0" placeholder="cm">
+                    <label>H</label>
+                    <input type="number" class="create-variation-height" step="0.1" min="0" placeholder="cm">
+                </div>`;
+        }
+
+        function setVariationDimensionsOnRow(row, dimSource) {
+            if (!row) return;
+            const d = parseProductDimensionsJson(dimSource);
+            const len = row.querySelector('.create-variation-length');
+            const wid = row.querySelector('.create-variation-width');
+            const hei = row.querySelector('.create-variation-height');
+            if (len && d.length != null && d.length !== '') len.value = d.length;
+            if (wid && d.width != null && d.width !== '') wid.value = d.width;
+            if (hei && d.height != null && d.height !== '') hei.value = d.height;
+        }
+
+        function readVariationDimensionsFromRow(row) {
+            if (!row) return null;
+            const length = row.querySelector('.create-variation-length')?.value;
+            const width = row.querySelector('.create-variation-width')?.value;
+            const height = row.querySelector('.create-variation-height')?.value;
+            if (!length && !width && !height) return null;
+            return {
+                length: length ? parseFloat(length) : null,
+                width: width ? parseFloat(width) : null,
+                height: height ? parseFloat(height) : null,
+                unit: 'cm'
+            };
+        }
+
+        function readProductDimensionsFromForm(prefix) {
+            const p = prefix || 'plan';
+            const length = document.getElementById(p + 'ProductLength')?.value;
+            const width = document.getElementById(p + 'ProductWidth')?.value;
+            const height = document.getElementById(p + 'ProductHeight')?.value;
+            if (!length && !width && !height) return null;
+            return {
+                length: length ? parseFloat(length) : null,
+                width: width ? parseFloat(width) : null,
+                height: height ? parseFloat(height) : null,
+                unit: 'cm'
+            };
+        }
+
+        function setProductDimensionsOnForm(prefix, dimSource) {
+            const p = prefix || 'plan';
+            const d = parseProductDimensionsJson(dimSource);
+            const len = document.getElementById(p + 'ProductLength');
+            const wid = document.getElementById(p + 'ProductWidth');
+            const hei = document.getElementById(p + 'ProductHeight');
+            if (len && d.length != null && d.length !== '') len.value = d.length;
+            if (wid && d.width != null && d.width !== '') wid.value = d.width;
+            if (hei && d.height != null && d.height !== '') hei.value = d.height;
+        }
+
+        function applyBuildFromPlannedUI(product) {
+            if (!product) return;
+            const form = document.getElementById('addProductForm');
+            if (form) form.setAttribute('data-build-from-planned', '1');
+            const hint = document.getElementById('buildVariationsHint');
+            if (hint) hint.textContent = 'Edit planned details and enter opening stock (qty) per variation.';
+            const nameEl = document.getElementById('name');
+            const catEl = document.getElementById('category');
+            const descEl = document.getElementById('description');
+            const saleEl = document.getElementById('createProductPrice');
+            const costEl = document.getElementById('createProductCostPrice');
+            if (nameEl) nameEl.value = product.Name || '';
+            if (descEl) descEl.value = product.Description || '';
+            if (catEl && product.Category) fillCategorySelectElement(catEl, product.Category);
+            if (saleEl && product.Price != null) {
+                saleEl.value = parseFloat(product.Price).toFixed(2);
+                bindProductPriceInput(saleEl);
+            }
+            if (costEl && product.CostPrice != null) {
+                costEl.value = parseFloat(product.CostPrice).toFixed(2);
+                bindProductPriceInput(costEl);
+            }
+            setProductDimensionsOnForm('create', product.Dimensions);
+            const mainPreview = document.getElementById('createProductMainImagePreview');
+            if (mainPreview) {
+                const imgUrl = product.ImageURL || '';
+                if (imgUrl) {
+                    mainPreview.innerHTML = '<div class="pi-var-planned-preview">' +
+                        buildMediaImgHtml(imgUrl, { style: 'width:64px;height:64px;object-fit:cover;border-radius:4px;' }) +
+                        '<span>From plan — change image (optional)</span></div>';
+                    if (form) form.dataset.hasPlannedMainImage = '1';
+                } else {
+                    mainPreview.innerHTML = '';
+                    if (form) delete form.dataset.hasPlannedMainImage;
+                }
+            }
+            const createVarList = document.getElementById('createProductVariationsList');
+            if (createVarList) {
+                createVarList.innerHTML = '';
+                const plannedVars = product.Variations || [];
+                if (plannedVars.length) {
+                    plannedVars.forEach(function(v) {
+                        createVarList.appendChild(buildCreateProductVariationRow(v, { fromPlan: true }));
+                    });
+                } else {
+                    createVarList.appendChild(buildCreateProductVariationRow());
+                }
+            }
+            updateCreateVariationTotalSummary();
+        }
+
+        function resetAndOpenBuildProductModal() {
+            if (!addProductModal) return;
+            document.getElementById('addProductForm')?.reset();
+            clearBuildFromPlannedUI();
+            const buildHidden = document.getElementById('buildFromInventoryProductId');
+            const buildFromParam = urlParams.get('buildFrom') || '';
+            if (buildHidden && buildFromParam) buildHidden.value = buildFromParam;
+            resetCreateProductPrice();
+            resetCreateProductVariations();
+            resetCreateBomBundleSelect();
+            resetCreateInventoryMaterials();
+            const createVarList = document.getElementById('createProductVariationsList');
+            if (createVarList) {
+                createVarList.innerHTML = '';
+                createVarList.appendChild(buildCreateProductVariationRow());
+            }
+            updateCreateVariationTotalSummary();
+            addProductModal.style.display = 'block';
+        }
+
+        function prefillBuildProductFromPlanned(product) {
+            if (!product) return;
+            const buildHidden = document.getElementById('buildFromInventoryProductId');
+            if (buildHidden) buildHidden.value = String(product.InventoryProductID || product.ProductID || '');
+            const title = document.getElementById('addProductModalTitle');
+            if (title) title.textContent = 'Build Planned Product';
+            const submitBtn = document.getElementById('submitAddProductBtn');
+            if (submitBtn) submitBtn.textContent = 'Save Build';
+            applyBuildFromPlannedUI(product);
+        }
+
         if (addInventoryItemBtn && addProductModal) {
-            addInventoryItemBtn.addEventListener('click', () => {
-                document.getElementById('addProductForm')?.reset();
-                resetCreateProductPrice();
-                resetCreateProductVariations();
-                resetCreateBomBundleSelect();
-                resetCreateInventoryMaterials();
-                const createVarList = document.getElementById('createProductVariationsList');
-                if (createVarList) createVarList.appendChild(buildCreateProductVariationRow());
-                updateCreateVariationTotalSummary();
-                addProductModal.style.display = 'block';
+            addInventoryItemBtn.addEventListener('click', resetAndOpenBuildProductModal);
+        }
+
+        const addPlanProductBtn = document.getElementById('addPlanProductBtn');
+        const addPlanProductModal = document.getElementById('addPlanProductModal');
+        const closePlanModal = document.getElementById('closePlanModal');
+        const cancelPlanProduct = document.getElementById('cancelPlanProduct');
+        function resetPlanProductVariations() {
+            const list = document.getElementById('planProductVariationsList');
+            if (list) list.innerHTML = '';
+            const jsonField = document.getElementById('planVariationsJson');
+            if (jsonField) jsonField.value = '';
+        }
+
+        function resetPlanProductModalForCreate() {
+            const form = document.getElementById('addPlanProductForm');
+            if (form) {
+                form.setAttribute('action', '/Employee/Admin/ProductsListing/Add');
+                form.removeAttribute('data-editing-product-id');
+            }
+            const title = addPlanProductModal?.querySelector('h3');
+            if (title) title.textContent = 'Plan New Product';
+            const submitBtn = document.getElementById('submitPlanProductBtn');
+            if (submitBtn) submitBtn.textContent = 'Save Plan';
+        }
+
+        function openPlanProductModal() {
+            if (!addPlanProductModal) return;
+            document.getElementById('addPlanProductForm')?.reset();
+            resetPlanProductVariations();
+            resetPlanProductModalForCreate();
+            const list = document.getElementById('planProductVariationsList');
+            if (list) list.appendChild(buildPlanProductVariationRow());
+            bindProductPriceInput(document.getElementById('planProductPrice'));
+            bindProductPriceInput(document.getElementById('planProductCostPrice'));
+            addPlanProductModal.style.display = 'block';
+        }
+
+        if (addPlanProductBtn && addPlanProductModal) {
+            addPlanProductBtn.addEventListener('click', openPlanProductModal);
+        }
+
+        const addPlanProductVariationBtn = document.getElementById('addPlanProductVariationBtn');
+        if (addPlanProductVariationBtn) {
+            addPlanProductVariationBtn.addEventListener('click', function() {
+                const list = document.getElementById('planProductVariationsList');
+                if (list) list.appendChild(buildPlanProductVariationRow());
             });
+        }
+
+        const addPlanProductForm = document.getElementById('addPlanProductForm');
+        if (addPlanProductForm) {
+            addPlanProductForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const saleEl = document.getElementById('planProductPrice');
+                const costEl = document.getElementById('planProductCostPrice');
+                const priceValidation = validateSaleCostPair(saleEl, costEl);
+                if (priceValidation) {
+                    showCustomPopup(priceValidation, true);
+                    return;
+                }
+                const unitPrice = getProductUnitPriceFromEl(saleEl);
+                const unitCost = getProductUnitPriceFromEl(costEl, true);
+                if (saleEl) saleEl.value = unitPrice.toFixed(2);
+                if (costEl) costEl.value = unitCost.toFixed(2);
+                const variations = collectPlanProductVariations();
+                const rowCount = document.querySelectorAll('#planProductVariationsList .create-product-variation-row').length;
+                if (!variations.length || variations.length < rowCount) {
+                    showCustomPopup('Each variation needs a name and main image.', true);
+                    return;
+                }
+                const jsonField = document.getElementById('planVariationsJson');
+                if (jsonField) jsonField.value = JSON.stringify(variations);
+                const formData = new FormData(this);
+                appendPlanVariationMediaToFormData(formData);
+                const actionPath = this.getAttribute('action') || '/Employee/Admin/ProductsListing/Add';
+                const isEditPlan = actionPath.indexOf('/ProductsListing/Update/') !== -1;
+                const submitBtn = document.getElementById('submitPlanProductBtn');
+                if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving...'; }
+                try {
+                    const response = await postMultipartForm(actionPath, formData);
+                    const result = response.result;
+                    if (response.ok && result.success) {
+                        closePlanProductModal();
+                        showCustomPopup(result.message || (isEditPlan ? 'Planned product updated.' : 'Plan saved.'));
+                        setTimeout(function() {
+                            window.location.href = '/Employee/Admin/ProductsListing';
+                        }, 500);
+                    } else {
+                        showCustomPopup(result.message || (isEditPlan ? 'Failed to update plan.' : 'Failed to save plan.'), true);
+                    }
+                } catch (err) {
+                    showCustomPopup('Failed to save plan: ' + err.message, true);
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = isEditPlan ? 'Save Changes' : 'Save Plan';
+                    }
+                }
+            });
+        }
+        function closePlanProductModal() {
+            if (addPlanProductModal) addPlanProductModal.style.display = 'none';
+            resetPlanProductModalForCreate();
+        }
+        if (closePlanModal) closePlanModal.addEventListener('click', closePlanProductModal);
+        if (cancelPlanProduct) cancelPlanProduct.addEventListener('click', closePlanProductModal);
+
+        async function openEditPlannedProductModal(inventoryProductId) {
+            if (!inventoryProductId) return;
+            try {
+                const res = await fetch('/api/admin/inventory-product/' + inventoryProductId + '?source=InventoryProducts', { credentials: 'include' });
+                const data = await res.json();
+                if (!data.success || !data.product) {
+                    showCustomPopup(data.message || 'Could not load planned product.', true);
+                    return;
+                }
+                const p = data.product;
+                const stage = String(p.ListingStage || '').toLowerCase();
+                if (stage && stage !== 'planned') {
+                    showCustomPopup('Only planned products can be edited here.', true);
+                    return;
+                }
+
+                const form = document.getElementById('addPlanProductForm');
+                if (form) {
+                    form.setAttribute('action', '/Employee/Admin/ProductsListing/Update/' + inventoryProductId);
+                    form.setAttribute('data-editing-product-id', String(inventoryProductId));
+                }
+                const title = addPlanProductModal?.querySelector('h3');
+                if (title) title.textContent = 'Edit Planned Product';
+                const submitBtn = document.getElementById('submitPlanProductBtn');
+                if (submitBtn) submitBtn.textContent = 'Save Changes';
+
+                const nameEl = document.getElementById('planName');
+                if (nameEl) nameEl.value = p.Name || '';
+                const priceEl = document.getElementById('planProductPrice');
+                if (priceEl) priceEl.value = (Number(p.Price) || 0).toFixed(2);
+                const costEl = document.getElementById('planProductCostPrice');
+                if (costEl) costEl.value = (Number(p.CostPrice) || 0).toFixed(2);
+                const catEl = document.getElementById('planCategory');
+                if (catEl) catEl.value = p.Category || '';
+                const descEl = document.getElementById('planDescription');
+                if (descEl) descEl.value = p.Description || '';
+
+                const dims = parseProductDimensionsJson(p.Dimensions);
+                const lenEl = document.getElementById('planProductLength');
+                const widEl = document.getElementById('planProductWidth');
+                const heiEl = document.getElementById('planProductHeight');
+                if (lenEl) lenEl.value = dims.length != null ? dims.length : '';
+                if (widEl) widEl.value = dims.width != null ? dims.width : '';
+                if (heiEl) heiEl.value = dims.height != null ? dims.height : '';
+
+                const list = document.getElementById('planProductVariationsList');
+                if (list) list.innerHTML = '';
+                (Array.isArray(p.Variations) ? p.Variations : []).forEach(function(v) {
+                    if (list) list.appendChild(buildPlanProductVariationRow(v));
+                });
+                if (list && !list.children.length) {
+                    list.appendChild(buildPlanProductVariationRow());
+                }
+
+                bindProductPriceInput(document.getElementById('planProductPrice'));
+                bindProductPriceInput(document.getElementById('planProductCostPrice'));
+                if (addPlanProductModal) addPlanProductModal.style.display = 'block';
+            } catch (err) {
+                showCustomPopup('Could not load planned product: ' + err.message, true);
+            }
+        }
+
+        function openBuildProductModalForPlanned(product) {
+            if (!addProductModal || !product) return;
+            document.getElementById('addProductForm')?.reset();
+            clearBuildFromPlannedUI();
+            const buildHidden = document.getElementById('buildFromInventoryProductId');
+            const buildFromParam = urlParams.get('buildFrom') || String(product.InventoryProductID || product.ProductID || '');
+            if (buildHidden && buildFromParam) buildHidden.value = buildFromParam;
+            resetCreateBomBundleSelect();
+            resetCreateInventoryMaterials();
+            prefillBuildProductFromPlanned(product);
+            addProductModal.style.display = 'block';
+        }
+
+        if (isInventoryPage && isProductInventoryProductsTab()) {
+            const buildFromId = parseInt(urlParams.get('buildFrom') || '', 10);
+            if (buildFromId && addProductModal) {
+                fetch('/api/admin/inventory-product/' + buildFromId + '?source=InventoryProducts', { credentials: 'include' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (!data.success || !data.product) {
+                            showCustomPopup(data.message || 'Could not load planned product.', true);
+                            return;
+                        }
+                        openBuildProductModalForPlanned(data.product);
+                    })
+                    .catch(function() {
+                        showCustomPopup('Could not load planned product.', true);
+                    });
+            }
         }
 
         if (closeAddModal) {
             closeAddModal.addEventListener('click', () => {
                 if (addProductModal) addProductModal.style.display = 'none';
+                clearBuildFromPlannedUI();
                 resetCreateProductPrice();
                 resetCreateProductVariations();
                 resetCreateBomBundleSelect();
@@ -1175,6 +1679,7 @@ const urlParams = new URLSearchParams(window.location.search);
         if (cancelAddProduct) {
             cancelAddProduct.addEventListener('click', () => {
                 if (addProductModal) addProductModal.style.display = 'none';
+                clearBuildFromPlannedUI();
                 resetCreateProductPrice();
                 resetCreateProductVariations();
                 resetCreateBomBundleSelect();
@@ -1217,20 +1722,71 @@ const urlParams = new URLSearchParams(window.location.search);
             });
         }
 
-        function appendVariationMediaToFormData(formData, rowOrForm, options) {
-            const opts = options || {};
-            const includeMain = opts.includeMain !== false;
-            const mainId = opts.mainImageId || 'editVariationStatusMainImage';
-            const main = (mainId && document.getElementById(mainId)) ||
-                rowOrForm.querySelector?.('.variation-main-image') ||
-                rowOrForm.querySelector?.('#variationMainImage') ||
-                rowOrForm.querySelector?.('#editVariationStatusMainImage');
-            const thumbs = rowOrForm.querySelector?.('.variation-thumbnails') || rowOrForm.querySelector?.('#variationThumbnails') || rowOrForm.querySelector?.('#editVariationStatusThumbnails');
-            const model = rowOrForm.querySelector?.('.variation-model3d') || rowOrForm.querySelector?.('#variationModel3d') || rowOrForm.querySelector?.('#editVariationStatusModel3d');
+        function clearVariationMediaFromFormData(formData) {
             formData.delete('variationMainImage');
             formData.delete('variationThumbnail');
             formData.delete('variationThumbnails');
             formData.delete('variationModel3d');
+        }
+
+        function rowQualifiesForPlanVariation(row, unitPrice) {
+            const name = row.querySelector('.create-variation-name')?.value?.trim();
+            const mainInput = row.querySelector('.create-variation-main-image');
+            const hasExistingImage = row.dataset.hasExistingImage === '1';
+            const hasNewImage = !!(mainInput?.files?.length);
+            const hasMainImage = hasExistingImage || hasNewImage;
+            return !!(name && unitPrice != null && hasMainImage);
+        }
+
+        function appendPlanVariationMediaToFormData(formData) {
+            clearVariationMediaFromFormData(formData);
+            const unitPrice = getProductUnitPriceFromEl(document.getElementById('planProductPrice'));
+            document.querySelectorAll('#planProductVariationsList .create-product-variation-row').forEach((row) => {
+                if (!rowQualifiesForPlanVariation(row, unitPrice)) return;
+                appendVariationMediaToFormData(formData, row, { includeMain: true, accumulate: true });
+            });
+        }
+
+        function rowQualifiesForCreateVariation(row, unitPrice, isBuildFromPlanned) {
+            const name = row.querySelector('.create-variation-name')?.value?.trim();
+            const qtyEl = row.querySelector('.create-variation-quantity');
+            const quantity = qtyEl ? parseInt(qtyEl.value, 10) : 0;
+            const variationId = parseInt(row.dataset.variationId, 10) || 0;
+            const hasExistingImage = row.dataset.hasExistingImage === '1';
+            const mainInput = row.querySelector('.create-variation-main-image');
+            const hasNewImage = !!(mainInput?.files?.length);
+            const hasMainImage = hasExistingImage || hasNewImage;
+            if (!name || unitPrice == null || !quantity || quantity <= 0) return false;
+            if (!hasMainImage && !isBuildFromPlanned) return false;
+            if (!hasMainImage && isBuildFromPlanned && !variationId) return false;
+            return true;
+        }
+
+        function appendCreateProductVariationMediaToFormData(formData) {
+            clearVariationMediaFromFormData(formData);
+            const unitPrice = getProductUnitPriceFromEl(document.getElementById('createProductPrice'));
+            const isBuildFromPlanned = document.getElementById('addProductForm')?.getAttribute('data-build-from-planned') === '1';
+            document.querySelectorAll('#createProductVariationsList .create-product-variation-row').forEach((row) => {
+                if (!rowQualifiesForCreateVariation(row, unitPrice, isBuildFromPlanned)) return;
+                appendVariationMediaToFormData(formData, row, { accumulate: true });
+            });
+        }
+
+        function appendVariationMediaToFormData(formData, rowOrForm, options) {
+            const opts = options || {};
+            const includeMain = opts.includeMain !== false;
+            const mainId = opts.mainImageId;
+            const main = rowOrForm.querySelector?.('.create-variation-main-image') ||
+                rowOrForm.querySelector?.('.variation-main-image') ||
+                rowOrForm.querySelector?.('#variationMainImage') ||
+                rowOrForm.querySelector?.('#editVariationStatusMainImage') ||
+                (mainId && document.getElementById(mainId)) ||
+                (!mainId && document.getElementById('editVariationStatusMainImage'));
+            const thumbs = rowOrForm.querySelector?.('.variation-thumbnails') || rowOrForm.querySelector?.('#variationThumbnails') || rowOrForm.querySelector?.('#editVariationStatusThumbnails');
+            const model = rowOrForm.querySelector?.('.variation-model3d') || rowOrForm.querySelector?.('#variationModel3d') || rowOrForm.querySelector?.('#editVariationStatusModel3d');
+            if (!opts.accumulate) {
+                clearVariationMediaFromFormData(formData);
+            }
             if (includeMain && main?.files?.[0]) formData.append('variationMainImage', main.files[0]);
             if (thumbs?.files?.length) {
                 Array.from(thumbs.files).slice(0, 4).forEach((file) => formData.append('variationThumbnail', file));
@@ -1247,7 +1803,8 @@ const urlParams = new URLSearchParams(window.location.search);
                 html += buildMediaImgHtml(data.mainImage, { label: 'Main image', style: 'max-width:100px;max-height:100px;object-fit:cover;border-radius:6px;border:1px solid #dee2e6;margin-bottom:8px;' });
             }
             if (data.thumbnails && data.thumbnails.length) {
-                html += '<p class="pi-media-preview-label">Thumbnails</p><div class="pi-media-preview-thumbs">';
+                const thumbsLabel = opts.thumbnailsLabel || 'Thumbnails';
+                html += '<p class="pi-media-preview-label">' + escapeHtml(thumbsLabel) + '</p><div class="pi-media-preview-thumbs">';
                 data.thumbnails.forEach(function(url) {
                     html += buildMediaImgHtml(url, { style: 'width:44px;height:44px;object-fit:cover;border-radius:4px;border:1px solid #dee2e6;' });
                 });
@@ -1287,9 +1844,6 @@ const urlParams = new URLSearchParams(window.location.search);
                     if (typeof action === 'function') await action();
                 });
             }
-            modal.addEventListener('click', function(e) {
-                if (e.target === modal) closeModal();
-            });
         }
 
         function showStorefrontConfirmModal(message, onConfirm) {
@@ -1321,9 +1875,6 @@ const urlParams = new URLSearchParams(window.location.search);
                     if (typeof action === 'function') await action();
                 });
             }
-            modal.addEventListener('click', function(e) {
-                if (e.target === modal) closeModal();
-            });
         }
 
         function showRestockConfirmModal(quantity, onConfirm) {
@@ -1451,6 +2002,14 @@ const urlParams = new URLSearchParams(window.location.search);
             return {
                 showReturnCols: !!(container && container.getAttribute('data-show-return-columns') === '1'),
                 showSf: !!(container && container.getAttribute('data-show-storefront') === '1'),
+                showSfInActions: !!(container && container.getAttribute('data-show-storefront-in-actions') === '1'),
+                showSfStockSplit: !!(container && container.getAttribute('data-show-storefront-stock-split') === '1'),
+                showVarDims: !!(container && container.getAttribute('data-show-variation-dimensions') === '1'),
+                showVarQty: container ? container.getAttribute('data-show-variation-qty') !== '0' : true,
+                showVarQtyTotal: !!(container && container.getAttribute('data-show-variation-qty-total') === '1'),
+                showVarSalePrice: container ? container.getAttribute('data-show-variation-sale-price') !== '0' : true,
+                showVarItemCost: container ? container.getAttribute('data-show-variation-item-cost') !== '0' : true,
+                variationItemCostMode: (container && container.getAttribute('data-variation-item-cost-mode')) || 'total',
                 showVarAct: !!(container && container.getAttribute('data-show-variation-actions') === '1'),
                 showDisc: !!(container && container.getAttribute('data-show-discount') === '1'),
                 discountMeta: getParentDiscountMetaFromContainer(container)
@@ -1473,6 +2032,7 @@ const urlParams = new URLSearchParams(window.location.search);
                 ? parseFloat(variation.Price) : null;
             const unitCost = Number(variation.CostPrice) || 0;
             const costBasisQty = resolveVariationSellableQty(variation);
+            const itemCostMode = rowFlags.variationItemCostMode || 'total';
             const pendingReturned = Number(variation.PendingInspectionQty) || 0;
             const variationName = variation.VariationName || 'N/A';
             const variationId = variation.VariationID || 0;
@@ -1483,9 +2043,10 @@ const urlParams = new URLSearchParams(window.location.search);
                 variationId: variationId,
                 variationName: variationName,
                 variationSku: variation.SKU || '—',
-                color: variation.Color || 'N/A',
                 salePriceHtml: salePriceNum != null ? formatPhpMoney(salePriceNum) : 'N/A',
-                itemCostHtml: formatPhpMoney(unitCost * costBasisQty),
+                itemCostHtml: itemCostMode === 'unit'
+                    ? formatPhpMoney(unitCost)
+                    : formatPhpMoney(unitCost * costBasisQty),
                 availableQty: stock.availableQty,
                 totalQty: stock.totalQty,
                 damagedQty: stock.damagedQty,
@@ -1513,13 +2074,26 @@ const urlParams = new URLSearchParams(window.location.search);
                     };
                 case 'sku':
                     return { className: 'var-col-sku', html: '<code style="font-size:0.85em;">' + escapeHtml(ctx.variationSku) + '</code>' };
-                case 'color':
-                    return { className: 'var-col-color', html: escapeHtml(ctx.color) };
+                case 'dimensions':
+                    return {
+                        className: 'var-col-dims',
+                        style: 'text-align:center',
+                        html: '<span class="var-dims-compact" title="L × W × H (cm)">' +
+                            escapeHtml(formatVariationDimensionsCompact(ctx.variation.Dimensions)) + '</span>'
+                    };
+                case 'qty-available': {
+                    const displayQty = resolveVariationStorefrontDisplayQty(variation);
+                    return { className: 'qty-col var-col-qty', html: formatStockQty(displayQty) };
+                }
+                case 'qty-actual':
+                    return { className: 'qty-col var-col-qty', html: formatStockQty(ctx.availableQty) };
+                case 'qty-total':
+                    return { className: 'qty-col var-col-qty', html: formatStockQty(ctx.totalQty) };
                 case 'qty': {
-                    const qtyHtml = isInventoryPage
-                        ? formatStockQty(ctx.totalQty)
-                        : formatStockQty(ctx.availableQty);
-                    return { className: 'qty-col var-col-qty', html: qtyHtml };
+                    const qtyVal = (isInventoryPage && rowFlags.showReturnCols)
+                        ? ctx.availableQty
+                        : (isInventoryPage ? ctx.totalQty : ctx.availableQty);
+                    return { className: 'qty-col var-col-qty', html: formatStockQty(qtyVal) };
                 }
                 case 'returned':
                     return { className: 'qty-col var-col-qty', html: buildReturnedQtyCellHtml(ctx) };
@@ -1538,7 +2112,7 @@ const urlParams = new URLSearchParams(window.location.search);
                         html: buildVariationDiscountCellHtml(Number(variation.Price) || 0, rowFlags.discountMeta)
                     };
                 case 'storefront':
-                    if (!rowFlags.showSf) {
+                    if (!rowFlags.showSf || rowFlags.showSfInActions) {
                         return { className: 'var-col-storefront', style: center, html: '' };
                     }
                     return {
@@ -1578,6 +2152,16 @@ const urlParams = new URLSearchParams(window.location.search);
                     const returnBtns = buildReturnRepairActionButtons(
                         ctx.variationId, ctx.variationName, qtySnap, ctx.damagedQty, ctx.repairedQty, storedReturned
                     );
+                    const varStorefrontBtn = (rowFlags.showSf && rowFlags.showSfInActions)
+                        ? '<button type="button" class="variation-storefront-btn pi-icon-storefront-btn' +
+                            (ctx.showStorefront ? ' is-visible' : '') +
+                            '" data-variation-id="' + ctx.variationId +
+                            '" data-show-on-storefront="' + (ctx.showStorefront ? '1' : '0') +
+                            '" data-variation-name="' + attrQuote(ctx.variationName) +
+                            '" title="' + (ctx.showStorefront ? 'Visible on storefront' : 'Hidden from storefront') +
+                            '" aria-label="' + (ctx.showStorefront ? 'Hide from storefront' : 'Show on storefront') +
+                            '">' + PI_SVG_STOREFRONT + '</button>'
+                        : '';
                     if (isInventoryPage && isProductInventoryProductsTab()) {
                         return {
                             className: 'var-col-action return-actions-col',
@@ -1589,8 +2173,21 @@ const urlParams = new URLSearchParams(window.location.search);
                                 '" data-available-qty="' + ctx.availableQty + '" title="Restock" aria-label="Restock">' + PI_SVG_RESTOCK + '</button>' +
                                 '<button type="button" class="edit-variation-status-btn pi-icon-edit-btn" data-mode="inventory" data-variation-id="' + ctx.variationId +
                                 '" title="Edit variation" aria-label="Edit variation">' + PI_SVG_EDIT + '</button>' +
+                                '<button type="button" class="inventory-variation-details-btn pi-icon-details-btn" data-variation-id="' + ctx.variationId +
+                                '" data-inventory-product-id="' + ctx.inventoryProductId + '" title="Variation details" aria-label="Variation details">' + PI_SVG_DETAILS + '</button>' +
                                 '<button type="button" class="archive-variation-btn pi-icon-archive-btn" data-variation-id="' + ctx.variationId +
                                 '" data-variation-name="' + escapeHtml(ctx.variationName) + '" title="Archive Variation" aria-label="Archive Variation">' + PI_SVG_ARCHIVE + '</button>' +
+                                '</div>'
+                        };
+                    }
+                    if (isStorefrontPage) {
+                        return {
+                            className: 'var-col-action',
+                            style: center,
+                            html: '<div class="pi-actions-cell">' +
+                                '<button type="button" class="edit-variation-status-btn pi-icon-edit-btn" data-mode="catalog" data-variation-id="' + ctx.variationId +
+                                '" title="Edit variation catalog" aria-label="Edit variation catalog">' + PI_SVG_EDIT + '</button>' +
+                                varStorefrontBtn +
                                 '</div>'
                         };
                     }
@@ -1631,6 +2228,10 @@ const urlParams = new URLSearchParams(window.location.search);
                 return /\.(png|jpe?g|gif|webp|svg|glb|gltf)$/i.test(String(value || ''));
             };
             const inventoryPrefixes = [
+                'ProductListing/Main/Product Parent',
+                'ProductListing/thumbnails/Product Parent',
+                'ProductListing/Main/Product Variations',
+                'ProductListing/thumbnails/Product Variations',
                 'Inventory/Main/Product Parent',
                 'Inventory/thumbnails/Product Parent',
                 'Inventory/Main/Product Variations',
@@ -1690,44 +2291,87 @@ const urlParams = new URLSearchParams(window.location.search);
             return (urls || []).map(function(url) { return resolveProductMediaUrl(url).primary; }).filter(Boolean);
         }
 
-        function buildCreateProductVariationRow() {
+        function buildPlanProductVariationRow(plannedVar) {
+            const fromPlan = plannedVar && plannedVar.VariationID;
             const row = document.createElement('div');
             row.className = 'create-product-variation-row pi-variation-row';
+            if (fromPlan) {
+                row.dataset.variationId = String(plannedVar.VariationID);
+                row.dataset.hasExistingImage = plannedVar.VariationImageURL ? '1' : '0';
+            }
+            const plannedVarImg = fromPlan && (plannedVar.VariationImageURL || plannedVar.variationImageURL);
+            const previewHtml = plannedVarImg
+                ? '<div class="pi-var-planned-preview">' + buildMediaImgHtml(plannedVarImg, { style: 'width:40px;height:40px;object-fit:cover;border-radius:4px;' }) + '<span>Current image — change (optional)</span></div>'
+                : '';
             row.innerHTML = `
                 <div>
-                    <label>Variation Name</label>
-                    <input type="text" class="create-variation-name" required placeholder="e.g. Red">
-                </div>
-                <div>
-                    <label>Color</label>
-                    <input type="text" class="create-variation-color" placeholder="Optional">
-                </div>
-                <div>
-                    <label>Qty</label>
-                    <input type="number" class="create-variation-quantity" min="1" value="1" required>
+                    <label>Variation Name <span style="color:#dc3545;">*</span></label>
+                    <input type="text" class="create-variation-name" required placeholder="e.g. Small" value="${plannedVar && plannedVar.VariationName ? escapeHtml(plannedVar.VariationName) : ''}">
                 </div>
                 <div class="pi-var-media">
                     <div>
-                        <label>Main Image</label>
+                        <label>Variation Main Image <span style="color:#dc3545;">*</span></label>
+                        ${previewHtml}
                         <input type="file" class="create-variation-main-image variation-main-image" accept="image/*">
                     </div>
-                    <div>
-                        <label>Thumbnails (max 4)</label>
-                        <input type="file" class="create-variation-thumbnails variation-thumbnails" accept="image/*" multiple>
-                    </div>
-                </div>
-                <div class="pi-var-full">
-                    <label>3D Model (GLB/GLTF)</label>
-                    <input type="file" class="create-variation-model3d variation-model3d" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
                 </div>
                 <div class="pi-variation-remove">
                     <button type="button" class="remove-create-variation-btn" title="Remove">×</button>
                 </div>
             `;
-            row.querySelector('.remove-create-variation-btn').addEventListener('click', () => {
-                row.remove();
-                updateCreateVariationTotalSummary();
-            });
+            const removeBtn = row.querySelector('.remove-create-variation-btn');
+            if (removeBtn && fromPlan) {
+                removeBtn.style.visibility = 'hidden';
+            } else if (removeBtn) {
+                removeBtn.addEventListener('click', () => {
+                    row.remove();
+                });
+            }
+            return row;
+        }
+
+        function buildCreateProductVariationRow(plannedVar, options) {
+            const opts = options || {};
+            const fromPlan = opts.fromPlan && plannedVar && plannedVar.VariationID;
+            const row = document.createElement('div');
+            row.className = 'create-product-variation-row pi-variation-row';
+            if (fromPlan) {
+                row.dataset.variationId = String(plannedVar.VariationID);
+                row.dataset.hasExistingImage = plannedVar.VariationImageURL ? '1' : '0';
+            }
+            const plannedVarImg = fromPlan && (plannedVar.VariationImageURL || plannedVar.variationImageURL);
+            const previewHtml = plannedVarImg
+                ? '<div class="pi-var-planned-preview">' + buildMediaImgHtml(plannedVarImg, { style: 'width:40px;height:40px;object-fit:cover;border-radius:4px;' }) + '<span>From plan — change image (optional)</span></div>'
+                : '';
+            const qtyBlock = fromPlan
+                ? `<div><label>Opening Qty <span style="color:#dc3545;">*</span></label><input type="number" class="create-variation-quantity" min="1" value="1" required></div>`
+                : `<div><label>Qty</label><input type="number" class="create-variation-quantity" min="1" value="1" required></div>`;
+            row.innerHTML = `
+                <div>
+                    <label>Variation Name <span style="color:#dc3545;">*</span></label>
+                    <input type="text" class="create-variation-name" required placeholder="e.g. Red" value="${plannedVar && plannedVar.VariationName ? escapeHtml(plannedVar.VariationName) : ''}">
+                </div>
+                ${qtyBlock}
+                <div class="pi-var-media">
+                    <div>
+                        <label>Variation Main Image${fromPlan ? '' : ''}</label>
+                        ${previewHtml}
+                        <input type="file" class="create-variation-main-image variation-main-image" accept="image/*">
+                    </div>
+                </div>
+                <div class="pi-variation-remove">
+                    <button type="button" class="remove-create-variation-btn" title="Remove">×</button>
+                </div>
+            `;
+            const removeBtn = row.querySelector('.remove-create-variation-btn');
+            if (removeBtn && !fromPlan) {
+                removeBtn.addEventListener('click', () => {
+                    row.remove();
+                    updateCreateVariationTotalSummary();
+                });
+            } else if (removeBtn && fromPlan) {
+                removeBtn.style.visibility = 'hidden';
+            }
             row.querySelector('.create-variation-quantity')?.addEventListener('input', updateCreateVariationTotalSummary);
             return row;
         }
@@ -1782,6 +2426,8 @@ const urlParams = new URLSearchParams(window.location.search);
         function bindCreateProductPriceInput() {
             bindProductPriceInput(document.getElementById('createProductPrice'));
             bindProductPriceInput(document.getElementById('createProductCostPrice'));
+            bindProductPriceInput(document.getElementById('planProductPrice'));
+            bindProductPriceInput(document.getElementById('planProductCostPrice'));
         }
 
         function formatPhpMoney(amount) {
@@ -1819,27 +2465,60 @@ const urlParams = new URLSearchParams(window.location.search);
             return getProductUnitPriceFromEl(document.getElementById('createProductPrice'));
         }
 
+        function collectPlanProductVariations() {
+            const unitPrice = getProductUnitPriceFromEl(document.getElementById('planProductPrice'));
+            const rows = document.querySelectorAll('#planProductVariationsList .create-product-variation-row');
+            const variations = [];
+            rows.forEach((row) => {
+                if (!rowQualifiesForPlanVariation(row, unitPrice)) return;
+                const name = row.querySelector('.create-variation-name')?.value?.trim();
+                const mainInput = row.querySelector('.create-variation-main-image');
+                const variationId = parseInt(row.dataset.variationId, 10) || 0;
+                const hasExistingImage = row.dataset.hasExistingImage === '1';
+                const hasNewImage = !!(mainInput?.files?.length);
+                const entry = {
+                    variationName: name,
+                    quantity: 0,
+                    price: unitPrice,
+                    thumbCount: 0,
+                    hasMainImage: hasExistingImage || hasNewImage,
+                    hasModel3d: false
+                };
+                if (variationId) entry.variationId = variationId;
+                variations.push(entry);
+            });
+            return variations;
+        }
+
         function collectCreateProductVariations() {
-            const unitPrice = getCreateProductUnitPrice();
+            const saleEl = document.getElementById('createProductPrice');
+            const unitPrice = getProductUnitPriceFromEl(saleEl);
+            const isBuildFromPlanned = document.getElementById('addProductForm')?.getAttribute('data-build-from-planned') === '1';
             const rows = document.querySelectorAll('#createProductVariationsList .create-product-variation-row');
             const variations = [];
             rows.forEach(row => {
                 const name = row.querySelector('.create-variation-name')?.value?.trim();
-                const quantity = parseInt(row.querySelector('.create-variation-quantity')?.value, 10);
-                if (!name || !quantity || quantity <= 0 || unitPrice == null) return;
+                const qtyEl = row.querySelector('.create-variation-quantity');
+                const quantity = qtyEl ? parseInt(qtyEl.value, 10) : 0;
+                const variationId = parseInt(row.dataset.variationId, 10) || 0;
+                const hasExistingImage = row.dataset.hasExistingImage === '1';
+                if (!name || unitPrice == null) return;
+                if (!quantity || quantity <= 0) return;
                 const mainInput = row.querySelector('.create-variation-main-image');
-                const thumbInput = row.querySelector('.create-variation-thumbnails');
-                const modelInput = row.querySelector('.create-variation-model3d');
-                const thumbFiles = thumbInput?.files ? Array.from(thumbInput.files).slice(0, 4) : [];
-                variations.push({
+                const hasNewImage = !!(mainInput?.files?.length);
+                const hasMainImage = hasExistingImage || hasNewImage;
+                if (!hasMainImage && !isBuildFromPlanned) return;
+                if (!hasMainImage && isBuildFromPlanned && !variationId) return;
+                const entry = {
                     variationName: name,
-                    color: row.querySelector('.create-variation-color')?.value?.trim() || '',
                     quantity,
                     price: unitPrice,
-                    thumbCount: thumbFiles.length,
-                    hasMainImage: !!(mainInput?.files?.length),
-                    hasModel3d: !!(modelInput?.files?.length)
-                });
+                    thumbCount: 0,
+                    hasMainImage: hasNewImage || hasExistingImage,
+                    hasModel3d: false
+                };
+                if (variationId) entry.variationId = variationId;
+                variations.push(entry);
             });
             return variations;
         }
@@ -2034,8 +2713,7 @@ const urlParams = new URLSearchParams(window.location.search);
         }
 
         function formatMaterialOptionLabel(material) {
-            const skuPart = material.sku ? material.sku + ' — ' : '';
-            return skuPart + material.name + ' (stock: ' + getMaterialStockQty(material) + ')';
+            return (material.name || 'Material') + ' (stock: ' + getMaterialStockQty(material) + ')';
         }
 
         async function applyBomBundleToCreateForm(bundleId) {
@@ -2053,7 +2731,7 @@ const urlParams = new URLSearchParams(window.location.search);
                 const res = await fetch('/api/admin/bom-bundles/' + bundleId, { credentials: 'include' });
                 const data = await res.json();
                 if (!data.success || !data.materials || !data.materials.length) {
-                    showCustomPopup(data.message || 'Bundle has no materials.', true);
+                    showCustomPopup(data.message || 'Bundle has no raw materials.', true);
                     return;
                 }
                 data.materials.forEach(function (m) {
@@ -2170,8 +2848,8 @@ const urlParams = new URLSearchParams(window.location.search);
             });
 
             if (selected.length === 0) {
-                summaryList.innerHTML = '<em>No materials selected yet</em>';
-                if (statusEl) statusEl.innerHTML = '<em>Add at least one material used per unit</em>';
+                summaryList.innerHTML = '<em>None yet</em>';
+                if (statusEl) statusEl.innerHTML = '<em>Add at least one raw material per unit</em>';
             } else {
                 summaryList.innerHTML = selected.map(m =>
                     '<div style="margin: 2px 0;">' + m.name + ' — <strong>' + m.quantity + '</strong>/unit</div>'
@@ -2185,7 +2863,7 @@ const urlParams = new URLSearchParams(window.location.search);
             materialRow.className = 'material-row';
             const select = document.createElement('select');
             select.className = 'material-select';
-            let optionsHtml = '<option value="">Select Material</option>';
+            let optionsHtml = '<option value="">Select raw material</option>';
             allRawMaterials.forEach(material => {
                 optionsHtml += '<option value="' + material.id + '"' + (selectedMaterialId == material.id ? ' selected' : '') + '>' + formatMaterialOptionLabel(material) + '</option>';
             });
@@ -2330,24 +3008,26 @@ const urlParams = new URLSearchParams(window.location.search);
         function renderInventoryProductRecipeDisplay(bundleEl, listEl, data) {
             const bom = data && data.bomBundle;
             const mats = (data && data.materials) || [];
+            const recipeOk = data && data.success !== false;
             if (bundleEl) {
                 if (bom && bom.name) {
                     const code = bom.code ? '<code>' + escapeHtml(bom.code) + '</code> — ' : '';
                     bundleEl.innerHTML = '<strong>BOM bundle:</strong> ' + code + escapeHtml(bom.name);
                 } else {
-                    bundleEl.innerHTML = '<strong>BOM bundle:</strong> <em>Manual recipe (no bundle linked)</em>';
+                    bundleEl.innerHTML = '<strong>BOM bundle:</strong> <em>Manual (no bundle linked)</em>';
                 }
             }
             if (listEl) {
-                if (!mats.length) {
-                    listEl.innerHTML = '<em>No raw materials in recipe</em>';
+                if (!recipeOk) {
+                    listEl.innerHTML = '<em style="color:#c00;">Could not load raw materials</em>';
+                } else if (!mats.length) {
+                    listEl.innerHTML = '<em>No manufacturing raw materials on this product yet</em>';
                 } else {
                     listEl.innerHTML = mats.map(function (m) {
-                        const sku = m.MaterialSKU ? escapeHtml(m.MaterialSKU) + ' — ' : '';
                         const name = escapeHtml(m.MaterialName || ('Material #' + m.MaterialID));
                         const qty = m.QuantityRequired || 0;
                         const unit = m.Unit ? ' ' + escapeHtml(m.Unit) : '';
-                        return '<div style="margin:3px 0;">' + sku + name + ' — <strong>' + qty + '</strong>/unit' + unit + '</div>';
+                        return '<div style="margin:3px 0;">' + name + ' — <strong>' + qty + '</strong>/unit' + unit + '</div>';
                     }).join('');
                 }
             }
@@ -2426,14 +3106,12 @@ const urlParams = new URLSearchParams(window.location.search);
                 if (saleEl) saleEl.value = unitPrice.toFixed(2);
                 if (costEl) costEl.value = unitCost.toFixed(2);
                 const variations = collectCreateProductVariations();
-                if (!variations.length) {
-                    showCustomPopup('Add at least one variation with name and quantity before creating the product.', true);
-                    return;
-                }
-                const rowsMissingFields = document.querySelectorAll('#createProductVariationsList .create-product-variation-row').length
-                    - variations.length;
-                if (rowsMissingFields > 0) {
-                    showCustomPopup('Each variation needs a name and quantity of at least 1.', true);
+                const rowCount = document.querySelectorAll('#createProductVariationsList .create-product-variation-row').length;
+                const isBuildPlanned = document.getElementById('addProductForm')?.getAttribute('data-build-from-planned') === '1';
+                if (!variations.length || variations.length < rowCount) {
+                    showCustomPopup(isBuildPlanned
+                        ? 'Each planned variation needs a name and opening quantity of at least 1.'
+                        : 'Add at least one variation with name, main image, and quantity before creating the product.', true);
                     return;
                 }
 
@@ -2462,9 +3140,7 @@ const urlParams = new URLSearchParams(window.location.search);
                 if (bundleSel && bundleSel.value) {
                     formData.set('bomBundleId', bundleSel.value);
                 }
-                document.querySelectorAll('#createProductVariationsList .create-product-variation-row').forEach((row) => {
-                    appendVariationMediaToFormData(formData, row);
-                });
+                appendCreateProductVariationMediaToFormData(formData);
 
                 const submitBtn = this.querySelector('button[type="submit"]');
                 if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Creating...'; }
@@ -2489,7 +3165,9 @@ const urlParams = new URLSearchParams(window.location.search);
                 } catch (err) {
                     showCustomPopup('Failed to create product: ' + err.message, true);
                 } finally {
-                    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Create Product'; }
+                    const submitLabel = document.getElementById('submitAddProductBtn');
+                    const defaultLabel = submitLabel && submitLabel.textContent.indexOf('Build') >= 0 ? 'Save Build' : 'Create Product';
+                    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = defaultLabel; }
                 }
             });
         }
@@ -2850,7 +3528,7 @@ const urlParams = new URLSearchParams(window.location.search);
                     if (result.success) {
                         showCustomPopup(result.message || 'Product updated.');
                         close();
-                        window.location.reload();
+                        if (!isStorefrontPage) window.location.reload();
                     } else {
                         showCustomPopup(result.message || 'Update failed.', true);
                     }
@@ -2870,9 +3548,20 @@ const urlParams = new URLSearchParams(window.location.search);
 
         if (isProductsListingPage) {
             initEditInventoryProductModal();
+        }
+        initArchiveConfirmModal();
+        if (isStorefrontPage) {
+            initEditInventoryProductModal();
             initStorefrontConfirmModal();
         }
-        if (isInventoryPage) initEditInventoryProductQuickModal();
+        if (isInventoryPage && isProductInventoryProductsTab()) {
+            initManageCategories();
+            fetchProductCategoriesFromServer();
+        }
+        if (isInventoryPage) {
+            initEditInventoryProductQuickModal();
+            initInventoryDetailsModal();
+        }
         if (isInventoryPage) initRestockConfirmModal();
         if (isInventoryPage) initVariationRestockModal();
 
@@ -2898,12 +3587,293 @@ const urlParams = new URLSearchParams(window.location.search);
                             : '<em style="color:#888;">No image</em>';
                     }
                     loadInventoryProductRecipeDisplay(productId, {
-                        bundleEl: 'editInventoryProductBomBundleDisplay',
-                        listEl: 'editInventoryProductRecipeList'
+                        bundleEl: 'editInventoryProductQuickBomBundleDisplay',
+                        listEl: 'editInventoryProductQuickRecipeList'
                     });
                     modal.style.display = 'block';
                 })
                 .catch(function() { showCustomPopup('Failed to load product.', true); });
+        }
+
+        function buildDetailsStockSummary(stock) {
+            const available = Number(stock.availableQty) || 0;
+            const returned = Number(stock.returnedQty) || 0;
+            const damaged = Number(stock.damagedQty) || 0;
+            const repaired = Number(stock.repairedQty) || 0;
+            const total = available + returned + damaged;
+            return { available: available, returned: returned, damaged: damaged, repaired: repaired, total: total };
+        }
+
+        function setInventoryDetailsStockCards(summary, options) {
+            const opts = options || {};
+            const map = [
+                ['inventoryDetailsStockAvailable', summary.available],
+                ['inventoryDetailsStockReturned', summary.returned],
+                ['inventoryDetailsStockDamaged', summary.damaged],
+                ['inventoryDetailsStockRepaired', summary.repaired],
+                ['inventoryDetailsStockTotal', summary.total]
+            ];
+            map.forEach(function(pair) {
+                const el = document.getElementById(pair[0]);
+                if (el) el.textContent = String(pair[1]);
+            });
+            const variantsCard = document.getElementById('inventoryDetailsVariantsCard');
+            const variantCountEl = document.getElementById('inventoryDetailsVariantCount');
+            if (variantsCard && variantCountEl) {
+                if (opts.showVariantCount && opts.variantCount != null) {
+                    variantsCard.style.display = '';
+                    variantCountEl.textContent = String(opts.variantCount);
+                } else {
+                    variantsCard.style.display = 'none';
+                    variantCountEl.textContent = '0';
+                }
+            }
+        }
+
+        function populateInventoryDetailsModal(opts) {
+            const titleEl = document.getElementById('inventoryDetailsModalTitle');
+            const nameEl = document.getElementById('inventoryDetailsName');
+            const categoryEl = document.getElementById('inventoryDetailsCategory');
+            const parentSaleEl = document.getElementById('inventoryDetailsParentSalePrice');
+            const parentCostEl = document.getElementById('inventoryDetailsParentItemCost');
+            const saleTotalEl = document.getElementById('inventoryDetailsSalePriceTotal');
+            const costTotalEl = document.getElementById('inventoryDetailsCostPriceTotal');
+            const productPricing = document.getElementById('inventoryDetailsProductPricing');
+            const variationPricing = document.getElementById('inventoryDetailsVariationPricing');
+            const skuEl = document.getElementById('inventoryDetailsSku');
+            const unitSaleEl = document.getElementById('inventoryDetailsUnitSalePrice');
+            const unitCostEl = document.getElementById('inventoryDetailsUnitCost');
+            const varSaleTotalEl = document.getElementById('inventoryDetailsVariationSalePriceTotal');
+            const varCostTotalEl = document.getElementById('inventoryDetailsVariationCostPriceTotal');
+            const dimsEl = document.getElementById('inventoryDetailsDims');
+            const dimsRow = document.getElementById('inventoryDetailsDimsRow');
+            const imageEl = document.getElementById('inventoryDetailsImage');
+            const isVariation = !!opts.isVariationDetail;
+            if (titleEl) titleEl.textContent = opts.title || 'Product Details';
+            if (nameEl) nameEl.textContent = opts.name || '—';
+            if (categoryEl) categoryEl.textContent = opts.category || '—';
+            if (productPricing) productPricing.style.display = isVariation ? 'none' : '';
+            if (variationPricing) variationPricing.style.display = isVariation ? '' : 'none';
+            if (!isVariation) {
+                if (parentSaleEl) {
+                    parentSaleEl.textContent = opts.unitSalePrice != null ? formatPhpMoney(opts.unitSalePrice) : '—';
+                }
+                if (parentCostEl) {
+                    parentCostEl.textContent = opts.unitCost != null ? formatPhpMoney(opts.unitCost) : '—';
+                }
+                if (saleTotalEl) {
+                    saleTotalEl.textContent = opts.salePriceTotal != null ? formatPhpMoney(opts.salePriceTotal) : '—';
+                }
+                if (costTotalEl) {
+                    costTotalEl.textContent = opts.costPriceTotal != null ? formatPhpMoney(opts.costPriceTotal) : '—';
+                }
+            } else {
+                if (skuEl) skuEl.textContent = opts.sku || '—';
+                if (unitSaleEl) {
+                    unitSaleEl.textContent = opts.unitSalePrice != null ? formatPhpMoney(opts.unitSalePrice) : '—';
+                }
+                if (unitCostEl) {
+                    unitCostEl.textContent = opts.unitCost != null ? formatPhpMoney(opts.unitCost) : '—';
+                }
+                if (varSaleTotalEl) {
+                    varSaleTotalEl.textContent = opts.salePriceTotal != null ? formatPhpMoney(opts.salePriceTotal) : '—';
+                }
+                if (varCostTotalEl) {
+                    varCostTotalEl.textContent = opts.costPriceTotal != null ? formatPhpMoney(opts.costPriceTotal) : '—';
+                }
+            }
+            if (dimsRow && dimsEl) {
+                const dimsText = opts.dims && opts.dims !== '—' ? opts.dims : '';
+                if (dimsText) {
+                    dimsRow.style.display = '';
+                    dimsEl.textContent = dimsText;
+                } else {
+                    dimsRow.style.display = 'none';
+                    dimsEl.textContent = '—';
+                }
+            }
+            if (imageEl) {
+                const resolved = resolveProductMediaUrl(opts.imageUrl || '');
+                imageEl.src = resolved.primary || '/images/placeholder-no-image.svg';
+                imageEl.alt = opts.name || 'Product';
+                imageEl.onerror = function() {
+                    if (resolved.fallback && imageEl.src.indexOf(resolved.fallback) === -1) {
+                        imageEl.src = resolved.fallback;
+                    } else if (resolved.fallback2 && imageEl.src.indexOf(resolved.fallback2) === -1) {
+                        imageEl.src = resolved.fallback2;
+                    } else {
+                        imageEl.onerror = null;
+                        imageEl.src = '/images/placeholder-no-image.svg';
+                    }
+                };
+            }
+            setInventoryDetailsStockCards(
+                opts.stockSummary || { available: 0, returned: 0, damaged: 0, repaired: 0, total: 0 },
+                {
+                    showVariantCount: !isVariation && opts.variantCount != null,
+                    variantCount: opts.variantCount
+                }
+            );
+        }
+
+        function openInventoryDetailsModal() {
+            const modal = document.getElementById('inventoryDetailsModal');
+            if (modal) modal.style.display = 'block';
+        }
+
+        function closeInventoryDetailsModal() {
+            const modal = document.getElementById('inventoryDetailsModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function openProductDetailsModal(inventoryProductId) {
+            if (!inventoryProductId) return;
+            populateInventoryDetailsModal({
+                title: 'Product Details',
+                isVariationDetail: false,
+                name: 'Loading…',
+                category: '—',
+                unitSalePrice: null,
+                unitCost: null,
+                salePriceTotal: null,
+                costPriceTotal: null,
+                variantCount: null,
+                imageUrl: '',
+                dims: '—',
+                stockSummary: { available: 0, returned: 0, damaged: 0, repaired: 0, total: 0 }
+            });
+            openInventoryDetailsModal();
+            try {
+                const [productRes, summaryRes] = await Promise.all([
+                    fetch('/api/admin/inventory-product/' + inventoryProductId + '?source=InventoryProducts', { credentials: 'include' }),
+                    fetch('/api/admin/inventory-products/' + inventoryProductId + '/summary', { credentials: 'include' })
+                ]);
+                const productJson = await productRes.json();
+                const summaryJson = await summaryRes.json();
+                if (!productJson.success || !productJson.product) {
+                    showCustomPopup(productJson.message || 'Product not found.', true);
+                    closeInventoryDetailsModal();
+                    return;
+                }
+                const p = productJson.product;
+                const variations = Array.isArray(p.Variations) ? p.Variations : [];
+                const unitSalePrice = Number(p.Price) || 0;
+                const unitCost = Number(p.CostPrice) || 0;
+                let salePriceTotal = variations.length
+                    ? sumVariationUnitSalePrices(variations)
+                    : unitSalePrice;
+                let costPriceTotal = variations.length
+                    ? sumVariationUnitCosts(variations)
+                    : unitCost;
+                const summary = summaryJson.summary || summaryJson;
+                const stock = buildDetailsStockSummary({
+                    availableQty: summary.availableQuantity,
+                    returnedQty: summary.returnedQuantity,
+                    damagedQty: summary.damagedQuantity,
+                    repairedQty: summary.repairedQuantity
+                });
+                populateInventoryDetailsModal({
+                    title: 'Product Details',
+                    isVariationDetail: false,
+                    name: p.Name || '—',
+                    category: p.Category || '—',
+                    unitSalePrice: unitSalePrice,
+                    unitCost: unitCost,
+                    salePriceTotal: salePriceTotal,
+                    costPriceTotal: costPriceTotal,
+                    variantCount: variations.length,
+                    imageUrl: p.ImageURL || '',
+                    dims: formatVariationDimensionsCompact(p.Dimensions),
+                    stockSummary: stock
+                });
+            } catch (err) {
+                showCustomPopup('Failed to load product details: ' + err.message, true);
+                closeInventoryDetailsModal();
+            }
+        }
+
+        async function openVariationDetailsModal(variationId, inventoryProductId) {
+            if (!variationId) return;
+            populateInventoryDetailsModal({
+                title: 'Variation Details',
+                isVariationDetail: true,
+                name: 'Loading…',
+                category: '—',
+                sku: '—',
+                unitSalePrice: null,
+                unitCost: null,
+                salePriceTotal: null,
+                costPriceTotal: null,
+                imageUrl: '',
+                dims: '—',
+                stockSummary: { available: 0, returned: 0, damaged: 0, repaired: 0, total: 0 }
+            });
+            openInventoryDetailsModal();
+            try {
+                const requests = [
+                    fetch('/api/admin/inventory-variation-quantity/' + variationId, { credentials: 'include' })
+                ];
+                if (inventoryProductId) {
+                    requests.push(fetch('/api/admin/inventory-product/' + inventoryProductId + '?source=InventoryProducts', { credentials: 'include' }));
+                }
+                const results = await Promise.all(requests);
+                const varJson = await results[0].json();
+                let parentCategory = '—';
+                let parentDims = null;
+                if (results[1]) {
+                    const parentJson = await results[1].json();
+                    if (parentJson.success && parentJson.product) {
+                        parentCategory = parentJson.product.Category || '—';
+                        parentDims = parentJson.product.Dimensions;
+                    }
+                }
+                if (!varJson.success || !varJson.variation) {
+                    showCustomPopup(varJson.message || 'Variation not found.', true);
+                    closeInventoryDetailsModal();
+                    return;
+                }
+                const v = varJson.variation;
+                const sellableQty = resolveVariationSellableQty(v);
+                const stock = buildDetailsStockSummary(resolveVariationStockTotals(v));
+                populateInventoryDetailsModal({
+                    title: 'Variation Details',
+                    isVariationDetail: true,
+                    name: v.VariationName || '—',
+                    category: parentCategory,
+                    sku: v.SKU || '—',
+                    unitSalePrice: Number(v.Price) || 0,
+                    unitCost: Number(v.CostPrice) || 0,
+                    salePriceTotal: variationLineSalePriceTotal(v),
+                    costPriceTotal: variationLineCostPriceTotal(v),
+                    imageUrl: v.VariationImageURL || '',
+                    dims: formatVariationDimensionsCompact(parentDims),
+                    stockSummary: stock
+                });
+            } catch (err) {
+                showCustomPopup('Failed to load variation details: ' + err.message, true);
+                closeInventoryDetailsModal();
+            }
+        }
+
+        function initInventoryDetailsModal() {
+            const modal = document.getElementById('inventoryDetailsModal');
+            if (!modal) return;
+            const closeBtn = document.getElementById('closeInventoryDetailsModal');
+            if (closeBtn) closeBtn.addEventListener('click', closeInventoryDetailsModal);
+            document.addEventListener('click', function(e) {
+                const prodBtn = e.target.closest('.inventory-product-details-btn');
+                if (prodBtn) {
+                    const pid = parseInt(prodBtn.getAttribute('data-product-id'), 10);
+                    if (pid) openProductDetailsModal(pid);
+                    return;
+                }
+                const varBtn = e.target.closest('.inventory-variation-details-btn');
+                if (varBtn) {
+                    const vid = parseInt(varBtn.getAttribute('data-variation-id'), 10);
+                    const ipid = parseInt(varBtn.getAttribute('data-inventory-product-id'), 10);
+                    if (vid) openVariationDetailsModal(vid, ipid || 0);
+                }
+            });
         }
 
         function initEditInventoryProductQuickModal() {
@@ -2949,11 +3919,7 @@ const urlParams = new URLSearchParams(window.location.search);
 
         // Function to archive product
         function archiveProduct(productId, productName, isFromProductsTable) {
-            // All products on this page are from InventoryProducts table
-            const isFromInventoryProducts = false; // Always false for this page
-            
-            if (confirm(`Are you sure you want to archive "${productName}"? This will move it to the Archived page.`)) {
-                // Create a form and submit it
+            showArchiveConfirmModal(productName || 'this product', function () {
                 const form = document.createElement('form');
                 form.method = 'POST';
                 form.action = `/Employee/Admin/Inventory/Archive/${productId}`;
@@ -2978,7 +3944,7 @@ const urlParams = new URLSearchParams(window.location.search);
                 
                 document.body.appendChild(form);
                 form.submit();
-            }
+            });
         }
 
         // Variations Management
@@ -3031,7 +3997,8 @@ const urlParams = new URLSearchParams(window.location.search);
                     e.preventDefault();
                     
                     const formData = new FormData(this);
-                    appendVariationMediaToFormData(formData, this);
+                    clearVariationMediaFromFormData(formData);
+                    appendVariationMediaToFormData(formData, this, { mainImageId: 'variationMainImage', accumulate: true });
                     
                     // For ProductInventory page, ALWAYS use InventoryProductVariations endpoint
                     // This page only manages InventoryProducts, so always use InventoryProductID
@@ -3253,13 +4220,39 @@ const urlParams = new URLSearchParams(window.location.search);
                     variationData.VariationImageURL || null
                 );
                 const variationInventoryMode = isInventoryPage && window._variationEditMode === 'inventory';
-                const variationCatalogMode = isProductsListingPage && window._variationEditMode === 'catalog';
+                const variationCatalogMode = (isProductsListingPage || isStorefrontPage) && window._variationEditMode === 'catalog';
+                const priceEl = document.getElementById('editVariationStatusSalePrice');
+                if (priceEl) {
+                    const loadedPrice = variationData.Price != null ? parseFloat(variationData.Price) : NaN;
+                    if (!Number.isNaN(loadedPrice) && loadedPrice > 0) {
+                        priceEl.value = loadedPrice.toFixed(2);
+                        priceEl.setAttribute('data-initial-price', loadedPrice.toFixed(2));
+                    } else {
+                        priceEl.value = '';
+                        priceEl.setAttribute('data-initial-price', '');
+                    }
+                    bindProductPriceInput(priceEl);
+                }
+                const sfStockEl = document.getElementById('editVariationStorefrontStock');
+                const actualStockEl = document.getElementById('editVariationActualStock');
+                const sellableQty = resolveVariationSellableQty(variationData);
+                if (actualStockEl) {
+                    actualStockEl.textContent = String(sellableQty);
+                }
+                if (sfStockEl) {
+                    const pvQty = variationData.ProductVariationQuantity;
+                    const displayQty = (pvQty != null && pvQty !== '')
+                        ? Math.max(0, parseInt(pvQty, 10) || 0)
+                        : sellableQty;
+                    sfStockEl.value = String(displayQty);
+                    sfStockEl.setAttribute('data-initial-storefront-qty', String(displayQty));
+                }
                 if (parentInvId && (variationInventoryMode || variationCatalogMode)) {
                     await loadInventoryProductRecipeDisplay(parentInvId, {
                         bundleEl: 'editVariationBomBundleDisplay',
                         listEl: 'editVariationRecipeReadonlyList'
                     });
-                } else if (!isProductReturnsPage && !isProductsListingPage) {
+                } else if (!isProductReturnsPage && !isProductsListingPage && !isStorefrontPage) {
                     await loadEditVariationRecipe(parentInvId);
                 } else {
                     resetEditVariationMaterials();
@@ -3309,12 +4302,16 @@ const urlParams = new URLSearchParams(window.location.search);
                 document.getElementById('editVariationStatusDisposedQuantity').value = currentDisposed;
                 
                 const mediaPreview = document.getElementById('editVariationStatusMediaPreview');
-                if (!isProductReturnsPage && (isProductsListingPage || isInventoryPage)) {
+                if (!isProductReturnsPage && (isProductsListingPage || isStorefrontPage || isInventoryPage)) {
+                    const catalogMedia = variationCatalogMode;
                     renderVariationMediaPreviews(mediaPreview, {
                         mainImage: variationData.VariationImageURL || null,
                         thumbnails: parseThumbnailUrls(variationData.ThumbnailURLs),
                         model3d: variationData.Model3D || null
-                    }, { showMain: false });
+                    }, {
+                        showMain: false,
+                        thumbnailsLabel: catalogMedia ? 'Current thumbnails' : 'Thumbnails'
+                    });
                 } else if (mediaPreview) {
                     mediaPreview.innerHTML = '';
                 }
@@ -3621,7 +4618,7 @@ const urlParams = new URLSearchParams(window.location.search);
                     (finalRepaired !== currentRepaired) ||
                     (finalDisposed !== currentDisposed);
 
-                const catalogMode = isProductsListingPage && window._variationEditMode === 'catalog';
+                const catalogMode = (isProductsListingPage || isStorefrontPage) && window._variationEditMode === 'catalog';
                 const inventoryMode = isInventoryPage && window._variationEditMode === 'inventory';
                 const colorInput = document.getElementById('editVariationStatusColor');
                 const skuInput = document.getElementById('editVariationStatusSku');
@@ -3643,14 +4640,33 @@ const urlParams = new URLSearchParams(window.location.search);
                 const initialRecipeJson = document.getElementById('editVariationRecipeMaterials')?.getAttribute('data-initial-recipe') || '[]';
                 const recipeChanged = !isProductReturnsPage && !catalogMode && currentRecipeJson !== initialRecipeJson;
 
+                const priceEl = document.getElementById('editVariationStatusSalePrice');
+                const initialPrice = priceEl?.getAttribute('data-initial-price') || '';
+                const priceChanged = catalogMode && priceEl
+                    && String(priceEl.value || '').trim() !== String(initialPrice).trim();
+                const sfStockEl = document.getElementById('editVariationStorefrontStock');
+                const initialSfQty = sfStockEl?.getAttribute('data-initial-storefront-qty') || '';
+                const storefrontStockChanged = catalogMode && isStorefrontPage && sfStockEl
+                    && String(sfStockEl.value || '').trim() !== String(initialSfQty).trim();
                 if (catalogMode) {
                     const vName = String(variationNameInput?.value || '').trim();
                     if (!vName) {
                         showCustomPopup('Variation name is required.', true);
                         return;
                     }
-                    if (!variationNameChanged && !hasMediaUpload && !colorChanged) {
-                        showCustomPopup('No changes detected. Update the variation name, color, main image, thumbnails, or 3D model before saving.', true);
+                    if (getProductUnitPriceFromEl(priceEl) == null) {
+                        showCustomPopup('Enter a sale price greater than zero.', true);
+                        return;
+                    }
+                    if (isStorefrontPage && sfStockEl) {
+                        const sfQty = parseInt(sfStockEl.value, 10);
+                        if (Number.isNaN(sfQty) || sfQty < 0) {
+                            showCustomPopup('Storefront available stock must be zero or greater.', true);
+                            return;
+                        }
+                    }
+                    if (!variationNameChanged && !hasMediaUpload && !colorChanged && !priceChanged && !storefrontStockChanged) {
+                        showCustomPopup('No changes detected. Update the variation name, sale price, storefront stock, main image, thumbnails, or 3D model before saving.', true);
                         return;
                     }
                 } else if (inventoryMode) {
@@ -3693,6 +4709,11 @@ const urlParams = new URLSearchParams(window.location.search);
                     const vName = String(variationNameInput?.value || '').trim();
                     if (vName) formData.append('variationName', vName);
                     if (colorInput) formData.append('color', String(colorInput.value || '').trim());
+                    const unitPrice = getProductUnitPriceFromEl(priceEl);
+                    if (unitPrice != null) formData.append('price', unitPrice.toFixed(2));
+                    if (isStorefrontPage && sfStockEl) {
+                        formData.append('storefrontStockQuantity', String(parseInt(sfStockEl.value, 10) || 0));
+                    }
                     appendVariationMediaToFormData(formData, document.getElementById('editVariationStatusForm'), {
                         includeMain: true,
                         mainImageId: 'editVariationCatalogMainImage'
@@ -3797,6 +4818,24 @@ const urlParams = new URLSearchParams(window.location.search);
                         if (pid) {
                             if (catalogMode) {
                                 await loadInventoryProductVariations(pid);
+                                if (isStorefrontPage && storefrontStockChanged && sfStockEl) {
+                                    const savedSfQty = parseInt(sfStockEl.value, 10);
+                                    const parentRow = document.querySelector(
+                                        'tr.product-listing-parent-row[data-inventory-product-id="' + pid + '"]'
+                                    );
+                                    if (parentRow && !Number.isNaN(savedSfQty)) {
+                                        const variations = window.currentVariations || [];
+                                        const displaySum = variations.length
+                                            ? sumVariationsStorefrontDisplay(variations)
+                                            : savedSfQty;
+                                        parentRow.setAttribute('data-storefront-display-qty', String(displaySum));
+                                        const cells = parentRow.querySelectorAll('td.qty-col .stock-qty');
+                                        if (cells[0]) {
+                                            cells[0].textContent = String(displaySum);
+                                            cells[0].className = 'stock-qty ' + getStockQtyClass(displaySum);
+                                        }
+                                    }
+                                }
                             } else {
                                 await notifyInventoryStockChanged(pid, result);
                             }
@@ -4453,5 +5492,12 @@ const urlParams = new URLSearchParams(window.location.search);
                     archiveProduct(productId, productName, isFromProducts);
                 });
             });
+        });
+
+        document.addEventListener('click', function(e) {
+            const btn = e.target.closest('.edit-plan-product-btn');
+            if (!btn) return;
+            const pid = parseInt(btn.getAttribute('data-product-id'), 10);
+            if (pid) openEditPlannedProductModal(pid);
         });
 })();

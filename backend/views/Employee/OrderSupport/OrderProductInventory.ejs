@@ -1459,7 +1459,7 @@
                         if (typeof inventoryProductIdFocus !== 'undefined' && inventoryProductIdFocus) {
                             parts.push('inventoryProductId=' + encodeURIComponent(inventoryProductIdFocus));
                         }
-                        return '/Employee/OrderSupport/Inventory?' + parts.join('&');
+                        return '/Employee/OrderSupport/ProductInventory?' + parts.join('&');
                     }
                     function stockQtyClass(qty) {
                         const n = Number(qty) || 0;
@@ -1475,7 +1475,7 @@
 
 
                 <div class="inventory-filter-card" data-inventory-search="<%= (invFilters.search || '').replace(/"/g, '&quot;') %>">
-                    <form method="get" action="/Employee/OrderSupport/Inventory" class="inventory-filter-form">
+                    <form method="get" action="/Employee/OrderSupport/ProductInventory" class="inventory-filter-form">
                         <input type="hidden" name="tab" value="ProductInventory">
                         <input type="hidden" name="page" value="1">
                         <div class="inventory-filter-field">
@@ -1494,7 +1494,7 @@
                         <div class="inventory-filter-actions">
                             <button type="submit" class="pi-btn pi-btn-primary inventory-filter-apply-btn">Apply</button>
                             <% if (invFilters.search || invFilters.category) { %>
-                            <a href="/Employee/OrderSupport/Inventory?tab=ProductInventory" class="pi-btn pi-btn-secondary">Clear</a>
+                            <a href="/Employee/OrderSupport/ProductInventory?tab=ProductInventory" class="pi-btn pi-btn-secondary">Clear</a>
                             <% } %>
                         </div>
                     </form>
@@ -1713,9 +1713,9 @@
             </div>
             </div>
 
-            <%- include('partials/raw-materials-tab', { materials: typeof materials !== 'undefined' ? materials : [], units: typeof units !== 'undefined' ? units : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
-            <%- include('partials/bom-bundles-tab', { bomBundles: typeof bomBundles !== 'undefined' ? bomBundles : [], materials: typeof materials !== 'undefined' ? materials : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
-            <%- include('partials/stock-movement-tab', { activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
+            <%- include('../Admin/partials/raw-materials-tab', { materials: typeof materials !== 'undefined' ? materials : [], units: typeof units !== 'undefined' ? units : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
+            <%- include('../Admin/partials/bom-bundles-tab', { bomBundles: typeof bomBundles !== 'undefined' ? bomBundles : [], materials: typeof materials !== 'undefined' ? materials : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
+            <%- include('../Admin/partials/stock-movement-tab', { activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
 
         </div>
         <script>
@@ -1734,12 +1734,12 @@
         })();
         </script>
 
-    <%- include('partials/bom-bundle-modal') %>
+    <%- include('../Admin/partials/bom-bundle-modal') %>
     </div>
 
-    <%- include('partials/edit-inventory-product-quick-modal') %>
-    <%- include('partials/edit-variation-status-modal') %>
-    <%- include('partials/repair-variation-modal') %>
+    <%- include('../Admin/partials/edit-inventory-product-quick-modal') %>
+    <%- include('../Admin/partials/edit-variation-status-modal') %>
+    <%- include('../Admin/partials/repair-variation-modal') %>
 
     <!-- Restock Variation Modal -->
     <div id="variationRestockModal" class="modal pi-modal-compact">

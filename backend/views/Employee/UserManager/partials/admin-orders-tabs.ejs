@@ -1,0 +1,10 @@
+<% const tab = typeof ordersTab !== 'undefined' ? ordersTab : 'pending'; %>
+<nav class="admin-orders-tabs" aria-label="Order status tabs">
+    <a href="/Employee/UserManager/UserOrdersPending" class="<%= tab === 'pending' ? 'active' : '' %>">Pending Verification</a>
+    <a href="/Employee/UserManager/UserOrdersProcessing" class="<%= tab === 'processing' ? 'active' : '' %>">Processing</a>
+    <a href="/Employee/UserManager/UserOrdersShipping" class="<%= tab === 'shipping' ? 'active' : '' %>">Shipping</a>
+    <a href="/Employee/UserManager/UserOrdersDelivery" class="<%= tab === 'delivery' ? 'active' : '' %>">Delivery</a>
+    <a href="/Employee/UserManager/UserOrdersReceive" class="<%= tab === 'receive' ? 'active' : '' %>">Receive</a>
+    <a href="/Employee/UserManager/UserCancelledOrders" class="<%= tab === 'cancelled' ? 'active' : '' %>">Cancelled</a>
+    <a href="/Employee/UserManager/UserCompletedOrders" class="<%= tab === 'completed' ? 'active' : '' %>">Completed</a>
+</nav>

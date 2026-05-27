@@ -5,11 +5,12 @@
     var INVENTORY_BASE = '/Employee/Admin/Inventory';
     var DEFAULT_TAB = 'ProductInventory';
     var TAB_PANELS = ['productsTab', 'rawMaterialsTab', 'bomBundlesTab', 'stockMovementTab'];
-    var TAB_NAMES = ['ProductInventory', 'raw-materials', 'bom-bundles', 'stock-movement'];
+    var TAB_NAMES = ['ProductInventory', 'raw-materials', 'rawmaterials-bundles', 'stock-movement'];
 
     function normalizeTabName(urlTab) {
         if (!urlTab || urlTab === 'products') return DEFAULT_TAB;
         if (urlTab === 'ProductInventory') return DEFAULT_TAB;
+        if (urlTab === 'bom-bundles') return 'rawmaterials-bundles';
         return urlTab;
     }
 
@@ -38,7 +39,7 @@
         });
 
         var panelId = tab === 'raw-materials' ? 'rawMaterialsTab'
-            : tab === 'bom-bundles' ? 'bomBundlesTab'
+            : tab === 'rawmaterials-bundles' ? 'bomBundlesTab'
             : tab === 'stock-movement' ? 'stockMovementTab'
             : 'productsTab';
         var panel = document.getElementById(panelId);
@@ -63,8 +64,9 @@
                 var tab = btn.getAttribute('data-tab');
                 if (!tab) return;
                 var target = tabUrl(tab);
-                if (window.location.pathname + window.location.search === target ||
-                    window.location.href.endsWith(target.replace(/^\//, ''))) {
+                var current = new URL(window.location.href);
+                var next = new URL(target, window.location.origin);
+                if (current.pathname === next.pathname && current.searchParams.get('tab') === next.searchParams.get('tab')) {
                     showTab(tab);
                     return;
                 }

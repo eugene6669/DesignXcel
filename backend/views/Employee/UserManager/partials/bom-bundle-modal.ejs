@@ -1,0 +1,23 @@
+<div id="bomBundleModal" class="modal bom-modal">
+    <div class="modal-content">
+        <span class="close-button" id="bomCloseModal">&times;</span>
+        <h3 id="bomModalTitle">Create BOM Bundle</h3>
+        <input type="hidden" id="bomEditBundleId" value="">
+        <div class="bom-form-compact">
+            <label for="bomBundleName">Bundle name <span class="req">*</span></label>
+            <input type="text" id="bomBundleName" placeholder="Executive Office Chair Kit" required>
+            <label for="bomBundleDescription">Description</label>
+            <textarea id="bomBundleDescription" rows="2" placeholder="Optional"></textarea>
+        </div>
+        <div class="bom-materials-block">
+            <h4>Materials <span class="req">*</span></h4>
+            <p class="bom-hint">Qty per finished unit — cannot exceed current stock.</p>
+            <div id="bomMaterialsContainer"></div>
+            <button type="button" id="bomAddMaterialRowBtn" class="add-material-btn bom-add-row-btn">+ Add material</button>
+        </div>
+        <div class="rm-form-actions">
+            <button type="button" class="rm-btn rm-btn-secondary" id="bomCancelModal">Cancel</button>
+            <button type="button" class="rm-btn rm-btn-primary" id="bomSaveBundleBtn">Save</button>
+        </div>
+    </div>
+</div>

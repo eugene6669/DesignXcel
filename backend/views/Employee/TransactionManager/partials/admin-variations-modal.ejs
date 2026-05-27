@@ -1,0 +1,67 @@
+<!-- Variations Management Modal (Products Listing) -->
+<div id="variationsModal" class="modal pi-modal-compact pi-modal-xl">
+    <div class="modal-content" style="position: relative;">
+        <span class="close-button" id="closeVariationsModal" onclick="if(window.closeVariationsModalFunc) window.closeVariationsModalFunc(); else { const modal = document.getElementById('variationsModal'); if(modal) modal.style.display = 'none'; }">&times;</span>
+        <h3 id="variationsModalTitle">Manage Product Variations</h3>
+
+        <div id="variationModalNotification" class="modal-notification" style="display: none; position: absolute; top: 20px; right: 20px; background-color: #4CAF50; color: white; padding: 15px 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 10001; animation: slideIn 0.5s ease-out; max-width: 300px;">
+            <div class="modal-notification-content" style="display: flex; align-items: center; gap: 12px;">
+                <span class="modal-notification-icon">✓</span>
+                <span class="modal-notification-message"></span>
+            </div>
+        </div>
+
+        <div class="pi-section">
+            <h4>Add New Variation</h4>
+            <form id="addVariationForm">
+                <input type="hidden" id="variationProductID" name="productID">
+                <input type="hidden" id="variationInventoryProductID" name="inventoryProductID">
+                <input type="hidden" name="isActive" value="1">
+                <div class="pi-form-grid">
+                    <div>
+                        <label for="variationName">Variation Name</label>
+                        <input type="text" id="variationName" name="variationName" required>
+                    </div>
+                    <div>
+                        <label for="variationColor">Color</label>
+                        <input type="text" id="variationColor" name="color">
+                    </div>
+                </div>
+                <div class="pi-form-grid" style="margin-top:10px;">
+                    <div class="pi-span-2">
+                        <label for="variationQuantity">Quantity</label>
+                        <input type="number" id="variationQuantity" name="quantity" min="1" required>
+                        <small id="availableStockInfo" style="display: block; margin-top: 5px; color: #666; font-size: 0.85em;"></small>
+                    </div>
+                </div>
+                <div class="form-group pi-section" style="margin-top:10px;">
+                    <h4 style="margin:0 0 8px;font-size:0.95em;">Manufacturing recipe</h4>
+                    <p style="font-size:0.82em;color:#666;margin:0 0 8px;">Stocking this variation deducts raw materials from the parent product recipe.</p>
+                    <div id="addVariationBomBundleDisplay" class="pi-recipe-bom-label" style="font-size:0.88em;margin-bottom:6px;color:#444;"><em>Loading recipe…</em></div>
+                    <div id="addVariationRecipeMaterialsList" class="pi-recipe-materials-list" style="font-size:0.88em;color:#333;"></div>
+                    <div id="addVariationRecipeStatus" style="margin-top: 8px; font-size: 0.85em; color: #555; display:none;"></div>
+                </div>
+                <div class="pi-form-grid" style="margin-top:10px;">
+                    <div>
+                        <label for="variationMainImage">Main Image</label>
+                        <input type="file" id="variationMainImage" class="variation-main-image" accept="image/*">
+                    </div>
+                    <div>
+                        <label for="variationThumbnails">Thumbnails (up to 4)</label>
+                        <input type="file" id="variationThumbnails" class="variation-thumbnails" accept="image/*" multiple>
+                    </div>
+                    <div class="pi-span-2">
+                        <label for="variationModel3d">3D Model (GLB/GLTF)</label>
+                        <input type="file" id="variationModel3d" class="variation-model3d" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
+                    </div>
+                </div>
+                <button type="submit" class="pi-btn pi-btn-primary" style="margin-top:10px;">Add Variation</button>
+            </form>
+        </div>
+
+        <div id="variationsList" class="pi-section" style="margin-top:12px;">
+            <h4 style="margin:0 0 10px;">Existing Variations</h4>
+            <div id="variationsContainer"></div>
+        </div>
+    </div>
+</div>

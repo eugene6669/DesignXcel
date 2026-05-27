@@ -9,8 +9,10 @@
     var productFilter = '';
     var expandedProducts = new Set();
     var expandedVariations = new Set();
+    var expandedRawMaterials = new Set();
 
     var CHEVRON_SVG = '<svg class="stock-movement-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>';
+    var ARCHIVE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>';
 
     function escapeHtml(text) {
         if (text == null) return '';
@@ -49,7 +51,7 @@
         if (t === 'returned_to_damaged') return 'stock-mv-badge-damaged';
         if (t === 'damaged_to_repaired') return 'stock-mv-badge-repaired';
         if (t === 'repaired_to_available') return 'stock-mv-badge-available';
-        if (t === 'restock_available' || t === 'restock_variation' || t === 'restock_product') return 'stock-mv-badge-restock';
+        if (t === 'restock_available' || t === 'restock_variation' || t === 'restock_product' || t === 'restock_raw_material') return 'stock-mv-badge-restock';
         return 'stock-mv-badge-default';
     }
 
@@ -63,6 +65,8 @@
             loading: document.getElementById('stockMovementLoading'),
             listWrap: document.getElementById('stockMovementListWrap'),
             list: document.getElementById('stockMovementGroupedList'),
+            rawList: document.getElementById('stockMovementRawMaterialsList'),
+            rawSectionHead: document.getElementById('stockMovementRawSectionHead'),
             empty: document.getElementById('stockMovementEmpty'),
             summary: document.getElementById('stockMovementSummary'),
             pagination: document.getElementById('stockMovementPagination'),
@@ -127,10 +131,10 @@
 
     function renderMovementTable(movements) {
         if (!movements || !movements.length) {
-            return '<p class="stock-mv-no-movements">No movements for this variation.</p>';
+            return '<p class="stock-mv-no-movements">No movements for this group.</p>';
         }
         var html = '<table class="stock-mv-nested-table"><thead><tr>' +
-            '<th>Date</th><th>Movement</th><th>From</th><th>To</th><th class="qty-col">Qty</th><th>Notes</th>' +
+            '<th>Date</th><th>Movement</th><th>From</th><th>To</th><th class="qty-col">Qty</th><th>Notes</th><th></th>' +
             '</tr></thead><tbody>';
         movements.forEach(function (mv) {
             var badgeClass = movementTypeBadgeClass(mv.movementType);
@@ -141,10 +145,146 @@
                 '<td>' + escapeHtml(formatStatusLabel(mv.toStatus)) + '</td>' +
                 '<td class="qty-col"><span class="stock-qty">' + (mv.quantity || 0) + '</span></td>' +
                 '<td class="stock-mv-notes-cell">' + escapeHtml(mv.notes || '—') + '</td>' +
+                '<td class="stock-mv-action-col"><button type="button" class="stock-mv-archive-btn" data-movement-id="' +
+                escapeHtml(String(mv.movementId || '')) + '" title="Archive movement" aria-label="Archive movement">' +
+                ARCHIVE_SVG + '</button></td>' +
                 '</tr>';
         });
         html += '</tbody></table>';
         return html;
+    }
+
+    function toggleRawMaterial(rawMaterialId) {
+        var key = String(rawMaterialId);
+        if (expandedRawMaterials.has(key)) {
+            expandedRawMaterials.delete(key);
+        } else {
+            expandedRawMaterials.add(key);
+        }
+        renderRawMaterialsList(window.__stockMovementRawMaterials || []);
+    }
+
+    function renderRawMaterialsList(materials) {
+        var el = getElements();
+        if (!el.rawList) return;
+        window.__stockMovementRawMaterials = materials || [];
+        el.rawList.innerHTML = '';
+
+        if (!materials || !materials.length) {
+            if (el.rawSectionHead) el.rawSectionHead.style.display = 'none';
+            return;
+        }
+
+        if (el.rawSectionHead) el.rawSectionHead.style.display = 'block';
+
+        materials.forEach(function (material) {
+            var mid = material.rawMaterialId;
+            var mKey = String(mid);
+            var mOpen = expandedRawMaterials.has(mKey);
+            var mBlock = document.createElement('div');
+            mBlock.className = 'stock-mv-product-block' + (mOpen ? ' is-expanded' : '');
+
+            var mHeaderRow = document.createElement('div');
+            mHeaderRow.className = 'stock-mv-header-row';
+
+            var mHeader = document.createElement('button');
+            mHeader.type = 'button';
+            mHeader.className = 'stock-mv-product-header';
+            mHeader.setAttribute('aria-expanded', mOpen ? 'true' : 'false');
+            var unitPart = material.materialUnit ? ' <span class="stock-mv-muted">(' + escapeHtml(material.materialUnit) + ')</span>' : '';
+            mHeader.innerHTML =
+                '<span class="stock-mv-expand-icon">' + CHEVRON_SVG + '</span>' +
+                '<span class="stock-mv-product-title"><strong>' + escapeHtml(material.materialName) + '</strong>' +
+                ' <span class="stock-mv-muted">#' + mid + '</span>' + unitPart + '</span>' +
+                '<span class="stock-mv-meta">' + material.movementCount + ' movement' + (material.movementCount === 1 ? '' : 's') +
+                (material.lastMovementAt ? ' · Last ' + escapeHtml(formatMovementDate(material.lastMovementAt)) : '') +
+                '</span>';
+            mHeader.addEventListener('click', function () {
+                toggleRawMaterial(mid);
+            });
+            mHeaderRow.appendChild(mHeader);
+            appendArchiveGroupButton(mHeaderRow, 'Archive all', 'rawMaterial', { rawMaterialId: mid });
+            mBlock.appendChild(mHeaderRow);
+
+            var mBody = document.createElement('div');
+            mBody.className = 'stock-mv-product-body';
+            mBody.style.display = mOpen ? 'block' : 'none';
+            mBody.innerHTML = renderMovementTable(material.movements);
+            mBlock.appendChild(mBody);
+
+            el.rawList.appendChild(mBlock);
+        });
+    }
+
+    function appendArchiveGroupButton(headerRow, label, scope, ids) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'stock-mv-archive-btn';
+        btn.innerHTML = ARCHIVE_SVG;
+        btn.title = label || 'Archive all';
+        btn.setAttribute('aria-label', label || 'Archive all');
+        btn.setAttribute('data-archive-scope', scope);
+        if (ids.inventoryProductId != null) {
+            btn.setAttribute('data-inventory-product-id', String(ids.inventoryProductId));
+        }
+        if (ids.rawMaterialId != null) {
+            btn.setAttribute('data-raw-material-id', String(ids.rawMaterialId));
+        }
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            archiveBulk(scope, ids);
+        });
+        headerRow.appendChild(btn);
+    }
+
+    async function archiveMovement(movementId) {
+        if (!movementId) return;
+        if (!window.confirm('Archive this stock movement? You can restore it from Archived.')) return;
+        try {
+            var response = await fetch('/api/admin/inventory-stock-movements/' + movementId + '/archive', {
+                method: 'POST',
+                credentials: 'include'
+            });
+            var result = await response.json();
+            if (result.success) {
+                loadStockMovements();
+            } else {
+                alert(result.message || 'Failed to archive movement.');
+            }
+        } catch (err) {
+            console.error('archive movement:', err);
+            alert('Failed to archive movement.');
+        }
+    }
+
+    async function archiveBulk(scope, ids) {
+        var msg = 'Archive all movements in this group? You can restore them from Archived.';
+        if (scope === 'allProducts') msg = 'Archive ALL product inventory movements on this page?';
+        if (scope === 'allRawMaterials') msg = 'Archive ALL raw material movements?';
+        if (!window.confirm(msg)) return;
+
+        var body = { scope: scope };
+        if (scope === 'product') body.inventoryProductId = ids.inventoryProductId;
+        if (scope === 'rawMaterial') body.rawMaterialId = ids.rawMaterialId;
+
+        try {
+            var response = await fetch('/api/admin/inventory-stock-movements/archive-bulk', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            var result = await response.json();
+            if (result.success) {
+                loadStockMovements();
+            } else {
+                alert(result.message || 'Failed to archive movements.');
+            }
+        } catch (err) {
+            console.error('archive bulk:', err);
+            alert('Failed to archive movements.');
+        }
     }
 
     function renderGroupedList(products) {
@@ -153,7 +293,10 @@
         window.__stockMovementProducts = products || [];
 
         el.list.innerHTML = '';
-        if (!products || !products.length) {
+        var hasProducts = products && products.length;
+        var hasRaw = window.__stockMovementRawMaterials && window.__stockMovementRawMaterials.length;
+
+        if (!hasProducts && !hasRaw) {
             if (el.listWrap) el.listWrap.style.display = 'none';
             if (el.empty) el.empty.style.display = 'block';
             return;
@@ -162,12 +305,19 @@
         if (el.empty) el.empty.style.display = 'none';
         if (el.listWrap) el.listWrap.style.display = 'block';
 
-        products.forEach(function (product) {
+        if (!hasProducts) {
+            el.list.innerHTML = '<p class="stock-mv-no-movements">No product inventory movements yet.</p>';
+        }
+
+        (products || []).forEach(function (product) {
             var pid = product.inventoryProductId;
             var pKey = String(pid);
             var pOpen = expandedProducts.has(pKey);
             var pBlock = document.createElement('div');
             pBlock.className = 'stock-mv-product-block' + (pOpen ? ' is-expanded' : '');
+
+            var pHeaderRow = document.createElement('div');
+            pHeaderRow.className = 'stock-mv-header-row';
 
             var pHeader = document.createElement('button');
             pHeader.type = 'button';
@@ -183,7 +333,9 @@
             pHeader.addEventListener('click', function () {
                 toggleProduct(pid);
             });
-            pBlock.appendChild(pHeader);
+            pHeaderRow.appendChild(pHeader);
+            appendArchiveGroupButton(pHeaderRow, 'Archive all', 'product', { inventoryProductId: pid });
+            pBlock.appendChild(pHeaderRow);
 
             var pBody = document.createElement('div');
             pBody.className = 'stock-mv-product-body';
@@ -316,6 +468,7 @@
             }
 
             var products = result.products || [];
+            var rawMaterials = result.rawMaterials || [];
             var pagination = result.pagination || {};
             if (pagination.page) currentPage = pagination.page;
 
@@ -326,11 +479,17 @@
             if (el.summary) {
                 var totalMv = pagination.totalMovementCount != null ? pagination.totalMovementCount : 0;
                 var totalProd = pagination.totalCount != null ? pagination.totalCount : products.length;
-                el.summary.textContent = totalMv + ' movement' + (totalMv === 1 ? '' : 's') +
-                    ' across ' + totalProd + ' product' + (totalProd === 1 ? '' : 's') +
-                    (productFilter ? ' (filtered #' + productFilter + ')' : '');
+                var rawCount = rawMaterials.length;
+                var summary = totalMv + ' product movement' + (totalMv === 1 ? '' : 's') +
+                    ' across ' + totalProd + ' product' + (totalProd === 1 ? '' : 's');
+                if (rawCount) {
+                    summary += '; ' + rawCount + ' raw material' + (rawCount === 1 ? '' : 's') + ' with history';
+                }
+                if (productFilter) summary += ' (filtered #' + productFilter + ')';
+                el.summary.textContent = summary;
             }
 
+            renderRawMaterialsList(rawMaterials);
             renderGroupedList(products);
             renderPagination(pagination);
         } catch (err) {
@@ -392,6 +551,21 @@
     function init() {
         readStateFromUrl();
         bindFilters();
+
+        var tabRoot = document.getElementById('stockMovementTab');
+        if (tabRoot && !tabRoot.getAttribute('data-archive-delegation')) {
+            tabRoot.setAttribute('data-archive-delegation', '1');
+            tabRoot.addEventListener('click', function (e) {
+                var archiveBtn = e.target.closest('.stock-mv-archive-btn');
+                if (!archiveBtn) return;
+                e.preventDefault();
+                archiveMovement(archiveBtn.getAttribute('data-movement-id'));
+            });
+        }
+
+        document.addEventListener('rawMaterialRestocked', function () {
+            if (isStockMovementTabActive()) loadStockMovements();
+        });
 
         document.querySelectorAll('.tab-navigation .tab-button[data-tab="stock-movement"]').forEach(function (btn) {
             if (btn.hasAttribute('data-stock-movement-bound')) return;

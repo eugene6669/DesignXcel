@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reports - Admin Panel</title>
+    <title>Reports - User Manager Panel</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1380,7 +1380,7 @@
         async function loadInventoryData() {
             try {
                 const params = new URLSearchParams(inventoryFilters);
-                const response = await fetch(`/Employee/UserManager/Reports/Inventory/Data?${params}`);
+                const response = await fetch(`/Employee/Admin/Reports/Inventory/Data?${params}`);
                 const data = await response.json();
                 
                 if (data.success) {
@@ -1802,7 +1802,7 @@
         async function exportInventoryCSV() {
             try {
                 const params = new URLSearchParams(inventoryFilters);
-                window.location.href = `/Employee/UserManager/Reports/Inventory/Export?${params}`;
+                window.location.href = `/Employee/Admin/Reports/Inventory/Export?${params}`;
             } catch (error) {
                 console.error('Export error:', error);
                 alert('Error exporting inventory data');
@@ -1814,7 +1814,7 @@
         async function loadSalesData() {
             try {
                 const params = new URLSearchParams(salesFilters);
-                const response = await fetch(`/Employee/UserManager/Reports/Sales/Data?${params}`);
+                const response = await fetch(`/Employee/Admin/Reports/Sales/Data?${params}`);
                 const data = await response.json();
                 
                 if (data.success) {
@@ -2382,7 +2382,7 @@
             closeCSVPreview();
             const params = new URLSearchParams(salesFilters);
             params.set('format', 'csv');
-            window.location.href = `/Employee/UserManager/Reports/Sales/Export?${params}`;
+            window.location.href = `/Employee/Admin/Reports/Sales/Export?${params}`;
         }
 
         async function exportSalesCSV() {
@@ -2399,7 +2399,7 @@
         async function loadMasterlistData() {
             try {
                 const params = new URLSearchParams(masterlistFilters);
-                const response = await fetch(`/Employee/UserManager/Reports/Masterlist/Data?${params}`);
+                const response = await fetch(`/Employee/Admin/Reports/Masterlist/Data?${params}`);
                 const data = await response.json();
                 
                 if (data.success) {
@@ -2571,7 +2571,7 @@
         async function exportMasterlistCSV() {
             try {
                 const params = new URLSearchParams(masterlistFilters);
-                window.location.href = `/Employee/UserManager/Reports/Masterlist/Export?${params}`;
+                window.location.href = `/Employee/Admin/Reports/Masterlist/Export?${params}`;
             } catch (error) {
                 console.error('Export error:', error);
                 alert('Error exporting masterlist data');

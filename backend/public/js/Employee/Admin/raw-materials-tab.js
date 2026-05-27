@@ -131,13 +131,6 @@
 
         wireClose(['rmCloseEditMaterial', 'rmCancelEditMaterial'], 'rmEditMaterialModal');
 
-        ['rmAddMaterialModal', 'rmEditMaterialModal', 'rmQuickAddModal', 'rmManageUnitsModal', 'rawMaterialRestockModal'].forEach(function (modalId) {
-            const modal = document.getElementById(modalId);
-            if (!modal) return;
-            modal.addEventListener('click', function (e) {
-                if (e.target === modal) closeModal(modalId);
-            });
-        });
     }
 
     function initQuickAdd() {
@@ -297,37 +290,59 @@
     }
 
     function updateMaterialQtyDisplay(materialId, newQty) {
-        const span = document.querySelector('#rawMaterialsTable .rm-qty-display[data-material-id="' + materialId + '"]');
-        if (!span) return;
-        span.textContent = String(newQty);
-        span.className = 'stock-qty rm-qty-display ' + stockQtyClassFor(newQty);
-        const row = document.querySelector('#rawMaterialsTable tr[data-material-id="' + materialId + '"]');
-        if (row) {
-            const editBtn = row.querySelector('.edit-raw-material-btn');
-            const restockBtn = row.querySelector('.restock-raw-material-btn');
-            if (editBtn) editBtn.setAttribute('data-quantity', String(newQty));
-            if (restockBtn) restockBtn.setAttribute('data-quantity', String(newQty));
-        }
+        const mid = String(materialId);
+        const n = Number(newQty) || 0;
+        const qtyClass = 'stock-qty rm-qty-display ' + stockQtyClassFor(n);
+
+        document.querySelectorAll('#rawMaterialsTab tr[data-material-id="' + mid + '"] .rm-qty-display').forEach(function (span) {
+            span.textContent = String(n);
+            span.className = qtyClass;
+            span.classList.add('rm-qty-updated');
+            window.setTimeout(function () { span.classList.remove('rm-qty-updated'); }, 1200);
+        });
+
+        document.querySelectorAll('#rawMaterialsTab .restock-raw-material-btn[data-material-id="' + mid + '"]').forEach(function (btn) {
+            btn.setAttribute('data-quantity', String(n));
+        });
+        document.querySelectorAll('#rawMaterialsTab .edit-raw-material-btn[data-id="' + mid + '"]').forEach(function (btn) {
+            btn.setAttribute('data-quantity', String(n));
+        });
     }
 
     function initRestock() {
+        const tab = document.getElementById('rawMaterialsTab');
         const modal = document.getElementById('rawMaterialRestockModal');
         const qtyInput = document.getElementById('rawMaterialRestockQty');
-        const confirmBtn = document.getElementById('rmConfirmRestock');
-        if (!modal || !confirmBtn) return;
+        const continueBtn = document.getElementById('rmConfirmRestock');
+        const confirmModal = document.getElementById('rawMaterialRestockConfirmModal');
+        const confirmText = document.getElementById('rawMaterialRestockConfirmText');
+        const cancelConfirmBtn = document.getElementById('rmCancelRestockConfirm');
+        const finalConfirmBtn = document.getElementById('rmConfirmRestockFinal');
+        if (!tab || !modal || !continueBtn) return;
 
         function closeRestockModal() {
             closeModal('rawMaterialRestockModal');
             if (qtyInput) qtyInput.value = '1';
         }
 
-        wireClose(['rmCloseRestockModal', 'rmCancelRestock'], 'rawMaterialRestockModal');
-        modal.addEventListener('click', function (e) {
-            if (e.target === modal) closeRestockModal();
-        });
+        function closeConfirmModal() {
+            if (confirmModal) confirmModal.classList.remove('show');
+        }
 
-        document.querySelectorAll('#rawMaterialsTab .restock-raw-material-btn').forEach(function (btn) {
-            btn.addEventListener('click', function () {
+        wireClose(['rmCloseRestockModal', 'rmCancelRestock'], 'rawMaterialRestockModal');
+        if (cancelConfirmBtn && !cancelConfirmBtn.getAttribute('data-listener-attached')) {
+            cancelConfirmBtn.setAttribute('data-listener-attached', '1');
+            cancelConfirmBtn.addEventListener('click', function () {
+                closeConfirmModal();
+                openModal('rawMaterialRestockModal');
+            });
+        }
+
+        if (!tab.getAttribute('data-restock-delegation')) {
+            tab.setAttribute('data-restock-delegation', '1');
+            tab.addEventListener('click', function (e) {
+                const btn = e.target.closest('.restock-raw-material-btn');
+                if (!btn) return;
                 const materialId = btn.getAttribute('data-material-id');
                 const name = btn.getAttribute('data-material-name') || 'Material';
                 const qty = parseInt(btn.getAttribute('data-quantity'), 10) || 0;
@@ -340,10 +355,14 @@
                 if (qtyInput) qtyInput.value = '1';
                 openModal('rawMaterialRestockModal');
             });
-        });
+        }
 
-        confirmBtn.addEventListener('click', async function () {
+        if (continueBtn.getAttribute('data-listener-attached')) return;
+        continueBtn.setAttribute('data-listener-attached', '1');
+
+        continueBtn.addEventListener('click', function () {
             const materialId = document.getElementById('rawMaterialRestockId').value;
+            const materialName = document.getElementById('rawMaterialRestockName').textContent || 'Material';
             const quantityToAdd = parseInt(qtyInput && qtyInput.value, 10);
             if (!materialId) {
                 popup('Missing material ID.', true);
@@ -353,30 +372,65 @@
                 popup('Enter a quantity of at least 1.', true);
                 return;
             }
-            confirmBtn.disabled = true;
-            try {
-                const res = await fetch('/api/admin/raw-materials/' + materialId + '/restock', {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ quantityToAdd: quantityToAdd })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    popup(data.message || 'Stock updated.');
-                    updateMaterialQtyDisplay(materialId, data.quantityAvailable);
-                    document.getElementById('rawMaterialRestockCurrentQty').textContent = String(data.quantityAvailable);
-                    const restockBtn = document.querySelector('#rawMaterialsTab .restock-raw-material-btn[data-material-id="' + materialId + '"]');
-                    if (restockBtn) restockBtn.setAttribute('data-quantity', String(data.quantityAvailable));
-                    closeRestockModal();
-                } else {
-                    popup(data.message || 'Failed to restock.', true);
-                }
-            } catch (e) {
-                popup('Failed to restock material.', true);
+            if (confirmModal && confirmText) {
+                confirmText.textContent = 'Add ' + quantityToAdd + ' to "' + materialName + '"?';
+                closeModal('rawMaterialRestockModal');
+                confirmModal.classList.add('show');
+                return;
             }
-            confirmBtn.disabled = false;
+            if (window.confirm('Add ' + quantityToAdd + ' to "' + materialName + '"?')) {
+                performRawMaterialRestock(materialId, quantityToAdd, closeRestockModal);
+            }
         });
+
+        if (!finalConfirmBtn || finalConfirmBtn.getAttribute('data-final-attached')) return;
+        finalConfirmBtn.setAttribute('data-final-attached', '1');
+
+        finalConfirmBtn.addEventListener('click', async function () {
+            const materialId = document.getElementById('rawMaterialRestockId').value;
+            const quantityToAdd = parseInt(qtyInput && qtyInput.value, 10);
+            closeConfirmModal();
+            await performRawMaterialRestock(materialId, quantityToAdd, closeRestockModal);
+        });
+    }
+
+    async function performRawMaterialRestock(materialId, quantityToAdd, onSuccessClose) {
+        const finalConfirmBtn = document.getElementById('rmConfirmRestockFinal');
+        const continueBtn = document.getElementById('rmConfirmRestock');
+        const btn = finalConfirmBtn || continueBtn;
+        if (!materialId || !quantityToAdd || quantityToAdd < 1) return;
+        if (btn) btn.disabled = true;
+        try {
+            const res = await fetch('/api/admin/raw-materials/' + materialId + '/restock', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quantityToAdd: quantityToAdd })
+            });
+            let data = {};
+            try {
+                data = await res.json();
+            } catch (parseErr) {
+                data = {};
+            }
+            if (data.success) {
+                const newQty = data.quantityAvailable != null ? data.quantityAvailable : data.newQuantity;
+                updateMaterialQtyDisplay(materialId, newQty);
+                popup(data.message || 'Stock updated.');
+                if (typeof window.loadStockMovementHistory === 'function') {
+                    window.loadStockMovementHistory();
+                }
+                document.dispatchEvent(new CustomEvent('rawMaterialRestocked', {
+                    detail: { materialId: materialId, quantityAvailable: newQty }
+                }));
+                if (onSuccessClose) onSuccessClose();
+            } else {
+                popup(data.message || 'Failed to restock.', true);
+            }
+        } catch (e) {
+            popup('Failed to restock material.', true);
+        }
+        if (btn) btn.disabled = false;
     }
 
     function removeMaterialRow(materialId) {
@@ -401,28 +455,42 @@
                 const materialId = btn.getAttribute('data-id');
                 const materialName = btn.getAttribute('data-name') || 'this material';
                 if (!materialId) return;
-                if (!confirm('Archive raw material "' + materialName + '"? You can restore it from Archived.')) return;
-
-                btn.disabled = true;
-                try {
-                    const res = await fetch('/api/rawmaterials/' + materialId, {
-                        method: 'DELETE',
-                        credentials: 'include'
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                        popup('"' + materialName + '" archived. Restore it from the Archived page.');
-                        removeMaterialRow(materialId);
-                    } else {
-                        popup(data.message || 'Failed to archive material.', true);
+                const runArchive = async function () {
+                    btn.disabled = true;
+                    try {
+                        const res = await fetch('/api/rawmaterials/' + materialId, {
+                            method: 'DELETE',
+                            credentials: 'include'
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            popup('"' + materialName + '" archived. Restore it from the Archived page.');
+                            removeMaterialRow(materialId);
+                        } else {
+                            popup(data.message || 'Failed to archive material.', true);
+                            btn.disabled = false;
+                        }
+                    } catch (e) {
+                        popup('Failed to archive material.', true);
                         btn.disabled = false;
                     }
-                } catch (e) {
-                    popup('Failed to archive material.', true);
-                    btn.disabled = false;
+                };
+                if (typeof window.showArchiveConfirmModal === 'function') {
+                    window.showArchiveConfirmModal(materialName, runArchive);
+                } else if (window.confirm('Archive raw material "' + materialName + '"? You can restore it from Archived.')) {
+                    await runArchive();
                 }
             });
         });
+    }
+
+    function focusRawMaterialFromUrl() {
+        const materialId = new URLSearchParams(window.location.search).get('materialId');
+        if (!materialId) return;
+        const row = document.querySelector('#rawMaterialsTable tr[data-material-id="' + materialId + '"]');
+        if (!row) return;
+        row.classList.add('inventory-focus-row');
+        row.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
 
     function init() {
@@ -432,6 +500,7 @@
         initManageUnits();
         initArchiveButtons();
         initRestock();
+        focusRawMaterialFromUrl();
     }
 
     if (document.readyState === 'loading') {

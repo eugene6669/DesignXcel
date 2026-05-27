@@ -7,7 +7,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>Manage Users - Design Excellence</title>
+    <title>Manage Users - Transaction Manager</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css?v=<%= Date.now() %>">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
 
@@ -677,7 +677,7 @@
                             <h3>Edit User</h3>
                             <span class="close-button" id="closeEditUserModal">&times;</span>
                         </div>
-                        <form id="editUserForm" method="POST" action="/Employee/TransactionManager/Users/Edit"
+                        <form id="editUserForm" method="POST" action="/Employee/TransactionManager/TransactionManageUsers/Users/Edit"
                             class="edit-user-form">
                             <input type="hidden" id="editUserID" name="userId">
 
@@ -1002,9 +1002,9 @@
                     async function loadUserPermissions(userId) {
                         try {
                             console.log('Loading permissions for user ID:', userId);
-                            console.log('Making request to:', '/Employee/TransactionManager/ManageUsers/Permissions/' + userId + '');
+                            console.log('Making request to:', '/Employee/Admin/ManageUsers/Permissions/' + userId + '');
 
-                            const response = await fetch('/Employee/TransactionManager/ManageUsers/Permissions/' + userId + '', {
+                            const response = await fetch('/Employee/Admin/ManageUsers/Permissions/' + userId + '', {
                                 method: 'GET',
                                 credentials: 'include', // Include cookies for session
                                 headers: {
@@ -1168,7 +1168,7 @@
 
                         console.log('Saving permissions:', changedPermissions);
 
-                        fetch('/Employee/TransactionManager/ManageUsers/Permissions/' + currentUserId + '/Update', {
+                        fetch('/Employee/Admin/ManageUsers/Permissions/' + currentUserId + '/Update', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json'
@@ -1238,7 +1238,7 @@
 
                         // Determine if this is a customer or user based on whether role is empty
                         const isCustomer = !data.roleId || data.roleId === '';
-                        const endpoint = isCustomer ? '/Employee/TransactionManager/Customers/Edit' : '/Employee/TransactionManager/Users/Edit';
+                        const endpoint = isCustomer ? '/Employee/TransactionManager/TransactionManageUsers/Customers/Edit' : '/Employee/TransactionManager/TransactionManageUsers/Users/Edit';
                         const successMessage = isCustomer ? 'Customer updated successfully!' : 'User updated successfully!';
 
                         // For customers, rename userId to customerId
@@ -1463,7 +1463,7 @@
                     // Function to load customer accounts
                     async function loadCustomerAccounts() {
                         try {
-                            const response = await fetch('/Employee/TransactionManager/ManageUsers/Customers');
+                            const response = await fetch('/Employee/TransactionManager/TransactionManageUsers/Customers');
                             const data = await response.json();
 
                             const tbody = document.querySelector('#customerAccountsTable tbody');
@@ -1569,7 +1569,7 @@
 
                         try {
                             const newStatus = userToDeactivate.currentStatus ? 0 : 1;
-                            const response = await fetch('/Employee/TransactionManager/ManageUsers/ToggleActive/' + userToDeactivate.id + '/' + newStatus, {
+                            const response = await fetch('/Employee/TransactionManager/TransactionManageUsers/ToggleActive/' + userToDeactivate.id + '/' + newStatus, {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json'
@@ -1678,7 +1678,7 @@
                     // Function to archive customer (soft delete)
                     async function archiveCustomer(customerId, fullName) {
                         try {
-                            const response = await fetch('/Employee/TransactionManager/Customers/Archive', {
+                            const response = await fetch('/Employee/TransactionManager/TransactionManageUsers/Customers/Archive', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json'
@@ -1706,7 +1706,7 @@
                     // Function to permanently delete customer
                     async function deleteCustomer(customerId, fullName) {
                         try {
-                            const response = await fetch('/Employee/TransactionManager/Customers/Delete/' + customerId, {
+                            const response = await fetch('/Employee/TransactionManager/TransactionManageUsers/Customers/Delete/' + customerId, {
                                 method: 'DELETE',
                                 headers: {
                                     'Content-Type': 'application/json'
@@ -1803,7 +1803,7 @@ Consider archiving instead if you want to preserve the data.`;
                     // Function to dearchive customer (restore archived customer)
                     async function dearchiveCustomer(customerId, fullName) {
                         try {
-                            const response = await fetch('/Employee/TransactionManager/Customers/Dearchive', {
+                            const response = await fetch('/Employee/TransactionManager/TransactionManageUsers/Customers/Dearchive', {
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json'
@@ -1831,7 +1831,7 @@ Consider archiving instead if you want to preserve the data.`;
                     // Function to permanently delete customer (updated with better error handling)
                     async function deleteCustomer(customerId, fullName) {
                         try {
-                            const response = await fetch('/Employee/TransactionManager/Customers/Delete/' + customerId, {
+                            const response = await fetch('/Employee/TransactionManager/TransactionManageUsers/Customers/Delete/' + customerId, {
                                 method: 'DELETE',
                                 headers: {
                                     'Content-Type': 'application/json'

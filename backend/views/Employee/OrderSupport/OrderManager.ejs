@@ -1147,7 +1147,7 @@
                         <div id="alertsDropdown" class="alerts-dropdown" style="display: none;">
                             <div class="alerts-dropdown-header">Low &amp; Out of Stock Alerts</div>
                             <div id="alertsDropdownContent" class="alerts-dropdown-content"></div>
-                            <a href="/Employee/Admin/Alerts" id="alertsDropdownFooter" class="alerts-dropdown-footer">Go to Alerts</a>
+                            <a href="/Employee/OrderSupport/OrderAlerts" id="alertsDropdownFooter" class="alerts-dropdown-footer">Go to Alerts</a>
                         </div>
                     </div>
                 </div>
@@ -1238,7 +1238,7 @@
                 <!-- Dashboard Sections -->
                 <div class="dashboard-sections">
                     <!-- Recent Orders Notification Section -->
-                    <div class="section-card recent-orders-section" style="cursor: pointer; transition: all 0.2s ease;" onclick="window.location.href='/Employee/Admin/OrdersPending'" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.4)'; this.style.boxShadow='0 2px 8px rgba(240, 178, 27, 0.15)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';">
+                    <div class="section-card recent-orders-section" style="cursor: pointer; transition: all 0.2s ease;" onclick="window.location.href='/Employee/OrderSupport/OrderOrdersPending'" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.4)'; this.style.boxShadow='0 2px 8px rgba(240, 178, 27, 0.15)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';">
                         <div class="section-header">
                             <h3 class="section-title">
                                 <span class="title-icon"><i class="fa-solid fa-shopping-cart"></i></span>
@@ -1274,7 +1274,7 @@
                     </div>
 
                     <!-- Alerts Section -->
-                    <div class="section-card alerts-section" style="cursor: pointer; transition: all 0.2s ease;" onclick="window.location.href='/Employee/Admin/Alerts'" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.4)'; this.style.boxShadow='0 2px 8px rgba(240, 178, 27, 0.15)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';">
+                    <div class="section-card alerts-section" style="cursor: pointer; transition: all 0.2s ease;" onclick="window.location.href='/Employee/OrderSupport/OrderAlerts'" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.4)'; this.style.boxShadow='0 2px 8px rgba(240, 178, 27, 0.15)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';">
                         <div class="section-header">
                             <h3 class="section-title">
                                 <span class="title-icon"><i class="fa-solid fa-bolt"></i></span>
@@ -1287,7 +1287,7 @@
                     </div>
 
                     <!-- Canceled Orders Notification Section -->
-                    <div class="section-card canceled-orders-section" style="cursor: pointer; transition: all 0.2s ease;" onclick="window.location.href='/Employee/Admin/CancelledOrders'" onmouseover="this.style.borderColor='rgba(220, 38, 38, 0.4)'; this.style.boxShadow='0 2px 8px rgba(220, 38, 38, 0.15)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';">
+                    <div class="section-card canceled-orders-section" style="cursor: pointer; transition: all 0.2s ease;" onclick="window.location.href='/Employee/OrderSupport/OrderCancelledOrders'" onmouseover="this.style.borderColor='rgba(220, 38, 38, 0.4)'; this.style.boxShadow='0 2px 8px rgba(220, 38, 38, 0.15)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';">
                         <div class="section-header">
                             <h3 class="section-title">
                                 <span class="title-icon" style="background: rgba(220, 38, 38, 0.18); color: #dc2626;"><i class="fa-solid fa-xmark-circle"></i></span>
@@ -1323,7 +1323,7 @@
                     </div>
 
                     <!-- Recent Logs Section -->
-                    <div class="section-card recent-logs-section logs" style="cursor: pointer; transition: all 0.2s ease;" onclick="window.location.href='/Employee/Admin/Logs'" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.4)'; this.style.boxShadow='0 2px 8px rgba(240, 178, 27, 0.15)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';">
+                    <div class="section-card recent-logs-section logs" style="cursor: pointer; transition: all 0.2s ease;" onclick="window.location.href='/Employee/OrderSupport/OrderLogs'" onmouseover="this.style.borderColor='rgba(240, 178, 27, 0.4)'; this.style.boxShadow='0 2px 8px rgba(240, 178, 27, 0.15)';" onmouseout="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none';">
                         <div class="section-header">
                             <h3 class="section-title">
                                 <span class="title-icon"><i class="fa-solid fa-clipboard-list"></i></span>
@@ -1417,13 +1417,13 @@
                 document.getElementById('totalMaterials').textContent = materialsData.count || 0;
 
                 // Fetch alerts count
-                const alertsResponse = await fetch('/Employee/Admin/Alerts/Data');
+                const alertsResponse = await fetch('/Employee/OrderSupport/Alerts/Data');
                 const alertsData = await alertsResponse.json();
                 const totalAlerts = (alertsData.products?.length || 0) + (alertsData.rawMaterials?.length || 0);
                 document.getElementById('totalAlerts').textContent = totalAlerts;
 
                 // Fetch recent logs count
-                const logsResponse = await fetch('/Employee/Admin/Logs/Data');
+                const logsResponse = await fetch('/Employee/OrderSupport/Logs/Data');
                 const logsData = await logsResponse.json();
                 const recentLogsCount = logsData.logs?.slice(0, 5).length || 0;
                 document.getElementById('recentLogs').textContent = recentLogsCount;
@@ -1473,7 +1473,7 @@
         async function loadAlerts() {
             try {
                 const [alertsRes, safetyRes] = await Promise.all([
-                    fetch('/Employee/Admin/Alerts/Data'),
+                    fetch('/Employee/OrderSupport/Alerts/Data'),
                     fetch('/api/safety-stock-value')
                 ]);
                 const data = await alertsRes.json();
@@ -1563,7 +1563,7 @@
 
         async function loadRecentLogs() {
             try {
-                const response = await fetch('/Employee/Admin/Logs/Data');
+                const response = await fetch('/Employee/OrderSupport/Logs/Data');
                 const data = await response.json();
                 
                 const logsContainer = document.getElementById('recentLogsContainer');
@@ -1661,7 +1661,7 @@
         // Function to update bell dot indicator
         async function updateAlertsBellDot() {
             try {
-                const response = await fetch('/Employee/Admin/Alerts/Data');
+                const response = await fetch('/Employee/OrderSupport/Alerts/Data');
                 const data = await response.json();
                 if ((data.products && data.products.length > 0) || (data.rawMaterials && data.rawMaterials.length > 0)) {
                     alertsBellDot.style.display = 'block';
@@ -1689,7 +1689,7 @@
             alertsDropdownContent.innerHTML = '<div class="alerts-dropdown-empty">Loading...</div>';
             try {
                 const [alertsRes, safetyRes] = await Promise.all([
-                    fetch('/Employee/Admin/Alerts/Data'),
+                    fetch('/Employee/OrderSupport/Alerts/Data'),
                     fetch('/api/safety-stock-value')
                 ]);
                 const alertsData = await alertsRes.json();
@@ -2021,7 +2021,7 @@
             
             try {
                 const [alertsRes, safetyRes] = await Promise.all([
-                    fetch('/Employee/Admin/Alerts/Data'),
+                    fetch('/Employee/OrderSupport/Alerts/Data'),
                     fetch('/api/safety-stock-value')
                 ]);
                 const alertsData = await alertsRes.json();
@@ -2127,7 +2127,7 @@
             modalBody.innerHTML = '<div class="dashboard-modal-loading">Loading recent activities...</div>';
             
             try {
-                const response = await fetch('/Employee/Admin/Logs/Data');
+                const response = await fetch('/Employee/OrderSupport/Logs/Data');
                 const data = await response.json();
                 
                 if (data.success && data.logs && data.logs.length > 0) {

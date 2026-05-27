@@ -279,6 +279,8 @@
 
         /* Mustard icon edit buttons — consistent across Products & Inventory */
         .pi-icon-edit-btn,
+        a.pi-icon-build-btn,
+        .pi-icon-build-btn,
         .edit-inventory-product-btn,
         .edit-inventory-product-quick-btn,
         .edit-variation-status-btn {
@@ -298,6 +300,30 @@
             vertical-align: middle;
         }
 
+        a.pi-icon-build-btn,
+        .pi-icon-build-btn {
+            background-color: #FFC107;
+            color: #333;
+            text-decoration: none;
+            border: none;
+            border-radius: 6px;
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            margin: 0 2px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, transform 0.15s;
+            vertical-align: middle;
+        }
+        a.pi-icon-build-btn:hover,
+        .pi-icon-build-btn:hover {
+            background-color: #e0ac06;
+            transform: translateY(-1px);
+            color: #333;
+        }
         .pi-icon-edit-btn:hover,
         .edit-inventory-product-btn:hover,
         .edit-inventory-product-quick-btn:hover,
@@ -307,6 +333,7 @@
         }
 
         .pi-icon-edit-btn svg,
+        .pi-icon-build-btn svg,
         .edit-inventory-product-btn svg,
         .edit-inventory-product-quick-btn svg,
         .edit-variation-status-btn svg {
@@ -565,6 +592,18 @@
             margin-top: 20px;
         }
 
+        .archive-confirm-content { text-align: center; }
+        .archive-confirm-icon {
+            width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 50%;
+            background: #fff3e0; color: #e65100; display: flex; align-items: center; justify-content: center;
+        }
+        .archive-confirm-message { text-align: center; font-size: 1.05em; color: #334155; margin: 0 0 8px; }
+        .archive-confirm-hint { text-align: center; font-size: 0.9em; color: #64748b; margin: 0 0 20px; }
+        .archive-confirm-btn-danger { background: #dc3545 !important; }
+        .archive-confirm-btn-danger:hover { background: #c82333 !important; }
+        tr.inventory-focus-row, tr.inventory-focus-row td {
+            background-color: #fff8e1 !important; box-shadow: inset 0 0 0 2px #ffc107;
+        }
         .inventory-confirm-btn {
             background-color: #F0B21B;
             color: white;
@@ -872,13 +911,42 @@
             background: #fff;
         }
         #addProductModal .pi-variation-row .pi-var-full { grid-column: 1 / -1; }
-        #addProductModal .pi-variation-row .pi-var-media {
+        #addProductModal .pi-variation-row .pi-var-media,
+        #addPlanProductModal .pi-variation-row .pi-var-media {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 8px;
             grid-column: 1 / -1;
         }
-        #addProductModal .pi-variation-row label {
+        .pi-create-product-modal .pi-var-dims-inline {
+            display: grid;
+            grid-template-columns: 28px 1fr 28px 1fr 28px 1fr;
+            gap: 2px 6px;
+            align-items: center;
+            grid-column: 1 / -1;
+            margin: 2px 0 4px;
+        }
+        .pi-create-product-modal .pi-var-dims-inline label {
+            font-size: 0.72em;
+            font-weight: 600;
+            color: #64748b;
+            margin: 0;
+        }
+        .pi-create-product-modal .pi-var-dims-inline input {
+            padding: 4px 6px;
+            font-size: 0.85em;
+            min-width: 0;
+        }
+        .pi-create-product-modal .pi-var-planned-preview {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+            font-size: 0.82em;
+            color: #64748b;
+        }
+        #addProductModal .pi-variation-row label,
+        #addPlanProductModal .pi-variation-row label {
             display: block;
             font-size: 0.78em;
             font-weight: 600;
@@ -1063,6 +1131,13 @@
             margin: 15px 0;
         }
         .page-products-listing .products-list-hint { font-size: 0.85em; color: #666; margin: 0 0 10px; }
+        .product-workflow-steps {
+            display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 1rem; padding: 12px 14px;
+            background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.88em;
+        }
+        .product-workflow-steps span { color: #64748b; }
+        .product-workflow-steps strong { color: #0f172a; }
+        .product-workflow-steps .step-active { color: #4f46e5; font-weight: 600; }
         .products-listing-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9em; }
         .products-listing-table th, .products-listing-table td { padding: 10px; border: 1px solid #dee2e6; vertical-align: middle; }
         .products-listing-table thead th { background: #f2f2f2; font-weight: 600; }
@@ -1128,7 +1203,14 @@
         <div class="main-content">
             <div class="header">
                 <h2>Products Listing</h2>
-                <p class="products-list-hint">Create products and manage categories with the buttons above. Catalog: edit product name, category, sale price, item cost, description, and images via the row action. Edit variation name, color, thumbnails, and 3D model from each variation. Stock, returns workflow, and restock are on <a href="/Employee/Admin/Inventory?tab=ProductInventory">Inventory</a>.</p>
+                <p class="products-list-hint">Step 1: plan what products you need to create. Step 2: build them in <a href="/Employee/Admin/Inventory?tab=ProductInventory">Inventory</a> (materials, BOM bundles, dimensions, variations). Step 3: publish on the <a href="/Employee/Admin/Storefront">Storefront</a> (visibility &amp; quantities).</p>
+                <div class="product-workflow-steps" role="list">
+                    <span><strong class="step-active">1. Products Listing</strong> — plan product</span>
+                    <span>→</span>
+                    <span><strong>2. Inventory</strong> — build &amp; stock</span>
+                    <span>→</span>
+                    <span><strong>3. Storefront</strong> — customer-facing</span>
+                </div>
             </div>
             <div id="productsListingPanel" class="content-area">
 
@@ -1149,6 +1231,7 @@
                             InventoryProductCategory: product.InventoryProductCategory,
                             InventoryProductPrice: product.InventoryProductPrice,
                             InventoryItemCostTotal: product.InventoryItemCostTotal || 0,
+                            InventoryItemSalePriceTotal: product.InventoryItemSalePriceTotal || 0,
                             InventoryProductImageURL: product.InventoryProductImageURL,
                             LastDateAdded: product.LastDateAdded || product.DateAdded,
                             LastDateAddedLabel: fmtDate(product.LastDateAdded || product.DateAdded, 'N/A'),
@@ -1168,6 +1251,7 @@
                             DiscountEndDate: product.DiscountEndDate || null,
                             DiscountedPrice: product.DiscountedPrice != null ? product.DiscountedPrice : null,
                             Notes: product.Notes || '',
+                            ListingStage: product.ListingStage || 'built',
                             hasInventory: (product.TotalQuantity || 0) > 0
                         }))
                         : [];
@@ -1229,7 +1313,7 @@
 
                 <div class="pi-toolbar">
                     <button type="button" id="manageCategoriesBtn" class="add-inventory-btn">Manage Categories</button>
-                    <button type="button" id="addInventoryItemBtn" class="add-inventory-btn">Create Product</button>
+                    <button type="button" id="addPlanProductBtn" class="add-inventory-btn">Plan Product</button>
                 </div>
 
                 <% if (locals.error && locals.error.length > 0) { %>
@@ -1239,131 +1323,7 @@
                     <div class="success-message"><%= success %></div>
                 <% } %>
 
-                <!-- Create Product Modal -->
-                <div id="addProductModal" class="modal pi-modal-compact pi-create-product-modal">
-                    <div class="modal-content">
-                        <span class="close-button" id="closeAddModal">&times;</span>
-                        <h3>Create New Product</h3>
-                        <form id="addProductForm" class="pi-create-form" action="/Employee/Admin/ProductsListing/Add" method="POST" enctype="multipart/form-data">
-                            <input type="hidden" id="quantity" name="quantity" value="0">
-
-                            <div class="pi-form-grid pi-create-top">
-                                <div class="form-group">
-                                    <label for="name">Product Name <span style="color:#dc3545;">*</span></label>
-                                    <input type="text" id="name" name="name" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="createProductPrice">Sale Price (₱) <span style="color:#dc3545;">*</span></label>
-                                    <input type="text" id="createProductPrice" name="price" inputmode="decimal" autocomplete="off" required placeholder="0.00">
-                                </div>
-                                <div class="form-group">
-                                    <label for="createProductCostPrice">Item Cost Price (₱) <span style="color:#dc3545;">*</span></label>
-                                    <input type="text" id="createProductCostPrice" name="costPrice" inputmode="decimal" autocomplete="off" required placeholder="0.00">
-                                </div>
-                                <div class="form-group">
-                                    <label for="category">Category <span style="color:#dc3545;">*</span></label>
-                                    <select id="category" name="category" required>
-                                        <option value="">Select category</option>
-                                        <% if (categories && categories.length > 0) { %>
-                                            <% categories.forEach(cat => { %>
-                                                <option value="<%= cat %>"><%= cat %></option>
-                                            <% }); %>
-                                        <% } else { %>
-                                            <option value="Chairs">Chairs</option>
-                                            <option value="Tables">Tables</option>
-                                            <option value="Storage">Storage</option>
-                                            <option value="Partitions">Partitions</option>
-                                            <option value="Others">Others</option>
-                                        <% } %>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="description">Description</label>
-                                <textarea id="description" name="description" rows="2" placeholder="Optional"></textarea>
-                            </div>
-
-                            <div class="form-group pi-section">
-                                <h4>Product Images</h4>
-                                <p style="font-size:0.85em;color:#666;margin:0 0 8px;">Parent catalog images (variations have their own media below).</p>
-                                <div class="pi-form-grid">
-                                    <div>
-                                        <label for="createProductMainImage">Main Image</label>
-                                        <input type="file" id="createProductMainImage" name="productMainImage" accept="image/*">
-                                    </div>
-                                    <div>
-                                        <label for="createProductThumbnails">Thumbnails (up to 4)</label>
-                                        <input type="file" id="createProductThumbnails" name="productThumbnail" accept="image/*" multiple>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="form-group pi-section" style="display: none;">
-                                <h4>Dimensions</h4>
-                                <div class="pi-form-grid">
-                                    <div>
-                                        <label for="length">Length (cm)</label>
-                                        <input type="number" id="length" name="length" step="0.1" min="0" placeholder="0.0">
-                                    </div>
-                                    <div>
-                                        <label for="width">Width (cm)</label>
-                                        <input type="number" id="width" name="width" step="0.1" min="0" placeholder="0.0">
-                                    </div>
-                                    <div>
-                                        <label for="height">Height (cm)</label>
-                                        <input type="number" id="height" name="height" step="0.1" min="0" placeholder="0.0">
-                                    </div>
-                                    <div>
-                                        <label for="weight">Weight (kg)</label>
-                                        <input type="number" id="weight" name="weight" step="0.1" min="0" placeholder="0.0">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="form-group pi-section">
-                                <h4>BOM Bundle <span style="color:#dc3545;">*</span></h4>
-                                <p>Pick a saved recipe or add materials manually.</p>
-                                <label for="createBomBundleSelect">Bundle</label>
-                                <select id="createBomBundleSelect" name="bomBundleId">
-                                    <option value="">— Manual materials (no bundle) —</option>
-                                    <% const bundleList = typeof bomBundles !== 'undefined' && Array.isArray(bomBundles) ? bomBundles : []; %>
-                                    <% bundleList.forEach(function(b) { %>
-                                        <option value="<%= b.BomBundleID %>"><%= b.BundleCode %> — <%= b.Name %></option>
-                                    <% }); %>
-                                </select>
-                            </div>
-                            <div class="form-group pi-section">
-                                <h4>Materials <span style="color:#dc3545;">*</span></h4>
-                                <p>Qty per unit when stocked.</p>
-                                <div id="createInventoryRecipeStatus" style="font-size:0.82em;margin-bottom:8px;color:#666;"><em>Select a bundle or add materials</em></div>
-                                <div class="materials-section">
-                                    <div id="createInventoryMaterialsContainer"></div>
-                                    <button type="button" id="addCreateInventoryMaterialBtn" class="add-material-btn">+ Add Material</button>
-                                    <div id="createInventoryMaterialsSummary" style="margin-top: 10px; padding: 8px; background: #fff; border-radius: 4px; font-size: 0.9em;">
-                                        <strong>Selected materials:</strong>
-                                        <div id="createInventoryMaterialsSummaryList" style="margin-top: 4px; color: #666;"><em>No materials selected yet</em></div>
-                                    </div>
-                                </div>
-                                <input type="hidden" id="requiredMaterials" name="requiredMaterials" value="">
-                            </div>
-
-                            <div class="form-group pi-section">
-                                <h4>Variations <span style="color:#dc3545;">*</span></h4>
-                                <p>At least one. Main image required; thumbnails and 3D optional.</p>
-                                <p id="createVariationTotalSummary" style="font-size:0.85em;margin:0 0 8px;color:#007bff;font-weight:600;">Total quantity: 0</p>
-                                <div id="createProductVariationsList"></div>
-                                <button type="button" id="addCreateProductVariationBtn" class="pi-btn pi-btn-info pi-btn-sm" style="margin-top:6px;">+ Add Variation</button>
-                            </div>
-                            <input type="hidden" id="variationsJson" name="variationsJson" value="">
-
-                            <div class="pi-form-actions">
-                                <button type="button" id="cancelAddProduct" class="pi-btn pi-btn-secondary">Cancel</button>
-                                <button type="submit" class="pi-btn pi-btn-primary">Create Product</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                <%- include('partials/plan-product-modal', { categories: typeof categories !== 'undefined' ? categories : [] }) %>
 
                 <!-- Manage Categories Modal -->
                 <div id="piManageCategoriesModal" class="modal pi-modal-compact pi-modal-categories">
@@ -1388,10 +1348,18 @@
                     stockQtyClass: stockQtyClass,
                     formatListDate: formatListDate,
                     showReturnColumns: false,
+                    showParentQty: false,
                     showActions: true,
-                    showVariationActions: true,
-                    showStorefront: true,
-                    showDiscount: true,
+                    showVariationActions: false,
+                    showStorefront: false,
+                    showDiscount: false,
+                    showListingStage: false,
+                    actionStyle: 'listing',
+                    parentSalePriceHeader: 'Item Sale Price Total',
+                    showParentPriceColumns: false,
+                    showParentItemCostColumn: false,
+                    showVariationQtyColumn: false,
+                    variationItemCostMode: 'unit',
                     qtyParentLabel: 'Total Available Stock',
                     variationQtyLabel: 'Available Stock'
                 }) %>
@@ -1427,7 +1395,9 @@
     <%- include('partials/edit-variation-status-modal') %>
     <%- include('partials/admin-variations-modal') %>
 
-    <div id="storefrontConfirmModal" class="inventory-confirmation-modal">
+    <%- include('partials/archive-confirmation-modal') %>
+
+    <div id="storefrontConfirmModal" class="inventory-confirmation-modal" style="display:none;">
         <div class="inventory-confirmation-content">
             <h3>Storefront visibility</h3>
             <p id="storefrontConfirmText" style="text-align:center;margin:12px 0 16px;font-size:1.05em;font-weight:600;color:#333;"></p>
@@ -1627,7 +1597,8 @@
         })();
     </script>
 
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260529a" defer></script>
+    <script src="/js/Employee/Admin/admin-modals.js?v=20260541" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260552" defer></script>
     <% if (locals.error && locals.error.length > 0) { %>
     <script>
         document.addEventListener('DOMContentLoaded', function() {

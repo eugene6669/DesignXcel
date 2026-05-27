@@ -1,0 +1,110 @@
+<% const buildFromId = typeof buildFromInventoryProductId !== 'undefined' && buildFromInventoryProductId ? buildFromInventoryProductId : ''; %>
+<div id="addProductModal" class="modal pi-modal-compact pi-create-product-modal">
+    <div class="modal-content">
+        <span class="close-button" id="closeAddModal">&times;</span>
+        <h3 id="addProductModalTitle"><%= buildFromId ? 'Build Planned Product' : 'Build New Product' %></h3>
+        <p id="addProductModalHint" class="pi-build-modal-hint">BOM bundle, raw materials, and opening stock for this planned product.</p>
+        <form id="addProductForm" class="pi-create-form" action="/Employee/Admin/Inventory/Add" method="POST" enctype="multipart/form-data">
+            <input type="hidden" id="buildFromInventoryProductId" name="buildFromInventoryProductId" value="<%= buildFromId %>">
+            <input type="hidden" id="quantity" name="quantity" value="0">
+
+            <div id="buildCatalogFields" class="pi-build-catalog-fields">
+            <div class="pi-form-grid pi-create-top pi-create-row-prices">
+                <div class="form-group pi-create-name">
+                    <label for="name">Product Name <span class="req">*</span></label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="createProductPrice">Sale Price (₱) <span class="req">*</span></label>
+                    <input type="text" id="createProductPrice" name="price" inputmode="decimal" autocomplete="off" required placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label for="createProductCostPrice">Item Cost (₱) <span class="req">*</span></label>
+                    <input type="text" id="createProductCostPrice" name="costPrice" inputmode="decimal" autocomplete="off" required placeholder="0.00">
+                </div>
+            </div>
+
+            <div class="pi-create-cat-desc">
+                <div class="form-group">
+                    <label for="category">Category <span class="req">*</span></label>
+                    <select id="category" name="category" required>
+                        <option value="">Select category</option>
+                        <% if (categories && categories.length > 0) { %>
+                            <% categories.forEach(cat => { %>
+                                <option value="<%= cat %>"><%= cat %></option>
+                            <% }); %>
+                        <% } %>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description" rows="2" placeholder="Optional"></textarea>
+                </div>
+            </div>
+
+            <div class="form-group pi-product-dims pi-section-tight">
+                <label>Dimensions (L × W × H cm)</label>
+                <div class="pi-var-dims-inline">
+                    <label for="createProductLength">L</label>
+                    <input type="number" id="createProductLength" name="length" step="0.1" min="0" placeholder="cm">
+                    <label for="createProductWidth">W</label>
+                    <input type="number" id="createProductWidth" name="width" step="0.1" min="0" placeholder="cm">
+                    <label for="createProductHeight">H</label>
+                    <input type="number" id="createProductHeight" name="height" step="0.1" min="0" placeholder="cm">
+                </div>
+                <small style="display:block;margin-top:4px;color:#666;">Same size for all variations of this product.</small>
+            </div>
+
+            <div class="form-group pi-section pi-section-tight pi-build-product-images">
+                <label for="createProductMainImage">Main Image</label>
+                <div id="createProductMainImagePreview" class="pi-planned-product-image-preview"></div>
+                <input type="file" id="createProductMainImage" name="productMainImage" accept="image/*">
+            </div>
+            </div>
+
+            <div class="pi-section pi-section-tight pi-build-recipe">
+                <div class="pi-build-bom-row">
+                    <label for="createBomBundleSelect">BOM Bundle <span class="req">*</span></label>
+                    <select id="createBomBundleSelect" name="bomBundleId">
+                        <option value="">— Manual raw materials —</option>
+                        <% const bundleList = typeof bomBundles !== 'undefined' && Array.isArray(bomBundles) ? bomBundles : []; %>
+                        <% bundleList.forEach(function(b) { %>
+                            <option value="<%= b.BomBundleID %>"><%= b.BundleCode %> — <%= b.Name %></option>
+                        <% }); %>
+                    </select>
+                </div>
+
+                <div class="pi-raw-materials-block">
+                    <div class="pi-raw-materials-head">
+                        <h4>Raw Materials <span class="req">*</span></h4>
+                        <span class="pi-raw-materials-sub">Qty per unit when stocked</span>
+                    </div>
+                    <div id="createInventoryRecipeStatus" class="pi-recipe-status"><em>Select a bundle or add raw materials</em></div>
+                    <div class="materials-section">
+                        <div id="createInventoryMaterialsContainer"></div>
+                        <button type="button" id="addCreateInventoryMaterialBtn" class="add-material-btn">+ Add Raw Material</button>
+                        <div id="createInventoryMaterialsSummary" class="pi-materials-summary">
+                            <strong>Selected:</strong>
+                            <div id="createInventoryMaterialsSummaryList"><em>None yet</em></div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="requiredMaterials" name="requiredMaterials" value="">
+                </div>
+            </div>
+
+            <div class="form-group pi-section pi-section-tight">
+                <h4>Product Variation <span class="req">*</span></h4>
+                <p id="buildVariationsHint" class="pi-section-note">Set opening stock (qty) per variation.</p>
+                <p id="createVariationTotalSummary" class="pi-var-total">Total quantity: 0</p>
+                <div id="createProductVariationsList"></div>
+                <button type="button" id="addCreateProductVariationBtn" class="pi-btn pi-btn-info pi-btn-sm pi-add-var-btn">+ Add Variation</button>
+            </div>
+            <input type="hidden" id="variationsJson" name="variationsJson" value="">
+
+            <div class="pi-form-actions">
+                <button type="button" id="cancelAddProduct" class="pi-btn pi-btn-secondary">Cancel</button>
+                <button type="submit" class="pi-btn pi-btn-primary" id="submitAddProductBtn"><%= buildFromId ? 'Save Build' : 'Create Product' %></button>
+            </div>
+        </form>
+    </div>
+</div>

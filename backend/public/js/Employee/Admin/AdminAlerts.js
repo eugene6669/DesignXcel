@@ -62,16 +62,30 @@ function displayProductAlerts(products) {
     
     products.forEach(product => {
         const row = document.createElement('tr');
+        row.className = 'alert-row-link';
         const avail = product.AvailableQuantity != null ? Number(product.AvailableQuantity) : Number(product.StockQuantity) || 0;
         const total = product.TotalQuantity != null ? Number(product.TotalQuantity) : avail;
         const status = getStockStatus(avail);
         const stockLabel = total !== avail ? `${avail} avail. / ${total} total` : String(avail);
+        const invId = product.InventoryProductID;
+        const variationId = product.VariationID;
         
         row.innerHTML = `
-            <td>${product.Name}${product.SKU ? `<br><small>SKU: ${product.SKU}</small>` : ''}</td>
+            <td>${escapeHtml(product.Name)}${product.SKU ? `<br><small>SKU: ${escapeHtml(product.SKU)}</small>` : ''}</td>
             <td>${stockLabel}</td>
             <td><span class="${status.class}">${status.label}</span></td>
         `;
+
+        if (invId) {
+            row.title = 'Open in Product Inventory';
+            row.addEventListener('click', function () {
+                const parts = ['tab=ProductInventory', 'inventoryProductId=' + encodeURIComponent(invId)];
+                if (variationId != null) {
+                    parts.push('variationId=' + encodeURIComponent(variationId));
+                }
+                window.location.href = '/Employee/Admin/Inventory?' + parts.join('&');
+            });
+        }
         
         tableBody.appendChild(row);
     });
@@ -107,14 +121,23 @@ function displayRawMaterialAlerts(rawMaterials) {
     
     rawMaterials.forEach(material => {
         const row = document.createElement('tr');
+        row.className = 'alert-row-link';
         const status = getStockStatus(material.QuantityAvailable);
+        const materialId = material.MaterialID;
         
         row.innerHTML = `
-            <td>${material.Name}</td>
+            <td>${escapeHtml(material.Name)}</td>
             <td>${material.QuantityAvailable}</td>
-            <td>${material.Unit}</td>
+            <td>${escapeHtml(material.Unit || '')}</td>
             <td><span class="${status.class}">${status.label}</span></td>
         `;
+
+        if (materialId != null) {
+            row.title = 'Open in Raw Materials';
+            row.addEventListener('click', function () {
+                window.location.href = '/Employee/Admin/Inventory?tab=raw-materials&materialId=' + encodeURIComponent(materialId);
+            });
+        }
         
         tableBody.appendChild(row);
     });
@@ -134,6 +157,15 @@ function setupInventoryAlertUpdates() {
         loadRawMaterialAlerts();
         checkCriticalAlerts();
     }, 30000);
+}
+
+function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 function getStockStatus(quantity) {
@@ -413,13 +445,6 @@ function createCriticalAlertModal() {
     
     modal.querySelector('#dismissAlertBtn').addEventListener('click', () => {
         modal.style.display = 'none';
-    });
-    
-    // Close on background click
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            modal.style.display = 'none';
-        }
     });
     
     // Add CSS animations

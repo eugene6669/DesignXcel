@@ -49,6 +49,23 @@ async function productHasActiveProductVariations(pool, productId, transaction = 
     return (result.recordset[0]?.PvCnt || 0) > 0;
 }
 
+async function getStorefrontDisplayQuantityForCatalogProduct(pool, productId, transaction = null) {
+    if (!productId) return null;
+    const request = transaction ? transaction.request() : pool.request();
+    const result = await request
+        .input('productId', sql.Int, productId)
+        .query(`
+            SELECT TOP 1 ip.StorefrontDisplayQuantity
+            FROM InventoryProducts ip
+            WHERE ip.ProductID = @productId AND ip.IsActive = 1
+            ORDER BY ip.InventoryProductID DESC
+        `);
+    const raw = result.recordset[0]?.StorefrontDisplayQuantity;
+    if (raw == null || raw === '') return null;
+    const n = parseInt(raw, 10);
+    return Number.isNaN(n) ? null : Math.max(0, n);
+}
+
 async function getInventoryVariationStockSum(pool, productId, transaction = null) {
     if (!productId) return 0;
     const request = transaction ? transaction.request() : pool.request();
@@ -67,6 +84,9 @@ async function getInventoryVariationStockSum(pool, productId, transaction = null
 
 async function getProductVariationStockSum(pool, productId, transaction = null) {
     if (!productId) return 0;
+    const displayOverride = await getStorefrontDisplayQuantityForCatalogProduct(pool, productId, transaction);
+    if (displayOverride != null) return displayOverride;
+
     const inventorySum = await getInventoryVariationStockSum(pool, productId, transaction);
     if (inventorySum > 0) return inventorySum;
 
@@ -96,7 +116,12 @@ async function getProductVariationQuantity(pool, productId, variationId, transac
             WHERE ip.ProductID = @productId AND ipv.VariationID = @variationId AND ipv.IsActive = 1
         `);
     if (invResult.recordset.length) {
-        return invResult.recordset[0].Quantity || 0;
+        const invQty = invResult.recordset[0].Quantity || 0;
+        const displayOverride = await getStorefrontDisplayQuantityForCatalogProduct(pool, productId, transaction);
+        if (displayOverride == null) return invQty;
+        const sumActual = await getInventoryVariationStockSum(pool, productId, transaction);
+        if (sumActual <= 0) return Math.min(invQty, displayOverride);
+        return Math.min(invQty, Math.max(0, Math.round(displayOverride * (invQty / sumActual))));
     }
 
     const pvRequest = transaction ? transaction.request() : pool.request();

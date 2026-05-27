@@ -31,6 +31,7 @@ const {
 const {
     ensureVariationMediaColumns,
     mapVariationMediaFiles,
+    buildVariationDimensionsJson,
     parseSingleVariationMediaFiles,
     resolveVariationMediaUrls,
     assignVariationSku,
@@ -44,6 +45,9 @@ const {
     getOrdersSchemaFlags,
     attachOrderItemsBatch,
     loadProductInventoryPageData,
+    loadStorefrontPageData,
+    ensureListingStageColumn,
+    ensureStorefrontDisplayQuantityColumn,
     loadProductReturnsPageData,
     buildInventoryStockRefreshPayload,
     fetchInventoryProductSummary,
@@ -60,9 +64,18 @@ const {
     logInventoryStockMovementFromVariationUpdate,
     logRestockVariationMovement,
     logRestockProductMovement,
+    logRestockRawMaterialMovement,
     logReturnOrderReceivedMovements,
     fetchInventoryStockMovements,
-    fetchInventoryStockMovementsGrouped
+    fetchInventoryStockMovementsGrouped,
+    fetchRawMaterialStockMovementsGrouped,
+    fetchArchivedStockMovements,
+    archiveStockMovement,
+    archiveStockMovementsForProduct,
+    archiveStockMovementsForRawMaterial,
+    archiveAllProductInventoryMovements,
+    archiveAllRawMaterialMovements,
+    reactivateStockMovement
 } = require('./utils/inventoryStockMovement');
 const { serializeActivityLogChanges, fetchActivityLogs } = require('./utils/activityLogHelpers');
 const { invalidateAdminPageCache } = require('./utils/adminPageCache');
@@ -21647,6 +21660,15 @@ module.exports = function (sql, pool, getStripe = null) {
                     WHERE MaterialID = @materialId
                 `);
 
+            await ensureInventoryStockMovementSchema(pool);
+            await logRestockRawMaterialMovement(pool, {
+                rawMaterialId: materialId,
+                quantity: quantityToAdd,
+                materialName: row.Name,
+                unit: row.Unit,
+                userId: req.session.user && req.session.user.id
+            });
+
             invalidateAdminPageCache('admin:');
             res.json({
                 success: true,
@@ -23254,7 +23276,9 @@ module.exports = function (sql, pool, getStripe = null) {
 
             await ensureBomBundleSchema(pool);
 
-            const [productsResult, materialsResult, inventoryProductsResult, variationsResult, bomBundlesResult] = await Promise.all([
+            await ensureInventoryStockMovementSchema(pool);
+
+            const [productsResult, materialsResult, inventoryProductsResult, variationsResult, bomBundlesResult, archivedStockMovements] = await Promise.all([
                 pool.request().query(`
                     SELECT ProductID, Name, Description, Price, StockQuantity, Category, DateAdded, IsActive
                     FROM Products WHERE IsActive = 0 ORDER BY DateAdded DESC
@@ -23304,7 +23328,8 @@ module.exports = function (sql, pool, getStripe = null) {
                     WHERE v.IsActive = 0
                     ORDER BY v.UpdatedAt DESC, v.CreatedAt DESC
                 `),
-                loadArchivedBomBundles(pool)
+                loadArchivedBomBundles(pool),
+                fetchArchivedStockMovements(pool, 300)
             ]);
 
             res.render('Employee/Admin/AdminArchived', {
@@ -23314,7 +23339,8 @@ module.exports = function (sql, pool, getStripe = null) {
                 archivedCategories: [],
                 archivedInventoryProducts: inventoryProductsResult.recordset,
                 archivedVariations: variationsResult.recordset,
-                archivedBomBundles: bomBundlesResult || []
+                archivedBomBundles: bomBundlesResult || [],
+                archivedStockMovements: archivedStockMovements || []
             });
         } catch (err) {
             console.error('Error fetching archived items:', err);
@@ -23329,6 +23355,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 archivedInventoryProducts: [],
                 archivedVariations: [],
                 archivedBomBundles: [],
+                archivedStockMovements: [],
                 error: err.message
             });
         }
@@ -24054,6 +24081,7 @@ module.exports = function (sql, pool, getStripe = null) {
             const normalizeAdminInventoryTabParam = (tab) => {
                 if (!tab || tab === 'products') return 'ProductInventory';
                 if (tab === 'ProductInventory') return 'ProductInventory';
+                if (tab === 'bom-bundles') return 'rawmaterials-bundles';
                 return tab;
             };
 
@@ -24383,13 +24411,94 @@ module.exports = function (sql, pool, getStripe = null) {
                         variationId: req.query.variationId
                     };
                     const grouped = req.query.grouped === '1' || req.query.grouped === 'true';
-                    const data = grouped
-                        ? await fetchInventoryStockMovementsGrouped(pool, opts)
-                        : await fetchInventoryStockMovements(pool, opts);
-                    res.json({ success: true, grouped, ...data });
+                    if (grouped) {
+                        const [productData, rawMaterialData] = await Promise.all([
+                            fetchInventoryStockMovementsGrouped(pool, opts),
+                            fetchRawMaterialStockMovementsGrouped(pool, { page: 1, limit: 100 })
+                        ]);
+                        return res.json({
+                            success: true,
+                            grouped: true,
+                            products: productData.products,
+                            pagination: productData.pagination,
+                            rawMaterials: rawMaterialData.materials,
+                            rawMaterialPagination: rawMaterialData.pagination
+                        });
+                    }
+                    const data = await fetchInventoryStockMovements(pool, opts);
+                    res.json({ success: true, grouped: false, ...data });
                 } catch (err) {
                     console.error('inventory-stock-movements:', err);
                     res.status(500).json({ success: false, message: err.message || 'Failed to load stock movements.' });
+                }
+            });
+
+            router.post('/api/admin/inventory-stock-movements/:id/archive', isAuthenticated, async (req, res) => {
+                try {
+                    await pool.connect();
+                    const movementId = parseInt(req.params.id, 10);
+                    const result = await archiveStockMovement(pool, movementId);
+                    if (!result.ok) {
+                        return res.status(400).json({ success: false, message: result.message });
+                    }
+                    res.json({ success: true, message: 'Stock movement archived.' });
+                } catch (err) {
+                    console.error('archive stock movement:', err);
+                    res.status(500).json({ success: false, message: err.message || 'Failed to archive movement.' });
+                }
+            });
+
+            router.post('/api/admin/inventory-stock-movements/archive-bulk', isAuthenticated, async (req, res) => {
+                try {
+                    await pool.connect();
+                    const scope = String(req.body.scope || '').trim();
+                    let result;
+                    if (scope === 'product') {
+                        result = await archiveStockMovementsForProduct(pool, req.body.inventoryProductId);
+                    } else if (scope === 'rawMaterial') {
+                        result = await archiveStockMovementsForRawMaterial(pool, req.body.rawMaterialId);
+                    } else if (scope === 'allProducts') {
+                        result = await archiveAllProductInventoryMovements(pool);
+                        result.message = result.count
+                            ? ('Archived ' + result.count + ' product movement(s).')
+                            : 'No product movements to archive.';
+                    } else if (scope === 'allRawMaterials') {
+                        result = await archiveAllRawMaterialMovements(pool);
+                        result.message = result.count
+                            ? ('Archived ' + result.count + ' raw material movement(s).')
+                            : 'No raw material movements to archive.';
+                    } else {
+                        return res.status(400).json({ success: false, message: 'Invalid archive scope.' });
+                    }
+                    res.json({
+                        success: true,
+                        message: result.message || 'Movements archived.',
+                        count: result.count || 0
+                    });
+                } catch (err) {
+                    console.error('archive bulk stock movement:', err);
+                    res.status(500).json({ success: false, message: err.message || 'Failed to archive movements.' });
+                }
+            });
+
+            router.delete('/api/admin/inventory-stock-movements/:id/permanent', isAuthenticated, async (req, res) => {
+                try {
+                    await pool.connect();
+                    await ensureInventoryStockMovementSchema(pool);
+                    const movementId = parseInt(req.params.id, 10);
+                    if (!movementId) {
+                        return res.status(400).json({ success: false, message: 'Invalid movement ID.' });
+                    }
+                    const result = await pool.request()
+                        .input('movementId', sql.Int, movementId)
+                        .query(`DELETE FROM InventoryStockMovements WHERE MovementID = @movementId`);
+                    if (!result.rowsAffected[0]) {
+                        return res.status(404).json({ success: false, message: 'Movement not found.' });
+                    }
+                    res.json({ success: true, message: 'Stock movement permanently deleted.' });
+                } catch (err) {
+                    console.error('permanent delete stock movement:', err);
+                    res.status(500).json({ success: false, message: err.message || 'Failed to delete movement.' });
                 }
             });
 
@@ -24438,12 +24547,16 @@ module.exports = function (sql, pool, getStripe = null) {
 
                     const tab = req.query.tab;
                     const activeTab = tab === 'raw-materials' ? 'raw-materials'
-                        : tab === 'bom-bundles' ? 'bom-bundles'
+                        : (tab === 'rawmaterials-bundles' || tab === 'bom-bundles') ? 'rawmaterials-bundles'
                         : tab === 'stock-movement' ? 'stock-movement'
                         : 'ProductInventory';
 
+                    await ensureListingStageColumn(pool);
+                    await ensureStorefrontDisplayQuantityColumn(pool);
                     res.render('Employee/Admin/AdminProductInventory', {
                         user: req.session.user,
+                        error: req.flash('error'),
+                        success: req.flash('success'),
                         inventoryItems: pageData.inventoryItems,
                         products: pageData.products,
                         categories: pageData.categories,
@@ -24454,6 +24567,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         pagination: pageData.pagination,
                         listFilters: pageData.listFilters,
                         inventoryProductIdFocus: pageData.inventoryProductIdFocus,
+                        buildFromQuery: req.query.buildFrom || '',
+                        formatInventoryDate: formatInventoryDate,
                         activeTab
                     });
                 } catch (err) {
@@ -24476,8 +24591,345 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             });
 
-            // Admin - Create New Product (from Inventory page) - Uses InventoryProducts table
-            router.post(['/Employee/Admin/Inventory/Add', '/Employee/Admin/ProductInventory/Add', '/Employee/Admin/ProductsListing/Add'], isAuthenticated, productUpload.fields([
+            // Step 1 — Plan product (catalog: images, prices, dimensions, variations — no stock yet)
+            router.post('/Employee/Admin/ProductsListing/Add', isAuthenticated, productUpload.fields([
+                { name: 'productMainImage', maxCount: 1 },
+                { name: 'variationMainImage', maxCount: 50 }
+            ]), async (req, res) => {
+                const wantsJson = req.get('X-Requested-With') === 'XMLHttpRequest';
+                const respondPlanError = (message, status = 400) => {
+                    if (wantsJson) return res.status(status).json({ success: false, message });
+                    req.flash('error', message);
+                    return res.redirect('/Employee/Admin/ProductsListing');
+                };
+                const respondPlanSuccess = (inventoryProductId) => {
+                    invalidateAdminPageCache('admin:');
+                    if (wantsJson) {
+                        return res.json({
+                            success: true,
+                            message: 'Product plan saved. Continue in Inventory to add materials and stock.',
+                            inventoryProductId
+                        });
+                    }
+                    req.flash('success', 'Product plan saved. Use Build in Inventory when you are ready to add materials and stock.');
+                    return res.redirect('/Employee/Admin/ProductsListing');
+                };
+                try {
+                    await pool.connect();
+                    await ensureListingStageColumn(pool);
+                    await ensureVariationMediaColumns(pool);
+                    const { name, description, price, costPrice, category, variationsJson, length, width, height } = req.body;
+                    const parentDimensionsJson = buildVariationDimensionsJson({ length, width, height });
+                    if (!name || !category) {
+                        return respondPlanError('Product name and category are required.');
+                    }
+                    let variationsList = [];
+                    if (variationsJson) {
+                        try {
+                            variationsList = typeof variationsJson === 'string' ? JSON.parse(variationsJson) : variationsJson;
+                        } catch (e) {
+                            return respondPlanError('Invalid variations data.');
+                        }
+                    }
+                    if (!Array.isArray(variationsList) || variationsList.length === 0) {
+                        return respondPlanError('Add at least one variation with name and main image.');
+                    }
+                    const parentPrice = parseFloat(price);
+                    if (Number.isNaN(parentPrice) || parentPrice <= 0) {
+                        return respondPlanError('Sale price is required and must be greater than zero.');
+                    }
+                    const parentCost = costPrice != null && String(costPrice).trim() !== '' ? parseFloat(costPrice) : NaN;
+                    if (Number.isNaN(parentCost) || parentCost < 0) {
+                        return respondPlanError('Item cost price is required and must be zero or greater.');
+                    }
+                    if (parentCost > parentPrice) {
+                        return respondPlanError('Item cost price cannot be higher than the sale price.');
+                    }
+                    const validVariations = variationsList.filter((v) => {
+                        const vName = (v.variationName || '').trim();
+                        return vName && (v.hasMainImage === true || v.hasMainImage === 'true' || v.hasMainImage === 1);
+                    });
+                    if (validVariations.length === 0) {
+                        return respondPlanError('Each variation needs a name and main image.');
+                    }
+                    const mediaByVariation = mapVariationMediaFiles(req.files, validVariations);
+                    const transaction = new sql.Transaction(pool);
+                    await transaction.begin();
+                    try {
+                        const tempSlug = `plan-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+                        const insert = await transaction.request()
+                            .input('name', sql.NVarChar, name)
+                            .input('description', sql.NVarChar, description || '')
+                            .input('price', sql.Decimal(10, 2), parentPrice)
+                            .input('costPrice', sql.Decimal(10, 2), parentCost)
+                            .input('category', sql.NVarChar, category)
+                            .input('dimensions', sql.NVarChar, parentDimensionsJson)
+                            .input('tempSlug', sql.NVarChar, tempSlug)
+                            .input('createdBy', sql.Int, req.session.user.id)
+                            .query(`
+                                INSERT INTO InventoryProducts (
+                                    Name, Description, Price, CostPrice, Category, Dimensions,
+                                    DateAdded, IsActive, ListingStage, Slug, PublicId, CreatedBy, InventoryNotes
+                                )
+                                VALUES (
+                                    @name, @description, @price, @costPrice, @category, @dimensions,
+                                    GETDATE(), 1, 'planned', @tempSlug, NEWID(), @createdBy, @description
+                                );
+                                SELECT SCOPE_IDENTITY() AS InventoryProductID;
+                            `);
+                        const inventoryProductId = insert.recordset[0].InventoryProductID;
+                        const { slug } = generateProductIdentifiers(inventoryProductId, name);
+                        await transaction.request()
+                            .input('id', sql.Int, inventoryProductId)
+                            .input('slug', sql.NVarChar, slug)
+                            .query('UPDATE InventoryProducts SET Slug = @slug WHERE InventoryProductID = @id');
+
+                        let parentImageUrl = null;
+                        if (req.files && req.files.productMainImage && req.files.productMainImage[0]) {
+                            parentImageUrl = publicUrlFromMulterProductFile(req.files.productMainImage[0]);
+                        }
+                        if (parentImageUrl) {
+                            await transaction.request()
+                                .input('inventoryProductId', sql.Int, inventoryProductId)
+                                .input('imageUrl', sql.NVarChar, parentImageUrl)
+                                .query(`
+                                    UPDATE InventoryProducts SET ImageURL = @imageUrl, DateUpdated = GETDATE()
+                                    WHERE InventoryProductID = @inventoryProductId
+                                `);
+                        }
+
+                        for (let vi = 0; vi < validVariations.length; vi++) {
+                            const v = validVariations[vi];
+                            const variationName = (v.variationName || '').trim();
+                            const media = mediaByVariation[vi] || { mainFile: null, modelFile: null, thumbFiles: [] };
+                            const mediaUrls = resolveVariationMediaUrls(media, publicUrlFromMulterVariationFile);
+                            const insertVar = await transaction.request()
+                                .input('inventoryProductID', sql.Int, inventoryProductId)
+                                .input('variationName', sql.NVarChar, variationName)
+                                .input('color', sql.NVarChar, (v.color || '').trim() || null)
+                                .input('price', sql.Decimal(10, 2), parentPrice)
+                                .input('costPrice', sql.Decimal(10, 2), parentCost)
+                                .input('variationImageUrl', sql.NVarChar, mediaUrls.imageUrl)
+                                .input('dimensions', sql.NVarChar, '{}')
+                                .input('createdBy', sql.Int, req.session.user.id)
+                                .query(`
+                                    INSERT INTO InventoryProductVariations (
+                                        ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity,
+                                        Price, CostPrice, VariationImageURL, Dimensions, IsActive, CreatedBy
+                                    )
+                                    OUTPUT INSERTED.VariationID
+                                    VALUES (
+                                        NULL, @inventoryProductID, @variationName, @color, 0, 0,
+                                        @price, @costPrice, @variationImageUrl, @dimensions, 1, @createdBy
+                                    )
+                                `);
+                            const variationId = insertVar.recordset[0].VariationID;
+                            await assignVariationSku(transaction, variationId, variationName);
+                        }
+
+                        await transaction.commit();
+                        return respondPlanSuccess(inventoryProductId);
+                    } catch (txErr) {
+                        await transaction.rollback();
+                        throw txErr;
+                    }
+                } catch (err) {
+                    console.error('Plan product error:', err);
+                    return respondPlanError('Failed to save product plan: ' + (err.message || 'unknown error'), 500);
+                }
+            });
+
+            // Step 1b — Edit planned product
+            router.post('/Employee/Admin/ProductsListing/Update/:id', isAuthenticated, productUpload.fields([
+                { name: 'productMainImage', maxCount: 1 },
+                { name: 'variationMainImage', maxCount: 50 }
+            ]), async (req, res) => {
+                const wantsJson = req.get('X-Requested-With') === 'XMLHttpRequest';
+                const respondError = (message, status = 400) => {
+                    if (wantsJson) return res.status(status).json({ success: false, message });
+                    req.flash('error', message);
+                    return res.redirect('/Employee/Admin/ProductsListing');
+                };
+                const respondSuccess = (inventoryProductId) => {
+                    invalidateAdminPageCache('admin:');
+                    if (wantsJson) {
+                        return res.json({
+                            success: true,
+                            message: 'Planned product updated.',
+                            inventoryProductId
+                        });
+                    }
+                    req.flash('success', 'Planned product updated.');
+                    return res.redirect('/Employee/Admin/ProductsListing');
+                };
+
+                try {
+                    await pool.connect();
+                    await ensureListingStageColumn(pool);
+                    await ensureVariationMediaColumns(pool);
+                    const inventoryProductId = parseInt(req.params.id, 10);
+                    if (!inventoryProductId || Number.isNaN(inventoryProductId)) {
+                        return respondError('Invalid planned product id.');
+                    }
+
+                    const { name, description, price, costPrice, category, variationsJson, length, width, height } = req.body;
+                    const parentDimensionsJson = buildVariationDimensionsJson({ length, width, height });
+                    if (!name || !category) {
+                        return respondError('Product name and category are required.');
+                    }
+                    let variationsList = [];
+                    if (variationsJson) {
+                        try {
+                            variationsList = typeof variationsJson === 'string' ? JSON.parse(variationsJson) : variationsJson;
+                        } catch (e) {
+                            return respondError('Invalid variations data.');
+                        }
+                    }
+                    if (!Array.isArray(variationsList) || variationsList.length === 0) {
+                        return respondError('Add at least one variation.');
+                    }
+                    const parentPrice = parseFloat(price);
+                    if (Number.isNaN(parentPrice) || parentPrice <= 0) {
+                        return respondError('Sale price is required and must be greater than zero.');
+                    }
+                    const parentCost = costPrice != null && String(costPrice).trim() !== '' ? parseFloat(costPrice) : NaN;
+                    if (Number.isNaN(parentCost) || parentCost < 0) {
+                        return respondError('Item cost price is required and must be zero or greater.');
+                    }
+                    if (parentCost > parentPrice) {
+                        return respondError('Item cost price cannot be higher than the sale price.');
+                    }
+
+                    const transaction = new sql.Transaction(pool);
+                    await transaction.begin();
+                    try {
+                        const plannedCheck = await transaction.request()
+                            .input('id', sql.Int, inventoryProductId)
+                            .query(`SELECT InventoryProductID, ListingStage FROM InventoryProducts WHERE InventoryProductID = @id AND IsActive = 1`);
+                        if (!plannedCheck.recordset.length) {
+                            throw new Error('Planned product not found.');
+                        }
+                        const stage = String(plannedCheck.recordset[0].ListingStage || '').toLowerCase();
+                        if (stage !== 'planned') {
+                            throw new Error('Only planned products can be edited on Products Listing.');
+                        }
+
+                        await transaction.request()
+                            .input('id', sql.Int, inventoryProductId)
+                            .input('name', sql.NVarChar, name)
+                            .input('description', sql.NVarChar, description || '')
+                            .input('price', sql.Decimal(10, 2), parentPrice)
+                            .input('costPrice', sql.Decimal(10, 2), parentCost)
+                            .input('category', sql.NVarChar, category)
+                            .input('dimensions', sql.NVarChar, parentDimensionsJson)
+                            .query(`
+                                UPDATE InventoryProducts
+                                SET Name = @name,
+                                    Description = @description,
+                                    Price = @price,
+                                    CostPrice = @costPrice,
+                                    Category = @category,
+                                    Dimensions = @dimensions,
+                                    InventoryNotes = @description,
+                                    DateUpdated = GETDATE()
+                                WHERE InventoryProductID = @id AND IsActive = 1
+                            `);
+
+                        if (req.files && req.files.productMainImage && req.files.productMainImage[0]) {
+                            const parentImageUrl = publicUrlFromMulterProductFile(req.files.productMainImage[0]);
+                            await transaction.request()
+                                .input('id', sql.Int, inventoryProductId)
+                                .input('imageUrl', sql.NVarChar, parentImageUrl)
+                                .query(`UPDATE InventoryProducts SET ImageURL = @imageUrl, DateUpdated = GETDATE() WHERE InventoryProductID = @id`);
+                        }
+
+                        const validVariations = variationsList.filter((v) => {
+                            const vName = (v.variationName || '').trim();
+                            return !!vName;
+                        });
+                        if (!validVariations.length) {
+                            throw new Error('Add at least one variation.');
+                        }
+
+                        const mediaByVariation = mapVariationMediaFiles(req.files, validVariations);
+
+                        const existingResult = await transaction.request()
+                            .input('id', sql.Int, inventoryProductId)
+                            .query(`
+                                SELECT VariationID, VariationImageURL, ThumbnailURLs
+                                FROM InventoryProductVariations
+                                WHERE InventoryProductID = @id AND IsActive = 1
+                            `);
+                        const existingById = new Map((existingResult.recordset || []).map((r) => [r.VariationID, r]));
+
+                        for (let vi = 0; vi < validVariations.length; vi++) {
+                            const v = validVariations[vi];
+                            const variationName = (v.variationName || '').trim();
+                            const variationId = parseInt(v.variationId, 10) || 0;
+                            const media = mediaByVariation[vi] || { mainFile: null, modelFile: null, thumbFiles: [] };
+                            const mediaUrls = resolveVariationMediaUrls(media, publicUrlFromMulterVariationFile);
+                            let variationImageUrl = mediaUrls.imageUrl;
+
+                            if (variationId && existingById.has(variationId)) {
+                                await transaction.request()
+                                    .input('variationId', sql.Int, variationId)
+                                    .input('variationName', sql.NVarChar, variationName)
+                                    .input('price', sql.Decimal(10, 2), parentPrice)
+                                    .input('costPrice', sql.Decimal(10, 2), parentCost)
+                                    .input('variationImageUrl', sql.NVarChar, variationImageUrl)
+                                    .query(`
+                                        UPDATE InventoryProductVariations
+                                        SET VariationName = @variationName,
+                                            Price = @price,
+                                            CostPrice = @costPrice,
+                                            VariationImageURL = COALESCE(NULLIF(@variationImageUrl, ''), VariationImageURL),
+                                            UpdatedAt = GETDATE()
+                                        WHERE VariationID = @variationId
+                                    `);
+                                await assignVariationSku(transaction, variationId, variationName);
+                                continue;
+                            }
+
+                            if (!variationImageUrl) {
+                                throw new Error('Each variation needs a main image.');
+                            }
+                            const insertVar = await transaction.request()
+                                .input('inventoryProductID', sql.Int, inventoryProductId)
+                                .input('variationName', sql.NVarChar, variationName)
+                                .input('price', sql.Decimal(10, 2), parentPrice)
+                                .input('costPrice', sql.Decimal(10, 2), parentCost)
+                                .input('variationImageUrl', sql.NVarChar, variationImageUrl)
+                                .input('dimensions', sql.NVarChar, '{}')
+                                .input('createdBy', sql.Int, req.session.user.id)
+                                .query(`
+                                    INSERT INTO InventoryProductVariations (
+                                        ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity,
+                                        Price, CostPrice, VariationImageURL, Dimensions, IsActive, CreatedBy
+                                    )
+                                    OUTPUT INSERTED.VariationID
+                                    VALUES (
+                                        NULL, @inventoryProductID, @variationName, NULL, 0, 0,
+                                        @price, @costPrice, @variationImageUrl, @dimensions, 1, @createdBy
+                                    )
+                                `);
+                            const newVariationId = insertVar.recordset[0].VariationID;
+                            await assignVariationSku(transaction, newVariationId, variationName);
+                        }
+
+                        await transaction.commit();
+                        return respondSuccess(inventoryProductId);
+                    } catch (txErr) {
+                        await transaction.rollback();
+                        throw txErr;
+                    }
+                } catch (err) {
+                    console.error('Edit planned product error:', err);
+                    return respondError('Failed to update planned product: ' + (err.message || 'unknown error'), 500);
+                }
+            });
+
+            // Step 2 — Build product in Inventory (materials, BOM, dimensions, variations)
+            router.post(['/Employee/Admin/Inventory/Add', '/Employee/Admin/ProductInventory/Add'], isAuthenticated, productUpload.fields([
                 { name: 'productMainImage', maxCount: 1 },
                 { name: 'productThumbnail', maxCount: 4 },
                 { name: 'variationMainImage', maxCount: 50 },
@@ -24491,7 +24943,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         return res.status(status).json({ success: false, message });
                     }
                     req.flash('error', message);
-                    return res.redirect('/Employee/Admin/ProductsListing');
+                    return res.redirect('/Employee/Admin/Inventory?tab=ProductInventory');
                 };
                 const respondSuccess = (inventoryProductId) => {
                     invalidateAdminPageCache('admin:');
@@ -24502,15 +24954,16 @@ module.exports = function (sql, pool, getStripe = null) {
                             inventoryProductId
                         });
                     }
-                    req.flash('success', 'Product created successfully in inventory!');
-                    return res.redirect(`/Employee/Admin/ProductsListing?inventoryProductId=${inventoryProductId}`);
+                    req.flash('success', 'Product built successfully. Manage storefront visibility on the Storefront page.');
+                    return res.redirect(`/Employee/Admin/Inventory?tab=ProductInventory&inventoryProductId=${inventoryProductId}`);
                 };
 
                 try {
                     await pool.connect();
                     await ensureVariationMediaColumns(pool);
                     await ensureBomBundleSchema(pool);
-                    const { name, description, price, costPrice, category, length, width, height, weight, dimensions, requiredMaterials, quantity, variationsJson, bomBundleId } = req.body;
+                    const { name, description, price, costPrice, category, length, width, height, weight, dimensions, requiredMaterials, quantity, variationsJson, bomBundleId, buildFromInventoryProductId } = req.body;
+                    const buildFromId = parseInt(buildFromInventoryProductId, 10) || 0;
 
                     console.log('ProductInventory/Add - Received data:', {
                         name, description, price, category, quantity,
@@ -24552,10 +25005,12 @@ module.exports = function (sql, pool, getStripe = null) {
                     const validVariations = variationsList.filter((v) => {
                         const vName = (v.variationName || '').trim();
                         const vQty = parseInt(v.quantity, 10);
-                        return vName && vQty > 0;
+                        const planVarId = parseInt(v.variationId, 10) || 0;
+                        const hasImage = v.hasMainImage === true || v.hasMainImage === 'true' || v.hasMainImage === 1 || planVarId > 0;
+                        return vName && vQty > 0 && hasImage;
                     });
                     if (validVariations.length === 0) {
-                        return respondError('Each variation needs a name and initial quantity of at least 1.');
+                        return respondError('Each variation needs a name and opening quantity of at least 1.');
                     }
 
                     let materialsData = [];
@@ -24597,64 +25052,70 @@ module.exports = function (sql, pool, getStripe = null) {
                     console.log('ProductInventory/Add - Transaction started');
 
                     try {
-                        // Build dimensions JSON from separate fields (matching Products page format)
-                        let dimensionsJson = '{}';
-                        if (length || width || height || weight) {
-                            try {
-                                const dimensionsData = {
-                                    length: length ? parseFloat(length) : null,
-                                    width: width ? parseFloat(width) : null,
-                                    height: height ? parseFloat(height) : null,
-                                    weight: weight ? parseFloat(weight) : null,
-                                    unit: 'cm' // Always cm for dimensions
-                                };
-                                dimensionsJson = JSON.stringify(dimensionsData);
-                            } catch (e) {
-                                console.log('Error parsing dimensions:', e);
+                        const dimensionsJson = buildVariationDimensionsJson({ length, width, height, dimensions });
+                        const variationDimensionsJson = '{}';
+
+                        let inventoryProductId;
+                        if (buildFromId) {
+                            const plannedCheck = await transaction.request()
+                                .input('id', sql.Int, buildFromId)
+                                .query(`
+                                    SELECT InventoryProductID, ListingStage
+                                    FROM InventoryProducts
+                                    WHERE InventoryProductID = @id AND IsActive = 1
+                                `);
+                            if (!plannedCheck.recordset.length) {
+                                throw new Error('Planned product not found.');
                             }
-                        } else if (dimensions) {
-                            // Fallback to existing dimensions JSON if provided
-                            try {
-                                const dimensionsData = typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions;
-                                dimensionsJson = JSON.stringify(dimensionsData);
-                            } catch (e) {
-                                console.log('Error parsing dimensions:', e);
+                            const stage = String(plannedCheck.recordset[0].ListingStage || '').toLowerCase();
+                            if (stage !== 'planned') {
+                                throw new Error('This product is already built. Open it in Inventory to edit stock.');
                             }
+                            inventoryProductId = buildFromId;
+                            await transaction.request()
+                                .input('inventoryProductId', sql.Int, inventoryProductId)
+                                .input('name', sql.NVarChar, name)
+                                .input('description', sql.NVarChar, description || '')
+                                .input('price', sql.Decimal(10, 2), catalogPrice)
+                                .input('costPrice', sql.Decimal(10, 2), catalogCostPrice)
+                                .input('category', sql.NVarChar, category)
+                                .input('dimensions', sql.NVarChar, dimensionsJson)
+                                .query(`
+                                    UPDATE InventoryProducts
+                                    SET Name = @name, Description = @description, Price = @price, CostPrice = @costPrice,
+                                        Category = @category, Dimensions = @dimensions, ListingStage = 'built',
+                                        DateUpdated = GETDATE()
+                                    WHERE InventoryProductID = @inventoryProductId
+                                `);
+                        } else {
+                            const tempSlug = `inv-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+                            const productResult = await transaction.request()
+                                .input('name', sql.NVarChar, name)
+                                .input('description', sql.NVarChar, description || '')
+                                .input('price', sql.Decimal(10, 2), catalogPrice)
+                                .input('costPrice', sql.Decimal(10, 2), catalogCostPrice)
+                                .input('category', sql.NVarChar, category)
+                                .input('dimensions', sql.NVarChar, dimensionsJson)
+                                .input('tempSlug', sql.NVarChar, tempSlug)
+                                .input('createdBy', sql.Int, req.session.user.id)
+                                .query(`
+                                    INSERT INTO InventoryProducts (Name, Description, Price, CostPrice, Category, Dimensions, DateAdded, IsActive, SKU, PublicId, Slug, CreatedBy, ListingStage)
+                                    VALUES (@name, @description, @price, @costPrice, @category, @dimensions, GETDATE(), 1, NULL, NEWID(), @tempSlug, @createdBy, 'built')
+                                    SELECT SCOPE_IDENTITY() as InventoryProductID
+                                `);
+                            inventoryProductId = productResult.recordset[0].InventoryProductID;
+                            const { slug } = generateProductIdentifiers(inventoryProductId, name);
+                            const finalPublicId = generateGuid();
+                            await transaction.request()
+                                .input('inventoryProductId', sql.Int, inventoryProductId)
+                                .input('publicId', sql.NVarChar, finalPublicId)
+                                .input('slug', sql.NVarChar, slug)
+                                .query(`
+                                    UPDATE InventoryProducts
+                                    SET PublicId = CAST(@publicId AS UNIQUEIDENTIFIER), Slug = @slug
+                                    WHERE InventoryProductID = @inventoryProductId
+                                `);
                         }
-
-                        const tempSlug = `inv-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-
-                        // Insert parent (no SKU — variations own SKUs)
-                        const productResult = await transaction.request()
-                            .input('name', sql.NVarChar, name)
-                            .input('description', sql.NVarChar, description || '')
-                            .input('price', sql.Decimal(10, 2), catalogPrice)
-                            .input('costPrice', sql.Decimal(10, 2), catalogCostPrice)
-                            .input('category', sql.NVarChar, category)
-                            .input('dimensions', sql.NVarChar, dimensionsJson)
-                            .input('tempSlug', sql.NVarChar, tempSlug)
-                            .input('createdBy', sql.Int, req.session.user.id)
-                            .query(`
-                                INSERT INTO InventoryProducts (Name, Description, Price, CostPrice, Category, Dimensions, DateAdded, IsActive, SKU, PublicId, Slug, CreatedBy)
-                                VALUES (@name, @description, @price, @costPrice, @category, @dimensions, GETDATE(), 1, NULL, NEWID(), @tempSlug, @createdBy)
-                                SELECT SCOPE_IDENTITY() as InventoryProductID
-                            `);
-
-                        const inventoryProductId = productResult.recordset[0].InventoryProductID;
-
-                        // Parent catalog group: slug/publicId only (SKU is per variation)
-                        const { slug } = generateProductIdentifiers(inventoryProductId, name);
-                        const finalPublicId = generateGuid();
-
-                        await transaction.request()
-                            .input('inventoryProductId', sql.Int, inventoryProductId)
-                            .input('publicId', sql.NVarChar, finalPublicId)
-                            .input('slug', sql.NVarChar, slug)
-                            .query(`
-                                UPDATE InventoryProducts
-                                SET PublicId = CAST(@publicId AS UNIQUEIDENTIFIER), Slug = @slug
-                                WHERE InventoryProductID = @inventoryProductId
-                            `);
 
                         let parentImageUrl = null;
                         let parentThumbJson = null;
@@ -24704,6 +25165,21 @@ module.exports = function (sql, pool, getStripe = null) {
 
                         let variationStockTotal = 0;
                         const catalogVariationRows = [];
+                        let existingPlannedVariations = [];
+                        if (buildFromId) {
+                            const existingVarResult = await transaction.request()
+                                .input('inventoryProductId', sql.Int, inventoryProductId)
+                                .query(`
+                                    SELECT VariationID, VariationName, Color, VariationImageURL, ThumbnailURLs, Model3D, Dimensions
+                                    FROM InventoryProductVariations
+                                    WHERE InventoryProductID = @inventoryProductId AND IsActive = 1
+                                `);
+                            existingPlannedVariations = existingVarResult.recordset || [];
+                        }
+                        const existingVarById = new Map(
+                            existingPlannedVariations.map((row) => [row.VariationID, row])
+                        );
+
                         for (let vi = 0; vi < validVariations.length; vi++) {
                             const v = validVariations[vi];
                             const variationName = (v.variationName || '').trim();
@@ -24712,13 +25188,60 @@ module.exports = function (sql, pool, getStripe = null) {
 
                             const variationPrice = parentPrice;
                             const variationCostPrice = parentCost;
+                            const plannedVariationId = parseInt(v.variationId, 10) || 0;
 
                             variationStockTotal += variationQuantity;
                             const media = mediaByVariation[vi] || { mainFile: null, modelFile: null, thumbFiles: [] };
                             const mediaUrls = resolveVariationMediaUrls(media, publicUrlFromMulterVariationFile);
-                            const variationImageUrl = mediaUrls.imageUrl;
+                            let variationImageUrl = mediaUrls.imageUrl;
                             const thumbJson = mediaUrls.thumbJson;
                             const model3dUrl = mediaUrls.model3d;
+                            const existingVar = plannedVariationId ? existingVarById.get(plannedVariationId) : null;
+
+                            if (existingVar) {
+                                if (!variationImageUrl) {
+                                    variationImageUrl = existingVar.VariationImageURL;
+                                    if (!variationImageUrl && existingVar.ThumbnailURLs) {
+                                        const thumbs = normalizeThumbnailList(existingVar.ThumbnailURLs);
+                                        if (thumbs && thumbs.length) variationImageUrl = thumbs[0];
+                                    }
+                                }
+                                await transaction.request()
+                                    .input('variationId', sql.Int, plannedVariationId)
+                                    .input('variationName', sql.NVarChar, variationName)
+                                    .input('color', sql.NVarChar, (v.color || '').trim() || null)
+                                    .input('quantity', sql.Int, variationQuantity)
+                                    .input('price', sql.Decimal(10, 2), variationPrice)
+                                    .input('costPrice', sql.Decimal(10, 2), variationCostPrice)
+                                    .input('variationImageUrl', sql.NVarChar, variationImageUrl)
+                                    .input('thumbJson', sql.NVarChar, thumbJson || existingVar.ThumbnailURLs)
+                                    .input('model3d', sql.NVarChar, model3dUrl || existingVar.Model3D)
+                                    .input('dimensions', sql.NVarChar, variationDimensionsJson)
+                                    .query(`
+                                        UPDATE InventoryProductVariations
+                                        SET VariationName = @variationName, Color = @color,
+                                            Quantity = @quantity, AvailableQuantity = @quantity,
+                                            Price = @price, CostPrice = @costPrice,
+                                            VariationImageURL = COALESCE(@variationImageUrl, VariationImageURL),
+                                            ThumbnailURLs = COALESCE(@thumbJson, ThumbnailURLs),
+                                            Model3D = COALESCE(@model3d, Model3D),
+                                            Dimensions = @dimensions
+                                        WHERE VariationID = @variationId
+                                    `);
+                                const variationSku = await assignVariationSku(transaction, plannedVariationId, variationName);
+                                catalogVariationRows.push({
+                                    variationId: plannedVariationId,
+                                    variationName,
+                                    color: (v.color || '').trim() || null,
+                                    quantity: variationQuantity,
+                                    price: variationPrice,
+                                    imageUrl: variationImageUrl,
+                                    thumbnailUrls: mediaUrls.thumbnailUrls,
+                                    model3d: model3dUrl,
+                                    sku: variationSku
+                                });
+                                continue;
+                            }
 
                             const insertVar = await transaction.request()
                                 .input('inventoryProductID', sql.Int, inventoryProductId)
@@ -24730,11 +25253,12 @@ module.exports = function (sql, pool, getStripe = null) {
                                 .input('variationImageUrl', sql.NVarChar, variationImageUrl)
                                 .input('thumbJson', sql.NVarChar, thumbJson)
                                 .input('model3d', sql.NVarChar, model3dUrl)
+                                .input('dimensions', sql.NVarChar, variationDimensionsJson)
                                 .input('createdBy', sql.Int, req.session.user.id)
                                 .query(`
-                                    INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity, Price, CostPrice, VariationImageURL, ThumbnailURLs, Model3D, IsActive, CreatedBy)
+                                    INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity, Price, CostPrice, VariationImageURL, ThumbnailURLs, Model3D, Dimensions, IsActive, CreatedBy)
                                     OUTPUT INSERTED.VariationID
-                                    VALUES (NULL, @inventoryProductID, @variationName, @color, @quantity, @quantity, @price, @costPrice, @variationImageUrl, @thumbJson, @model3d, 1, @createdBy)
+                                    VALUES (NULL, @inventoryProductID, @variationName, @color, @quantity, @quantity, @price, @costPrice, @variationImageUrl, @thumbJson, @model3d, @dimensions, 1, @createdBy)
                                 `);
 
                             const variationId = insertVar.recordset[0].VariationID;
@@ -25127,9 +25651,10 @@ module.exports = function (sql, pool, getStripe = null) {
             ]), async (req, res) => {
                 try {
                     await pool.connect();
+                    await ensureStorefrontDisplayQuantityColumn(pool);
                     await ensureVariationMediaColumns(pool);
                     const id = parseInt(req.params.id, 10);
-                    const { name, category, description, currentImageURL, currentThumbnailURLs, price, costPrice } = req.body;
+                    const { name, category, description, currentImageURL, currentThumbnailURLs, price, costPrice, storefrontStockQuantity } = req.body;
                     if (!id || Number.isNaN(id)) {
                         return res.status(400).json({ success: false, message: 'Invalid product id.' });
                     }
@@ -25238,6 +25763,43 @@ module.exports = function (sql, pool, getStripe = null) {
                     }
 
                     await syncInventoryProductCatalogToProducts(id);
+
+                    if (storefrontStockQuantity != null && String(storefrontStockQuantity).trim() !== '') {
+                        const displayStock = parseInt(storefrontStockQuantity, 10);
+                        if (Number.isNaN(displayStock) || displayStock < 0) {
+                            return res.status(400).json({ success: false, message: 'Storefront available stock must be zero or greater.' });
+                        }
+                        const linkRow = await pool.request()
+                            .input('id', sql.Int, id)
+                            .query(`
+                                SELECT ProductID FROM InventoryProducts
+                                WHERE InventoryProductID = @id AND IsActive = 1
+                            `);
+                        const linkedProductId = linkRow.recordset[0]?.ProductID;
+                        if (!linkedProductId) {
+                            return res.status(400).json({
+                                success: false,
+                                message: 'Enable storefront visibility for this product before setting display stock.'
+                            });
+                        }
+                        await pool.request()
+                            .input('id', sql.Int, id)
+                            .input('displayStock', sql.Int, displayStock)
+                            .query(`
+                                UPDATE InventoryProducts
+                                SET StorefrontDisplayQuantity = @displayStock, DateUpdated = GETDATE()
+                                WHERE InventoryProductID = @id AND IsActive = 1
+                            `);
+                        await pool.request()
+                            .input('productId', sql.Int, linkedProductId)
+                            .input('stockQty', sql.Int, displayStock)
+                            .query(`
+                                UPDATE Products
+                                SET StockQuantity = @stockQty, UpdatedAt = GETDATE()
+                                WHERE ProductID = @productId AND IsActive = 1
+                            `);
+                    }
+
                     invalidateAdminPageCache('admin:');
                     return res.json({ success: true, message: 'Product catalog updated successfully.', imageUrl });
                 } catch (err) {
@@ -25473,6 +26035,8 @@ module.exports = function (sql, pool, getStripe = null) {
 
                     console.log(`[INVENTORY VARIATIONS API] Querying variations with productId: ${variationQueryProductId} (isProductID: ${isProductID}, isInventoryProductID: ${isInventoryProductID})`);
 
+                    await ensureVariationMediaColumns(pool);
+
                     // Get variations - check both ProductID and InventoryProductID
                     // Also check if there's a linked InventoryProductID when querying by ProductID
                     const result = await pool.request()
@@ -25499,13 +26063,16 @@ module.exports = function (sql, pool, getStripe = null) {
                                     pv.VariationImageURL
                                 ) AS VariationImageURL,
                                 v.ThumbnailURLs,
+                                v.Dimensions,
                                 v.IsActive,
                                 v.CreatedAt,
                                 CASE
                                     WHEN ip.ProductID IS NULL THEN 0
                                     WHEN pv.VariationID IS NULL THEN 1
                                     ELSE CAST(ISNULL(pv.IsActive, 0) AS INT)
-                                END AS ShowOnStorefront
+                                END AS ShowOnStorefront,
+                                COALESCE(pv.Quantity, 0) AS ProductVariationQuantity,
+                                COALESCE(pv.Quantity, 0) AS StorefrontDisplayQuantity
                             FROM InventoryProductVariations v
                             LEFT JOIN InventoryProducts ip ON ip.InventoryProductID = v.InventoryProductID
                             LEFT JOIN Products p ON p.ProductID = COALESCE(v.ProductID, ip.ProductID)
@@ -25553,7 +26120,6 @@ module.exports = function (sql, pool, getStripe = null) {
                         productStock = totalVariationQuantity;
                     }
 
-                    await ensureVariationMediaColumns(pool);
                     const variations = [];
                     for (const row of result.recordset) {
                         let sku = row.SKU;
@@ -26182,29 +26748,31 @@ module.exports = function (sql, pool, getStripe = null) {
                         .input('variationID', sql.Int, variationID)
                         .query(`
                             SELECT 
-                                VariationID,
-                                InventoryProductID,
-                                VariationName,
-                                Quantity,
+                                ipv.VariationID,
+                                ipv.InventoryProductID,
+                                ipv.VariationName,
+                                ipv.Quantity,
                                 CASE 
-                                    WHEN AvailableQuantity IS NULL OR AvailableQuantity = 0 
-                                    THEN Quantity
-                                    ELSE AvailableQuantity
+                                    WHEN ipv.AvailableQuantity IS NULL OR ipv.AvailableQuantity = 0 
+                                    THEN ipv.Quantity
+                                    ELSE ipv.AvailableQuantity
                                 END as AvailableQuantity,
-                                COALESCE(DamagedQuantity, 0) as DamagedQuantity,
-                                COALESCE(ReturnedQuantity, 0) as ReturnedQuantity,
-                                COALESCE(RepairedQuantity, 0) as RepairedQuantity,
-                                COALESCE(DisposedQuantity, 0) as DisposedQuantity,
-                                COALESCE(Notes, '') as Notes,
-                                COALESCE(SKU, '') as SKU,
-                                COALESCE(Color, '') as Color,
-                                COALESCE(VariationImageURL, '') as VariationImageURL,
-                                ThumbnailURLs,
-                                Model3D,
-                                COALESCE(Price, 0) AS Price,
-                                COALESCE(CostPrice, 0) AS CostPrice
-                            FROM InventoryProductVariations
-                            WHERE VariationID = @variationID
+                                COALESCE(ipv.DamagedQuantity, 0) as DamagedQuantity,
+                                COALESCE(ipv.ReturnedQuantity, 0) as ReturnedQuantity,
+                                COALESCE(ipv.RepairedQuantity, 0) as RepairedQuantity,
+                                COALESCE(ipv.DisposedQuantity, 0) as DisposedQuantity,
+                                COALESCE(ipv.Notes, '') as Notes,
+                                COALESCE(ipv.SKU, '') as SKU,
+                                COALESCE(ipv.Color, '') as Color,
+                                COALESCE(ipv.VariationImageURL, '') as VariationImageURL,
+                                ipv.ThumbnailURLs,
+                                ipv.Model3D,
+                                COALESCE(ipv.Price, 0) AS Price,
+                                COALESCE(ipv.CostPrice, 0) AS CostPrice,
+                                COALESCE(pv.Quantity, 0) AS ProductVariationQuantity
+                            FROM InventoryProductVariations ipv
+                            LEFT JOIN ProductVariations pv ON pv.VariationID = ipv.VariationID
+                            WHERE ipv.VariationID = @variationID
                         `);
 
                     if (result.recordset.length === 0) {
@@ -26342,7 +26910,10 @@ module.exports = function (sql, pool, getStripe = null) {
                         stockDelta = 0;
                     }
 
-                    if (catalogOnly && !variationNameUpdate && !hasNewThumbs && !hasNewModel && !hasNewMain && catalogPriceUpdate == null) {
+                    const storefrontStockUpdate = req.body.storefrontStockQuantity != null
+                        && String(req.body.storefrontStockQuantity).trim() !== '';
+                    if (catalogOnly && !variationNameUpdate && !hasNewThumbs && !hasNewModel && !hasNewMain
+                        && catalogPriceUpdate == null && !storefrontStockUpdate) {
                         return res.json({
                             success: false,
                             message: 'No catalog changes to save.'
@@ -26480,6 +27051,58 @@ module.exports = function (sql, pool, getStripe = null) {
                                 WHERE VariationID = @variationID
                             `);
 
+                        if (catalogOnly && storefrontStockUpdate) {
+                            const displayStock = parseInt(req.body.storefrontStockQuantity, 10);
+                            if (Number.isNaN(displayStock) || displayStock < 0) {
+                                throw new Error('Storefront available stock must be zero or greater.');
+                            }
+                            await variationTransaction.request()
+                                .input('variationID', sql.Int, parsedVariationID)
+                                .input('displayStock', sql.Int, displayStock)
+                                .query(`
+                                    UPDATE ProductVariations
+                                    SET Quantity = @displayStock, UpdatedAt = GETDATE()
+                                    WHERE VariationID = @variationID
+                                `);
+                            if (inventoryProductId) {
+                                const sumResult = await variationTransaction.request()
+                                    .input('invId', sql.Int, inventoryProductId)
+                                    .query(`
+                                        SELECT ISNULL(SUM(COALESCE(pv.Quantity, 0)), 0) AS DisplaySum
+                                        FROM InventoryProductVariations ipv
+                                        INNER JOIN ProductVariations pv
+                                            ON pv.VariationID = ipv.VariationID AND pv.IsActive = 1
+                                        WHERE ipv.InventoryProductID = @invId AND ipv.IsActive = 1
+                                    `);
+                                const displaySum = sumResult.recordset[0]?.DisplaySum ?? 0;
+                                await variationTransaction.request()
+                                    .input('invId', sql.Int, inventoryProductId)
+                                    .input('displaySum', sql.Int, displaySum)
+                                    .query(`
+                                        UPDATE InventoryProducts
+                                        SET StorefrontDisplayQuantity = @displaySum, DateUpdated = GETDATE()
+                                        WHERE InventoryProductID = @invId AND IsActive = 1
+                                    `);
+                                const linkRow = await variationTransaction.request()
+                                    .input('invId', sql.Int, inventoryProductId)
+                                    .query(`
+                                        SELECT ProductID FROM InventoryProducts
+                                        WHERE InventoryProductID = @invId AND IsActive = 1
+                                    `);
+                                const linkedProductId = linkRow.recordset[0]?.ProductID;
+                                if (linkedProductId) {
+                                    await variationTransaction.request()
+                                        .input('productId', sql.Int, linkedProductId)
+                                        .input('stockQty', sql.Int, displaySum)
+                                        .query(`
+                                            UPDATE Products
+                                            SET StockQuantity = @stockQty, UpdatedAt = GETDATE()
+                                            WHERE ProductID = @productId AND IsActive = 1
+                                        `);
+                                }
+                            }
+                        }
+
                         await variationTransaction.commit();
                     } catch (variationTxErr) {
                         await variationTransaction.rollback();
@@ -26492,7 +27115,9 @@ module.exports = function (sql, pool, getStripe = null) {
                     console.log('Variation status updated. Rows affected:', updateResult.rowsAffected);
                     console.log('Updated variation data:', updateResult.recordset[0]);
 
-                    // Sync variation stock to ProductVariations table for CMS display
+                    // Sync inventory quantity to ProductVariations — skip on catalog-only saves
+                    // (storefront display stock is stored separately in ProductVariations.Quantity)
+                    if (!catalogOnly) {
                     console.log(`[VARIATION UPDATE] ====== STARTING VARIATION SYNC PROCESS ======`);
                     console.log(`[VARIATION UPDATE] VariationID: ${parsedVariationID}`);
                     console.log(`[VARIATION UPDATE] Updated Quantity: ${totalQty}`);
@@ -26546,6 +27171,9 @@ module.exports = function (sql, pool, getStripe = null) {
                             console.error('[VARIATION UPDATE] Error syncing product qty from variations:', syncProdErr);
                         }
                     }
+                    }
+
+                    invalidateAdminPageCache('admin:');
 
                     const statusRefresh = inventoryProductId
                         ? await buildInventoryStockRefreshPayload(pool, inventoryProductId)
@@ -27392,18 +28020,28 @@ module.exports = function (sql, pool, getStripe = null) {
                             .input('id', sql.Int, productId)
                             .query(`
                                 SELECT 
-                                    InventoryProductID as ProductID,
-                                    Name,
-                                    Description,
-                                    Price,
-                                    CostPrice,
-                                    Category,
-                                    ImageURL,
-                                    ThumbnailURLs,
-                                    Dimensions,
-                                    Model3D as Model3DURL
-                                FROM InventoryProducts
-                                WHERE InventoryProductID = @id AND IsActive = 1
+                                    ip.InventoryProductID as ProductID,
+                                    ip.InventoryProductID,
+                                    ip.Name,
+                                    ip.Description,
+                                    ip.Price,
+                                    ip.CostPrice,
+                                    ip.Category,
+                                    ip.ImageURL,
+                                    ip.ThumbnailURLs,
+                                    ip.Dimensions,
+                                    ip.Model3D as Model3DURL,
+                                    ip.ListingStage,
+                                    ip.ProductID AS LinkedProductID,
+                                    ip.StorefrontDisplayQuantity,
+                                    COALESCE(
+                                        ip.StorefrontDisplayQuantity,
+                                        p.StockQuantity,
+                                        0
+                                    ) AS StorefrontStockQuantity
+                                FROM InventoryProducts ip
+                                LEFT JOIN Products p ON p.ProductID = ip.ProductID AND p.IsActive = 1
+                                WHERE ip.InventoryProductID = @id AND ip.IsActive = 1
                             `);
 
                         if (result.recordset.length === 0) {
@@ -27414,6 +28052,20 @@ module.exports = function (sql, pool, getStripe = null) {
                         }
 
                         product = result.recordset[0];
+                        if (!product.InventoryProductID) {
+                            product.InventoryProductID = product.ProductID;
+                        }
+
+                        const variationsResult = await pool.request()
+                            .input('id', sql.Int, productId)
+                            .query(`
+                                SELECT VariationID, VariationName, Color, Quantity, AvailableQuantity,
+                                       Price, CostPrice, VariationImageURL, ThumbnailURLs, Model3D, Dimensions
+                                FROM InventoryProductVariations
+                                WHERE InventoryProductID = @id AND IsActive = 1
+                                ORDER BY VariationID
+                            `);
+                        product.Variations = variationsResult.recordset || [];
 
                         // Fetch required materials for this inventory product (if table exists)
                         try {
@@ -27447,6 +28099,24 @@ module.exports = function (sql, pool, getStripe = null) {
                             // If table doesn't exist or query fails, return empty array
                             console.log('InventoryProductMaterials table not found or error fetching materials:', materialsErr.message);
                             product.RequiredMaterials = [];
+                        }
+                    }
+
+                    if (product && product.ImageURL) {
+                        product.ImageURL = normalizeProductAssetUrl(product.ImageURL) || product.ImageURL;
+                    }
+                    if (product && Array.isArray(product.Variations)) {
+                        product.Variations = product.Variations.map(function(v) {
+                            const url = v.VariationImageURL;
+                            return Object.assign({}, v, {
+                                VariationImageURL: url ? (normalizeProductAssetUrl(url) || url) : url
+                            });
+                        });
+                    }
+                    if (product && sourceTable !== 'Products') {
+                        const summary = await fetchInventoryProductSummary(pool, productId);
+                        if (summary) {
+                            product.ActualStockQuantity = summary.availableQuantity;
                         }
                     }
 
@@ -32952,9 +33622,48 @@ module.exports = function (sql, pool, getStripe = null) {
         return res.redirect('/Employee/Admin/ProductsListing' + (q.toString() ? '?' + q.toString() : ''));
     });
 
+    router.get('/Employee/Admin/Storefront', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            await ensureListingStageColumn(pool);
+            await ensureStorefrontDisplayQuantityColumn(pool);
+            const pageData = await loadStorefrontPageData(pool, {
+                search: req.query.search || '',
+                category: req.query.category || '',
+                page: parseInt(req.query.page, 10) || 1,
+                limit: 50,
+                inventoryProductId: req.query.inventoryProductId
+            });
+            if (pageData.redirectToPage) {
+                const q = new URLSearchParams(req.query);
+                q.set('page', String(pageData.redirectToPage));
+                return res.redirect('/Employee/Admin/Storefront?' + q.toString());
+            }
+            res.render('Employee/Admin/AdminStorefront', {
+                user: req.session.user,
+                error: req.flash('error'),
+                success: req.flash('success'),
+                materials: pageData.materials,
+                units: pageData.units,
+                categories: pageData.categories,
+                bomBundles: pageData.bomBundles || [],
+                allInventoryProducts: pageData.allInventoryProducts,
+                pagination: pageData.pagination,
+                listFilters: pageData.listFilters,
+                inventoryProductIdFocus: pageData.inventoryProductIdFocus,
+                formatInventoryDate: formatInventoryDate
+            });
+        } catch (err) {
+            console.error('Error loading Admin Storefront page:', err);
+            req.flash('error', 'Failed to load storefront products.');
+            res.redirect('/Employee/Admin/Inventory?tab=ProductInventory');
+        }
+    });
+
     router.get('/Employee/Admin/ProductsListing', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
+            await ensureListingStageColumn(pool);
             const pageData = await loadProductInventoryPageData(pool, {
                 search: req.query.search || '',
                 category: req.query.category || '',
@@ -33531,6 +34240,25 @@ module.exports = function (sql, pool, getStripe = null) {
         } catch (err) {
             console.error('Error reactivating BOM bundle:', err);
             req.flash('error', 'Failed to reactivate BOM bundle. Please try again.');
+            res.redirect('/Employee/Admin/Archived');
+        }
+    });
+
+    router.post('/Employee/Admin/Archived/ReactivateStockMovement/:id', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const movementId = parseInt(req.params.id, 10);
+            const result = await reactivateStockMovement(pool, movementId);
+            if (!result.ok) {
+                req.flash('error', result.message || 'Failed to restore stock movement.');
+                return res.redirect('/Employee/Admin/Archived');
+            }
+            invalidateAdminPageCache('admin:');
+            req.flash('success', 'Stock movement restored to history.');
+            res.redirect('/Employee/Admin/Archived?reactivated=1');
+        } catch (err) {
+            console.error('Error reactivating stock movement:', err);
+            req.flash('error', 'Failed to restore stock movement.');
             res.redirect('/Employee/Admin/Archived');
         }
     });

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Archived Items</title>
+    <title>Order Support Archived Items</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -249,7 +249,7 @@
                                         <td><%= material.LastUpdated ? new Date(material.LastUpdated).toLocaleDateString() : 'N/A' %></td>
                                         <td>
                                             <div style="display: flex; gap: 8px; align-items: center;">
-                                                <form action="/Employee/OrderSupport/Archived/ReactivateMaterial/<%= material.MaterialID %>" method="POST" style="display:inline;">
+                                                <form action="/Employee/OrderSupport/OrderArchived/ReactivateMaterial/<%= material.MaterialID %>" method="POST" style="display:inline;">
                                                     <button type="submit" class="reactivate-btn">Reactivate</button>
                                                 </form>
                                                 <button type="button" class="delete-btn" data-id="<%= material.MaterialID %>" data-type="material" data-name="<%= material.Name %>">Delete</button>
@@ -285,7 +285,7 @@
                                         <td><%= bundle.DateUpdated ? new Date(bundle.DateUpdated).toLocaleDateString() : (bundle.DateAdded ? new Date(bundle.DateAdded).toLocaleDateString() : 'N/A') %></td>
                                         <td>
                                             <div class="archived-actions">
-                                                <form action="/Employee/OrderSupport/Archived/ReactivateBomBundle/<%= bundle.BomBundleID %>" method="POST" style="display:inline;">
+                                                <form action="/Employee/OrderSupport/OrderArchived/ReactivateBomBundle/<%= bundle.BomBundleID %>" method="POST" style="display:inline;">
                                                     <button type="submit" class="reactivate-btn">Reactivate</button>
                                                 </form>
                                                 <button type="button" class="delete-btn" data-id="<%= bundle.BomBundleID %>" data-type="bom-bundle" data-name="<%= bundle.Name %>">Delete</button>
@@ -342,7 +342,7 @@
                                         <td><%= product.DateAdded ? new Date(product.DateAdded).toLocaleDateString() : 'N/A' %></td>
                                         <td>
                                             <div class="archived-actions">
-                                                <form action="/Employee/OrderSupport/Archived/ReactivateInventoryProduct/<%= product.InventoryProductID %>" method="POST" style="display:inline;">
+                                                <form action="/Employee/OrderSupport/OrderArchived/ReactivateInventoryProduct/<%= product.InventoryProductID %>" method="POST" style="display:inline;">
                                                     <button type="submit" class="reactivate-btn">Reactivate</button>
                                                 </form>
                                                 <button type="button" class="delete-btn" data-id="<%= product.InventoryProductID %>" data-type="inventory-product" data-name="<%= product.Name %>">Delete</button>
@@ -436,7 +436,7 @@
                                         <td><%= variation.UpdatedAt ? new Date(variation.UpdatedAt).toLocaleDateString() : (variation.CreatedAt ? new Date(variation.CreatedAt).toLocaleDateString() : 'N/A') %></td>
                                         <td>
                                             <div class="archived-variations-actions">
-                                                <form method="POST" action="/Employee/OrderSupport/Archived/ReactivateVariation/<%= variation.VariationID %>" style="margin: 0;">
+                                                <form method="POST" action="/Employee/OrderSupport/OrderArchived/ReactivateVariation/<%= variation.VariationID %>" style="margin: 0;">
                                                     <button type="submit" class="reactivate-btn">Reactivate</button>
                                                 </form>
                                                 <button type="button" class="delete-btn" data-id="<%= variation.VariationID %>" data-type="variation" data-name="<%= variation.VariationName || 'Variation' %>">Delete</button>

@@ -2239,8 +2239,8 @@
         function handleAction(orderId, action) {
             console.log(`[FRONTEND] handleAction called with orderId: ${orderId}, action: ${action}`);
             const url = action === 'proceed'
-                ? `/Employee/UserManager/OrdersPending/Proceed/${orderId}`
-                : `/Employee/UserManager/OrdersPending/Cancel/${orderId}`;
+                ? `/Employee/Admin/OrdersPending/Proceed/${orderId}`
+                : `/Employee/Admin/OrdersPending/Cancel/${orderId}`;
             
             console.log(`[FRONTEND] Calling URL: ${url}`);
             
@@ -2264,7 +2264,7 @@
                         showOrderSuccess(action === 'proceed' ? '✓ Order moved to Processing!' : '✓ Order cancelled successfully!');
                         if (action === 'proceed') {
                             setTimeout(() => {
-                                window.location.href = '/Employee/UserManager/Orders?tab=processing';
+                                window.location.href = '/Employee/UserManager/UserOrdersProcessing';
                             }, 1500);
                         } else {
                             setTimeout(() => location.reload(), 2000);

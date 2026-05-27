@@ -286,7 +286,7 @@
                     <div class="error-message"><%= error %></div>
                 <% } %>
                 <button id="toggleNewBulkForm" style="background:#f59e0b;color:#111;border:none;border-radius:6px;padding:10px 14px;font-weight:700;margin-bottom:12px;">New Walk In</button>
-                <form id="simpleBulkForm" action="/Employee/UserManager/WalkIn/Add" method="POST" style="display:none;background:#fff;padding:16px;border-radius:8px;border:1px solid #e5e7eb;margin-bottom:18px;">
+                <form id="simpleBulkForm" action="/Employee/UserManager/UserWalkIn/Add" method="POST" style="display:none;background:#fff;padding:16px;border-radius:8px;border:1px solid #e5e7eb;margin-bottom:18px;">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
                         <div>
                             <label>Customer Name</label>
@@ -1403,7 +1403,7 @@
                         btn.addEventListener('click', function() {
                             const id = this.getAttribute('data-id');
                             if (!confirm('Remove this walk-in order? This cannot be undone.')) return;
-                            fetch(`/Employee/UserManager/WalkIn/Remove/${id}`, { method: 'POST' })
+                            fetch(`/Employee/UserManager/UserWalkIn/Remove/${id}`, { method: 'POST' })
                                 .then(r => r.json()).then(d => {
                                     if (d.success) location.reload();
                                     else alert(d.message || 'Remove failed');

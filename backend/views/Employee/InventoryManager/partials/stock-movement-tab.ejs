@@ -1,0 +1,33 @@
+<div id="stockMovementTab" class="tab-content<%= typeof activeTab !== 'undefined' && activeTab === 'stock-movement' ? ' active' : '' %>">
+    <div class="content-area stock-movement-area">
+        <p class="bom-intro">Expand each product, then each variation, to view movement history (returned → damaged → repaired → available, restocks).</p>
+        <div class="inventory-filter-card">
+            <form id="stockMovementFilterForm" class="inventory-filter-form" onsubmit="return false;">
+                <div class="inventory-filter-field">
+                    <label for="stockMovementProductFilter">Product ID (optional)</label>
+                    <input type="number" id="stockMovementProductFilter" min="1" placeholder="All products">
+                </div>
+                <div class="inventory-filter-field">
+                    <label for="stockMovementPageSize">Products per page</label>
+                    <select id="stockMovementPageSize" class="stock-movement-page-size">
+                        <option value="5">5</option>
+                        <option value="10" selected>10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                    </select>
+                </div>
+                <div class="inventory-filter-actions">
+                    <button type="button" id="stockMovementApplyFilter" class="pi-btn pi-btn-primary">Apply</button>
+                    <button type="button" id="stockMovementClearFilter" class="pi-btn pi-btn-secondary">Clear</button>
+                </div>
+            </form>
+            <p id="stockMovementSummary" class="inventory-list-summary"></p>
+        </div>
+        <div id="stockMovementLoading" class="stock-movement-loading">Loading movement history…</div>
+        <div id="stockMovementListWrap" class="stock-movement-list-wrap" style="display:none;">
+            <div id="stockMovementGroupedList" class="stock-movement-grouped-list"></div>
+        </div>
+        <p id="stockMovementEmpty" class="inventory-list-empty" style="display:none;">No stock movements recorded yet.</p>
+        <nav id="stockMovementPagination" class="inventory-pagination stock-movement-pagination" style="display:none;" aria-label="Stock movement pages"></nav>
+    </div>
+</div>

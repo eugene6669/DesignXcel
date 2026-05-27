@@ -1,0 +1,33 @@
+<!-- Quick edit parent (Product Inventory): name, category, main image -->
+<div id="editInventoryProductQuickModal" class="modal pi-modal-compact">
+    <div class="modal-content">
+        <span class="close-button" id="closeEditInventoryProductQuickModal">&times;</span>
+        <h3>Edit Product Inventory</h3>
+        <form id="editInventoryProductQuickForm" enctype="multipart/form-data">
+            <input type="hidden" id="editInventoryProductQuickId" name="inventoryProductId">
+            <input type="hidden" id="editInventoryProductQuickCurrentImage" name="currentImageURL">
+            <div class="form-group">
+                <label for="editInventoryProductQuickName">Product Name</label>
+                <input type="text" id="editInventoryProductQuickName" name="name" required>
+            </div>
+            <div class="form-group">
+                <label for="editInventoryProductQuickCategory">Category</label>
+                <select id="editInventoryProductQuickCategory" name="category" required></select>
+            </div>
+            <div class="form-group">
+                <label for="editInventoryProductQuickImage">Main Image</label>
+                <div id="editInventoryProductQuickImagePreview" style="margin:6px 0;min-height:40px;"></div>
+                <input type="file" id="editInventoryProductQuickImage" name="productImage" accept="image/*">
+            </div>
+            <div class="form-group pi-section" id="editInventoryProductRecipeSection">
+                <h4 style="margin:0 0 8px;font-size:0.95em;">Manufacturing recipe</h4>
+                <div id="editInventoryProductBomBundleDisplay" class="pi-recipe-bom-label" style="font-size:0.88em;margin-bottom:6px;color:#444;"></div>
+                <div id="editInventoryProductRecipeList" class="pi-recipe-materials-list" style="font-size:0.88em;color:#333;"></div>
+            </div>
+            <div class="pi-form-actions">
+                <button type="button" id="cancelEditInventoryProductQuick" class="pi-btn pi-btn-secondary pi-btn-sm">Cancel</button>
+                <button type="submit" id="saveEditInventoryProductQuick" class="pi-btn pi-btn-primary pi-btn-sm">Save</button>
+            </div>
+        </form>
+    </div>
+</div>

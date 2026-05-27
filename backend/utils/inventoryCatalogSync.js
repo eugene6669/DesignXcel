@@ -58,7 +58,8 @@ async function ensureVariationMediaColumns(pool) {
         { table: 'InventoryProducts', column: 'ThumbnailURLs', ddl: 'ALTER TABLE InventoryProducts ADD ThumbnailURLs NVARCHAR(MAX) NULL' },
         { table: 'InventoryProducts', column: 'Model3D', ddl: 'ALTER TABLE InventoryProducts ADD Model3D NVARCHAR(500) NULL' },
         { table: 'InventoryProducts', column: 'CostPrice', ddl: 'ALTER TABLE InventoryProducts ADD CostPrice DECIMAL(10, 2) NULL' },
-        { table: 'InventoryProductVariations', column: 'CostPrice', ddl: 'ALTER TABLE InventoryProductVariations ADD CostPrice DECIMAL(10, 2) NULL' }
+        { table: 'InventoryProductVariations', column: 'CostPrice', ddl: 'ALTER TABLE InventoryProductVariations ADD CostPrice DECIMAL(10, 2) NULL' },
+        { table: 'InventoryProductVariations', column: 'Dimensions', ddl: 'ALTER TABLE InventoryProductVariations ADD Dimensions NVARCHAR(MAX) NULL' }
     ];
     for (const { table, column, ddl } of checks) {
         const exists = await pool.request()
@@ -79,6 +80,25 @@ async function ensureVariationMediaColumns(pool) {
 /**
  * Map multer file arrays to per-variation media (files appended in row order).
  */
+function buildVariationDimensionsJson(v) {
+    const src = v || {};
+    const length = src.length != null && src.length !== '' ? parseFloat(src.length) : null;
+    const width = src.width != null && src.width !== '' ? parseFloat(src.width) : null;
+    const height = src.height != null && src.height !== '' ? parseFloat(src.height) : null;
+    if (length == null && width == null && height == null) {
+        if (src.dimensions) {
+            return typeof src.dimensions === 'string' ? src.dimensions : JSON.stringify(src.dimensions);
+        }
+        return '{}';
+    }
+    return JSON.stringify({
+        length: Number.isFinite(length) ? length : null,
+        width: Number.isFinite(width) ? width : null,
+        height: Number.isFinite(height) ? height : null,
+        unit: 'cm'
+    });
+}
+
 function mapVariationMediaFiles(files, variationsList) {
     const mainFiles = (files && files.variationMainImage) ? files.variationMainImage : [];
     const modelFiles = (files && files.variationModel3d) ? files.variationModel3d : [];
@@ -301,6 +321,7 @@ async function createStorefrontProductFromInventory(transaction, inventoryProduc
 
 module.exports = {
     ensureVariationMediaColumns,
+    buildVariationDimensionsJson,
     mapVariationMediaFiles,
     parseSingleVariationMediaFiles,
     resolveVariationMediaUrls,

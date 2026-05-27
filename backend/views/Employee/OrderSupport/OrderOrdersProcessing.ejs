@@ -2283,8 +2283,8 @@
         // Handle Actions
         function handleAction(orderId, action) {
             const url = action === 'proceed'
-                ? `/Employee/OrderSupport/OrdersProcessing/Proceed/${orderId}`
-                : `/Employee/OrderSupport/OrdersProcessing/Cancel/${orderId}`;
+                ? `/Employee/Admin/OrdersProcessing/Proceed/${orderId}`
+                : `/Employee/Admin/OrdersProcessing/Cancel/${orderId}`;
             
             // Show loading spinner
             showLoadingSpinner('orders-loading-spinner', action === 'proceed' ? 'Processing order...' : 'Cancelling order...');
@@ -2300,8 +2300,8 @@
                             const confirmBtn = document.querySelector(`.js-confirm-order-action[data-order-id="${orderId}"][data-action="proceed"]`);
                             const deliveryType = confirmBtn ? confirmBtn.getAttribute('data-delivery-type') : 'delivery';
                             const nextPage = deliveryType === 'pickup' 
-                                ? '/Employee/OrderSupport/Orders?tab=receive' 
-                                : '/Employee/OrderSupport/Orders?tab=shipping';
+                                ? '/Employee/OrderSupport/OrderOrdersReceive' 
+                                : '/Employee/OrderSupport/OrderOrdersShipping';
                             // Keep spinner visible during redirect
                             setTimeout(() => {
                                 window.location.href = nextPage;

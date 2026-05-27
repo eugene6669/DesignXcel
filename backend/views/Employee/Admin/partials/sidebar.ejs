@@ -1,5 +1,5 @@
 <% const active=typeof activePage !=='undefined' ? activePage : '' ; const
-    inventoryPages=['inventory' , 'product-inventory' , 'products' , 'product-returns' , 'raw-materials' , 'archived' ]; const
+    inventoryPages=['inventory' , 'product-inventory' , 'products' , 'storefront' , 'product-returns' , 'raw-materials' , 'archived' ]; const
     transactionsPages=['bulk-orders', 'delivery-rates' , 'walk-in' ]; const
     ordersPages=['orders', 'orders-returned']; const
     userPages=['manage-users']; const reviewPages=['reviews']; const supportPages=['chat-support', 'messages' ]; const
@@ -29,6 +29,16 @@
                 </svg>
                 Reports
             </a></li>
+        <li><a href="/Employee/Admin/Alerts" <%=active==='alerts' ? 'class="active"' : '' %>>
+                <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                        d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                Alerts
+            </a></li>
         <li class="sidebar-section-label <%= inventoryPages.includes(active) ? 'active' : '' %>">PRODUCTS</li>
         <ul class="sidebar-submenu">
             <li><a href="/Employee/Admin/Inventory" <%=active==='inventory' || active==='product-inventory' ? 'class="active"' : '' %>>
@@ -49,15 +59,13 @@
                     </svg>
                     Products Listings
                 </a></li>
-            <li style="display: none;"><a href="/Employee/Admin/Alerts" <%=active==='alerts' ? 'class="active"' : '' %>>
+            <li><a href="/Employee/Admin/Storefront" <%=active==='storefront' ? 'class="active"' : '' %>>
                     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
-                        <path
-                            d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                        <line x1="12" y1="9" x2="12" y2="13" />
-                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                        <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                        <polyline points="9,22 9,12 15,12 15,22" />
                     </svg>
-                    Alerts
+                    Storefront
                 </a></li>
             <li><a href="/Employee/Admin/Archived" <%=active==='archived' ? 'class="active"' : '' %>>
                     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"

@@ -72,8 +72,7 @@
     }
 
     function materialOptionLabel(m) {
-        const sku = m.sku ? m.sku + ' — ' : '';
-        return sku + m.name + ' (' + (m.unit || 'pcs') + ', stock: ' + (m.stockQuantity ?? 0) + ')';
+        return m.name + ' (' + (m.unit || 'pcs') + ', stock: ' + (m.stockQuantity ?? 0) + ')';
     }
 
     function getSelectedMaterialIds(excludeSelect) {
@@ -145,8 +144,7 @@
         const row = document.createElement('div');
         row.className = 'bom-material-row material-row';
         if (selectedId && materialMeta) {
-            const label = (materialMeta.materialSku ? materialMeta.materialSku + ' — ' : '') +
-                (materialMeta.materialName || materialMeta.name || ('Material #' + selectedId)) +
+            const label = (materialMeta.materialName || materialMeta.name || ('Material #' + selectedId)) +
                 ' (' + (materialMeta.unit || 'pcs') + ')';
             row.setAttribute('data-material-label', label);
         }
@@ -231,7 +229,7 @@
         document.getElementById('bomBundleDescription').value = '';
         const container = document.getElementById('bomMaterialsContainer');
         if (container) container.innerHTML = '';
-        document.getElementById('bomModalTitle').textContent = 'Create BOM Bundle';
+        document.getElementById('bomModalTitle').textContent = 'Create Raw Materials Bundle';
     }
 
     async function openBomModalForCreate() {
@@ -243,7 +241,7 @@
     async function openBomModalForEdit(bundleId) {
         resetBomForm();
         document.getElementById('bomEditBundleId').value = bundleId;
-        document.getElementById('bomModalTitle').textContent = 'Edit BOM Bundle';
+        document.getElementById('bomModalTitle').textContent = 'Edit Raw Materials Bundle';
         try {
             const res = await fetch('/api/admin/bom-bundles/' + bundleId, { credentials: 'include' });
             const data = await res.json();
@@ -311,7 +309,7 @@
                 popup(data.message || 'Bundle saved.');
                 closeModal('bomBundleModal');
                 setTimeout(function () {
-                    window.location.href = '/Employee/Admin/Inventory?tab=bom-bundles';
+                    window.location.href = '/Employee/Admin/Inventory?tab=rawmaterials-bundles';
                 }, 600);
             } else {
                 popup(data.message || 'Failed to save bundle.', true);
@@ -324,22 +322,28 @@
     }
 
     async function archiveBomBundle(bundleId, bundleName) {
-        if (!confirm('Archive BOM bundle "' + bundleName + '"?')) return;
-        try {
-            const res = await fetch('/api/admin/bom-bundles/' + bundleId, {
-                method: 'DELETE',
-                credentials: 'include'
-            });
-            const data = await res.json();
-            if (data.success) {
-                popup('Bundle archived. Restore it from the Archived page.');
-                const row = document.querySelector('#bomBundlesTable tr[data-bundle-id="' + bundleId + '"]');
-                if (row) row.remove();
-            } else {
-                popup(data.message || 'Failed to archive.', true);
+        const doArchive = async function () {
+            try {
+                const res = await fetch('/api/admin/bom-bundles/' + bundleId, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    popup('Bundle archived. Restore it from the Archived page.');
+                    const row = document.querySelector('#bomBundlesTable tr[data-bundle-id="' + bundleId + '"]');
+                    if (row) row.remove();
+                } else {
+                    popup(data.message || 'Failed to archive.', true);
+                }
+            } catch (e) {
+                popup('Failed to archive bundle.', true);
             }
-        } catch (e) {
-            popup('Failed to archive bundle.', true);
+        };
+        if (typeof window.showArchiveConfirmModal === 'function') {
+            window.showArchiveConfirmModal(bundleName || 'this bundle', doArchive);
+        } else if (window.confirm('Archive BOM bundle "' + bundleName + '"?')) {
+            await doArchive();
         }
     }
 
@@ -367,9 +371,6 @@
 
         const modal = document.getElementById('bomBundleModal');
         if (modal) {
-            modal.addEventListener('click', function (e) {
-                if (e.target === modal) closeModal('bomBundleModal');
-            });
         }
 
         document.querySelectorAll('#bomBundlesTab .edit-bom-bundle-btn').forEach(function (btn) {
@@ -385,6 +386,9 @@
         });
     }
 
+    document.addEventListener('rawMaterialRestocked', function () {
+        cachedRawMaterials = null;
+    });
     document.addEventListener('rawMaterialArchived', function () {
         cachedRawMaterials = null;
     });

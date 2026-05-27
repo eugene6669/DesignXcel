@@ -2204,8 +2204,8 @@
         // Handle Actions
         function handleAction(orderId, action) {
             const url = action === 'proceed'
-                ? `/Employee/TransactionManager/OrdersShipping/Proceed/${orderId}`
-                : `/Employee/TransactionManager/OrdersShipping/Cancel/${orderId}`;
+                ? `/Employee/Admin/OrdersShipping/Proceed/${orderId}`
+                : `/Employee/Admin/OrdersShipping/Cancel/${orderId}`;
             
             // Show loading spinner
             showLoadingSpinner('orders-loading-spinner', action === 'proceed' ? 'Processing order...' : 'Cancelling order...');
@@ -2219,7 +2219,7 @@
                         if (action === 'proceed') {
                             // Keep spinner visible during redirect
                             setTimeout(() => {
-                                window.location.href = '/Employee/TransactionManager/Orders?tab=delivery';
+                                window.location.href = '/Employee/TransactionManager/TransactionOrdersDelivery';
                             }, 1500);
                         } else {
                             setTimeout(() => {

@@ -1128,7 +1128,7 @@
         <div class="main-content">
             <div class="header">
                 <h2>Products Listing</h2>
-                <p class="products-list-hint">Create products and manage categories with the buttons above. Catalog: edit product name, category, sale price, item cost, description, and images via the row action. Edit variation name, color, thumbnails, and 3D model from each variation. Stock, returns workflow, and restock are on <a href="/Employee/TransactionManager/Inventory?tab=ProductInventory">Inventory</a>.</p>
+                <p class="products-list-hint">Create products and manage categories with the buttons above. Catalog: edit product name, category, sale price, item cost, description, and images via the row action. Edit variation name, color, thumbnails, and 3D model from each variation. Stock, returns workflow, and restock are on <a href="/Employee/TransactionManager/ProductInventory?tab=ProductInventory">Inventory</a>.</p>
             </div>
             <div id="productsListingPanel" class="content-area">
 
@@ -1182,7 +1182,7 @@
                         if (typeof inventoryProductIdFocus !== 'undefined' && inventoryProductIdFocus) {
                             parts.push('inventoryProductId=' + encodeURIComponent(inventoryProductIdFocus));
                         }
-                        return '/Employee/TransactionManager/ProductsListing?' + parts.join('&');
+                        return '/Employee/TransactionManager/TransactionProducts?' + parts.join('&');
                     }
                     function stockQtyClass(qty) {
                         const n = Number(qty) || 0;
@@ -1200,7 +1200,7 @@
                 %>
 
                 <div class="inventory-filter-card" data-inventory-search="<%= (invFilters.search || '').replace(/"/g, '&quot;') %>">
-                    <form method="get" action="/Employee/TransactionManager/ProductsListing" class="inventory-filter-form">
+                    <form method="get" action="/Employee/TransactionManager/TransactionProducts" class="inventory-filter-form">
                         <input type="hidden" name="page" value="1">
                         <div class="inventory-filter-field">
                             <label for="invSearch">Search</label>
@@ -1218,7 +1218,7 @@
                         <div class="inventory-filter-actions">
                             <button type="submit" class="pi-btn pi-btn-primary">Apply filters</button>
                             <% if (invFilters.search || invFilters.category) { %>
-                            <a href="/Employee/TransactionManager/ProductsListing" class="pi-btn pi-btn-secondary">Clear</a>
+                            <a href="/Employee/TransactionManager/TransactionProducts" class="pi-btn pi-btn-secondary">Clear</a>
                             <% } %>
                         </div>
                     </form>
@@ -1244,7 +1244,7 @@
                     <div class="modal-content">
                         <span class="close-button" id="closeAddModal">&times;</span>
                         <h3>Create New Product</h3>
-                        <form id="addProductForm" class="pi-create-form" action="/Employee/TransactionManager/ProductsListing/Add" method="POST" enctype="multipart/form-data">
+                        <form id="addProductForm" class="pi-create-form" action="/Employee/TransactionManager/TransactionProducts/Add" method="POST" enctype="multipart/form-data">
                             <input type="hidden" id="quantity" name="quantity" value="0">
 
                             <div class="pi-form-grid pi-create-top">
@@ -1382,7 +1382,7 @@
                     </div>
                 </div>
 
-                <%- include('partials/product-listing-expandable', {
+                <%- include('../Admin/partials/product-listing-expandable', {
                     allProductsList: allProductsList,
                     invFilters: invFilters,
                     stockQtyClass: stockQtyClass,
@@ -1423,9 +1423,9 @@
     <script>
         window.__adminProductCategories = <%- JSON.stringify(invCategories || []) %>;
     </script>
-    <%- include('partials/edit-inventory-product-modal') %>
-    <%- include('partials/edit-variation-status-modal') %>
-    <%- include('partials/admin-variations-modal') %>
+    <%- include('../Admin/partials/edit-inventory-product-modal') %>
+    <%- include('../Admin/partials/edit-variation-status-modal') %>
+    <%- include('../Admin/partials/admin-variations-modal') %>
 
     <div id="storefrontConfirmModal" class="inventory-confirmation-modal">
         <div class="inventory-confirmation-content">

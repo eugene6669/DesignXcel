@@ -2312,7 +2312,7 @@
         function handleAction(orderId, action) {
             if (action !== 'proceed') return;
 
-            const url = `/Employee/InventoryManager/OrdersReceive/Proceed/${orderId}`;
+            const url = `/Employee/Admin/OrdersReceive/Proceed/${orderId}`;
 
             showLoadingSpinner('orders-loading-spinner', 'Receiving order...');
 
@@ -2321,7 +2321,7 @@
                 .then(data => {
                     if (data.success) {
                         closeModal(orderId, action);
-                        const dest = '/Employee/InventoryManager/Orders?tab=completed';
+                        const dest = '/Employee/InventoryManager/InventoryCompletedOrders';
                         showOrderSuccess(data.status === 'Completed Returned'
                             ? 'Replacement order auto-confirmed and completed!'
                             : 'Order auto-confirmed after 7-day return window!');

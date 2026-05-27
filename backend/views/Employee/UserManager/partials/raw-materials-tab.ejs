@@ -1,0 +1,223 @@
+<div id="rawMaterialsTab" class="tab-content<%= typeof activeTab !== 'undefined' && activeTab === 'raw-materials' ? ' active' : '' %>">
+    <div class="content-area">
+        <p class="bom-intro">Inventory master — track materials only (SKU, stock, supplier). Not sold to customers.</p>
+        <div class="rm-toolbar">
+            <button type="button" id="rmAddMaterialBtn" class="add-material-btn">+ Add Material</button>
+            <button type="button" id="rmQuickAddBtn" class="add-material-btn" style="background:#28a745;color:#fff;">Quick Add Common</button>
+            <button type="button" id="rmManageUnitsBtn" class="add-material-btn" style="background:#17a2b8;color:#fff;">Manage Units</button>
+        </div>
+        <div class="stock-legend rm-legend">
+            <span><i style="background:#DC3545;"></i> Out of stock (0)</span>
+            <span><i style="background:#FF9800;"></i> Critical (1–10)</span>
+            <span><i style="background:#d4af37;"></i> Low (11–20)</span>
+        </div>
+
+        <% if (materials && materials.length > 0) { %>
+            <table id="rawMaterialsTable">
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Name</th>
+                        <th class="qty-col">Qty</th>
+                        <th>Unit</th>
+                        <th>Supplier</th>
+                        <th>Updated</th>
+                        <th class="pi-actions-col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% materials.forEach(material => {
+                        const qty = material.QuantityAvailable;
+                        const n = Number(qty) || 0;
+                        let qtyClass = 'stock-qty-normal';
+                        if (n < 0) qtyClass = 'stock-qty-negative';
+                        else if (n === 0) qtyClass = 'stock-qty-out';
+                        else if (n <= 10) qtyClass = 'stock-qty-critical';
+                        else if (n <= 20) qtyClass = 'stock-qty-low';
+                    %>
+                        <tr data-material-id="<%= material.MaterialID %>">
+                            <td><code style="font-size:0.85em;"><%= material.SKU || '—' %></code></td>
+                            <td><%= material.Name %></td>
+                            <td class="qty-col"><span class="stock-qty rm-qty-display <%= qtyClass %>" data-material-id="<%= material.MaterialID %>"><%= qty %></span></td>
+                            <td><%= material.Unit %></td>
+                            <td><%= material.Supplier || '—' %></td>
+                            <td class="rm-updated-cell"><%= material.LastUpdated ? new Date(material.LastUpdated).toLocaleDateString() : '—' %></td>
+                            <td class="pi-actions-col">
+                                <div class="pi-actions-cell">
+                                <button type="button" class="restock-raw-material-btn pi-icon-restock-btn"
+                                    data-material-id="<%= material.MaterialID %>"
+                                    data-material-name="<%= material.Name.replace(/'/g, "\\'").replace(/"/g, "&quot;") %>"
+                                    data-quantity="<%= material.QuantityAvailable %>"
+                                    data-unit="<%= material.Unit %>"
+                                    title="Restock" aria-label="Restock">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                </button>
+                                <button type="button" class="edit-raw-material-btn pi-icon-edit-btn" title="Edit" aria-label="Edit"
+                                    data-id="<%= material.MaterialID %>"
+                                    data-sku="<%= material.SKU || '' %>"
+                                    data-name="<%= material.Name %>"
+                                    data-quantity="<%= material.QuantityAvailable %>"
+                                    data-unit="<%= material.Unit %>"
+                                    data-supplier="<%= (material.Supplier || '').replace(/"/g, '&quot;') %>">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                </button>
+                                <button type="button" class="archive-material-btn pi-icon-archive-btn" title="Archive" aria-label="Archive"
+                                    data-id="<%= material.MaterialID %>"
+                                    data-name="<%= material.Name %>">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                                </button>
+                                </div>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        <% } else { %>
+            <p style="color:#666;font-size:0.9em;">No raw materials yet. Use <strong>Quick Add Common</strong> or <strong>Add Material</strong>.</p>
+        <% } %>
+    </div>
+</div>
+
+<div id="rmAddMaterialModal" class="modal rm-modal-compact">
+    <div class="modal-content">
+        <span class="close-button" id="rmCloseAddMaterial">&times;</span>
+        <h3>Add Raw Material</h3>
+        <p style="font-size:0.82em;color:#666;margin:0 0 10px;">SKU is auto-generated (RM-000001 format).</p>
+        <form action="/Employee/UserManager/RawMaterials/Add" method="POST">
+            <input type="hidden" name="redirectTab" value="raw-materials">
+            <div class="rm-form-grid">
+                <div class="rm-full">
+                    <label for="rmAddName">Name</label>
+                    <input type="text" id="rmAddName" name="name" required placeholder="e.g. Wood Plank Oak">
+                </div>
+                <div>
+                    <label for="rmAddQuantity">Quantity</label>
+                    <input type="number" id="rmAddQuantity" name="quantity" min="0" value="0" required>
+                </div>
+                <div>
+                    <label for="rmAddUnit">Unit</label>
+                    <select id="rmAddUnit" name="unit" required>
+                        <% if (units && units.length > 0) { %>
+                            <% units.forEach(unit => { %>
+                                <option value="<%= unit.UnitName %>"><%= unit.UnitName %></option>
+                            <% }); %>
+                        <% } else { %>
+                            <option value="pcs">pcs</option>
+                            <option value="kg">kg</option>
+                            <option value="meter">meter</option>
+                            <option value="sheet">sheet</option>
+                        <% } %>
+                    </select>
+                </div>
+                <div class="rm-full">
+                    <label for="rmAddSupplier">Supplier</label>
+                    <input type="text" id="rmAddSupplier" name="supplier" placeholder="Optional supplier name">
+                </div>
+            </div>
+            <div class="rm-form-actions">
+                <button type="button" class="rm-btn rm-btn-secondary" id="rmCancelAddMaterial">Cancel</button>
+                <button type="submit" class="rm-btn rm-btn-primary">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="rmEditMaterialModal" class="modal rm-modal-compact">
+    <div class="modal-content">
+        <span class="close-button" id="rmCloseEditMaterial">&times;</span>
+        <h3>Edit Raw Material</h3>
+        <form id="rmEditMaterialForm" action="/Employee/UserManager/RawMaterials/Edit" method="POST">
+            <input type="hidden" name="redirectTab" value="raw-materials">
+            <input type="hidden" id="rmEditMaterialID" name="materialid">
+            <div class="rm-form-grid">
+                <div class="rm-full">
+                    <label>SKU</label>
+                    <input type="text" id="rmEditSku" readonly style="background:#f5f5f5;color:#555;">
+                </div>
+                <div class="rm-full">
+                    <label for="rmEditMaterialName">Name</label>
+                    <input type="text" id="rmEditMaterialName" name="name" required>
+                </div>
+                <div>
+                    <label for="rmEditQuantity">Quantity</label>
+                    <input type="number" id="rmEditQuantity" name="quantity" min="0" required>
+                </div>
+                <div>
+                    <label for="rmEditUnit">Unit</label>
+                    <select id="rmEditUnit" name="unit" required>
+                        <% if (units && units.length > 0) { %>
+                            <% units.forEach(unit => { %>
+                                <option value="<%= unit.UnitName %>"><%= unit.UnitName %></option>
+                            <% }); %>
+                        <% } else { %>
+                            <option value="pcs">pcs</option>
+                            <option value="kg">kg</option>
+                        <% } %>
+                    </select>
+                </div>
+                <div class="rm-full">
+                    <label for="rmEditSupplier">Supplier</label>
+                    <input type="text" id="rmEditSupplier" name="supplier" placeholder="Optional">
+                </div>
+            </div>
+            <div class="rm-form-actions">
+                <button type="button" class="rm-btn rm-btn-secondary" id="rmCancelEditMaterial">Cancel</button>
+                <button type="submit" class="rm-btn rm-btn-primary">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="rmQuickAddModal" class="modal rm-modal-compact rm-modal-wide">
+    <div class="modal-content">
+        <span class="close-button" id="rmCloseQuickAdd">&times;</span>
+        <h3>Quick Add — Office Furniture Materials</h3>
+        <p style="margin:0 0 10px;font-size:0.82em;color:#666;">Select items to add (qty starts at 0). Existing names are skipped.</p>
+        <div id="rmCommonMaterialsList" class="rm-quick-grid"></div>
+        <div class="rm-form-actions">
+            <button type="button" class="rm-btn rm-btn-secondary" id="rmCancelQuickAdd">Cancel</button>
+            <button type="button" class="rm-btn rm-btn-primary" id="rmSubmitQuickAdd">Add Selected</button>
+        </div>
+    </div>
+</div>
+
+<div id="rawMaterialRestockModal" class="modal pi-modal-compact">
+    <div class="modal-content" style="max-width:420px;">
+        <span class="close-button" id="rmCloseRestockModal">&times;</span>
+        <h3>Restock Raw Material</h3>
+        <input type="hidden" id="rawMaterialRestockId" value="">
+        <div class="form-group">
+            <label>Material</label>
+            <p id="rawMaterialRestockName" style="margin:4px 0 0;font-weight:600;color:#333;"></p>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;padding:10px;background:#f8f9fa;border-radius:6px;font-size:0.9em;">
+            <strong>Current Qty:</strong> <span id="rawMaterialRestockCurrentQty">0</span>
+            <span id="rawMaterialRestockUnit" style="color:#666;"></span>
+        </div>
+        <div class="form-group">
+            <label for="rawMaterialRestockQty">Quantity to add</label>
+            <input type="number" id="rawMaterialRestockQty" min="1" value="1" style="width:100%;max-width:120px;padding:8px;border:1px solid #ced4da;border-radius:4px;text-align:center;">
+            <p style="font-size:0.85em;color:#666;margin:8px 0 0;">Adds to available stock for this material.</p>
+        </div>
+        <div class="pi-form-actions">
+            <button type="button" id="rmCancelRestock" class="pi-btn pi-btn-secondary">Cancel</button>
+            <button type="button" id="rmConfirmRestock" class="pi-btn pi-btn-primary" style="background:#198754;color:#fff;border:none;">Restock</button>
+        </div>
+    </div>
+</div>
+
+<div id="rmManageUnitsModal" class="modal rm-modal-compact rm-modal-wide">
+    <div class="modal-content">
+        <span class="close-button" id="rmCloseManageUnits">&times;</span>
+        <h3>Manage Units</h3>
+        <div class="rm-add-unit-row">
+            <input type="text" id="rmNewUnitName" placeholder="New unit name (e.g. box, roll)">
+            <button type="button" class="rm-btn rm-btn-primary" id="rmAddUnitBtn">Add</button>
+        </div>
+        <h4>Existing units</h4>
+        <div id="rmUnitsList" class="rm-units-list"><em style="color:#888;">Loading…</em></div>
+        <div class="rm-form-actions">
+            <button type="button" class="rm-btn rm-btn-secondary" id="rmCloseManageUnitsBtn">Close</button>
+        </div>
+    </div>
+</div>

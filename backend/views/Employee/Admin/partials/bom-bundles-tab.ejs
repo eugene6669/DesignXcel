@@ -1,8 +1,8 @@
-<div id="bomBundlesTab" class="tab-content<%= typeof activeTab !== 'undefined' && activeTab === 'bom-bundles' ? ' active' : '' %>">
+<div id="bomBundlesTab" class="tab-content<%= typeof activeTab !== 'undefined' && (activeTab === 'rawmaterials-bundles' || activeTab === 'bom-bundles') ? ' active' : '' %>">
     <div class="content-area">
-        <p class="bom-intro">Reusable manufacturing recipes (Bill of Materials). Products can select a bundle when creating stock.</p>
+        <p class="bom-intro">Reusable raw materials bundles (manufacturing recipes). Products can select a bundle when building stock.</p>
         <div class="rm-toolbar">
-            <button type="button" id="bomAddBundleBtn" class="add-material-btn">+ Create BOM Bundle</button>
+            <button type="button" id="bomAddBundleBtn" class="add-material-btn">+ Create Raw Materials Bundle</button>
         </div>
 
         <% const bundles = typeof bomBundles !== 'undefined' && Array.isArray(bomBundles) ? bomBundles : []; %>

@@ -2,8 +2,6 @@
 
 const sql = require('mssql');
 
-let schemaReady = false;
-
 const MOVEMENT_LABELS = {
     returned_to_damaged: 'Returned → Damaged',
     damaged_to_repaired: 'Damaged → Repaired',
@@ -11,12 +9,12 @@ const MOVEMENT_LABELS = {
     restock_available: 'Restock → Available',
     restock_variation: 'Restock variation',
     restock_product: 'Restock product',
+    restock_raw_material: 'Restock raw material',
     return_received: 'Return received',
     status_adjustment: 'Status adjustment'
 };
 
 async function ensureInventoryStockMovementSchema(pool) {
-    if (schemaReady) return;
     await pool.request().query(`
         IF NOT EXISTS (
             SELECT 1 FROM sys.tables
@@ -39,8 +37,22 @@ async function ensureInventoryStockMovementSchema(pool) {
             CREATE INDEX IX_InventoryStockMovements_Variation ON dbo.InventoryStockMovements(VariationID, CreatedAt DESC);
             CREATE INDEX IX_InventoryStockMovements_Product ON dbo.InventoryStockMovements(InventoryProductID, CreatedAt DESC);
         END
+        IF NOT EXISTS (
+            SELECT 1 FROM sys.columns
+            WHERE object_id = OBJECT_ID('dbo.InventoryStockMovements') AND name = 'RawMaterialID'
+        )
+        BEGIN
+            ALTER TABLE dbo.InventoryStockMovements ADD RawMaterialID INT NULL;
+            CREATE INDEX IX_InventoryStockMovements_RawMaterial ON dbo.InventoryStockMovements(RawMaterialID, CreatedAt DESC);
+        END
+        IF NOT EXISTS (
+            SELECT 1 FROM sys.columns
+            WHERE object_id = OBJECT_ID('dbo.InventoryStockMovements') AND name = 'IsArchived'
+        )
+        BEGIN
+            ALTER TABLE dbo.InventoryStockMovements ADD IsArchived BIT NOT NULL CONSTRAINT DF_InventoryStockMovements_IsArchived DEFAULT (0);
+        END
     `);
-    schemaReady = true;
 }
 
 function movementLabel(type) {
@@ -55,6 +67,7 @@ async function insertStockMovement(pool, row) {
     await pool.request()
         .input('inventoryProductId', sql.Int, row.inventoryProductId || null)
         .input('variationId', sql.Int, row.variationId || null)
+        .input('rawMaterialId', sql.Int, row.rawMaterialId || null)
         .input('movementType', sql.NVarChar(64), row.movementType)
         .input('fromStatus', sql.NVarChar(32), row.fromStatus || null)
         .input('toStatus', sql.NVarChar(32), row.toStatus || null)
@@ -63,10 +76,10 @@ async function insertStockMovement(pool, row) {
         .input('createdBy', sql.Int, row.createdBy || null)
         .query(`
             INSERT INTO InventoryStockMovements (
-                InventoryProductID, VariationID, MovementType, FromStatus, ToStatus, Quantity, Notes, CreatedBy
+                InventoryProductID, VariationID, RawMaterialID, MovementType, FromStatus, ToStatus, Quantity, Notes, CreatedBy
             )
             VALUES (
-                @inventoryProductId, @variationId, @movementType, @fromStatus, @toStatus, @quantity, @notes, @createdBy
+                @inventoryProductId, @variationId, @rawMaterialId, @movementType, @fromStatus, @toStatus, @quantity, @notes, @createdBy
             )
         `);
 }
@@ -163,6 +176,29 @@ async function logRestockVariationMovement(pool, payload) {
 }
 
 /** Log manual restock for products without variations. */
+/** Log manual restock from Raw Materials tab. */
+async function logRestockRawMaterialMovement(pool, payload) {
+    const rawMaterialId = parseInt(payload.rawMaterialId, 10);
+    const quantity = parseInt(payload.quantity, 10);
+    if (!rawMaterialId || !quantity || quantity <= 0) return;
+
+    const materialName = payload.materialName ? String(payload.materialName).trim() : '';
+    const unit = payload.unit ? String(payload.unit).trim() : '';
+    const noteBase = materialName
+        ? ('Restock raw material: ' + materialName + (unit ? ' (' + unit + ')' : ''))
+        : ('Restock raw material #' + rawMaterialId);
+
+    await insertStockMovement(pool, {
+        rawMaterialId,
+        movementType: 'restock_raw_material',
+        fromStatus: null,
+        toStatus: 'available',
+        quantity,
+        notes: payload.notes || (noteBase + ' (+' + quantity + ')'),
+        createdBy: payload.userId || null
+    });
+}
+
 async function logRestockProductMovement(pool, payload) {
     const inventoryProductId = parseInt(payload.inventoryProductId, 10);
     const quantity = parseInt(payload.quantity, 10);
@@ -267,9 +303,15 @@ async function logReturnOrderReceivedMovements(pool, payload) {
 }
 
 function bindMovementFilters(request, options) {
-    let where = ' WHERE 1=1';
+    let where = ' WHERE (m.IsArchived = 0 OR m.IsArchived IS NULL)';
     const productId = parseInt(options.inventoryProductId, 10);
     const variationId = parseInt(options.variationId, 10);
+    const rawMaterialId = parseInt(options.rawMaterialId, 10);
+    if (options.scope === 'products') {
+        where += ' AND m.RawMaterialID IS NULL';
+    } else if (options.scope === 'rawMaterials') {
+        where += ' AND m.RawMaterialID IS NOT NULL';
+    }
     if (productId) {
         request.input('productId', sql.Int, productId);
         where += ' AND m.InventoryProductID = @productId';
@@ -277,6 +319,10 @@ function bindMovementFilters(request, options) {
     if (variationId) {
         request.input('variationId', sql.Int, variationId);
         where += ' AND m.VariationID = @variationId';
+    }
+    if (rawMaterialId) {
+        request.input('rawMaterialId', sql.Int, rawMaterialId);
+        where += ' AND m.RawMaterialID = @rawMaterialId';
     }
     return where;
 }
@@ -353,6 +399,7 @@ function mapMovementRow(row) {
         movementId: row.MovementID,
         inventoryProductId: row.InventoryProductID,
         variationId: row.VariationID,
+        rawMaterialId: row.RawMaterialID,
         movementType: row.MovementType,
         movementLabel: movementLabel(row.MovementType),
         fromStatus: row.FromStatus,
@@ -362,7 +409,9 @@ function mapMovementRow(row) {
         createdAt: row.CreatedAt,
         productName: row.ProductName,
         variationName: row.VariationName,
-        variationSku: row.VariationSKU
+        variationSku: row.VariationSKU,
+        materialName: row.MaterialName,
+        materialUnit: row.MaterialUnit
     };
 }
 
@@ -374,7 +423,7 @@ async function fetchInventoryStockMovementsGrouped(pool, options = {}) {
     const offset = (page - 1) * limit;
 
     const countReq = pool.request();
-    const where = bindMovementFilters(countReq, options);
+    const where = bindMovementFilters(countReq, { ...options, scope: 'products' });
     const countResult = await countReq.query(`
         SELECT COUNT(DISTINCT m.InventoryProductID) AS total
         FROM InventoryStockMovements m
@@ -386,7 +435,7 @@ async function fetchInventoryStockMovementsGrouped(pool, options = {}) {
     const pageReq = pool.request()
         .input('offset', sql.Int, offset)
         .input('limit', sql.Int, limit);
-    const pageWhere = bindMovementFilters(pageReq, options);
+    const pageWhere = bindMovementFilters(pageReq, { ...options, scope: 'products' });
     const pageResult = await pageReq.query(`
         SELECT pp.InventoryProductID
         FROM (
@@ -420,12 +469,13 @@ async function fetchInventoryStockMovementsGrouped(pool, options = {}) {
     const rowsReq = pool.request();
     productIds.forEach((id, idx) => rowsReq.input(`pid${idx}`, sql.Int, id));
     const idPlaceholders = productIds.map((_, idx) => `@pid${idx}`).join(', ');
-    const rowsWhere = bindMovementFilters(rowsReq, options);
+    const rowsWhere = bindMovementFilters(rowsReq, { ...options, scope: 'products' });
     const rowsResult = await rowsReq.query(`
         SELECT
             m.MovementID,
             m.InventoryProductID,
             m.VariationID,
+            m.RawMaterialID,
             m.MovementType,
             m.FromStatus,
             m.ToStatus,
@@ -512,14 +562,274 @@ async function fetchInventoryStockMovementsGrouped(pool, options = {}) {
     };
 }
 
+/** Paginate by raw material for restock history. */
+async function fetchRawMaterialStockMovementsGrouped(pool, options = {}) {
+    await ensureInventoryStockMovementSchema(pool);
+    const limit = Math.min(Math.max(parseInt(options.limit, 10) || 50, 5), 200);
+    const page = Math.max(parseInt(options.page, 10) || 1, 1);
+    const offset = (page - 1) * limit;
+
+    const countReq = pool.request();
+    const where = bindMovementFilters(countReq, { ...options, scope: 'rawMaterials' });
+    const countResult = await countReq.query(`
+        SELECT COUNT(DISTINCT m.RawMaterialID) AS total
+        FROM InventoryStockMovements m
+        ${where}
+    `);
+    const totalMaterials = parseInt(countResult.recordset[0]?.total, 10) || 0;
+
+    const pageReq = pool.request()
+        .input('offset', sql.Int, offset)
+        .input('limit', sql.Int, limit);
+    const pageWhere = bindMovementFilters(pageReq, { ...options, scope: 'rawMaterials' });
+    const pageResult = await pageReq.query(`
+        SELECT pp.RawMaterialID
+        FROM (
+            SELECT m.RawMaterialID, MAX(m.CreatedAt) AS LastAt
+            FROM InventoryStockMovements m
+            ${pageWhere}
+            GROUP BY m.RawMaterialID
+        ) pp
+        ORDER BY pp.LastAt DESC
+        OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+    `);
+
+    const materialIds = (pageResult.recordset || [])
+        .map((r) => parseInt(r.RawMaterialID, 10))
+        .filter(Boolean);
+
+    if (!materialIds.length) {
+        return {
+            materials: [],
+            pagination: {
+                page,
+                limit,
+                totalCount: totalMaterials,
+                totalMovementCount: 0,
+                totalPages: Math.max(1, Math.ceil(totalMaterials / limit))
+            }
+        };
+    }
+
+    const rowsReq = pool.request();
+    materialIds.forEach((id, idx) => rowsReq.input(`rmid${idx}`, sql.Int, id));
+    const idPlaceholders = materialIds.map((_, idx) => `@rmid${idx}`).join(', ');
+    const rowsWhere = bindMovementFilters(rowsReq, { ...options, scope: 'rawMaterials' });
+    const rowsResult = await rowsReq.query(`
+        SELECT
+            m.MovementID,
+            m.InventoryProductID,
+            m.VariationID,
+            m.RawMaterialID,
+            m.MovementType,
+            m.FromStatus,
+            m.ToStatus,
+            m.Quantity,
+            m.Notes,
+            m.CreatedAt,
+            rm.Name AS MaterialName,
+            rm.Unit AS MaterialUnit
+        FROM InventoryStockMovements m
+        LEFT JOIN RawMaterials rm ON rm.MaterialID = m.RawMaterialID
+        ${rowsWhere}
+        AND m.RawMaterialID IN (${idPlaceholders})
+        ORDER BY m.RawMaterialID, m.CreatedAt DESC
+    `);
+
+    const movements = (rowsResult.recordset || []).map(mapMovementRow);
+    const materialMap = new Map();
+
+    for (const mv of movements) {
+        const mid = mv.rawMaterialId || 0;
+        if (!materialMap.has(mid)) {
+            materialMap.set(mid, {
+                rawMaterialId: mid,
+                materialName: mv.materialName || ('Material #' + mid),
+                materialUnit: mv.materialUnit || null,
+                movementCount: 0,
+                lastMovementAt: null,
+                movements: []
+            });
+        }
+        const material = materialMap.get(mid);
+        material.movementCount += 1;
+        material.movements.push(mv);
+        if (!material.lastMovementAt || new Date(mv.createdAt) > new Date(material.lastMovementAt)) {
+            material.lastMovementAt = mv.createdAt;
+        }
+    }
+
+    const materials = materialIds
+        .map((mid) => materialMap.get(mid))
+        .filter(Boolean);
+
+    return {
+        materials,
+        pagination: {
+            page,
+            limit,
+            totalCount: totalMaterials,
+            totalMovementCount: movements.length,
+            totalPages: Math.max(1, Math.ceil(totalMaterials / limit))
+        }
+    };
+}
+
+async function archiveStockMovementsWhere(pool, extraWhere, inputs = {}) {
+    await ensureInventoryStockMovementSchema(pool);
+    const req = pool.request();
+    Object.keys(inputs).forEach((key) => {
+        req.input(key, inputs[key].type, inputs[key].value);
+    });
+    const result = await req.query(`
+        UPDATE InventoryStockMovements
+        SET IsArchived = 1
+        WHERE (IsArchived = 0 OR IsArchived IS NULL)
+        ${extraWhere}
+    `);
+    return { ok: true, count: result.rowsAffected[0] || 0 };
+}
+
+async function archiveAllProductInventoryMovements(pool) {
+    return archiveStockMovementsWhere(pool, ' AND RawMaterialID IS NULL');
+}
+
+async function archiveAllRawMaterialMovements(pool) {
+    return archiveStockMovementsWhere(pool, ' AND RawMaterialID IS NOT NULL');
+}
+
+async function archiveStockMovementsForProduct(pool, inventoryProductId) {
+    const id = parseInt(inventoryProductId, 10);
+    if (!id) return { ok: false, message: 'Invalid product ID.', count: 0 };
+    const result = await archiveStockMovementsWhere(
+        pool,
+        ' AND InventoryProductID = @inventoryProductId AND RawMaterialID IS NULL',
+        { inventoryProductId: { type: sql.Int, value: id } }
+    );
+    return { ...result, message: result.count ? 'Archived ' + result.count + ' movement(s).' : 'No movements to archive.' };
+}
+
+async function archiveStockMovementsForRawMaterial(pool, rawMaterialId) {
+    const id = parseInt(rawMaterialId, 10);
+    if (!id) return { ok: false, message: 'Invalid material ID.', count: 0 };
+    const result = await archiveStockMovementsWhere(
+        pool,
+        ' AND RawMaterialID = @rawMaterialId',
+        { rawMaterialId: { type: sql.Int, value: id } }
+    );
+    return { ...result, message: result.count ? 'Archived ' + result.count + ' movement(s).' : 'No movements to archive.' };
+}
+
+async function archiveStockMovement(pool, movementId) {
+    await ensureInventoryStockMovementSchema(pool);
+    const id = parseInt(movementId, 10);
+    if (!id) return { ok: false, message: 'Invalid movement ID.' };
+
+    const result = await pool.request()
+        .input('movementId', sql.Int, id)
+        .query(`
+            UPDATE InventoryStockMovements
+            SET IsArchived = 1
+            WHERE MovementID = @movementId AND (IsArchived = 0 OR IsArchived IS NULL)
+        `);
+
+    if (!result.rowsAffected[0]) {
+        return { ok: false, message: 'Movement not found or already archived.' };
+    }
+    return { ok: true };
+}
+
+async function reactivateStockMovement(pool, movementId) {
+    await ensureInventoryStockMovementSchema(pool);
+    const id = parseInt(movementId, 10);
+    if (!id) return { ok: false, message: 'Invalid movement ID.' };
+
+    const result = await pool.request()
+        .input('movementId', sql.Int, id)
+        .query(`
+            UPDATE InventoryStockMovements
+            SET IsArchived = 0
+            WHERE MovementID = @movementId AND IsArchived = 1
+        `);
+
+    if (!result.rowsAffected[0]) {
+        return { ok: false, message: 'Archived movement not found.' };
+    }
+    return { ok: true };
+}
+
+async function fetchArchivedStockMovements(pool, limit = 200) {
+    await ensureInventoryStockMovementSchema(pool);
+    const cap = Math.min(Math.max(parseInt(limit, 10) || 200, 10), 500);
+    const result = await pool.request()
+        .input('limit', sql.Int, cap)
+        .query(`
+            SELECT TOP (@limit)
+                m.MovementID,
+                m.InventoryProductID,
+                m.VariationID,
+                m.RawMaterialID,
+                m.MovementType,
+                m.FromStatus,
+                m.ToStatus,
+                m.Quantity,
+                m.Notes,
+                m.CreatedAt,
+                ip.Name AS ProductName,
+                ipv.VariationName,
+                ipv.SKU AS VariationSKU,
+                rm.Name AS MaterialName,
+                rm.Unit AS MaterialUnit
+            FROM InventoryStockMovements m
+            LEFT JOIN InventoryProducts ip ON ip.InventoryProductID = m.InventoryProductID
+            LEFT JOIN InventoryProductVariations ipv ON ipv.VariationID = m.VariationID
+            LEFT JOIN RawMaterials rm ON rm.MaterialID = m.RawMaterialID
+            WHERE m.IsArchived = 1
+            ORDER BY m.CreatedAt DESC
+        `);
+
+    return (result.recordset || []).map((row) => ({
+        movementId: row.MovementID,
+        inventoryProductId: row.InventoryProductID,
+        variationId: row.VariationID,
+        rawMaterialId: row.RawMaterialID,
+        movementType: row.MovementType,
+        movementLabel: movementLabel(row.MovementType),
+        fromStatus: row.FromStatus,
+        toStatus: row.ToStatus,
+        quantity: row.Quantity,
+        notes: row.Notes,
+        createdAt: row.CreatedAt,
+        productName: row.ProductName,
+        variationName: row.VariationName,
+        variationSku: row.VariationSKU,
+        materialName: row.MaterialName,
+        materialUnit: row.MaterialUnit,
+        entityLabel: row.RawMaterialID
+            ? (row.MaterialName || ('Raw material #' + row.RawMaterialID))
+            : row.VariationID
+                ? ((row.ProductName || 'Product') + ' — ' + (row.VariationName || 'Variation'))
+                : (row.ProductName || ('Product #' + (row.InventoryProductID || '—')))
+    }));
+}
+
 module.exports = {
     ensureInventoryStockMovementSchema,
     insertStockMovement,
     logInventoryStockMovementFromVariationUpdate,
     fetchInventoryStockMovements,
     fetchInventoryStockMovementsGrouped,
+    fetchRawMaterialStockMovementsGrouped,
+    fetchArchivedStockMovements,
+    archiveStockMovement,
+    archiveStockMovementsForProduct,
+    archiveStockMovementsForRawMaterial,
+    archiveAllProductInventoryMovements,
+    archiveAllRawMaterialMovements,
+    reactivateStockMovement,
     logRestockVariationMovement,
     logRestockProductMovement,
+    logRestockRawMaterialMovement,
     logReturnOrderReceivedMovements,
     movementLabel,
     MOVEMENT_LABELS

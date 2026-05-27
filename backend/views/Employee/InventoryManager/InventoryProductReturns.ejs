@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Returns - Design Excellence</title>
+    <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+
+    <style>
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-menu {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .logout-section {
+            padding: 20px;
+            border-top: 1px solid #ddd;
+            margin-top: 20px;
+            text-align: center;
+            position: relative;
+        }
+        .logout-button {
+            display: inline-block;
+            width: auto;
+            padding: 12px 25px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .logout-button:hover {
+            background-color: #c82333;
+        }
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 700px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close-button:hover,
+        .close-button:focus {
+            color: #000;
+        }
+
+        /* Table Styles */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        tr:hover {
+            background-color: #e9e9e9;
+        }
+
+        /* Status Badge Styles */
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 500;
+            display: inline-block;
+        }
+
+        .status-available {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .status-damaged {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .status-returned {
+            background-color: #ffc107;
+            color: #333;
+        }
+
+        .status-repaired {
+            background-color: #17a2b8;
+            color: white;
+        }
+
+        .status-disposed {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .status-repaired {
+            background-color: #17a2b8;
+            color: white;
+        }
+
+        .status-disposed {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .materials-section {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+
+        .material-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .material-row select,
+        .material-row input[type="number"] {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .remove-material-btn {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .add-material-btn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+
+        /* Image Preview */
+        .image-preview {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+
+        /* Button Styles */
+        .add-inventory-btn {
+            background-color: #FFC107;
+            color: #333;
+            border: none;
+            border-radius: 5px;
+            padding: 10px 22px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .add-inventory-btn:hover {
+            background-color: #e0ac06;
+        }
+
+        .edit-inventory-btn {
+            background-color: #FFC107;
+            color: #333;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            font-size: 0.9em;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+
+        .edit-inventory-btn:hover {
+            background-color: #e0ac06;
+        }
+
+        .delete-inventory-btn {
+            background-color: #DC3545;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+
+        .delete-inventory-btn:hover {
+            background-color: #c82333;
+        }
+
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .dimensions-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 10px;
+        }
+
+        /* Custom Popup */
+        .custom-popup {
+            display: none;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 2000;
+            animation: slideIn 0.5s ease-out;
+            max-width: 300px;
+        }
+
+        .custom-popup.error {
+            background-color: #f44336;
+        }
+
+        .custom-popup-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Delete Confirmation Modal */
+        .delete-confirmation-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .delete-confirmation-content {
+            background-color: #fff;
+            padding: 32px;
+            border-radius: 10px;
+            box-shadow: 0 6px 32px rgba(0,0,0,0.18);
+            max-width: 420px;
+            text-align: center;
+        }
+
+        .delete-confirmation-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 18px;
+            margin-top: 20px;
+        }
+
+        .delete-cancel-btn {
+            background-color: #6c757d;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 28px;
+            cursor: pointer;
+        }
+
+        .delete-confirm-btn {
+            background-color: #dc3545;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 28px;
+            cursor: pointer;
+        }
+
+        /* Inventory Confirmation Modal - Matching other pages */
+        .inventory-confirmation-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            visibility: hidden;
+            opacity: 0;
+            transition: visibility 0s, opacity 0.3s ease;
+        }
+
+        .inventory-confirmation-modal.show {
+            display: flex;
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .inventory-confirmation-content {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            width: 90%;
+            text-align: left;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+
+        .inventory-confirmation-modal.show .inventory-confirmation-content {
+            transform: scale(1);
+        }
+
+        .inventory-confirmation-content h3 {
+            margin-top: 0;
+            color: #333;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .inventory-confirmation-content .changes-list {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 1em;
+            line-height: 1.8;
+        }
+
+        .inventory-confirmation-content .changes-list .change-item {
+            margin: 5px 0;
+        }
+
+        .inventory-confirmation-content .changes-list .change-positive {
+            color: #10b981;
+        }
+
+        .inventory-confirmation-content .changes-list .change-negative {
+            color: #dc3545;
+        }
+
+        .inventory-confirmation-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .inventory-confirm-btn {
+            background-color: #F0B21B;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 25px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .inventory-confirm-btn:hover {
+            background-color: #d69e16;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .inventory-cancel-btn {
+            background-color: #f8f9fa;
+            color: #333;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 12px 25px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .inventory-cancel-btn:hover {
+            background-color: #e9ecef;
+        }
+
+        /* Tab Styles */
+        .tab-navigation {
+            display: flex;
+            border-bottom: 2px solid #dee2e6;
+            margin-bottom: 20px;
+            background-color: #fff;
+        }
+
+        .tab-button {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: #6c757d;
+            transition: all 0.3s ease;
+        }
+
+        .tab-button:hover {
+            color: #007bff;
+            background-color: #f8f9fa;
+        }
+
+        .tab-button.active {
+            color: #007bff;
+            border-bottom-color: #007bff;
+            font-weight: 600;
+        }
+
+        /* Products listing page has no tabs — keep content always visible */
+        body.page-product-returns .main-content .content-area {
+            display: block !important;
+        }
+
+        /* Stock qty alerts — number only (not full row) */
+        .stock-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; font-size: 0.8em; color: #555; align-items: center; }
+        .stock-legend span { display: inline-flex; align-items: center; gap: 6px; }
+        .stock-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+        .stock-qty { font-weight: 700; font-size: 1.05em; display: inline-block; min-width: 2em; text-align: center; }
+        .stock-qty-negative { color: #b02a37; }
+        .stock-qty-out { color: #DC3545; }
+        .stock-qty-critical { color: #FF9800; }
+        .stock-qty-low { color: #d4af37; }
+        .stock-qty-normal { color: #28a745; }
+        .stock-qty-available { color: #28a745; }
+        .inventory-list-toolbar { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between; margin-bottom: 16px; }
+        .inventory-list-toolbar form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+        .inventory-list-toolbar label { display: block; font-size: 0.85em; margin-bottom: 4px; color: #555; }
+        .inventory-list-toolbar input,
+        .inventory-list-toolbar select { padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.9em; }
+        .inventory-list-summary { font-size: 0.78em; color: #868e96; margin: 6px 0 0; white-space: nowrap; }
+        .inventory-list-empty { color: #666; margin: 16px 0; }
+        .inventory-pagination { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin: 20px 0 8px; }
+        .inventory-pagination a,
+        .inventory-pagination span { padding: 6px 12px; border: 1px solid #dee2e6; border-radius: 4px; text-decoration: none; color: #333; font-size: 0.9em; }
+        .inventory-pagination a:hover { background: #f8f9fa; }
+        .inventory-pagination .current { background: #007bff; color: #fff; border-color: #007bff; }
+        .inventory-pagination .disabled { color: #9ca3af; pointer-events: none; background: #f3f4f6; }
+        .inventory-filter-card {
+            background: #fff;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+        }
+        .inventory-filter-form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 8px;
+            align-items: flex-end;
+        }
+        .inventory-filter-field { min-width: 130px; flex: 1 1 150px; }
+        .inventory-filter-field label {
+            display: block;
+            font-size: 0.72em;
+            font-weight: 500;
+            margin-bottom: 2px;
+            color: #6c757d;
+        }
+        .inventory-filter-field input,
+        .inventory-filter-field select {
+            width: 100%;
+            padding: 5px 8px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            font-size: 0.85em;
+            background: #fff;
+        }
+        .inventory-filter-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+            flex: 0 0 auto;
+        }
+        .inventory-filter-actions .pi-btn {
+            padding: 5px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .inventory-filter-actions .pi-btn-primary { background: #007bff; color: #fff; }
+        .inventory-filter-actions .pi-btn-primary:hover { background: #0069d9; }
+        .inventory-filter-actions .pi-btn-secondary { background: #6c757d; color: #fff; text-decoration: none; display: inline-flex; align-items: center; }
+        .inventory-filter-actions .pi-btn-secondary:hover { background: #5a6268; color: #fff; }
+        .archive-variation-btn {
+            background-color: #dc3545 !important;
+            color: #fff !important;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        .archive-variation-btn:hover { background-color: #c82333 !important; }
+        .edit-material-btn {
+            background-color: #ffc107;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            font-size: 0.9em;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .edit-material-btn:hover { background-color: #e0ac06; }
+        .delete-material-btn {
+            background-color: #DC3545;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            font-size: 0.9em;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .delete-material-btn:hover { background-color: #c82333; }
+        #rawMaterialsTable .rm-actions-cell {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            align-items: center;
+        }
+        .qty-col { text-align: center !important; }
+        #rawMaterialsTable th:nth-child(2),
+        #rawMaterialsTable td:nth-child(2) { text-align: center !important; }
+
+        /* Products tab toolbar */
+        .pi-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; align-items: center; justify-content: flex-end; }
+        .pi-toolbar .add-inventory-btn { margin: 0; }
+        .pi-categories-list .pi-category-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-bottom: 1px solid #eee; }
+        .pi-categories-list .pi-category-row:last-child { border-bottom: none; }
+        .pi-add-category-row { display: flex; gap: 8px; margin-bottom: 12px; }
+        .pi-add-category-row input { flex: 1; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; }
+
+        /* Raw materials tab — compact */
+        .rm-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; justify-content: flex-end; }
+        .rm-toolbar .add-material-btn { padding: 7px 12px; font-size: 0.85em; margin: 0; }
+        .rm-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; font-size: 0.8em; color: #555; }
+        .rm-legend span { display: inline-flex; align-items: center; gap: 5px; }
+        .rm-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
+
+        /* Products tab modals — compact */
+        .pi-modal-compact .modal-content {
+            max-width: 520px;
+            padding: 16px 18px;
+            margin: 2% auto;
+            max-height: 94vh;
+            overflow-y: auto;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+        }
+        .pi-modal-compact.pi-modal-wide .modal-content { max-width: 760px; }
+        .pi-modal-compact.pi-modal-xl .modal-content { max-width: 900px; }
+        .pi-modal-compact h3 { margin: 0 0 12px; font-size: 1.1em; color: #212529; padding-right: 28px; }
+        .pi-modal-compact h4 { margin: 0 0 8px; font-size: 0.95em; color: #333; }
+        .pi-modal-compact .form-group { margin-bottom: 10px; }
+        .pi-modal-compact .form-group > label { display: block; font-size: 0.82em; font-weight: 600; color: #444; margin-bottom: 4px; }
+        .pi-modal-compact input[type="text"],
+        .pi-modal-compact input[type="number"],
+        .pi-modal-compact input[type="file"],
+        .pi-modal-compact select,
+        .pi-modal-compact textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 6px 8px;
+            font-size: 0.9em;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+        }
+        .pi-modal-compact textarea { min-height: 72px; resize: vertical; }
+        .pi-modal-compact small { font-size: 0.78em; color: #666; }
+        .pi-modal-compact .pi-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+        .pi-modal-compact .pi-form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .pi-modal-compact .pi-span-2 { grid-column: 1 / -1; }
+        .pi-modal-compact .pi-section {
+            margin-top: 10px;
+            padding: 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            background: #f8f9fa;
+        }
+        .pi-modal-compact .pi-section p { margin: 0 0 8px; font-size: 0.8em; color: #666; }
+        .pi-modal-compact .materials-section { padding: 10px; border-radius: 4px; }
+        .pi-modal-compact .material-row { margin-bottom: 6px; }
+        .pi-modal-compact .pi-form-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid #eee;
+        }
+        .pi-modal-compact .pi-btn {
+            border: none;
+            padding: 7px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        .pi-modal-compact .pi-btn-primary { background: #28a745; color: #fff; }
+        #addProductModal .pi-btn-primary {
+            background: #D4A017;
+            color: #1a1a1a;
+        }
+        #addProductModal .pi-btn-primary:hover {
+            background: #B8860B;
+            color: #1a1a1a;
+        }
+        .pi-modal-compact .pi-btn-secondary { background: #6c757d; color: #fff; }
+        .pi-modal-compact .pi-btn-info { background: #007bff; color: #fff; }
+        .pi-modal-compact .close-button { margin-top: -4px; }
+        body.page-product-returns .content-area > table { font-size: 0.9em; }
+        body.page-product-returns .content-area > table th,
+        body.page-product-returns .content-area > table td { padding: 10px; }
+        #rawMaterialsTable { font-size: 0.88em; }
+        #rawMaterialsTable th, #rawMaterialsTable td { padding: 8px 10px; }
+        .rm-modal-compact .modal-content { max-width: 420px; padding: 16px 18px; margin: 4% auto; }
+        .rm-modal-compact.rm-modal-wide .modal-content { max-width: 720px; }
+        .rm-modal-compact h3 { margin: 0 0 12px; font-size: 1.1em; }
+        .rm-modal-compact h4 { margin: 0 0 8px; font-size: 0.95em; }
+        .rm-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+        .rm-form-grid .rm-full { grid-column: 1 / -1; }
+        .rm-form-grid label { display: block; font-size: 0.8em; font-weight: 600; color: #444; margin-bottom: 4px; }
+        .rm-form-grid input, .rm-form-grid select { width: 100%; padding: 6px 8px; font-size: 0.9em; border: 1px solid #ced4da; border-radius: 4px; box-sizing: border-box; }
+        .rm-form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+        .rm-btn { border: none; padding: 7px 14px; border-radius: 4px; cursor: pointer; font-size: 0.85em; font-weight: 600; }
+        .rm-btn-primary { background: #28a745; color: #fff; }
+        .rm-btn-secondary { background: #6c757d; color: #fff; }
+        .rm-btn-info { background: #17a2b8; color: #fff; }
+        .rm-quick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; max-height: 52vh; overflow-y: auto; padding: 4px 0; }
+        .rm-quick-item { border: 1px solid #dee2e6; border-radius: 4px; padding: 8px; background: #f8f9fa; font-size: 0.82em; }
+        .rm-quick-item label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; margin: 0; }
+        .rm-quick-cat { font-size: 0.9em; font-weight: 600; color: #333; margin: 12px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #e9ecef; }
+        .rm-units-list { max-height: 280px; overflow-y: auto; }
+        .rm-unit-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border: 1px solid #e9ecef; border-radius: 4px; margin-bottom: 6px; font-size: 0.88em; background: #f8f9fa; }
+        .rm-add-unit-row { display: flex; gap: 8px; margin-bottom: 12px; }
+        .rm-add-unit-row input { flex: 1; padding: 6px 8px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.9em; }
+
+        #variationsTable {
+            width: 100%;
+        }
+        #variationsTable .variations-table-status-cell {
+            text-align: center;
+            vertical-align: middle;
+            padding: 28px 16px;
+            font-size: 1.05em;
+            color: #666;
+        }
+        #variationsTable .variations-table-status-cell.is-error {
+            color: #c82333;
+        }
+
+        .variations-btn {
+            background-color: #6f42c1;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .variations-btn:hover {
+            background-color: #5a32a3;
+        }
+
+        .toggle-variations-btn {
+            transition: transform 0.3s ease;
+        }
+        .toggle-variations-btn.expanded .toggle-icon {
+            transform: rotate(90deg);
+        }
+        .variations-row {
+            background-color: #f8f9fa;
+        }
+        .variations-container {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .variations-table-container table {
+            font-size: 0.9em;
+        }
+        .variations-table-container td,
+        .variations-table-container th {
+            padding: 8px 10px;
+            vertical-align: middle;
+            border: 1px solid #dee2e6;
+        }
+        .variations-nested-table thead th {
+            background: #e9ecef;
+            font-weight: 600;
+            font-size: 0.8em;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+        .pi-name-with-image-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .pi-name-with-image-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .pi-name-with-image-cell .image-preview,
+        .pi-name-with-image-cell .variation-row-thumb {
+            width: 48px; height: 48px; object-fit: cover; border-radius: 4px; border: 1px solid #dee2e6; flex-shrink: 0;
+        }
+        .pi-name-image-placeholder {
+            flex-shrink: 0; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;
+            color: #999; border: 1px dashed #dee2e6; border-radius: 4px; background: #f8f9fa;
+        }
+        .variations-returns-table .var-col-name { width: 22%; text-align: left; }
+        .variations-returns-table .var-col-sku { width: 14%; text-align: left; word-break: break-all; }
+        .variations-returns-table .var-col-color { width: 8%; text-align: left; }
+        .variations-returns-table .var-col-qty { width: 7%; text-align: center; }
+        .variations-returns-table .var-col-price { width: 9%; text-align: center; }
+        .variations-returns-table .var-col-image { width: 10%; text-align: center; }
+        .variations-returns-table .var-col-action { width: 10%; text-align: center; }
+        .variations-returns-table tbody td.var-col-qty {
+            text-align: center;
+        }
+
+        .modal-notification {
+            display: none;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 10001;
+            animation: slideIn 0.5s ease-out;
+            max-width: 300px;
+        }
+
+        .modal-notification.error {
+            background-color: #f44336;
+        }
+
+        .modal-notification-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .delete-variation-modal-compact {
+            max-width: 400px;
+        }
+
+        .delete-variation-info-compact {
+            text-align: left;
+            margin: 15px 0;
+        }
+
+        .delete-variation-warning {
+            color: #dc3545;
+            font-weight: 500;
+            margin: 15px 0;
+        }
+        .page-product-returns .products-list-hint { font-size: 0.85em; color: #666; margin: 0 0 10px; }
+        .products-flat-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9em; }
+        .products-flat-table th, .products-flat-table td { padding: 10px; border: 1px solid #dee2e6; vertical-align: middle; }
+        .products-flat-table thead th { background: #f2f2f2; font-weight: 600; }
+        tr.variation-flat-row td { background: #f8f9fa; }
+        tr.variation-flat-row td:nth-child(2) { padding-left: 28px; }
+        .row-type-badge { font-size: 0.75em; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+        .row-type-product { background: #e7f1ff; color: #004085; }
+        .row-type-variation { background: #f0f0f0; color: #555; }
+        body.page-product-returns .main-content .content-area { display: block !important; }
+        .products-listing-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9em; }
+        .products-listing-table th, .products-listing-table td { padding: 10px; border: 1px solid #dee2e6; vertical-align: middle; }
+        .products-listing-table thead th { background: #f2f2f2; font-weight: 600; }
+        .products-flat-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9em; }
+        .products-flat-table th, .products-flat-table td { padding: 10px; border: 1px solid #dee2e6; vertical-align: middle; }
+        .products-flat-table thead th { background: #f2f2f2; font-weight: 600; }
+        tr.variation-flat-row td { background: #f8f9fa; }
+        tr.variation-flat-row td:nth-child(2) { padding-left: 28px; }
+        .row-type-badge { font-size: 0.75em; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+        .row-type-product { background: #e7f1ff; color: #004085; }
+        .row-type-variation { background: #f0f0f0; color: #555; }
+        .return-qty { font-weight: 600; display: inline-block; min-width: 1.5em; text-align: center; }
+        .return-qty.has-stock { font-weight: 700; }
+        .return-qty-damaged, .return-qty-th-damaged { color: #b45309; }
+        .return-qty-returned, .return-qty-th-returned { color: #1d4ed8; }
+        .return-qty-repaired, .return-qty-th-repaired { color: #047857; }
+        .return-qty-disposed, .return-qty-th-disposed { color: #6b21a8; }
+        .products-returns-table .return-qty:not(.has-stock) { color: #adb5bd; font-weight: 500; }
+        .return-qty-cell {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .repair-variation-btn {
+            font-size: 0.72em;
+            line-height: 1.2;
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid #b45309;
+            background: #fff7ed;
+            color: #b45309;
+            cursor: pointer;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .repair-variation-btn:hover {
+            background: #b45309;
+            color: #fff;
+        }
+        .make-available-variation-btn {
+            font-size: 0.72em;
+            line-height: 1.2;
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid #15803d;
+            background: #f0fdf4;
+            color: #15803d;
+            cursor: pointer;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .make-available-variation-btn:hover {
+            background: #15803d;
+            color: #fff;
+        }
+        .pi-icon-action-btn {
+            border: none;
+            border-radius: 6px;
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, transform 0.15s;
+            vertical-align: middle;
+        }
+        .pi-icon-action-btn svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            flex-shrink: 0;
+        }
+        .pi-icon-repair-btn {
+            background: #fff7ed;
+            color: #b45309;
+            border: 1px solid #b45309;
+        }
+        .pi-icon-repair-btn:hover {
+            background: #b45309;
+            color: #fff;
+        }
+        .pi-icon-available-btn {
+            background: #f0fdf4;
+            color: #15803d;
+            border: 1px solid #15803d;
+        }
+        .pi-icon-available-btn:hover {
+            background: #15803d;
+            color: #fff;
+        }
+        .return-actions-col {
+            min-width: 88px;
+        }
+    </style>
+</head>
+<body class="page-product-returns">
+    <div id="customPopup" class="custom-popup">
+        <div class="custom-popup-content">
+            <span class="custom-popup-icon">✓</span>
+            <span class="custom-popup-message"></span>
+        </div>
+    </div>
+    <div class="dashboard-container">
+        <div class="sidebar">
+            <%- include('partials/sidebar', { activePage: 'product-returns' }) %>
+        </div>
+        <div class="main-content">
+            <div class="header">
+                <h2>Product Returns</h2>
+                <p class="products-list-hint">Inventory products that have at least one active variation with returned, damaged, or repaired stock. Expand a row to edit variation status and quantities.</p>
+            </div>
+            <div id="productReturnsPanel" class="content-area">
+
+                <% 
+                    const fmtDate = typeof formatInventoryDate === 'function'
+                        ? formatInventoryDate
+                        : function(v) { return v ? String(v) : 'N/A'; };
+                    // Use allInventoryProducts directly from InventoryProducts table
+                    // All products now have inventory data stored directly in InventoryProducts
+                    const inventoryRows = (typeof allInventoryProducts !== 'undefined' && Array.isArray(allInventoryProducts))
+                        ? allInventoryProducts
+                        : [];
+                    const allProductsList = inventoryRows.length > 0
+                        ? inventoryRows.map(product => ({
+                            InventoryProductID: product.InventoryProductID,
+                            InventoryProductName: product.InventoryProductName,
+                            InventoryProductSKU: product.InventoryProductSKU,
+                            InventoryProductCategory: product.InventoryProductCategory,
+                            InventoryProductPrice: product.InventoryProductPrice,
+                            InventoryProductImageURL: product.InventoryProductImageURL,
+                            LastDateAdded: product.LastDateAdded || product.DateAdded,
+                            LastDateAddedLabel: fmtDate(product.LastDateAdded || product.DateAdded, 'N/A'),
+                            TotalQuantity: product.TotalQuantity || 0,
+                            AvailableQuantity: product.AvailableQuantity || 0,
+                            DamagedQuantity: product.DamagedQuantity || 0,
+                            ReturnedQuantity: product.ReturnedQuantity || 0,
+                            RepairedQuantity: product.RepairedQuantity || 0,
+                            DisposedQuantity: product.DisposedQuantity || 0,
+                            InventoryStatus: product.InventoryStatus || 'no_stock',
+                            Notes: product.Notes || '',
+                            hasInventory: (product.TotalQuantity || 0) > 0
+                        }))
+                        : [];
+                    const invPag = typeof pagination !== 'undefined' ? pagination : { page: 1, limit: 25, totalCount: 0, totalPages: 1 };
+                    const invFilters = typeof listFilters !== 'undefined' ? listFilters : { search: '', category: '' };
+                    const invCategories = typeof categories !== 'undefined' ? categories : [];
+                    function invListUrl(pageNum) {
+                        const parts = [];
+                        parts.push('page=' + encodeURIComponent(pageNum));
+                        if (invFilters.search) parts.push('search=' + encodeURIComponent(invFilters.search));
+                        if (invFilters.category) parts.push('category=' + encodeURIComponent(invFilters.category));
+                        if (typeof inventoryProductIdFocus !== 'undefined' && inventoryProductIdFocus) {
+                            parts.push('inventoryProductId=' + encodeURIComponent(inventoryProductIdFocus));
+                        }
+                        return '/Employee/InventoryManager/ProductInventory?' + parts.join('&');
+                    }
+                    function stockQtyClass(qty) {
+                        const n = Number(qty) || 0;
+                        if (n < 0) return 'stock-qty-negative';
+                        if (n === 0) return 'stock-qty-out';
+                        if (n <= 10) return 'stock-qty-critical';
+                        if (n <= 20) return 'stock-qty-low';
+                        return 'stock-qty-normal';
+                    }
+                    const invRangeStart = invPag.totalCount > 0 ? (invPag.page - 1) * invPag.limit + 1 : 0;
+                    const invRangeEnd = invPag.totalCount > 0 ? Math.min(invPag.page * invPag.limit, invPag.totalCount) : 0;
+                %>
+
+                <div class="inventory-filter-card" data-inventory-search="<%= (invFilters.search || '').replace(/"/g, '&quot;') %>">
+                    <form method="get" action="/Employee/InventoryManager/ProductInventory" class="inventory-filter-form">
+                        <input type="hidden" name="page" value="1">
+                        <div class="inventory-filter-field">
+                            <label for="invSearch">Search</label>
+                            <input type="search" id="invSearch" name="search" value="<%= invFilters.search || '' %>" placeholder="Name or variation SKU">
+                        </div>
+                        <div class="inventory-filter-field">
+                            <label for="invCategory">Category</label>
+                            <select id="invCategory" name="category">
+                                <option value="">All categories</option>
+                                <% invCategories.forEach(function(cat) { %>
+                                    <option value="<%= cat %>"<%= invFilters.category === cat ? ' selected' : '' %>><%= cat %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="inventory-filter-actions">
+                            <button type="submit" class="pi-btn pi-btn-primary">Apply filters</button>
+                            <% if (invFilters.search || invFilters.category) { %>
+                            <a href="/Employee/InventoryManager/ProductInventory" class="pi-btn pi-btn-secondary">Clear</a>
+                            <% } %>
+                        </div>
+                    </form>
+                    <% if (invPag.totalCount > 0) { %>
+                    <p class="inventory-list-summary">Showing <%= invRangeStart %>–<%= invRangeEnd %> of <%= invPag.totalCount %> products</p>
+                    <% } %>
+                </div>
+
+                <%- include('../Admin/partials/product-listing-expandable', {
+                    allProductsList: allProductsList,
+                    invFilters: invFilters,
+                    stockQtyClass: stockQtyClass,
+                    formatListDate: function(v) { return fmtDate(v, 'N/A'); },
+                    showReturnColumns: true,
+                    showActions: false,
+                    showVariationActions: true,
+                    showStorefront: false,
+                    showDiscount: false,
+                    emptyListMessage: 'No products have active variations with returned, damaged, or repaired stock.'
+                }) %>
+
+                <% if (invPag.totalPages > 1) { %>
+                    <nav class="inventory-pagination" aria-label="Product inventory pages">
+                        <% if (invPag.page > 1) { %>
+                            <a href="<%= invListUrl(invPag.page - 1) %>">Previous</a>
+                        <% } else { %>
+                            <span class="disabled">Previous</span>
+                        <% } %>
+                        <% for (let p = Math.max(1, invPag.page - 2); p <= Math.min(invPag.totalPages, invPag.page + 2); p++) { %>
+                            <% if (p === invPag.page) { %>
+                                <span class="current"><%= p %></span>
+                            <% } else { %>
+                                <a href="<%= invListUrl(p) %>"><%= p %></a>
+                            <% } %>
+                        <% } %>
+                        <% if (invPag.page < invPag.totalPages) { %>
+                            <a href="<%= invListUrl(invPag.page + 1) %>">Next</a>
+                        <% } else { %>
+                            <span class="disabled">Next</span>
+                        <% } %>
+                    </nav>
+                <% } %>
+
+            </div>
+        </div>
+    </div>
+    <%- include('../Admin/partials/repair-variation-modal') %>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260525o" defer></script>
+</body>
+</html>

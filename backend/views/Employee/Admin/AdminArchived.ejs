@@ -300,6 +300,70 @@
                     </table>
                 </div>
                 <div class="archived-section">
+                    <h3>Archived Stock Movements</h3>
+                    <div class="archived-stock-movements-filter" style="margin: 6px 0 14px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                        <label for="archivedStockMovementsGroup" style="color:#666;font-size:0.9em;">Show:</label>
+                        <select id="archivedStockMovementsGroup" style="padding:6px 10px;border:1px solid #ced4da;border-radius:6px;">
+                            <option value="all" selected>Products + Raw Materials</option>
+                            <option value="products">Products</option>
+                            <option value="raw">Raw Materials</option>
+                        </select>
+                    </div>
+                    <%
+                    const smAll = (archivedStockMovements || []);
+                    const smProducts = smAll.filter(function(mv){ return !mv.rawMaterialId; });
+                    const smRaw     = smAll.filter(function(mv){ return !!mv.rawMaterialId; });
+
+                    function renderSmTable(rows, emptyMsg) {
+                        let html = '<table>';
+                        html += '<thead><tr><th>Date</th><th>Item</th><th>Movement</th><th class="qty-col">Qty</th><th>Notes</th><th>Action</th></tr></thead><tbody>';
+                        if (rows.length > 0) {
+                            rows.forEach(function(mv){
+                                html += '<tr>';
+                                html += '<td>' + (mv.createdAt ? new Date(mv.createdAt).toLocaleString() : 'N/A') + '</td>';
+                                html += '<td>' + (mv.entityLabel || '—') + '</td>';
+                                html += '<td>' + (mv.movementLabel || mv.movementType || '—') + '</td>';
+                                html += '<td class="qty-col"><span class="stock-qty">' + (mv.quantity || 0) + '</span></td>';
+                                html += '<td style="max-width:240px;word-break:break-word;">' + (mv.notes || '—') + '</td>';
+                                html += '<td><div class="archived-actions">';
+                                html += '<form action="/Employee/Admin/Archived/ReactivateStockMovement/' + mv.movementId + '" method="POST" style="display:inline;">';
+                                html += '<button type="submit" class="reactivate-btn">Restore</button></form>';
+                                html += '<button type="button" class="delete-btn" data-id="' + mv.movementId + '" data-type="stock-movement" data-name="movement #' + mv.movementId + '">Delete</button>';
+                                html += '</div></td>';
+                                html += '</tr>';
+                            });
+                        } else {
+                            html += '<tr><td colspan="6" class="empty-table-message">' + emptyMsg + '</td></tr>';
+                        }
+                        html += '</tbody></table>';
+                        return html;
+                    }
+                    %>
+                    <div id="archivedStockMovementsProducts">
+                        <h4 style="margin:0 0 6px;font-size:0.95em;color:#555;">Products</h4>
+                        <%- renderSmTable(smProducts, 'No archived product stock movements.') %>
+                    </div>
+                    <div id="archivedStockMovementsRaw">
+                        <h4 style="margin:18px 0 6px;font-size:0.95em;color:#555;">Raw Materials</h4>
+                        <%- renderSmTable(smRaw, 'No archived raw material stock movements.') %>
+                    </div>
+                    <script>
+                        (function () {
+                            var sel = document.getElementById('archivedStockMovementsGroup');
+                            var prod = document.getElementById('archivedStockMovementsProducts');
+                            var raw = document.getElementById('archivedStockMovementsRaw');
+                            if (!sel || !prod || !raw) return;
+                            function apply() {
+                                var v = String(sel.value || 'all');
+                                prod.style.display = (v === 'raw') ? 'none' : 'block';
+                                raw.style.display = (v === 'products') ? 'none' : 'block';
+                            }
+                            sel.addEventListener('change', apply);
+                            apply();
+                        })();
+                    </script>
+                </div>
+                <div class="archived-section">
                     <h3>Archived Product Inventory</h3>
                     <table>
                         <thead>
@@ -502,6 +566,8 @@
                 reactivateType = 'material';
             } else if (action.includes('ReactivateBomBundle')) {
                 reactivateType = 'BOM bundle';
+            } else if (action.includes('ReactivateStockMovement')) {
+                reactivateType = 'stock movement';
             } else {
                 reactivateType = 'item';
             }
@@ -576,12 +642,15 @@
                 endpoint = `/api/admin/inventory-product-variations/delete-permanent/${deleteItemId}`;
             } else if (deleteItemType === 'bom-bundle') {
                 endpoint = `/api/admin/archived/bom-bundles/${deleteItemId}/permanent`;
+            } else if (deleteItemType === 'stock-movement') {
+                endpoint = `/api/admin/inventory-stock-movements/${deleteItemId}/permanent`;
             } else {
                 endpoint = `/api/admin/archived/${deleteItemType}s/${deleteItemId}/permanent`;
             }
             
             const response = await fetch(endpoint, {
                 method: deleteItemType === 'variation' ? 'POST' : 'DELETE',
+                // stock-movement uses DELETE (already default above)
                 headers: {
                     'Content-Type': 'application/json'
                 }
