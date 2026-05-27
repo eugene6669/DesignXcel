@@ -295,6 +295,13 @@
             transform: translateY(-1px);
             color: #1a1a1a;
         }
+        .pi-actions-cell .inventory-product-details-btn.pi-icon-details-btn,
+        .pi-actions-cell .inventory-variation-details-btn.pi-icon-details-btn,
+        .pi-actions-cell .product-storefront-btn.pi-icon-storefront-btn {
+            display: inline-flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
         .pi-icon-restock-btn,
         .restock-variation-btn,
         .restock-raw-material-btn {
@@ -1299,12 +1306,20 @@
             background: #B8860B;
             color: #1a1a1a;
         }
-        /* Create product modal â€” compact + mobile */
+        /* Build planned product modal — horizontal layout (reduce scroll) */
         #addProductModal.pi-create-product-modal .modal-content {
-            max-width: min(720px, calc(100vw - 24px));
+            max-width: min(980px, calc(100vw - 24px));
             padding: 14px 16px;
             margin: 12px auto;
         }
+        #addProductModal .pi-build-layout {
+            display: grid;
+            grid-template-columns: minmax(360px, 1fr) minmax(360px, 1fr);
+            gap: 10px 12px;
+            align-items: start;
+        }
+        #addProductModal .pi-build-layout .pi-build-col { min-width: 0; }
+        #addProductModal .pi-build-layout .pi-section { margin-top: 0; }
         #addProductModal .pi-build-modal-hint {
             font-size: 0.82em;
             color: #64748b;
@@ -1313,15 +1328,18 @@
         #addProductModal .req { color: #dc3545; }
         #addProductModal .pi-create-form .pi-create-top {
             display: grid;
-            grid-template-columns: 1fr 120px 120px;
+            grid-template-columns: 1fr 1fr;
             gap: 8px 10px;
             align-items: start;
+        }
+        #addProductModal .pi-create-form .pi-create-top .pi-create-name {
+            grid-column: 1 / -1;
         }
         #addProductModal .pi-create-form .pi-create-top .form-group { margin-bottom: 0; }
         #addProductModal .pi-create-cat-desc {
             display: grid;
-            grid-template-columns: minmax(140px, 200px) 1fr;
-            gap: 8px 10px;
+            grid-template-columns: 1fr;
+            gap: 8px;
             align-items: start;
             margin: 8px 0 6px;
         }
@@ -1380,7 +1398,7 @@
         #addProductModal #createInventoryMaterialsSummary { margin-top: 6px; padding: 6px; font-size: 0.82em; }
         #addProductModal .pi-variation-row {
             display: grid;
-            grid-template-columns: 1fr 1fr 72px;
+            grid-template-columns: 1fr 88px;
             gap: 8px;
             margin-bottom: 10px;
             padding: 10px;
@@ -1391,7 +1409,7 @@
         #addProductModal .pi-variation-row .pi-var-full { grid-column: 1 / -1; }
         #addProductModal .pi-variation-row .pi-var-media {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 8px;
             grid-column: 1 / -1;
         }
@@ -1462,6 +1480,7 @@
                 margin: 8px auto;
                 max-height: 92vh;
             }
+            #addProductModal .pi-build-layout { grid-template-columns: 1fr; }
             #addProductModal .pi-create-form .pi-create-top {
                 grid-template-columns: 1fr;
             }
@@ -1854,6 +1873,11 @@
                 %>
 
 
+                <div class="stock-legend">
+                    <span><i style="background:#DC3545;"></i> Out of stock (0)</span>
+                    <span><i style="background:#FF9800;"></i> Critical (1–10)</span>
+                    <span><i style="background:#d4af37;"></i> Low (11–20)</span>
+                </div>
                 <div class="inventory-filter-card" data-inventory-search="<%= (invFilters.search || '').replace(/"/g, '&quot;') %>">
                     <form method="get" action="/Employee/Admin/Inventory" class="inventory-filter-form">
                         <input type="hidden" name="tab" value="ProductInventory">
@@ -1924,7 +1948,8 @@
                     showVariationSalePrice: false,
                     formatDimensionsCompact: formatDimensionsCompact,
                     qtyParentLabel: 'Total Qty',
-                    variationQtyLabel: 'Available Qty'
+                    variationQtyLabel: 'Available Qty',
+                    showStockLegend: false
                 }) %>
 
                 <% if (invPag.totalPages > 1) { %>
@@ -2023,11 +2048,24 @@
         </div>
     </div>
 
+    <!-- Adjust Stock Confirmation Modal -->
+    <div id="adjustStockConfirmModal" class="inventory-confirmation-modal">
+        <div class="inventory-confirmation-content">
+            <h3>Confirm Stock Adjustment</h3>
+            <p id="adjustStockConfirmText" style="text-align:center;margin:12px 0 8px;font-size:1.05em;font-weight:600;color:#333;"></p>
+            <p style="text-align:center;margin:0 0 16px;color:#64748b;font-size:0.9em;">This is a manual correction and does not deduct raw materials.</p>
+            <div class="inventory-confirmation-buttons">
+                <button type="button" class="inventory-cancel-btn" id="cancelAdjustStockConfirm">Cancel</button>
+                <button type="button" class="inventory-confirm-btn" id="confirmAdjustStockConfirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/js/Employee/Admin/admin-modals.js?v=20260541" defer></script>
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260557" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260565" defer></script>
     <script src="/js/Employee/Admin/product-inventory-tabs.js?v=20260541" defer></script>
     <script src="/js/Employee/Admin/stock-movement-tab.js?v=20260554" defer></script>
-    <script src="/js/Employee/Admin/raw-materials-tab.js?v=20260552"></script>
+    <script src="/js/Employee/Admin/raw-materials-tab.js?v=20260561"></script>
     <script src="/js/Employee/Admin/bom-bundles-tab.js?v=20260552" defer></script>
 
     <% if (locals.error && locals.error.length > 0) { %>

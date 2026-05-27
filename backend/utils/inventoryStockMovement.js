@@ -11,7 +11,8 @@ const MOVEMENT_LABELS = {
     restock_product: 'Restock product',
     restock_raw_material: 'Restock raw material',
     return_received: 'Return received',
-    status_adjustment: 'Status adjustment'
+    status_adjustment: 'Status adjustment',
+    adjust_variation_stock: 'Adjust variation stock'
 };
 
 async function ensureInventoryStockMovementSchema(pool) {
@@ -61,8 +62,8 @@ function movementLabel(type) {
 
 async function insertStockMovement(pool, row) {
     await ensureInventoryStockMovementSchema(pool);
-    const qty = Math.max(0, parseInt(row.quantity, 10) || 0);
-    if (qty <= 0) return;
+    const qty = parseInt(row.quantity, 10) || 0;
+    if (!qty) return;
 
     await pool.request()
         .input('inventoryProductId', sql.Int, row.inventoryProductId || null)

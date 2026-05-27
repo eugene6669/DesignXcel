@@ -29,6 +29,7 @@
     showVariationItemCost (boolean, default true)
     variationItemCostMode ('total' | 'unit', default 'total')
     emptyListMessage (optional string)
+    showStockLegend (boolean, default true)
 %>
 <%
     const showReturnCols = typeof showReturnColumns !== 'undefined' ? !!showReturnColumns : false;
@@ -56,6 +57,7 @@
     const showVarItemCost = typeof showVariationItemCost !== 'undefined' ? !!showVariationItemCost : true;
     const varItemCostMode = typeof variationItemCostMode !== 'undefined' ? variationItemCostMode : 'total';
     const showDisc = typeof showDiscount !== 'undefined' ? !!showDiscount : false;
+    const showLegend = typeof showStockLegend !== 'undefined' ? !!showStockLegend : true;
     const showStage = typeof showListingStage !== 'undefined' ? !!showListingStage : false;
     const actionStyleMode = typeof actionStyle !== 'undefined' ? actionStyle : 'listing';
     const buildUrlPrefix = typeof listingBuildUrlPrefix !== 'undefined' ? listingBuildUrlPrefix : '/Employee/Admin/Inventory?tab=ProductInventory&buildFrom=';
@@ -73,7 +75,7 @@
     const varQtyLabel = typeof variationQtyLabel !== 'undefined' ? variationQtyLabel : 'Qty';
 %>
 <% if (allProductsList && allProductsList.length > 0) { %>
-    <% if (!showReturnCols) { %>
+    <% if (!showReturnCols && showLegend) { %>
     <div class="stock-legend">
         <span><i style="background:#DC3545;"></i> Out of stock (0)</span>
         <span><i style="background:#FF9800;"></i> Critical (1–10)</span>

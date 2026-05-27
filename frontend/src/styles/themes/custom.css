@@ -523,10 +523,13 @@
     align-items: center;
     gap: 1.2rem;
     padding: 0.15rem 0;
+    margin-bottom: 0;
     font-weight: 500;
     font-size: 0.7rem;
+    text-align: center;
     letter-spacing: 0.2px;
-    height: 28px;
+    min-height: 28px;
+    height: auto;
     position: sticky;
     top: var(--header-main-height, 80px);
     z-index: 100;
@@ -535,13 +538,31 @@
     backface-visibility: hidden;
     font-family: 'Neue Helvetica', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   }
+  .header-nav-bar .christmas-nav-decoration {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+  .header-nav-bar .christmas-nav-decoration:first-child {
+    left: 10px;
+  }
+  .header-nav-bar .christmas-nav-decoration:last-child {
+    right: 10px;
+  }
   .header-nav-link {
     color: #fff;
     text-decoration: none;
     padding: 0.25rem 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.2;
     border-radius: 3px;
     transition: text-decoration 0.2s;
     font-weight: 700;
+    font-size: 0.85rem;
+    text-align: center;
     font-family: 'Neue Helvetica', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   }
   

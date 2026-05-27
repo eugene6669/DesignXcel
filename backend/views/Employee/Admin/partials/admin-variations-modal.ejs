@@ -1,8 +1,8 @@
 <!-- Variations Management Modal (Products Listing) -->
-<div id="variationsModal" class="modal pi-modal-compact pi-modal-xl">
+<div id="variationsModal" class="modal pi-modal-compact pi-modal-wide">
     <div class="modal-content" style="position: relative;">
         <span class="close-button" id="closeVariationsModal" onclick="if(window.closeVariationsModalFunc) window.closeVariationsModalFunc(); else { const modal = document.getElementById('variationsModal'); if(modal) modal.style.display = 'none'; }">&times;</span>
-        <h3 id="variationsModalTitle">Manage Product Variations</h3>
+        <h3 id="variationsModalTitle">Add Variations</h3>
 
         <div id="variationModalNotification" class="modal-notification" style="display: none; position: absolute; top: 20px; right: 20px; background-color: #4CAF50; color: white; padding: 15px 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 10001; animation: slideIn 0.5s ease-out; max-width: 300px;">
             <div class="modal-notification-content" style="display: flex; align-items: center; gap: 12px;">
@@ -23,12 +23,6 @@
                         <input type="text" id="variationName" name="variationName" required>
                     </div>
                     <div>
-                        <label for="variationColor">Color</label>
-                        <input type="text" id="variationColor" name="color">
-                    </div>
-                </div>
-                <div class="pi-form-grid" style="margin-top:10px;">
-                    <div class="pi-span-2">
                         <label for="variationQuantity">Quantity</label>
                         <input type="number" id="variationQuantity" name="quantity" min="1" required>
                         <small id="availableStockInfo" style="display: block; margin-top: 5px; color: #666; font-size: 0.85em;"></small>
@@ -42,17 +36,9 @@
                     <div id="addVariationRecipeStatus" style="margin-top: 8px; font-size: 0.85em; color: #555; display:none;"></div>
                 </div>
                 <div class="pi-form-grid" style="margin-top:10px;">
-                    <div>
-                        <label for="variationMainImage">Main Image</label>
-                        <input type="file" id="variationMainImage" name="variationMainImage" class="variation-main-image" accept="image/*">
-                    </div>
-                    <div>
-                        <label for="variationThumbnails">Thumbnails (up to 4)</label>
-                        <input type="file" id="variationThumbnails" class="variation-thumbnails" accept="image/*" multiple>
-                    </div>
                     <div class="pi-span-2">
-                        <label for="variationModel3d">3D Model (GLB/GLTF)</label>
-                        <input type="file" id="variationModel3d" class="variation-model3d" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
+                        <label for="variationMainImage">Variation Main Image</label>
+                        <input type="file" id="variationMainImage" name="variationMainImage" class="variation-main-image" accept="image/*">
                     </div>
                 </div>
                 <button type="submit" class="pi-btn pi-btn-primary" style="margin-top:10px;">Add Variation</button>

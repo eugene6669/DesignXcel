@@ -505,7 +505,7 @@
             if (mode === 'inventory' || (isInventoryPage && mode !== 'catalog')) {
                 statusBlocks.forEach(function(el) { el.style.display = 'none'; });
                 catalogBlocks.forEach(function(el) { el.style.display = 'none'; });
-                restockBlocks.forEach(function(el) { el.style.display = 'none'; });
+                restockBlocks.forEach(function(el) { el.style.display = ''; });
                 inventoryDetailsBlocks.forEach(function(el) { el.style.display = ''; });
                 recipeViewBlocks.forEach(function(el) { el.style.display = ''; });
                 if (mainImageWrap) mainImageWrap.style.display = '';
@@ -1271,7 +1271,7 @@ let currentSelectedProductId = null;
             currentVariationProductId = productId;
             currentVariationIsFromProducts = false;
             const variationsModalTitleEl = document.getElementById('variationsModalTitle');
-            if (variationsModalTitleEl) variationsModalTitleEl.textContent = 'Manage Variations - ' + (productName || 'Product');
+            if (variationsModalTitleEl) variationsModalTitleEl.textContent = 'Add Variations - ' + (productName || 'Product');
             if (productId) {
                 loadVariations(productId, false).catch(function(err) { console.error(err); });
                 loadParentRecipeForAddVariation(productId).catch(function (err) { console.error(err); });
@@ -1906,6 +1906,38 @@ let currentSelectedProductId = null;
             }
         }
 
+        let pendingAdjustStockAction = null;
+        function initAdjustStockConfirmModal() {
+            const modal = document.getElementById('adjustStockConfirmModal');
+            if (!modal) return;
+            const cancelBtn = document.getElementById('cancelAdjustStockConfirm');
+            const confirmBtn = document.getElementById('confirmAdjustStockConfirm');
+            const closeModal = function() {
+                modal.classList.remove('show');
+                pendingAdjustStockAction = null;
+            };
+            if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', async function() {
+                    const action = pendingAdjustStockAction;
+                    closeModal();
+                    if (typeof action === 'function') await action();
+                });
+            }
+        }
+
+        function showAdjustStockConfirmModal(message, onConfirm) {
+            const modal = document.getElementById('adjustStockConfirmModal');
+            const textEl = document.getElementById('adjustStockConfirmText');
+            if (!modal || !textEl) {
+                if (window.confirm(message)) return onConfirm();
+                return;
+            }
+            textEl.textContent = message;
+            pendingAdjustStockAction = onConfirm;
+            modal.classList.add('show');
+        }
+
         function showRestockConfirmModal(quantity, onConfirm) {
             const modal = document.getElementById('restockConfirmModal');
             const textEl = document.getElementById('restockConfirmText');
@@ -2335,7 +2367,7 @@ let currentSelectedProductId = null;
             row.innerHTML = `
                 <div>
                     <label>Variation Name <span style="color:#dc3545;">*</span></label>
-                    <input type="text" class="create-variation-name" required placeholder="e.g. Small" value="${plannedVar && plannedVar.VariationName ? escapeHtml(plannedVar.VariationName) : ''}">
+                    <input type="text" class="create-variation-name" required placeholder="e.g. Blue" value="${plannedVar && plannedVar.VariationName ? escapeHtml(plannedVar.VariationName) : ''}">
                 </div>
                 <div class="pi-var-media">
                     <div>
@@ -2625,6 +2657,49 @@ let currentSelectedProductId = null;
                         buttonEl.textContent = 'Restock';
                     } else if (buttonEl.id === 'editVariationRestockBtn') {
                         buttonEl.textContent = 'Add Stock';
+                    }
+                }
+            }
+        }
+
+        async function executeAdjustVariationStock(variationId, inventoryProductId, buttonEl, delta, notes) {
+            if (buttonEl) {
+                if (!buttonEl.dataset.piIconHtml) buttonEl.dataset.piIconHtml = buttonEl.innerHTML;
+                buttonEl.disabled = true;
+                buttonEl.innerHTML = '…';
+            }
+            try {
+                const response = await fetch('/api/admin/inventory-products/adjust-variation-stock', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ inventoryProductId, variationId, delta, notes })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showCustomPopup(result.message || 'Stock adjusted.');
+                    await notifyInventoryStockChanged(inventoryProductId, result);
+                    if (document.getElementById('editVariationStatusModal')?.style.display === 'block' && typeof window.editVariationStatus === 'function') {
+                        await window.editVariationStatus(variationId);
+                    }
+                    if (typeof loadInventoryProductVariations === 'function') {
+                        await loadInventoryProductVariations(inventoryProductId);
+                    }
+                    if (typeof window.loadStockMovementHistory === 'function') {
+                        window.loadStockMovementHistory();
+                    }
+                } else {
+                    showCustomPopup(result.message || 'Adjust stock failed.', true);
+                }
+            } catch (err) {
+                showCustomPopup('Adjust stock failed: ' + err.message, true);
+            } finally {
+                if (buttonEl) {
+                    buttonEl.disabled = false;
+                    if (buttonEl.dataset.piIconHtml) {
+                        buttonEl.innerHTML = buttonEl.dataset.piIconHtml;
+                    } else {
+                        buttonEl.textContent = 'Adjust';
                     }
                 }
             }
@@ -3566,6 +3641,7 @@ let currentSelectedProductId = null;
             initInventoryDetailsModal();
         }
         if (isInventoryPage) initRestockConfirmModal();
+        if (isInventoryPage) initAdjustStockConfirmModal();
         if (isInventoryPage) initVariationRestockModal();
 
         function openEditInventoryProductQuickModal(productId) {
@@ -4203,16 +4279,10 @@ let currentSelectedProductId = null;
                 const invIdEl = document.getElementById('editVariationStatusInventoryProductID');
                 if (invIdEl) invIdEl.value = parentInvId || '';
                 const skuEl = document.getElementById('editVariationStatusSku');
-                const colorEl = document.getElementById('editVariationStatusColor');
                 const loadedSku = variationData.SKU || '';
-                const loadedColor = variationData.Color || '';
                 if (skuEl) {
                     skuEl.value = loadedSku;
                     skuEl.setAttribute('data-initial-sku', loadedSku);
-                }
-                if (colorEl) {
-                    colorEl.value = loadedColor;
-                    colorEl.setAttribute('data-initial-color', loadedColor);
                 }
                 renderMainImagePreview(
                     document.getElementById('editVariationStatusMainImagePreview'),
@@ -4249,6 +4319,8 @@ let currentSelectedProductId = null;
                         : sellableQty;
                     sfStockEl.value = String(displayQty);
                     sfStockEl.setAttribute('data-initial-storefront-qty', String(displayQty));
+                    sfStockEl.setAttribute('data-max-actual-stock', String(sellableQty));
+                    sfStockEl.max = String(sellableQty);
                 }
                 if (parentInvId && (variationInventoryMode || variationCatalogMode)) {
                     await loadInventoryProductRecipeDisplay(parentInvId, {
@@ -4332,6 +4404,16 @@ let currentSelectedProductId = null;
                 // Reset status select
                 document.getElementById('editVariationStatusSelect').value = '';
                 document.getElementById('variationStatusQuantityInputContainer').style.display = 'none';
+                const adjustQtyEl = document.getElementById('editVariationAdjustQty');
+                const adjustNotesEl = document.getElementById('editVariationAdjustNotes');
+                if (adjustQtyEl) adjustQtyEl.value = '1';
+                if (adjustNotesEl) adjustNotesEl.value = '';
+                const adjustSectionEl = document.getElementById('editVariationAdjustSection');
+                if (adjustSectionEl) {
+                    const stage = String(variationData.ListingStage || '').trim().toLowerCase();
+                    const hasStock = Number(currentAvailable) > 0;
+                    adjustSectionEl.style.display = (stage === 'built' || hasStock) ? '' : 'none';
+                }
 
                 updateVariationTotalQuantity();
 
@@ -4673,6 +4755,11 @@ let currentSelectedProductId = null;
                         const sfQty = parseInt(sfStockEl.value, 10);
                         if (Number.isNaN(sfQty) || sfQty < 0) {
                             showCustomPopup('Storefront available stock must be zero or greater.', true);
+                            return;
+                        }
+                        const maxActualStock = parseInt(sfStockEl.getAttribute('data-max-actual-stock') || '0', 10) || 0;
+                        if (sfQty > maxActualStock) {
+                            showCustomPopup('Storefront available stock cannot exceed actual stock (' + maxActualStock + ').', true);
                             return;
                         }
                     }
@@ -5361,6 +5448,8 @@ let currentSelectedProductId = null;
         function attachEditVariationStatusListeners() {
             const editVariationStatusForm = document.getElementById('editVariationStatusForm');
             const submitEditVariationStatusBtn = document.getElementById('submitEditVariationStatus');
+            const restockBtn = document.getElementById('editVariationRestockBtn');
+            const adjustBtn = document.getElementById('editVariationAdjustBtn');
             
             if (editVariationStatusForm) {
                 // Check if listener is already attached
@@ -5390,6 +5479,41 @@ let currentSelectedProductId = null;
                 }
             } else {
                 console.warn('Update Variation Status button not found - will retry when modal opens');
+            }
+
+            if (restockBtn && !restockBtn.hasAttribute('data-listener-attached')) {
+                restockBtn.addEventListener('click', async function (e) {
+                    e.preventDefault();
+                    const variationId = parseInt(document.getElementById('editVariationStatusVariationID')?.value, 10);
+                    const inventoryProductId = parseInt(document.getElementById('editVariationStatusInventoryProductID')?.value, 10);
+                    const qty = parseInt(document.getElementById('editVariationRestockQty')?.value, 10);
+                    if (variationId && inventoryProductId && qty > 0) {
+                        await window.restockVariationInline(variationId, inventoryProductId, restockBtn, qty);
+                    } else {
+                        showCustomPopup('Enter a positive restock quantity.', true);
+                    }
+                });
+                restockBtn.setAttribute('data-listener-attached', 'true');
+            }
+
+            if (adjustBtn && !adjustBtn.hasAttribute('data-listener-attached')) {
+                adjustBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const variationId = parseInt(document.getElementById('editVariationStatusVariationID')?.value, 10);
+                    const inventoryProductId = parseInt(document.getElementById('editVariationStatusInventoryProductID')?.value, 10);
+                    const deductQty = parseInt(document.getElementById('editVariationAdjustQty')?.value, 10);
+                    const notes = (document.getElementById('editVariationAdjustNotes')?.value || '').trim();
+                    if (!variationId || !inventoryProductId || !deductQty || deductQty <= 0) {
+                        showCustomPopup('Enter a positive quantity to deduct.', true);
+                        return;
+                    }
+                    const delta = -Math.abs(deductQty);
+                    const msg = 'Deduct stock by ' + Math.abs(delta) + ' unit(s)?';
+                    showAdjustStockConfirmModal(msg, async function () {
+                        await executeAdjustVariationStock(variationId, inventoryProductId, adjustBtn, delta, notes);
+                    });
+                });
+                adjustBtn.setAttribute('data-listener-attached', 'true');
             }
 
             const addEditVariationMaterialBtn = document.getElementById('addEditVariationMaterialBtn');

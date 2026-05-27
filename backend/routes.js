@@ -61,6 +61,7 @@ const {
 } = require('./utils/adminQueryHelpers');
 const {
     ensureInventoryStockMovementSchema,
+    insertStockMovement,
     logInventoryStockMovementFromVariationUpdate,
     logRestockVariationMovement,
     logRestockProductMovement,
@@ -25857,6 +25858,95 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             });
 
+            router.post('/api/admin/inventory-products/adjust-variation-stock', isAuthenticated, async (req, res) => {
+                try {
+                    await pool.connect();
+                    const inventoryProductId = parseInt(req.body.inventoryProductId, 10);
+                    const variationId = parseInt(req.body.variationId, 10);
+                    const delta = parseInt(req.body.delta, 10);
+                    const notes = (req.body.notes || '').toString().trim();
+
+                    if (!inventoryProductId || !variationId || !delta) {
+                        return res.json({ success: false, message: 'Product, variation, and a non-zero deduction are required.' });
+                    }
+                    if (delta >= 0) {
+                        return res.json({ success: false, message: 'Adjust Stock in this modal supports deductions only.' });
+                    }
+
+                    const varCheck = await pool.request()
+                        .input('variationId', sql.Int, variationId)
+                        .input('inventoryProductId', sql.Int, inventoryProductId)
+                        .query(`
+                            SELECT TOP 1 VariationID,
+                                   COALESCE(Quantity, 0) as Quantity,
+                                   COALESCE(AvailableQuantity, 0) as AvailableQuantity
+                            FROM InventoryProductVariations
+                            WHERE VariationID = @variationId AND InventoryProductID = @inventoryProductId AND IsActive = 1
+                        `);
+
+                    if (!varCheck.recordset.length) {
+                        return res.json({ success: false, message: 'Variation not found for this product.' });
+                    }
+
+                    const before = varCheck.recordset[0];
+                    const newAvailable = (Number(before.AvailableQuantity) || 0) + delta;
+                    const newQty = (Number(before.Quantity) || 0) + delta;
+                    if (newAvailable < 0 || newQty < 0) {
+                        return res.json({ success: false, message: 'Cannot deduct more than current stock.' });
+                    }
+
+                    const tx = new sql.Transaction(pool);
+                    await tx.begin();
+                    try {
+                        await tx.request()
+                            .input('variationId', sql.Int, variationId)
+                            .input('delta', sql.Int, delta)
+                            .query(`
+                                UPDATE InventoryProductVariations
+                                SET Quantity = COALESCE(Quantity, 0) + @delta,
+                                    AvailableQuantity = COALESCE(AvailableQuantity, 0) + @delta
+                                WHERE VariationID = @variationId
+                            `);
+
+                        await syncInventoryProductQtyFromVariations(inventoryProductId, tx);
+                        await tx.commit();
+                    } catch (txErr) {
+                        await tx.rollback();
+                        throw txErr;
+                    }
+
+                    try {
+                        await insertStockMovement(pool, {
+                            inventoryProductId,
+                            variationId,
+                            movementType: 'adjust_variation_stock',
+                            fromStatus: 'available',
+                            toStatus: 'available',
+                            quantity: delta,
+                            notes: (notes ? (notes + ' — ') : '') + 'Adjust (' + (delta > 0 ? '+' : '') + delta + ')',
+                            createdBy: req.session.user?.id
+                        });
+                    } catch (movementLogErr) {
+                        console.warn('[STOCK MOVEMENT] adjust variation log failed:', movementLogErr.message);
+                    }
+
+                    try {
+                        await syncInventoryVariationToProductsVariation(variationId, null);
+                    } catch (syncErr) {
+                        console.error('[ADJUST] Variation sync error:', syncErr);
+                    }
+
+                    const refresh = await buildInventoryStockRefreshPayload(pool, inventoryProductId);
+                    return res.json(Object.assign(
+                        { success: true, message: 'Stock deducted (' + delta + ').' },
+                        refresh
+                    ));
+                } catch (err) {
+                    console.error('Adjust variation stock error:', err);
+                    return res.json({ success: false, message: 'Failed to adjust stock: ' + err.message });
+                }
+            });
+
             // =============================================================================
             // INVENTORY PRODUCT VARIATIONS ROUTES
             // =============================================================================
@@ -26666,8 +26756,10 @@ module.exports = function (sql, pool, getStripe = null) {
                                 ipv.Model3D,
                                 COALESCE(ipv.Price, 0) AS Price,
                                 COALESCE(ipv.CostPrice, 0) AS CostPrice,
-                                COALESCE(pv.Quantity, 0) AS ProductVariationQuantity
+                                COALESCE(pv.Quantity, 0) AS ProductVariationQuantity,
+                                COALESCE(ip.ListingStage, '') AS ListingStage
                             FROM InventoryProductVariations ipv
+                            LEFT JOIN InventoryProducts ip ON ip.InventoryProductID = ipv.InventoryProductID
                             LEFT JOIN ProductVariations pv ON pv.VariationID = ipv.VariationID
                             WHERE ipv.VariationID = @variationID
                         `);
@@ -26952,6 +27044,21 @@ module.exports = function (sql, pool, getStripe = null) {
                             const displayStock = parseInt(req.body.storefrontStockQuantity, 10);
                             if (Number.isNaN(displayStock) || displayStock < 0) {
                                 throw new Error('Storefront available stock must be zero or greater.');
+                            }
+                            const actualStockResult = await variationTransaction.request()
+                                .input('variationID', sql.Int, parsedVariationID)
+                                .query(`
+                                    SELECT CASE
+                                            WHEN ipv.AvailableQuantity IS NULL OR ipv.AvailableQuantity = 0
+                                            THEN COALESCE(ipv.Quantity, 0)
+                                            ELSE COALESCE(ipv.AvailableQuantity, 0)
+                                           END AS ActualStock
+                                    FROM InventoryProductVariations ipv
+                                    WHERE ipv.VariationID = @variationID AND ipv.IsActive = 1
+                                `);
+                            const actualStock = actualStockResult.recordset[0]?.ActualStock ?? 0;
+                            if (displayStock > actualStock) {
+                                throw new Error('Storefront available stock cannot exceed actual stock (' + actualStock + ').');
                             }
                             await variationTransaction.request()
                                 .input('variationID', sql.Int, parsedVariationID)
