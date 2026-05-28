@@ -1,6 +1,6 @@
 <div id="bomBundlesTab" class="tab-content<%= typeof activeTab !== 'undefined' && (activeTab === 'rawmaterials-bundles' || activeTab === 'bom-bundles') ? ' active' : '' %>">
     <div class="content-area">
-        <p class="bom-intro">Reusable raw materials bundles (manufacturing recipes). Products can select a bundle when building stock.</p>
+        <p class="bom-intro">Reusable raw materials bundles. Products can select a bundle when building stock.</p>
         <div class="rm-toolbar">
             <button type="button" id="bomAddBundleBtn" class="add-material-btn">+ Create Raw Materials Bundle</button>
         </div>
@@ -45,7 +45,7 @@
                 </tbody>
             </table>
         <% } else { %>
-            <p style="color:#666;font-size:0.9em;">No BOM bundles yet. Create one to reuse material recipes across products.</p>
+            <p style="color:#666;font-size:0.9em;">No raw materials bundles yet. Create one to reuse raw materials across products.</p>
         <% } %>
     </div>
 </div>

@@ -58,6 +58,7 @@ async function ensureVariationMediaColumns(pool) {
         { table: 'InventoryProducts', column: 'ThumbnailURLs', ddl: 'ALTER TABLE InventoryProducts ADD ThumbnailURLs NVARCHAR(MAX) NULL' },
         { table: 'InventoryProducts', column: 'Model3D', ddl: 'ALTER TABLE InventoryProducts ADD Model3D NVARCHAR(500) NULL' },
         { table: 'InventoryProducts', column: 'CostPrice', ddl: 'ALTER TABLE InventoryProducts ADD CostPrice DECIMAL(10, 2) NULL' },
+        { table: 'InventoryProducts', column: 'ReorderPoint', ddl: 'ALTER TABLE InventoryProducts ADD ReorderPoint INT NOT NULL DEFAULT 10' },
         { table: 'InventoryProductVariations', column: 'CostPrice', ddl: 'ALTER TABLE InventoryProductVariations ADD CostPrice DECIMAL(10, 2) NULL' },
         { table: 'InventoryProductVariations', column: 'Dimensions', ddl: 'ALTER TABLE InventoryProductVariations ADD Dimensions NVARCHAR(MAX) NULL' }
     ];

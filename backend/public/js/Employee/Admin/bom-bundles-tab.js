@@ -342,7 +342,7 @@
         };
         if (typeof window.showArchiveConfirmModal === 'function') {
             window.showArchiveConfirmModal(bundleName || 'this bundle', doArchive);
-        } else if (window.confirm('Archive BOM bundle "' + bundleName + '"?')) {
+        } else if (window.confirm('Archive raw materials bundle "' + bundleName + '"?')) {
             await doArchive();
         }
     }

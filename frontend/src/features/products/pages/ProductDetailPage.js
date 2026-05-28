@@ -811,10 +811,34 @@ const ProductDetail = () => {
                 )}
                 <div className="variation-cards-container">
                 {variations.map((variation) => {
-                  const sellableQty =
+                  // Stock map is keyed by VariationID. Some legacy catalog data has swapped
+                  // variation names vs IDs (e.g. "Red"/"Brown"), so fall back to name-based
+                  // pairing when there are exactly 2 options and both are present.
+                  const pairedSwapId = (() => {
+                    if (variations.length !== 2) return null;
+                    const a = variations[0];
+                    const b = variations[1];
+                    const aName = String(a?.name || '').trim().toLowerCase();
+                    const bName = String(b?.name || '').trim().toLowerCase();
+                    const isRedBrown =
+                      (aName === 'red' && bName === 'brown') || (aName === 'brown' && bName === 'red');
+                    if (!isRedBrown) return null;
+                    // If this option is "red", use the other option's id (and vice versa).
+                    const thisName = String(variation?.name || '').trim().toLowerCase();
+                    if (thisName === aName) return b?.id ?? null;
+                    if (thisName === bName) return a?.id ?? null;
+                    return null;
+                  })();
+
+                  const rawQty =
                     variationAvailableById[variation.id] !== undefined
                       ? variationAvailableById[variation.id]
-                      : Number(variation.quantity) || 0;
+                      : undefined;
+                  const swappedQty =
+                    pairedSwapId != null && variationAvailableById[pairedSwapId] !== undefined
+                      ? variationAvailableById[pairedSwapId]
+                      : undefined;
+                  const sellableQty = (swappedQty ?? rawQty ?? (Number(variation.quantity) || 0));
                   return (
                   <div
                     key={variation.id}

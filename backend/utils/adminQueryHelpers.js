@@ -105,6 +105,7 @@ const INVENTORY_PRODUCT_LIST_CORE = `
         ip.Category as InventoryProductCategory,
         ip.Price as InventoryProductPrice,
         ip.CostPrice as InventoryProductCostPrice,
+        COALESCE(ip.ReorderPoint, 10) as ReorderPoint,
         vagg.InventoryItemCostTotal,
         COALESCE(
             NULLIF(ip.ImageURL, ''),

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Product Inventory - Design Excellence</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <%- include('partials/pi-row-actions-assets') %>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -284,7 +285,7 @@
         .pi-icon-details-btn,
         .inventory-product-details-btn,
         .inventory-variation-details-btn {
-            background-color: #D4A017;
+            background-color: #d4af37;
             color: #1a1a1a;
             border: 1px solid #B8860B;
         }
@@ -362,6 +363,10 @@
             height: 16px;
             stroke: currentColor;
             flex-shrink: 0;
+        }
+        a.pi-icon-build-btn svg.pi-build-icon,
+        .pi-icon-build-btn svg.pi-build-icon {
+            stroke: none;
         }
 
         .pi-media-preview-main img {
@@ -864,6 +869,12 @@
         .products-listing-table .variations-nested-table th,
         .products-listing-table .variations-nested-table td { padding: 8px 10px; border: 1px solid #dee2e6; vertical-align: middle; }
         .products-listing-table .variations-nested-table thead th { background: #e9ecef; font-weight: 600; }
+        .page-inventory .variations-nested-table .var-col-sku .variation-sku-value,
+        .page-inventory .variation-flat-row .variation-sku-value {
+            font-size: 1.3em !important;
+            line-height: 1.3;
+            font-weight: 800;
+        }
         .var-col-dims { width: 78px; max-width: 88px; text-align: center; }
         .var-dims-compact {
             display: inline-block;
@@ -1079,17 +1090,13 @@
         }
         .inventory-filter-actions .pi-btn-primary,
         .inventory-filter-actions .inventory-filter-apply-btn {
-            background-color: #FFC107;
-            color: #333;
-            padding: 4px 10px;
-            font-size: 0.78em;
-            line-height: 1.2;
-            min-height: 0;
+            background-color: #d4be17;
+            color: #1a1a1a;
         }
         .inventory-filter-actions .pi-btn-primary:hover,
         .inventory-filter-actions .inventory-filter-apply-btn:hover {
-            background-color: #e0ac06;
-            color: #333;
+            background-color: #B8860B;
+            color: #1a1a1a;
         }
         .inventory-filter-actions .pi-btn-secondary {
             background: #6c757d;
@@ -1219,7 +1226,7 @@
             font-size: 0.85em;
             font-weight: 600;
         }
-        .pi-modal-compact .pi-btn-primary { background: #28a745; color: #fff; }
+        .pi-modal-compact .pi-btn-primary { background: #d4af37; color: #1a1a1a; }
         #addProductModal .pi-btn-primary {
             background: #D4A017;
             color: #1a1a1a;
@@ -1296,6 +1303,10 @@
         .inventory-stock-card.stock-repaired .inventory-stock-card-value { color: #198754; }
         .inventory-stock-card.stock-variants .inventory-stock-card-value { color: #6f42c1; }
         .inventory-stock-card.stock-total .inventory-stock-card-value { color: #212529; }
+        .inventory-stock-card-value.stock-level-out { color: #dc3545 !important; }
+        .inventory-stock-card-value.stock-level-critical { color: #FF9800 !important; }
+        .inventory-stock-card-value.stock-level-low { color: #d4af37 !important; }
+        .inventory-stock-card-value.stock-level-ok { color: #28a745 !important; }
         .inventory-stock-summary-grid {
             grid-template-columns: repeat(3, 1fr);
         }
@@ -1320,6 +1331,20 @@
         }
         #addProductModal .pi-build-layout .pi-build-col { min-width: 0; }
         #addProductModal .pi-build-layout .pi-section { margin-top: 0; }
+        #addProductModal .pi-plan-col-group-title {
+            margin: 0 0 8px;
+            text-align: left;
+            font-size: 0.95em;
+            font-weight: 700;
+            color: #334155;
+        }
+        #addProductModal .pi-build-col-left,
+        #addProductModal .pi-build-col-right {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px;
+        }
         #addProductModal .pi-build-modal-hint {
             font-size: 0.82em;
             color: #64748b;
@@ -1388,7 +1413,7 @@
         }
         #addProductModal .pi-materials-summary strong { font-size: 0.9em; }
         #addProductModal #createProductPrice,
-        #addProductModal #createProductCostPrice { text-align: right; }
+        #addProductModal #createProductCostPrice { text-align: left; }
         #addProductModal .pi-create-form textarea { min-height: 56px; }
         #addProductModal .pi-section { margin-top: 8px; padding: 10px; }
         #addProductModal .pi-section h4 { margin-bottom: 4px; }
@@ -1396,6 +1421,47 @@
         #addProductModal #createBomBundleSelect { max-width: none; margin-bottom: 8px; padding: 6px 8px; }
         #addProductModal .materials-section { padding: 8px; }
         #addProductModal #createInventoryMaterialsSummary { margin-top: 6px; padding: 6px; font-size: 0.82em; }
+        #addProductModal #createInventoryMaterialsContainer .material-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 72px 30px;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        #addProductModal #createInventoryMaterialsContainer .material-select {
+            width: 100%;
+            min-width: 0;
+            flex: unset;
+            padding: 6px 8px;
+            font-size: 0.82em;
+            line-height: 1.35;
+            white-space: normal;
+            word-wrap: break-word;
+            height: auto;
+            min-height: 34px;
+        }
+        #addProductModal #createInventoryMaterialsContainer .material-select option {
+            white-space: normal;
+            padding: 4px 6px;
+        }
+        #addProductModal #createInventoryMaterialsContainer .material-quantity {
+            width: 100%;
+            flex: unset;
+            padding: 6px;
+            font-size: 0.88em;
+            box-sizing: border-box;
+        }
+        #addProductModal #createInventoryMaterialsContainer .remove-material-btn {
+            width: 30px;
+            height: 30px;
+            padding: 0;
+            flex-shrink: 0;
+            font-size: 1.15em;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
         #addProductModal .pi-variation-row {
             display: grid;
             grid-template-columns: 1fr 88px;
@@ -1405,6 +1471,8 @@
             border: 1px solid #e9ecef;
             border-radius: 6px;
             background: #fff;
+            position: relative;
+            padding-top: 34px;
         }
         #addProductModal .pi-variation-row .pi-var-full { grid-column: 1 / -1; }
         #addProductModal .pi-variation-row .pi-var-media {
@@ -1458,9 +1526,10 @@
             box-sizing: border-box;
         }
         #addProductModal .pi-variation-remove {
-            grid-column: 1 / -1;
-            display: flex;
-            justify-content: flex-end;
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            margin: 0;
         }
         #addProductModal .pi-variation-remove button {
             background: #dc3545;
@@ -1472,6 +1541,28 @@
             cursor: pointer;
             font-size: 1.1em;
             line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+
+        /* Build modal: Add Variation button matches yellow theme */
+        #addProductModal #addCreateProductVariationBtn {
+            background: #FFC107;
+            color: #333;
+            border: 1px solid #e0ac06;
+            font-weight: 600;
+        }
+        #addProductModal #addCreateProductVariationBtn:hover {
+            background: #e0ac06;
+            color: #333;
+        }
+        #addProductModal #addCreateInventoryMaterialBtn {
+            color: #000;
+        }
+        #addProductModal #addCreateInventoryMaterialBtn:hover {
+            color: #000;
         }
         @media (max-width: 640px) {
             #addProductModal.pi-create-product-modal .modal-content {
@@ -1691,7 +1782,12 @@
         }
         .variations-container {
             max-height: 600px;
+            overflow-x: auto;
             overflow-y: auto;
+        }
+        body.pi-actions-menu-active .variations-container,
+        body.pi-actions-menu-active .variations-table-container {
+            overflow: visible !important;
         }
         .variations-table-container table {
             font-size: 0.9em;
@@ -1746,6 +1842,39 @@
             font-weight: 500;
             margin: 15px 0;
         }
+        /* Unified action/button color system (match edit button) */
+        .pi-btn.pi-btn-primary {
+            background: #FFC107 !important;
+            color: #333 !important;
+            border: 1px solid #e0ac06 !important;
+            font-weight: 600 !important;
+        }
+        .pi-btn.pi-btn-primary:hover {
+            background: #e0ac06 !important;
+            color: #333 !important;
+        }
+        .inventory-product-details-btn.pi-icon-details-btn,
+        .inventory-variation-details-btn.pi-icon-details-btn,
+        .product-storefront-btn.pi-icon-storefront-btn.is-visible,
+        .variation-storefront-btn.pi-icon-storefront-btn.is-visible,
+        .add-inventory-discount-btn {
+            background: #FFC107 !important;
+            color: #333 !important;
+            border: 1px solid #e0ac06 !important;
+            font-weight: 600 !important;
+        }
+        .inventory-product-details-btn.pi-icon-details-btn:hover,
+        .inventory-variation-details-btn.pi-icon-details-btn:hover,
+        .product-storefront-btn.pi-icon-storefront-btn.is-visible:hover,
+        .variation-storefront-btn.pi-icon-storefront-btn.is-visible:hover,
+        .add-inventory-discount-btn:hover {
+            background: #e0ac06 !important;
+            color: #333 !important;
+        }
+        .inventory-product-details-btn.pi-icon-details-btn svg,
+        .inventory-variation-details-btn.pi-icon-details-btn svg {
+            stroke: #111 !important;
+        }
     </style>
 </head>
 <body class="page-inventory">
@@ -1765,7 +1894,7 @@
         <div class="main-content">
             <div class="header">
                 <h2>Inventory Management</h2>
-                <p class="products-list-hint">Step 2: build products from your listing — BOM bundles, raw materials, <strong>dimensions</strong>, variations, and stock. Then publish on the <a href="/Employee/Admin/Storefront">Storefront</a>.</p>
+                <p class="products-list-hint">Step 2: build products from your listing — raw materials bundles, raw materials, <strong>dimensions</strong>, variations, and stock. Then publish on the <a href="/Employee/Admin/Storefront">Storefront</a>.</p>
                 <div class="product-workflow-steps" role="list">
                     <span><strong>1. Products Listing</strong> — plan</span>
                     <span>&rarr;</span>
@@ -1896,7 +2025,7 @@
                             </select>
                         </div>
                         <div class="inventory-filter-actions">
-                            <button type="submit" class="pi-btn pi-btn-primary inventory-filter-apply-btn">Apply</button>
+                            <button type="submit" class="pi-btn pi-btn-primary inventory-filter-apply-btn">Apply Filter</button>
                             <% if (invFilters.search || invFilters.category) { %>
                             <a href="/Employee/Admin/Inventory?tab=ProductInventory" class="pi-btn pi-btn-secondary">Clear</a>
                             <% } %>
@@ -1945,10 +2074,12 @@
                     parentAvailableQtyLabel: 'Available',
                     showVariationDimensions: false,
                     showVariationQtyTotalColumn: true,
+                    variationQtyTotalLabel: 'Total Stock',
                     showVariationSalePrice: false,
                     formatDimensionsCompact: formatDimensionsCompact,
                     qtyParentLabel: 'Total Qty',
-                    variationQtyLabel: 'Available Qty',
+                    showSkuColumn: false,
+                    variationQtyLabel: 'Available Stock',
                     showStockLegend: false
                 }) %>
 
@@ -2062,11 +2193,11 @@
     </div>
 
     <script src="/js/Employee/Admin/admin-modals.js?v=20260541" defer></script>
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260565" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260573" defer></script>
     <script src="/js/Employee/Admin/product-inventory-tabs.js?v=20260541" defer></script>
     <script src="/js/Employee/Admin/stock-movement-tab.js?v=20260554" defer></script>
-    <script src="/js/Employee/Admin/raw-materials-tab.js?v=20260561"></script>
-    <script src="/js/Employee/Admin/bom-bundles-tab.js?v=20260552" defer></script>
+    <script src="/js/Employee/Admin/raw-materials-tab.js?v=20260573" defer></script>
+    <script src="/js/Employee/Admin/bom-bundles-tab.js?v=20260570" defer></script>
 
     <% if (locals.error && locals.error.length > 0) { %>
     <script>

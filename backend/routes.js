@@ -321,7 +321,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 const updateRequest = transaction ? transaction.request() : pool.request();
                 const invRow = inventoryResult.recordset[0];
                 let variationSku = invRow.SKU;
-                if (!variationSku || !String(variationSku).trim()) {
+                if ((!variationSku || !String(variationSku).trim()) && Number(inventoryQuantity) > 0) {
                     variationSku = await assignVariationSku(transaction || pool, variationId, invRow.VariationName);
                 }
                 const updateResult = await updateRequest
@@ -21568,12 +21568,22 @@ module.exports = function (sql, pool, getStripe = null) {
             });
 
             invalidateAdminPageCache('admin:');
+
+            const updatedRow = await pool.request()
+                .input('materialId', sql.Int, materialId)
+                .query(`
+                    SELECT LastUpdated
+                    FROM RawMaterials
+                    WHERE MaterialID = @materialId
+                `);
+
             res.json({
                 success: true,
                 message: `Added ${quantityToAdd} to stock.`,
                 quantityAvailable: newQty,
                 materialName: row.Name,
-                unit: row.Unit
+                unit: row.Unit,
+                lastUpdated: updatedRow.recordset[0] && updatedRow.recordset[0].LastUpdated
             });
         } catch (err) {
             console.error('Error restocking raw material:', err);
@@ -21836,7 +21846,7 @@ module.exports = function (sql, pool, getStripe = null) {
                 .input('id', sql.Int, id)
                 .query('SELECT BomBundleID, Name FROM BomBundles WHERE BomBundleID = @id AND IsActive = 0');
             if (!check.recordset.length) {
-                return res.status(404).json({ success: false, message: 'Archived BOM bundle not found.' });
+                return res.status(404).json({ success: false, message: 'Archived raw materials bundle not found.' });
             }
 
             await pool.request()
@@ -21847,10 +21857,10 @@ module.exports = function (sql, pool, getStripe = null) {
                 .query('DELETE FROM BomBundles WHERE BomBundleID = @id');
 
             invalidateAdminPageCache('admin:');
-            res.json({ success: true, message: 'BOM bundle permanently deleted.' });
+            res.json({ success: true, message: 'Raw materials bundle permanently deleted.' });
         } catch (err) {
             console.error('Error permanently deleting BOM bundle:', err);
-            res.json({ success: false, message: 'Failed to permanently delete BOM bundle.' });
+            res.json({ success: false, message: 'Failed to permanently delete raw materials bundle.' });
         }
     });
     router.delete('/api/admin/archived/categories/:id/permanent', isAuthenticated, async (req, res) => {
@@ -24150,7 +24160,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     res.json({ success: true, bundles });
                 } catch (err) {
                     console.error('Error fetching BOM bundles:', err);
-                    res.status(500).json({ success: false, message: 'Failed to fetch BOM bundles.' });
+                    res.status(500).json({ success: false, message: 'Failed to fetch raw materials bundles.' });
                 }
             });
 
@@ -24160,7 +24170,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     const id = parseInt(req.params.id, 10);
                     if (!id) return res.status(400).json({ success: false, message: 'Invalid bundle ID.' });
                     const data = await loadBomBundleWithMaterials(pool, id);
-                    if (!data) return res.status(404).json({ success: false, message: 'BOM bundle not found.' });
+                    if (!data) return res.status(404).json({ success: false, message: 'Raw materials bundle not found.' });
                     res.json({
                         success: true,
                         bundle: data.bundle,
@@ -24175,7 +24185,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     });
                 } catch (err) {
                     console.error('Error fetching BOM bundle:', err);
-                    res.status(500).json({ success: false, message: 'Failed to fetch BOM bundle.' });
+                    res.status(500).json({ success: false, message: 'Failed to fetch raw materials bundle.' });
                 }
             });
 
@@ -24216,7 +24226,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         invalidateAdminPageCache('admin:');
                         res.json({
                             success: true,
-                            message: 'BOM bundle created.',
+                            message: 'Raw materials bundle created.',
                             bomBundleId: bundleId,
                             bundleCode
                         });
@@ -24226,7 +24236,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     }
                 } catch (err) {
                     console.error('Error creating BOM bundle:', err);
-                    res.status(500).json({ success: false, message: 'Failed to create BOM bundle: ' + err.message });
+                    res.status(500).json({ success: false, message: 'Failed to create raw materials bundle: ' + err.message });
                 }
             });
 
@@ -24262,14 +24272,14 @@ module.exports = function (sql, pool, getStripe = null) {
                         await saveBomBundleMaterials(transaction, id, validMaterials);
                         await transaction.commit();
                         invalidateAdminPageCache('admin:');
-                        res.json({ success: true, message: 'BOM bundle updated.' });
+                        res.json({ success: true, message: 'Raw materials bundle updated.' });
                     } catch (txErr) {
                         await transaction.rollback();
                         throw txErr;
                     }
                 } catch (err) {
                     console.error('Error updating BOM bundle:', err);
-                    res.status(500).json({ success: false, message: 'Failed to update BOM bundle: ' + err.message });
+                    res.status(500).json({ success: false, message: 'Failed to update raw materials bundle: ' + err.message });
                 }
             });
 
@@ -24287,10 +24297,10 @@ module.exports = function (sql, pool, getStripe = null) {
                             WHERE BomBundleID = @id
                         `);
                     invalidateAdminPageCache('admin:');
-                    res.json({ success: true, message: 'BOM bundle archived.' });
+                    res.json({ success: true, message: 'Raw materials bundle archived.' });
                 } catch (err) {
                     console.error('Error archiving BOM bundle:', err);
-                    res.status(500).json({ success: false, message: 'Failed to archive BOM bundle.' });
+                    res.status(500).json({ success: false, message: 'Failed to archive raw materials bundle.' });
                 }
             });
 
@@ -24516,7 +24526,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     await pool.connect();
                     await ensureListingStageColumn(pool);
                     await ensureVariationMediaColumns(pool);
-                    const { name, description, price, costPrice, category, variationsJson, length, width, height } = req.body;
+                    const { name, description, price, costPrice, category, variationsJson, length, width, height, reorderPoint } = req.body;
                     const parentDimensionsJson = buildVariationDimensionsJson({ length, width, height });
                     if (!name || !category) {
                         return respondPlanError('Product name and category are required.');
@@ -24555,6 +24565,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     await transaction.begin();
                     try {
                         const tempSlug = `plan-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+                        const parsedReorderPoint = Math.max(0, parseInt(reorderPoint, 10) || 0);
                         const insert = await transaction.request()
                             .input('name', sql.NVarChar, name)
                             .input('description', sql.NVarChar, description || '')
@@ -24563,14 +24574,17 @@ module.exports = function (sql, pool, getStripe = null) {
                             .input('category', sql.NVarChar, category)
                             .input('dimensions', sql.NVarChar, parentDimensionsJson)
                             .input('tempSlug', sql.NVarChar, tempSlug)
+                            .input('reorderPoint', sql.Int, parsedReorderPoint)
                             .input('createdBy', sql.Int, req.session.user.id)
                             .query(`
                                 INSERT INTO InventoryProducts (
                                     Name, Description, Price, CostPrice, Category, Dimensions,
+                                    ReorderPoint,
                                     DateAdded, IsActive, ListingStage, Slug, PublicId, CreatedBy, InventoryNotes
                                 )
                                 VALUES (
                                     @name, @description, @price, @costPrice, @category, @dimensions,
+                                    @reorderPoint,
                                     GETDATE(), 1, 'planned', @tempSlug, NEWID(), @createdBy, @description
                                 );
                                 SELECT SCOPE_IDENTITY() AS InventoryProductID;
@@ -24622,7 +24636,6 @@ module.exports = function (sql, pool, getStripe = null) {
                                     )
                                 `);
                             const variationId = insertVar.recordset[0].VariationID;
-                            await assignVariationSku(transaction, variationId, variationName);
                         }
 
                         await transaction.commit();
@@ -24670,7 +24683,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         return respondError('Invalid planned product id.');
                     }
 
-                    const { name, description, price, costPrice, category, variationsJson, length, width, height } = req.body;
+                    const { name, description, price, costPrice, category, variationsJson, length, width, height, reorderPoint } = req.body;
                     const parentDimensionsJson = buildVariationDimensionsJson({ length, width, height });
                     if (!name || !category) {
                         return respondError('Product name and category are required.');
@@ -24712,6 +24725,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             throw new Error('Only planned products can be edited on Products Listing.');
                         }
 
+                        const parsedReorderPoint = Math.max(0, parseInt(reorderPoint, 10) || 0);
                         await transaction.request()
                             .input('id', sql.Int, inventoryProductId)
                             .input('name', sql.NVarChar, name)
@@ -24720,6 +24734,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             .input('costPrice', sql.Decimal(10, 2), parentCost)
                             .input('category', sql.NVarChar, category)
                             .input('dimensions', sql.NVarChar, parentDimensionsJson)
+                            .input('reorderPoint', sql.Int, parsedReorderPoint)
                             .query(`
                                 UPDATE InventoryProducts
                                 SET Name = @name,
@@ -24728,6 +24743,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                     CostPrice = @costPrice,
                                     Category = @category,
                                     Dimensions = @dimensions,
+                                    ReorderPoint = COALESCE(@reorderPoint, ReorderPoint),
                                     InventoryNotes = @description,
                                     DateUpdated = GETDATE()
                                 WHERE InventoryProductID = @id AND IsActive = 1
@@ -24784,7 +24800,6 @@ module.exports = function (sql, pool, getStripe = null) {
                                             UpdatedAt = GETDATE()
                                         WHERE VariationID = @variationId
                                     `);
-                                await assignVariationSku(transaction, variationId, variationName);
                                 continue;
                             }
 
@@ -24811,7 +24826,6 @@ module.exports = function (sql, pool, getStripe = null) {
                                     )
                                 `);
                             const newVariationId = insertVar.recordset[0].VariationID;
-                            await assignVariationSku(transaction, newVariationId, variationName);
                         }
 
                         await transaction.commit();
@@ -24860,8 +24874,9 @@ module.exports = function (sql, pool, getStripe = null) {
                     await pool.connect();
                     await ensureVariationMediaColumns(pool);
                     await ensureBomBundleSchema(pool);
-                    const { name, description, price, costPrice, category, length, width, height, weight, dimensions, requiredMaterials, quantity, variationsJson, bomBundleId, buildFromInventoryProductId } = req.body;
+                    const { name, description, price, costPrice, category, length, width, height, weight, dimensions, requiredMaterials, quantity, variationsJson, bomBundleId, buildFromInventoryProductId, reorderPoint } = req.body;
                     const buildFromId = parseInt(buildFromInventoryProductId, 10) || 0;
+                    const parsedReorderPoint = Math.max(0, parseInt(reorderPoint, 10) || 0);
 
                     console.log('ProductInventory/Add - Received data:', {
                         name, description, price, category, quantity,
@@ -24934,7 +24949,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         }
                     }
                     if (validMaterials.length === 0) {
-                        return respondError('Select a BOM bundle or add at least one raw material with quantity per unit.');
+                        return respondError('Select a raw materials bundle or add at least one raw material with quantity per unit.');
                     }
 
                     const catalogPrice = parentPrice;
@@ -24978,10 +24993,12 @@ module.exports = function (sql, pool, getStripe = null) {
                                 .input('costPrice', sql.Decimal(10, 2), catalogCostPrice)
                                 .input('category', sql.NVarChar, category)
                                 .input('dimensions', sql.NVarChar, dimensionsJson)
+                                .input('reorderPoint', sql.Int, parsedReorderPoint)
                                 .query(`
                                     UPDATE InventoryProducts
                                     SET Name = @name, Description = @description, Price = @price, CostPrice = @costPrice,
                                         Category = @category, Dimensions = @dimensions, ListingStage = 'built',
+                                        ReorderPoint = COALESCE(@reorderPoint, ReorderPoint),
                                         DateUpdated = GETDATE()
                                     WHERE InventoryProductID = @inventoryProductId
                                 `);
@@ -24994,11 +25011,12 @@ module.exports = function (sql, pool, getStripe = null) {
                                 .input('costPrice', sql.Decimal(10, 2), catalogCostPrice)
                                 .input('category', sql.NVarChar, category)
                                 .input('dimensions', sql.NVarChar, dimensionsJson)
+                                .input('reorderPoint', sql.Int, parsedReorderPoint)
                                 .input('tempSlug', sql.NVarChar, tempSlug)
                                 .input('createdBy', sql.Int, req.session.user.id)
                                 .query(`
-                                    INSERT INTO InventoryProducts (Name, Description, Price, CostPrice, Category, Dimensions, DateAdded, IsActive, SKU, PublicId, Slug, CreatedBy, ListingStage)
-                                    VALUES (@name, @description, @price, @costPrice, @category, @dimensions, GETDATE(), 1, NULL, NEWID(), @tempSlug, @createdBy, 'built')
+                                    INSERT INTO InventoryProducts (Name, Description, Price, CostPrice, Category, Dimensions, ReorderPoint, DateAdded, IsActive, SKU, PublicId, Slug, CreatedBy, ListingStage)
+                                    VALUES (@name, @description, @price, @costPrice, @category, @dimensions, @reorderPoint, GETDATE(), 1, NULL, NEWID(), @tempSlug, @createdBy, 'built')
                                     SELECT SCOPE_IDENTITY() as InventoryProductID
                                 `);
                             inventoryProductId = productResult.recordset[0].InventoryProductID;
@@ -26110,7 +26128,8 @@ module.exports = function (sql, pool, getStripe = null) {
                     const variations = [];
                     for (const row of result.recordset) {
                         let sku = row.SKU;
-                        if (!sku || !String(sku).trim()) {
+                        const rowStock = Number(row.AvailableQuantity) || Number(row.Quantity) || 0;
+                        if ((!sku || !String(sku).trim()) && rowStock > 0) {
                             sku = await assignVariationSku(pool, row.VariationID, row.VariationName);
                         }
                         const thumbUrls = normalizeThumbnailList(row.ThumbnailURLs);
@@ -26516,6 +26535,27 @@ module.exports = function (sql, pool, getStripe = null) {
                     const inventoryProductID = currentVariationResult.recordset[0].InventoryProductID;
                     const currentQuantity = currentVariationResult.recordset[0].CurrentQuantity || 0;
                     const currentImageURL = currentVariationResult.recordset[0].CurrentImageURL;
+                    const nextIsActive = isActive === '1' ? 1 : 0;
+
+                    // Validation: do not allow hiding/deactivating the last active variation.
+                    if (nextIsActive === 0) {
+                        const activeCountResult = await pool.request()
+                            .input('inventoryProductId', sql.Int, inventoryProductID)
+                            .input('variationID', sql.Int, parsedVariationID)
+                            .query(`
+                                SELECT COUNT(*) AS ActiveCount
+                                FROM InventoryProductVariations
+                                WHERE InventoryProductID = @inventoryProductId
+                                  AND IsActive = 1
+                            `);
+                        const activeCount = activeCountResult.recordset[0]?.ActiveCount || 0;
+                        if (activeCount <= 1) {
+                            return res.json({
+                                success: false,
+                                message: 'At least one active variation is required. Add another variation before hiding this one.'
+                            });
+                        }
+                    }
 
                     // Get product stock - check both ProductID and InventoryProductID
                     // Check if it's an InventoryProductID from InventoryProducts table
@@ -26571,7 +26611,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         .input('quantity', sql.Int, variationQuantity)
                         .input('price', sql.Decimal(10, 2), price ? parseFloat(price) : null)
                         .input('imageUrl', sql.NVarChar, imageUrl)
-                        .input('isActive', sql.Bit, isActive === '1' ? 1 : 0)
+                        .input('isActive', sql.Bit, nextIsActive)
                         .input('productID', sql.Int, actualProductID)
                         .input('inventoryProductID', sql.Int, actualInventoryProductID)
                         .query(`
@@ -26691,6 +26731,24 @@ module.exports = function (sql, pool, getStripe = null) {
                             success: false,
                             message: 'Link this product to the storefront catalog in Product Inventory first.'
                         });
+                    }
+
+                    // Validation: storefront must keep at least one visible variation.
+                    if (!showOnStorefront) {
+                        const activeStorefrontCountResult = await pool.request()
+                            .input('productId', sql.Int, row.ProductID)
+                            .query(`
+                                SELECT COUNT(*) AS ActiveCount
+                                FROM ProductVariations
+                                WHERE ProductID = @productId AND IsActive = 1
+                            `);
+                        const activeStorefrontCount = activeStorefrontCountResult.recordset[0]?.ActiveCount || 0;
+                        if (activeStorefrontCount <= 1) {
+                            return res.json({
+                                success: false,
+                                message: 'At least one storefront variation must remain visible.'
+                            });
+                        }
                     }
 
                     const pvCheck = await pool.request()
@@ -28036,6 +28094,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                     ip.Dimensions,
                                     ip.Model3D as Model3DURL,
                                     ip.ListingStage,
+                                    COALESCE(ip.ReorderPoint, 10) AS ReorderPoint,
                                     ip.ProductID AS LinkedProductID,
                                     ip.StorefrontDisplayQuantity,
                                     COALESCE(
@@ -28460,7 +28519,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     bomBundle = {
                         id: row.BomBundleID,
                         code: row.BundleCode || null,
-                        name: row.Name || 'BOM bundle'
+                        name: row.Name || 'Raw materials bundle'
                     };
                 }
             } catch (bomColErr) {
@@ -33513,9 +33572,22 @@ module.exports = function (sql, pool, getStripe = null) {
     // API endpoint for safety stock value
     router.get('/api/safety-stock-value', isAuthenticated, async (req, res) => {
         try {
-            // For now, return a default safety stock value of 10
-            // This could be made configurable in the future
-            res.json({ value: 10 });
+            await pool.connect();
+            await pool.request().query(`
+                IF OBJECT_ID('dbo.AppSettings', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.AppSettings (
+                        SettingKey NVARCHAR(100) NOT NULL PRIMARY KEY,
+                        IntValue INT NULL,
+                        UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+                    );
+                END
+            `);
+            const row = await pool.request()
+                .input('key', sql.NVarChar, 'SafetyStock')
+                .query(`SELECT TOP 1 IntValue FROM dbo.AppSettings WHERE SettingKey = @key`);
+            const value = row.recordset.length ? (row.recordset[0].IntValue ?? 10) : 10;
+            res.json({ value });
         } catch (err) {
             console.error('Error fetching safety stock value:', err);
             res.json({ value: 10 });
@@ -33525,13 +33597,38 @@ module.exports = function (sql, pool, getStripe = null) {
     // API endpoint for updating safety stock value
     router.post('/api/safety-stock-value', isAuthenticated, async (req, res) => {
         try {
-            const { value } = req.body;
-            if (!value || value < 1) {
+            await pool.connect();
+            await pool.request().query(`
+                IF OBJECT_ID('dbo.AppSettings', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.AppSettings (
+                        SettingKey NVARCHAR(100) NOT NULL PRIMARY KEY,
+                        IntValue INT NULL,
+                        UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+                    );
+                END
+            `);
+
+            const raw = req.body?.value;
+            const value = parseInt(raw, 10);
+            if (!Number.isFinite(value) || value < 1) {
                 return res.status(400).json({ success: false, message: 'Invalid safety stock value' });
             }
 
-            // For now, just return success - in the future this could be stored in a settings table
-            res.json({ success: true, value: parseInt(value) });
+            await pool.request()
+                .input('key', sql.NVarChar, 'SafetyStock')
+                .input('val', sql.Int, value)
+                .query(`
+                    MERGE dbo.AppSettings AS t
+                    USING (SELECT @key AS SettingKey, @val AS IntValue) AS s
+                    ON t.SettingKey = s.SettingKey
+                    WHEN MATCHED THEN
+                        UPDATE SET IntValue = s.IntValue, UpdatedAt = SYSUTCDATETIME()
+                    WHEN NOT MATCHED THEN
+                        INSERT (SettingKey, IntValue) VALUES (s.SettingKey, s.IntValue);
+                `);
+
+            res.json({ success: true, value });
         } catch (err) {
             console.error('Error updating safety stock value:', err);
             res.status(500).json({ success: false, message: 'Failed to update safety stock value' });
@@ -34210,7 +34307,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
             const bundleId = parseInt(req.params.id, 10);
             if (!bundleId) {
-                req.flash('error', 'Invalid BOM bundle ID.');
+                req.flash('error', 'Invalid raw materials bundle ID.');
                 return res.redirect('/Employee/Admin/Archived');
             }
 
@@ -34219,13 +34316,13 @@ module.exports = function (sql, pool, getStripe = null) {
                 .query('SELECT BomBundleID, Name, IsActive FROM BomBundles WHERE BomBundleID = @id');
 
             if (checkResult.recordset.length === 0) {
-                req.flash('error', 'BOM bundle not found.');
+                req.flash('error', 'Raw materials bundle not found.');
                 return res.redirect('/Employee/Admin/Archived');
             }
 
             const bundle = checkResult.recordset[0];
             if (bundle.IsActive === 1) {
-                req.flash('error', 'BOM bundle is already active.');
+                req.flash('error', 'Raw materials bundle is already active.');
                 return res.redirect('/Employee/Admin/Archived');
             }
 
@@ -34239,11 +34336,11 @@ module.exports = function (sql, pool, getStripe = null) {
                 `);
 
             invalidateAdminPageCache('admin:');
-            req.flash('success', `BOM bundle "${bundle.Name}" has been reactivated.`);
+            req.flash('success', `Raw materials bundle "${bundle.Name}" has been reactivated.`);
             res.redirect('/Employee/Admin/Archived');
         } catch (err) {
             console.error('Error reactivating BOM bundle:', err);
-            req.flash('error', 'Failed to reactivate BOM bundle. Please try again.');
+            req.flash('error', 'Failed to reactivate raw materials bundle. Please try again.');
             res.redirect('/Employee/Admin/Archived');
         }
     });

@@ -436,31 +436,37 @@
         });
 
         content.appendChild(table);
+        if (typeof window.piEnhanceActionsCells === 'function') {
+            window.piEnhanceActionsCells(table);
+        }
     }
 
     async function refreshRawMaterialsTable() {
         try {
-            const res = await fetch('/api/rawmaterials', {
+            const res = await fetch('/api/rawmaterials?_=' + Date.now(), {
                 credentials: 'include',
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }
             });
             const data = await res.json();
             if (data && data.success && Array.isArray(data.materials)) {
                 renderRawMaterialsTable(data.materials);
-                return true;
+                syncGlobalRawMaterialsCache(data.materials);
+                return data.materials;
             }
         } catch (err) {
             console.error('Failed to refresh raw materials table:', err);
         }
-        return false;
+        return null;
     }
 
-    function updateMaterialQtyDisplay(materialId, newQty) {
+    window.refreshRawMaterialsTable = refreshRawMaterialsTable;
+
+    function updateMaterialQtyDisplay(materialId, newQty, updatedAt) {
         const mid = String(materialId);
         const n = Number(newQty) || 0;
         const qtyClass = 'stock-qty rm-qty-display ' + stockQtyClassFor(n);
 
-        document.querySelectorAll('#rawMaterialsTab tr[data-material-id="' + mid + '"] .rm-qty-display').forEach(function (span) {
+        document.querySelectorAll('#rawMaterialsTab tr[data-material-id="' + mid + '"] .rm-qty-display, #rawMaterialsTab tr[data-material-id="' + mid + '"] td.qty-col .stock-qty').forEach(function (span) {
             span.textContent = String(n);
             span.className = qtyClass;
             span.classList.add('rm-qty-updated');
@@ -473,6 +479,27 @@
         document.querySelectorAll('#rawMaterialsTab .edit-raw-material-btn[data-id="' + mid + '"]').forEach(function (btn) {
             btn.setAttribute('data-quantity', String(n));
         });
+
+        if (updatedAt) {
+            const updatedText = formatUpdatedDate(updatedAt);
+            document.querySelectorAll('#rawMaterialsTab tr[data-material-id="' + mid + '"] .rm-updated-cell').forEach(function (cell) {
+                cell.textContent = updatedText;
+            });
+        }
+
+        const currentQtyEl = document.getElementById('rawMaterialRestockCurrentQty');
+        const restockIdEl = document.getElementById('rawMaterialRestockId');
+        if (currentQtyEl && restockIdEl && String(restockIdEl.value) === mid) {
+            currentQtyEl.textContent = String(n);
+        }
+    }
+
+    function syncGlobalRawMaterialsCache(materials) {
+        if (!Array.isArray(materials)) return;
+        if (typeof window.updateRawMaterialsTableFromList === 'function') {
+            window.updateRawMaterialsTableFromList(materials);
+        }
+        document.dispatchEvent(new CustomEvent('rawMaterialsListRefreshed', { detail: { materials: materials } }));
     }
 
     function initRestock() {
@@ -523,7 +550,7 @@
             });
         }
 
-        if (continueBtn.getAttribute('data-listener-attached')) return;
+        if (!continueBtn.getAttribute('data-listener-attached')) {
         continueBtn.setAttribute('data-listener-attached', '1');
 
         continueBtn.addEventListener('click', function () {
@@ -548,8 +575,9 @@
                 performRawMaterialRestock(materialId, quantityToAdd, closeRestockModal);
             }
         });
+        }
 
-        if (!finalConfirmBtn || finalConfirmBtn.getAttribute('data-final-attached')) return;
+        if (finalConfirmBtn && !finalConfirmBtn.getAttribute('data-final-attached')) {
         finalConfirmBtn.setAttribute('data-final-attached', '1');
 
         finalConfirmBtn.addEventListener('click', async function () {
@@ -558,6 +586,7 @@
             closeConfirmModal();
             await performRawMaterialRestock(materialId, quantityToAdd, closeRestockModal);
         });
+        }
     }
 
     async function performRawMaterialRestock(materialId, quantityToAdd, onSuccessClose) {
@@ -581,13 +610,28 @@
             }
             if (data.success) {
                 const newQty = data.quantityAvailable != null ? data.quantityAvailable : data.newQuantity;
-                updateMaterialQtyDisplay(materialId, newQty);
+                const updatedAt = data.lastUpdated || new Date().toISOString();
+                updateMaterialQtyDisplay(materialId, newQty, updatedAt);
+                const refreshedMaterials = await refreshRawMaterialsTable();
+                if (Array.isArray(refreshedMaterials)) {
+                    const match = refreshedMaterials.find(function (m) {
+                        return String(normalizeMaterial(m).id) === String(materialId);
+                    });
+                    if (match) {
+                        const normalized = normalizeMaterial(match);
+                        updateMaterialQtyDisplay(materialId, normalized.stockQuantity, normalized.createdAt);
+                    }
+                }
                 popup(data.message || 'Stock updated.');
                 if (typeof window.loadStockMovementHistory === 'function') {
                     window.loadStockMovementHistory();
                 }
                 document.dispatchEvent(new CustomEvent('rawMaterialRestocked', {
-                    detail: { materialId: materialId, quantityAvailable: newQty }
+                    detail: {
+                        materialId: materialId,
+                        quantityAvailable: newQty,
+                        materials: Array.isArray(refreshedMaterials) ? refreshedMaterials : null
+                    }
                 }));
                 if (onSuccessClose) onSuccessClose();
             } else {

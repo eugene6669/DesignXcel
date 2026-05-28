@@ -316,7 +316,7 @@
         var PI_SVG_REPAIR = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>';
         var PI_SVG_AVAILABLE = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
         var PI_SVG_STOREFRONT = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
-        var PI_SVG_DETAILS = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+        var PI_SVG_DETAILS = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 4.5V3a3 3 0 016 0v1.5M9 10h6M9 14h6M9 18h6"/></svg>';
 
         function buildReturnRepairActionButtons(variationId, variationName, qtySnapshot, damagedQty, repairedQty, storedReturnedQty) {
             if (!shouldShowReturnWorkflowPage() || !variationId) return '';
@@ -613,7 +613,7 @@
             let cols = '<tr class="variation-flat-row" data-parent-product-id="' + productId + '" data-variation-id="' + variationId + '">' +
                 '<td><span class="row-type-badge row-type-variation">Variation</span></td>' +
                 '<td>' + escapeHtml(variationName) + '</td>' +
-                '<td><code style="font-size:0.85em;">' + escapeHtml(variationSku) + '</code></td>' +
+                '<td><code class="variation-sku-value">' + escapeHtml(variationSku) + '</code></td>' +
                 '<td class="qty-col">' + formatStockQty(totalQty) + '</td>';
 
             if (!isProductReturnsPage) {
@@ -938,16 +938,25 @@ let currentSelectedProductId = null;
             const tbody = document.querySelector('#rawMaterialsTable tbody');
             if (!tbody) return;
             materials.forEach(function (m) {
-                const tr = tbody.querySelector('tr[data-material-id="' + m.id + '"]');
+                const mid = m.id != null ? m.id : m.MaterialID;
+                if (mid == null) return;
+                const tr = tbody.querySelector('tr[data-material-id="' + mid + '"]');
                 if (!tr) return;
-                const span = tr.querySelector('td.qty-col .stock-qty');
+                const n = Number(m.stockQuantity != null ? m.stockQuantity : m.QuantityAvailable) || 0;
+                const span = tr.querySelector('td.qty-col .stock-qty, td.qty-col .rm-qty-display');
                 if (span) {
-                    const n = Number(m.stockQuantity) || 0;
-                    span.textContent = n;
-                    span.className = 'stock-qty ' + getStockQtyClass(n);
+                    span.textContent = String(n);
+                    span.className = 'stock-qty rm-qty-display ' + getStockQtyClass(n);
                 }
+                tr.querySelectorAll('.restock-raw-material-btn[data-material-id="' + mid + '"]').forEach(function (btn) {
+                    btn.setAttribute('data-quantity', String(n));
+                });
+                tr.querySelectorAll('.edit-raw-material-btn[data-id="' + mid + '"]').forEach(function (btn) {
+                    btn.setAttribute('data-quantity', String(n));
+                });
             });
         }
+        window.updateRawMaterialsTableFromList = updateRawMaterialsTableFromList;
 
         function applyStockRefreshPayload(payload) {
             if (!payload) return;
@@ -1007,6 +1016,9 @@ let currentSelectedProductId = null;
             if (emptyDiv) emptyDiv.style.display = 'none';
             bindRestockVariationButtons(tableBody);
             updateParentProductRowTotals(inventoryProductId, variations);
+            if (typeof window.piEnhanceActionsCells === 'function') {
+                window.piEnhanceActionsCells(tableBody);
+            }
         }
 
         function highlightVariationRow(variationId) {
@@ -1117,6 +1129,33 @@ let currentSelectedProductId = null;
             if (inventoryProductId) refreshProductVariationsUI(inventoryProductId);
         }
         window.notifyInventoryStockChanged = notifyInventoryStockChanged;
+
+        document.addEventListener('rawMaterialRestocked', function (e) {
+            const detail = e && e.detail ? e.detail : {};
+            if (Array.isArray(detail.materials) && detail.materials.length) {
+                updateRawMaterialsTableFromList(detail.materials);
+                return;
+            }
+            if (detail.materialId != null && detail.quantityAvailable != null) {
+                const mid = detail.materialId;
+                const n = Number(detail.quantityAvailable) || 0;
+                allRawMaterials = allRawMaterials.map(function (m) {
+                    if (String(m.id) === String(mid)) {
+                        return Object.assign({}, m, { stockQuantity: n });
+                    }
+                    return m;
+                });
+                updateRawMaterialsTableFromList(allRawMaterials);
+                return;
+            }
+            fetchRawMaterialsForInventory();
+        });
+
+        document.addEventListener('rawMaterialsListRefreshed', function (e) {
+            if (e && e.detail && Array.isArray(e.detail.materials)) {
+                updateRawMaterialsTableFromList(e.detail.materials);
+            }
+        });
 
         document.addEventListener('click', function(e) {
             const storefrontBtn = e.target.closest('.product-storefront-btn, .variation-storefront-btn');
@@ -2134,7 +2173,10 @@ let currentSelectedProductId = null;
                             '<strong>' + escapeHtml(ctx.variationName) + '</strong></div>'
                     };
                 case 'sku':
-                    return { className: 'var-col-sku', html: '<code style="font-size:0.85em;">' + escapeHtml(ctx.variationSku) + '</code>' };
+                    return {
+                        className: 'var-col-sku',
+                        html: '<code class="variation-sku-value">' + escapeHtml(ctx.variationSku) + '</code>'
+                    };
                 case 'dimensions':
                     return {
                         className: 'var-col-dims',
@@ -2848,7 +2890,7 @@ let currentSelectedProductId = null;
                 }
                 updateCreateInventoryMaterialsSummary();
             } catch (err) {
-                showCustomPopup('Failed to load BOM bundle.', true);
+                showCustomPopup('Failed to load raw materials bundle.', true);
             }
         }
 
@@ -2902,7 +2944,7 @@ let currentSelectedProductId = null;
             const el = document.getElementById('addVariationRecipeStatus');
             if (!el) return;
             if (!materials || materials.length === 0) {
-                el.innerHTML = '<span style="color:#856404;">No parent recipe — stock will not deduct raw materials. Set recipe on the product first.</span>';
+                el.innerHTML = '<span style="color:#856404;">No raw materials set — stock will not deduct raw materials. Set raw materials on the product first.</span>';
                 el.style.display = '';
                 return;
             }
@@ -2983,7 +3025,9 @@ let currentSelectedProductId = null;
             const removeButton = document.createElement('button');
             removeButton.type = 'button';
             removeButton.className = 'remove-material-btn';
-            removeButton.textContent = 'Remove';
+            removeButton.textContent = '×';
+            removeButton.title = 'Remove';
+            removeButton.setAttribute('aria-label', 'Remove material');
             removeButton.addEventListener('click', () => {
                 materialRow.remove();
                 updateCreateInventoryMaterialsSummary();
@@ -3116,9 +3160,9 @@ let currentSelectedProductId = null;
             if (bundleEl) {
                 if (bom && bom.name) {
                     const code = bom.code ? '<code>' + escapeHtml(bom.code) + '</code> — ' : '';
-                    bundleEl.innerHTML = '<strong>BOM bundle:</strong> ' + code + escapeHtml(bom.name);
+                    bundleEl.innerHTML = '<strong>Raw materials bundle:</strong> ' + code + escapeHtml(bom.name);
                 } else {
-                    bundleEl.innerHTML = '<strong>BOM bundle:</strong> <em>Manual (no bundle linked)</em>';
+                    bundleEl.innerHTML = '<strong>Raw materials bundle:</strong> <em>Manual (no bundle linked)</em>';
                 }
             }
             if (listEl) {
@@ -3140,7 +3184,7 @@ let currentSelectedProductId = null;
         async function loadInventoryProductRecipeDisplay(inventoryProductId, elementIds) {
             const bundleEl = document.getElementById(elementIds.bundleEl);
             const listEl = document.getElementById(elementIds.listEl);
-            if (bundleEl) bundleEl.innerHTML = '<em>Loading recipe…</em>';
+            if (bundleEl) bundleEl.innerHTML = '<em>Loading raw materials…</em>';
             if (listEl) listEl.innerHTML = '';
             if (!inventoryProductId) {
                 if (bundleEl) bundleEl.innerHTML = '<em>No product linked</em>';
@@ -3152,7 +3196,7 @@ let currentSelectedProductId = null;
                 renderInventoryProductRecipeDisplay(bundleEl, listEl, data);
             } catch (err) {
                 console.error('loadInventoryProductRecipeDisplay:', err);
-                if (bundleEl) bundleEl.innerHTML = '<em style="color:#c00;">Failed to load recipe</em>';
+                if (bundleEl) bundleEl.innerHTML = '<em style="color:#c00;">Failed to load raw materials</em>';
             }
         }
 
@@ -3227,7 +3271,7 @@ let currentSelectedProductId = null;
 
                 const recipeMaterials = getCreateInventoryRequiredMaterials();
                 if (recipeMaterials.length === 0) {
-                    showCustomPopup('Select a BOM bundle or add at least one raw material with quantity per unit.', true);
+                    showCustomPopup('Select a raw materials bundle or add at least one raw material with quantity per unit.', true);
                     return;
                 }
                 const materialsField = document.getElementById('requiredMaterials');
@@ -3696,6 +3740,9 @@ let currentSelectedProductId = null;
                 const el = document.getElementById(pair[0]);
                 if (el) el.textContent = String(pair[1]);
             });
+            const threshold = opts.reorderPoint != null ? opts.reorderPoint : 10;
+            applyStockLevelClass('inventoryDetailsStockAvailable', summary.available, threshold);
+            applyStockLevelClass('inventoryDetailsStockTotal', summary.total, threshold);
             const variantsCard = document.getElementById('inventoryDetailsVariantsCard');
             const variantCountEl = document.getElementById('inventoryDetailsVariantCount');
             if (variantsCard && variantCountEl) {
@@ -3707,6 +3754,25 @@ let currentSelectedProductId = null;
                     variantCountEl.textContent = '0';
                 }
             }
+        }
+
+        function getStockLevelClass(value, threshold) {
+            const n = Number(value) || 0;
+            const t = Math.max(0, Number(threshold) || 0);
+            const critical = Math.max(1, Math.floor(t / 2));
+            if (n <= 0) return 'stock-level-out';
+            if (t > 0 && n <= critical) return 'stock-level-critical';
+            if (t > 0 && n <= t) return 'stock-level-low';
+            if (t === 0 && n <= 10) return 'stock-level-critical';
+            if (t === 0 && n <= 20) return 'stock-level-low';
+            return 'stock-level-ok';
+        }
+
+        function applyStockLevelClass(valueId, value, threshold) {
+            const el = document.getElementById(valueId);
+            if (!el) return;
+            el.classList.remove('stock-level-out', 'stock-level-critical', 'stock-level-low', 'stock-level-ok');
+            el.classList.add(getStockLevelClass(value, threshold));
         }
 
         function populateInventoryDetailsModal(opts) {
@@ -3790,7 +3856,8 @@ let currentSelectedProductId = null;
                 opts.stockSummary || { available: 0, returned: 0, damaged: 0, repaired: 0, total: 0 },
                 {
                     showVariantCount: !isVariation && opts.variantCount != null,
-                    variantCount: opts.variantCount
+                    variantCount: opts.variantCount,
+                    reorderPoint: opts.reorderPoint
                 }
             );
         }
@@ -3835,6 +3902,7 @@ let currentSelectedProductId = null;
                     return;
                 }
                 const p = productJson.product;
+                const reorderPoint = p.ReorderPoint != null ? Number(p.ReorderPoint) : 10;
                 const variations = Array.isArray(p.Variations) ? p.Variations : [];
                 const unitSalePrice = Number(p.Price) || 0;
                 const unitCost = Number(p.CostPrice) || 0;
@@ -3863,6 +3931,7 @@ let currentSelectedProductId = null;
                     variantCount: variations.length,
                     imageUrl: p.ImageURL || '',
                     dims: formatVariationDimensionsCompact(p.Dimensions),
+                    reorderPoint: reorderPoint,
                     stockSummary: stock
                 });
             } catch (err) {
@@ -3899,11 +3968,13 @@ let currentSelectedProductId = null;
                 const varJson = await results[0].json();
                 let parentCategory = '—';
                 let parentDims = null;
+                let reorderPoint = 10;
                 if (results[1]) {
                     const parentJson = await results[1].json();
                     if (parentJson.success && parentJson.product) {
                         parentCategory = parentJson.product.Category || '—';
                         parentDims = parentJson.product.Dimensions;
+                        reorderPoint = parentJson.product.ReorderPoint != null ? Number(parentJson.product.ReorderPoint) : 10;
                     }
                 }
                 if (!varJson.success || !varJson.variation) {
@@ -3926,6 +3997,7 @@ let currentSelectedProductId = null;
                     costPriceTotal: variationLineCostPriceTotal(v),
                     imageUrl: v.VariationImageURL || '',
                     dims: formatVariationDimensionsCompact(parentDims),
+                    reorderPoint: reorderPoint,
                     stockSummary: stock
                 });
             } catch (err) {

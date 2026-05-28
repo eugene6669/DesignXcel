@@ -3982,9 +3982,9 @@ module.exports = function(sql, pool) {
                     SELECT 
                         pv.VariationID as id,
                         pv.ProductID as productId,
-                        pv.VariationName as name,
+                        COALESCE(NULLIF(LTRIM(RTRIM(ipv.VariationName)), ''), pv.VariationName) as name,
                         COALESCE(ipv.SKU, pv.SKU) as sku,
-                        pv.Color as color,
+                        COALESCE(NULLIF(LTRIM(RTRIM(ipv.Color)), ''), pv.Color) as color,
                         COALESCE(
                             CASE
                                 WHEN ipv.AvailableQuantity IS NULL OR ipv.AvailableQuantity = 0

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Products Listing - Design Excellence</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <%- include('partials/pi-row-actions-assets') %>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -333,6 +334,7 @@
         }
 
         .pi-icon-edit-btn svg,
+        a.pi-icon-build-btn svg,
         .pi-icon-build-btn svg,
         .edit-inventory-product-btn svg,
         .edit-inventory-product-quick-btn svg,
@@ -341,6 +343,10 @@
             height: 16px;
             stroke: currentColor;
             flex-shrink: 0;
+        }
+        a.pi-icon-build-btn svg.pi-build-icon,
+        .pi-icon-build-btn svg.pi-build-icon {
+            stroke: none;
         }
 
         .pi-media-preview-main img {
@@ -900,7 +906,7 @@
         }
         #addPlanProductModal .pi-create-form .pi-create-top .form-group { margin-bottom: 0; }
         #addPlanProductModal #planProductPrice,
-        #addPlanProductModal #planProductCostPrice { text-align: right; }
+        #addPlanProductModal #planProductCostPrice { text-align: left; }
         #addPlanProductModal .pi-section { margin-top: 8px; padding: 10px; }
         #addPlanProductModal .pi-variation-row {
             display: grid;
@@ -911,6 +917,8 @@
             border: 1px solid #e9ecef;
             border-radius: 6px;
             background: #fff;
+            position: relative;
+            padding-top: 34px;
         }
         #addPlanProductModal .pi-variation-row input[type="text"],
         #addPlanProductModal .pi-variation-row input[type="file"] {
@@ -922,8 +930,10 @@
             box-sizing: border-box;
         }
         #addPlanProductModal .pi-variation-remove {
-            display: flex;
-            justify-content: flex-end;
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            margin: 0;
         }
         #addPlanProductModal .pi-variation-remove button {
             background: #dc3545;
@@ -935,6 +945,10 @@
             cursor: pointer;
             font-size: 1.1em;
             line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
         }
         #addProductModal .pi-create-form .pi-create-top {
             display: grid;
@@ -961,6 +975,8 @@
             border: 1px solid #e9ecef;
             border-radius: 6px;
             background: #fff;
+            position: relative;
+            padding-top: 34px;
         }
         #addProductModal .pi-variation-row .pi-var-full { grid-column: 1 / -1; }
         #addProductModal .pi-variation-row .pi-var-media,
@@ -1015,9 +1031,10 @@
             box-sizing: border-box;
         }
         #addProductModal .pi-variation-remove {
-            grid-column: 1 / -1;
-            display: flex;
-            justify-content: flex-end;
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            margin: 0;
         }
         #addProductModal .pi-variation-remove button {
             background: #dc3545;
@@ -1029,6 +1046,38 @@
             cursor: pointer;
             font-size: 1.1em;
             line-height: 1;
+        }
+        #addPlanProductModal .pi-section h4 {
+            text-align: left;
+        }
+        #addPlanProductModal .pi-plan-col-group-title {
+            margin: 0 0 8px;
+            text-align: left;
+            font-size: 0.95em;
+            font-weight: 700;
+            color: #334155;
+        }
+        #addPlanProductModal .pi-plan-col-left {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px;
+        }
+        #addPlanProductModal .pi-plan-col-right {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px;
+        }
+        #addPlanProductModal #addPlanProductVariationBtn {
+            background: #FFC107;
+            color: #333;
+            border: 1px solid #e0ac06;
+            font-weight: 600;
+        }
+        #addPlanProductModal #addPlanProductVariationBtn:hover {
+            background: #e0ac06;
+            color: #333;
         }
         .pi-modal-categories .modal-content { max-width: 380px; padding: 14px 16px; }
         .pi-modal-categories h3 { margin-bottom: 6px; font-size: 1em; }
@@ -1134,7 +1183,12 @@
         }
         .variations-container {
             max-height: 600px;
+            overflow-x: auto;
             overflow-y: auto;
+        }
+        body.pi-actions-menu-active .variations-container,
+        body.pi-actions-menu-active .variations-table-container {
+            overflow: visible !important;
         }
         .variations-table-container table {
             font-size: 0.9em;
@@ -1195,6 +1249,12 @@
         .products-listing-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9em; }
         .products-listing-table th, .products-listing-table td { padding: 10px; border: 1px solid #dee2e6; vertical-align: middle; }
         .products-listing-table thead th { background: #f2f2f2; font-weight: 600; }
+        .page-products-listing .variations-nested-table .var-col-sku .variation-sku-value,
+        .page-products-listing .variation-flat-row .variation-sku-value {
+            font-size: 1.3em !important;
+            line-height: 1.3;
+            font-weight: 800;
+        }
         .last-added-cell { white-space: nowrap; font-size: 0.9em; color: #444; }
         .pi-icon-storefront-btn {
             display: inline-flex;
@@ -1248,6 +1308,39 @@
         .remove-inventory-discount-btn:hover {
             background: #f5f5f5;
         }
+        /* Unified action/button color system (match edit button) */
+        .pi-btn.pi-btn-primary {
+            background: #FFC107 !important;
+            color: #333 !important;
+            border: 1px solid #e0ac06 !important;
+            font-weight: 600 !important;
+        }
+        .pi-btn.pi-btn-primary:hover {
+            background: #e0ac06 !important;
+            color: #333 !important;
+        }
+        .inventory-product-details-btn.pi-icon-details-btn,
+        .inventory-variation-details-btn.pi-icon-details-btn,
+        .product-storefront-btn.pi-icon-storefront-btn.is-visible,
+        .variation-storefront-btn.pi-icon-storefront-btn.is-visible,
+        .add-inventory-discount-btn {
+            background: #FFC107 !important;
+            color: #333 !important;
+            border: 1px solid #e0ac06 !important;
+            font-weight: 600 !important;
+        }
+        .inventory-product-details-btn.pi-icon-details-btn:hover,
+        .inventory-variation-details-btn.pi-icon-details-btn:hover,
+        .product-storefront-btn.pi-icon-storefront-btn.is-visible:hover,
+        .variation-storefront-btn.pi-icon-storefront-btn.is-visible:hover,
+        .add-inventory-discount-btn:hover {
+            background: #e0ac06 !important;
+            color: #333 !important;
+        }
+        .inventory-product-details-btn.pi-icon-details-btn svg,
+        .inventory-variation-details-btn.pi-icon-details-btn svg {
+            stroke: #111 !important;
+        }
     </style>
 </head>
 <body class="page-products-listing">
@@ -1264,7 +1357,7 @@
         <div class="main-content">
             <div class="header">
                 <h2>Products Listing</h2>
-                <p class="products-list-hint">Step 1: plan what products you need to create. Step 2: build them in <a href="/Employee/Admin/Inventory?tab=ProductInventory">Inventory</a> (materials, BOM bundles, dimensions, variations). Step 3: publish on the <a href="/Employee/Admin/Storefront">Storefront</a> (visibility &amp; quantities).</p>
+                <p class="products-list-hint">Step 1: plan what products you need to create. Step 2: build them in <a href="/Employee/Admin/Inventory?tab=ProductInventory">Inventory</a> (raw materials, raw materials bundles, dimensions, variations). Step 3: publish on the <a href="/Employee/Admin/Storefront">Storefront</a> (visibility &amp; quantities).</p>
                 <div class="product-workflow-steps" role="list">
                     <span><strong class="step-active">1. Products Listing</strong> — plan product</span>
                     <span>→</span>
@@ -1290,6 +1383,7 @@
                             InventoryProductName: product.InventoryProductName,
                             InventoryProductSKU: product.InventoryProductSKU,
                             InventoryProductCategory: product.InventoryProductCategory,
+                            InventoryProductDescription: product.InventoryProductDescription || product.Description || product.Notes || '',
                             InventoryProductPrice: product.InventoryProductPrice,
                             InventoryItemCostTotal: product.InventoryItemCostTotal || 0,
                             InventoryItemSalePriceTotal: product.InventoryItemSalePriceTotal || 0,
@@ -1341,6 +1435,24 @@
                     const invRangeEnd = invPag.totalCount > 0 ? Math.min(invPag.page * invPag.limit, invPag.totalCount) : 0;
                     function formatListDate(val) {
                         return fmtDate(val, 'N/A');
+                    }
+                    function formatDimensionsCompact(val) {
+                        if (!val) return '—';
+                        try {
+                            const d = typeof val === 'string' ? JSON.parse(val) : val;
+                            const fmt = function(v) {
+                                if (v == null || v === '') return null;
+                                const n = Number(v);
+                                return isNaN(n) ? String(v) : (Number.isInteger(n) ? String(n) : n.toFixed(1));
+                            };
+                            const l = fmt(d.length);
+                            const w = fmt(d.width);
+                            const h = fmt(d.height);
+                            if (l == null && w == null && h == null) return '—';
+                            return (l != null ? l : '—') + '×' + (w != null ? w : '—') + '×' + (h != null ? h : '—');
+                        } catch (e) {
+                            return '—';
+                        }
                     }
                 %>
 
@@ -1414,7 +1526,6 @@
                     stockQtyClass: stockQtyClass,
                     formatListDate: formatListDate,
                     showReturnColumns: false,
-                    showParentQty: false,
                     showActions: true,
                     showVariationActions: false,
                     showStorefront: false,
@@ -1424,9 +1535,14 @@
                     parentSalePriceHeader: 'Item Sale Price Total',
                     showParentPriceColumns: false,
                     showParentItemCostColumn: false,
+                    showParentQty: false,
+                    showParentDimensions: true,
+                    showParentDescription: true,
+                    showSkuColumn: false,
+                    showStatusColumn: false,
+                    formatDimensionsCompact: formatDimensionsCompact,
                     showVariationQtyColumn: false,
                     variationItemCostMode: 'unit',
-                    qtyParentLabel: 'Total Available Stock',
                     variationQtyLabel: 'Available Stock',
                     showStockLegend: false
                 }) %>
@@ -1455,8 +1571,16 @@
             </div>
         </div>
     </div>
+    <script type="application/json" id="adminProductCategoriesJson"><%- JSON.stringify(invCategories || []) %></script>
     <script>
-        window.__adminProductCategories = <%- JSON.stringify(invCategories || []) %>;
+        (function () {
+            try {
+                const el = document.getElementById('adminProductCategoriesJson');
+                window.__adminProductCategories = el ? JSON.parse(el.textContent || '[]') : [];
+            } catch (e) {
+                window.__adminProductCategories = [];
+            }
+        })();
     </script>
     <%- include('partials/edit-inventory-product-modal') %>
     <%- include('partials/edit-variation-status-modal') %>
@@ -1665,7 +1789,7 @@
     </script>
 
     <script src="/js/Employee/Admin/admin-modals.js?v=20260541" defer></script>
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260560" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260573" defer></script>
     <% if (locals.error && locals.error.length > 0) { %>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -1674,9 +1798,16 @@
     </script>
     <% } %>
     <% if (locals.success && locals.success.length > 0) { %>
+    <script type="application/json" id="adminSuccessMessageJson"><%- JSON.stringify(success || '') %></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            showCustomPopup(<%- JSON.stringify(success || '') %>);
+            try {
+                const el = document.getElementById('adminSuccessMessageJson');
+                const msg = el ? JSON.parse(el.textContent || '""') : '';
+                showCustomPopup(msg);
+            } catch (e) {
+                showCustomPopup('');
+            }
         });
     </script>
     <% } %>

@@ -264,7 +264,7 @@
                     </table>
                 </div>
                 <div class="archived-section">
-                    <h3>Archived BOM Bundles</h3>
+                    <h3>Archived Raw Materials Bundles</h3>
                     <table>
                         <thead>
                             <tr>
@@ -294,7 +294,7 @@
                                     </tr>
                                 <% }); %>
                             <% } else { %>
-                                <tr><td colspan="5" class="empty-table-message">No archived BOM bundles found.</td></tr>
+                                <tr><td colspan="5" class="empty-table-message">No archived raw materials bundles found.</td></tr>
                             <% } %>
                         </tbody>
                     </table>
@@ -565,7 +565,7 @@
             } else if (action.includes('ReactivateMaterial')) {
                 reactivateType = 'material';
             } else if (action.includes('ReactivateBomBundle')) {
-                reactivateType = 'BOM bundle';
+                reactivateType = 'raw materials bundle';
             } else if (action.includes('ReactivateStockMovement')) {
                 reactivateType = 'stock movement';
             } else {
@@ -667,7 +667,7 @@
                 deleteModal.style.display = 'none';
                 const itemTypeName = deleteItemType === 'product' ? 'Product' : 
                                     deleteItemType === 'material' ? 'Material' : 
-                                    deleteItemType === 'bom-bundle' ? 'BOM Bundle' :
+                                    deleteItemType === 'bom-bundle' ? 'Raw Materials Bundle' :
                                     deleteItemType === 'inventory-product' ? 'Product Inventory' : 'Item';
                 showSuccessPopup(`${itemTypeName} deleted successfully!`);
                 
