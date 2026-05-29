@@ -1,9 +1,9 @@
-// User Manager Alerts JavaScript
-// Handles user alerts for products and raw materials
+// Admin Alerts JavaScript
+// Handles inventory alerts for products and raw materials
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize user manager alerts functionality
-    initializeUserAlerts();
+    // Initialize admin alerts functionality
+    initializeAdminAlerts();
     
     // Load alerts data
     loadAlertsData();
@@ -12,13 +12,13 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
 });
 
-function initializeUserAlerts() {
-    console.log('Initializing User Manager Alerts...');
+function initializeAdminAlerts() {
+    console.log('Initializing Admin Alerts...');
     
-    // User Manager system - no permission checking needed
+    // Admin-only system - no permission checking needed
     
-    // Initialize user alert features
-    initializeUserAlertFeatures();
+    // Initialize inventory alert features
+    initializeInventoryAlerts();
     
     // Check for critical alerts on page load
     checkCriticalAlerts();
@@ -62,14 +62,30 @@ function displayProductAlerts(products) {
     
     products.forEach(product => {
         const row = document.createElement('tr');
-        const status = getStockStatus(product.StockQuantity);
+        row.className = 'alert-row-link';
+        const avail = product.AvailableQuantity != null ? Number(product.AvailableQuantity) : Number(product.StockQuantity) || 0;
+        const total = product.TotalQuantity != null ? Number(product.TotalQuantity) : avail;
+        const status = getStockStatus(avail);
+        const stockLabel = total !== avail ? `${avail} avail. / ${total} total` : String(avail);
+        const invId = product.InventoryProductID;
+        const variationId = product.VariationID;
         
         row.innerHTML = `
-            <td>${product.ProductID}</td>
-            <td>${product.Name}</td>
-            <td>${product.StockQuantity}</td>
+            <td>${escapeHtml(product.Name)}${product.SKU ? `<br><small>SKU: ${escapeHtml(product.SKU)}</small>` : ''}</td>
+            <td>${stockLabel}</td>
             <td><span class="${status.class}">${status.label}</span></td>
         `;
+
+        if (invId) {
+            row.title = 'Open in Product Inventory';
+            row.addEventListener('click', function () {
+                const parts = ['tab=ProductInventory', 'inventoryProductId=' + encodeURIComponent(invId)];
+                if (variationId != null) {
+                    parts.push('variationId=' + encodeURIComponent(variationId));
+                }
+                window.location.href = '/Employee/UserManager/ProductInventory?' + parts.join('&');
+            });
+        }
         
         tableBody.appendChild(row);
     });
@@ -105,34 +121,51 @@ function displayRawMaterialAlerts(rawMaterials) {
     
     rawMaterials.forEach(material => {
         const row = document.createElement('tr');
+        row.className = 'alert-row-link';
         const status = getStockStatus(material.QuantityAvailable);
+        const materialId = material.MaterialID;
         
         row.innerHTML = `
-            <td>${material.MaterialID}</td>
-            <td>${material.Name}</td>
+            <td>${escapeHtml(material.Name)}</td>
             <td>${material.QuantityAvailable}</td>
-            <td>${material.Unit}</td>
+            <td>${escapeHtml(material.Unit || '')}</td>
             <td><span class="${status.class}">${status.label}</span></td>
         `;
+
+        if (materialId != null) {
+            row.title = 'Open in Raw Materials';
+            row.addEventListener('click', function () {
+                window.location.href = '/Employee/UserManager/ProductInventory?tab=raw-materials&materialId=' + encodeURIComponent(materialId);
+            });
+        }
         
         tableBody.appendChild(row);
     });
 }
 
-function initializeUserAlertFeatures() {
-    console.log('User alert features initialized');
+function initializeInventoryAlerts() {
+    console.log('Inventory alerts initialized');
     
-    // Setup real-time updates for user alerts
-    setupUserAlertUpdates();
+    // Setup real-time updates for inventory alerts
+    setupInventoryAlertUpdates();
 }
 
-function setupUserAlertUpdates() {
-    // Update user alerts every 30 seconds
+function setupInventoryAlertUpdates() {
+    // Update inventory alerts every 30 seconds
     setInterval(() => {
         loadProductAlerts();
         loadRawMaterialAlerts();
         checkCriticalAlerts();
     }, 30000);
+}
+
+function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 function getStockStatus(quantity) {
@@ -196,20 +229,23 @@ function checkCriticalAlerts() {
                 // Check products
                 if (data.products && data.products.length > 0) {
                     data.products.forEach(product => {
-                        if (product.StockQuantity === 0) {
+                        const avail = product.AvailableQuantity != null
+                            ? Number(product.AvailableQuantity)
+                            : Number(product.StockQuantity) || 0;
+                        if (avail === 0) {
                             criticalItems.push({
                                 type: 'product',
                                 name: product.Name,
-                                id: product.ProductID,
-                                quantity: product.StockQuantity,
+                                id: product.VariationID || product.ProductID,
+                                quantity: avail,
                                 status: 'out-of-stock'
                             });
-                        } else if (product.StockQuantity <= safetyStock) {
+                        } else if (avail <= safetyStock) {
                             criticalItems.push({
                                 type: 'product',
                                 name: product.Name,
-                                id: product.ProductID,
-                                quantity: product.StockQuantity,
+                                id: product.VariationID || product.ProductID,
+                                quantity: avail,
                                 status: 'critical'
                             });
                         }
@@ -411,13 +447,6 @@ function createCriticalAlertModal() {
         modal.style.display = 'none';
     });
     
-    // Close on background click
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            modal.style.display = 'none';
-        }
-    });
-    
     // Add CSS animations
     const style = document.createElement('style');
     style.textContent = `
@@ -439,13 +468,13 @@ function createCriticalAlertModal() {
     return modal;
 }
 
-// Dashboard integration - check alerts when accessing user manager panel
+// Dashboard integration - check alerts when accessing admin panel
 function checkDashboardAlerts() {
     console.log('Checking dashboard alerts...');
     
     // Check if we're on the dashboard page
-    const isDashboard = window.location.pathname.includes('UserManager') || 
-                       window.location.pathname.includes('UserManager/UserManager');
+    const isDashboard = window.location.pathname.includes('AdminManager') || 
+                       window.location.pathname.includes('Admin/AdminManager');
     
     if (isDashboard) {
         // Delay the check slightly to ensure page is fully loaded
@@ -455,22 +484,22 @@ function checkDashboardAlerts() {
     }
 }
 
-// Global function to be called from any user manager page
-window.checkUserAlerts = function() {
-    if (window.UserAlerts && window.UserAlerts.checkCriticalAlerts) {
-        window.UserAlerts.checkCriticalAlerts();
+// Global function to be called from any admin page
+window.checkInventoryAlerts = function() {
+    if (window.AdminAlerts && window.AdminAlerts.checkCriticalAlerts) {
+        window.AdminAlerts.checkCriticalAlerts();
     } else {
-        console.log('UserAlerts not loaded yet');
+        console.log('AdminAlerts not loaded yet');
     }
 };
 
 // Auto-check alerts on page load for dashboard
 document.addEventListener('DOMContentLoaded', function() {
-    // Check if this is a dashboard or user manager page
-    const isUserManagerPage = window.location.pathname.includes('/Employee/UserManager') || 
-                       window.location.pathname.includes('/Employee/UserManager/UserManager');
+    // Check if this is a dashboard or admin page
+    const isAdminPage = window.location.pathname.includes('/Employee/Admin') || 
+                       window.location.pathname.includes('/Employee/UserManager');
     
-    if (isUserManagerPage) {
+    if (isAdminPage) {
         // Check alerts after a short delay to ensure everything is loaded
         setTimeout(() => {
             checkDashboardAlerts();
@@ -479,16 +508,14 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Export functions for use in other modules
-window.UserAlerts = {
+window.AdminAlerts = {
     loadAlertsData,
     loadProductAlerts,
     loadRawMaterialAlerts,
-    initializeUserAlerts,
+    initializeAdminAlerts,
     getStockStatus,
     formatTimestamp,
     checkCriticalAlerts,
     showCriticalAlertPopup,
     checkDashboardAlerts
 };
-
-

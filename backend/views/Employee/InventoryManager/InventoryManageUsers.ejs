@@ -870,62 +870,10 @@
                     let currentUserPermissions = [];
                     let originalPermissions = {};
 
-                    // Define permission sections based on your project structure
-                    const permissionSections = [
-                        {
-                            section: 'inventory', name: 'Inventory Section', permissions: [
-                                { key: 'products', name: 'Products Management' },
-                                { key: 'variations', name: 'Variations Management' },
-                                { key: 'materials', name: 'Raw Materials Management' },
-                                { key: 'alerts', name: 'Alerts Management' },
-                                { key: 'archived', name: 'Archived Items' },
-                                { key: 'reports', name: 'Inventory Reports' }
-                            ]
-                        },
-                        {
-                            section: 'transactions', name: 'Transactions Section', permissions: [
-                                { key: 'delivery_rates', name: 'Delivery Rates' },
-                                { key: 'walk_in', name: 'Walk In Transactions' },
-                                { key: 'bulk_orders', name: 'Bulk Orders' }
-                            ]
-                        },
-                        {
-                            section: 'orders', name: 'Orders Section', permissions: [
-                                { key: 'orders_pending', name: 'Orders Pending' },
-                                { key: 'orders_processing', name: 'Orders Processing' },
-                                { key: 'orders_shipping', name: 'Orders Shipping' },
-                                { key: 'orders_delivery', name: 'Orders Delivery' },
-                                { key: 'orders_receive', name: 'Orders Receive' },
-                                { key: 'orders_cancelled', name: 'Cancelled Orders' },
-                                { key: 'orders_completed', name: 'Completed Orders' },
-                                { key: 'orders_returned', name: 'Returned Orders' },
-                                { key: 'orders_completed_refunded', name: 'Completed Refunded' },
-                                { key: 'orders_completed_returned', name: 'Completed Replacement' }
-                            ]
-                        },
-                        {
-                            section: 'users', name: 'User Management Section', permissions: [
-                                { key: 'manage_users', name: 'Manage Users Functionality' }
-                            ]
-                        },
-                        {
-                            section: 'reviews', name: 'Customer Reviews Section', permissions: [
-                                { key: 'reviews', name: 'Reviews Management' }
-                            ]
-                        },
-                        {
-                            section: 'chat', name: 'Support & Communication Section', permissions: [
-                                { key: 'chat_support', name: 'Chat Support' },
-                                { key: 'messages', name: 'Messages' }
-                            ]
-                        },
-                        {
-                            section: 'content', name: 'Content & System Section', permissions: [
-                                { key: 'cms', name: 'Content Management System (CMS)' },
-                                { key: 'logs', name: 'Activity Logs Viewing' }
-                            ]
-                        }
-                    ];
+                    <%- include('../partials/manage-users-permission-catalog', {
+                        permissionSections: typeof permissionSections !== 'undefined' ? permissionSections : [],
+                        permissionLegacyKeys: typeof permissionLegacyKeys !== 'undefined' ? permissionLegacyKeys : {}
+                    }) %>
 
                     // Handle edit user button clicks
                     document.addEventListener('click', function (e) {
@@ -1024,12 +972,7 @@
 
                             if (data.success) {
                                 currentUserPermissions = data.permissions || [];
-                                originalPermissions = {};
-
-                                // Create original permissions backup
-                                currentUserPermissions.forEach(perm => {
-                                    originalPermissions[perm.PermissionName] = perm.CanAccess;
-                                });
+                                originalPermissions = buildOriginalPermissionsMap(currentUserPermissions);
 
                                 console.log('Loaded permissions:', currentUserPermissions);
                                 console.log('Original permissions:', originalPermissions);
@@ -1060,17 +1003,8 @@
                             html += '<h4 style="margin: 0 0 15px 0; color: #333; border-bottom: 2px solid #007bff; padding-bottom: 8px;">' + section.name + '</h4>';
 
                             section.permissions.forEach(permission => {
-                                const permissionName = section.section + '_' + permission.key;
-                                const permissionObj = currentUserPermissions.find(p => p.PermissionName === permissionName);
-                                const hasAccess = permissionObj?.CanAccess || false;
-
-                                if (permissionName === 'inventory_products') {
-                                    console.log('Debug ' + permissionName + ':', {
-                                        permissionObj,
-                                        hasAccess,
-                                        currentUserPermissions: currentUserPermissions.filter(p => p.PermissionName.includes('inventory'))
-                                    });
-                                }
+                                const permissionName = permission.key;
+                                const hasAccess = resolveUserPermissionAccess(permissionName, currentUserPermissions);
 
                                 html += '<div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee;">';
                                 html += '<span style="flex: 1;">' + permission.name + '</span>';

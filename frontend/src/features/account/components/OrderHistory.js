@@ -22,6 +22,9 @@ import {
 } from '../../../shared/components/ui/SvgIcons';
 // LoadingSpinner and InlineLoader removed as requested
 import { getImageUrl } from '../../../shared/utils/imageUtils';
+import { canShowDeliveryTracking } from '../../../shared/utils/deliveryTracking';
+import DeliveryTrackingPanel from '../../orders/components/DeliveryTrackingPanel';
+import '../../orders/components/delivery-tracking.css';
 import './account.css';
 
 const getNotificationStorageKey = (baseKey) => {
@@ -732,6 +735,15 @@ const DetailsModal = ({ open, onClose, order }) => {
               </div>
             )}
           </div>
+
+          {canShowDeliveryTracking(order) && (
+            <div className="order-details-tracking-section">
+              <DeliveryTrackingPanel
+                order={order}
+                mapKey={`details-track-${OrderID}-${open}`}
+              />
+            </div>
+          )}
 
           {/* Status Flow - Minimalist */}
           <div className="order-status-flow-section">

@@ -481,6 +481,29 @@
             const productsTab = document.getElementById('productsTab');
             return !!(productsTab && productsTab.classList.contains('active'));
         }
+
+        const PLANNED_RESTOCK_MSG = 'Cannot restock a planned product. Build the product first using the Build button.';
+
+        function getInventoryProductListingStage(inventoryProductId) {
+            if (!inventoryProductId) return '';
+            const row = document.querySelector(
+                'tr.product-listing-parent-row[data-inventory-product-id="' + inventoryProductId + '"]'
+            );
+            return String(row && row.getAttribute('data-listing-stage') || '').toLowerCase();
+        }
+
+        function isPlannedInventoryProduct(inventoryProductId) {
+            return getInventoryProductListingStage(inventoryProductId) === 'planned';
+        }
+
+        function blockPlannedProductRestock(inventoryProductId) {
+            if (isPlannedInventoryProduct(inventoryProductId)) {
+                showCustomPopup(PLANNED_RESTOCK_MSG, true);
+                return true;
+            }
+            return false;
+        }
+
         const isFlatListPage = false;
 
         function configureVariationEditModalForPage() {
@@ -505,7 +528,9 @@
             if (mode === 'inventory' || (isInventoryPage && mode !== 'catalog')) {
                 statusBlocks.forEach(function(el) { el.style.display = 'none'; });
                 catalogBlocks.forEach(function(el) { el.style.display = 'none'; });
-                restockBlocks.forEach(function(el) { el.style.display = ''; });
+                const editInvId = parseInt(document.getElementById('editVariationStatusInventoryProductID')?.value, 10);
+                const hideRestockForPlanned = editInvId && isPlannedInventoryProduct(editInvId);
+                restockBlocks.forEach(function(el) { el.style.display = hideRestockForPlanned ? 'none' : ''; });
                 inventoryDetailsBlocks.forEach(function(el) { el.style.display = ''; });
                 recipeViewBlocks.forEach(function(el) { el.style.display = ''; });
                 if (mainImageWrap) mainImageWrap.style.display = '';
@@ -1233,7 +1258,9 @@ let currentSelectedProductId = null;
                 const vname = restockVarBtn.getAttribute('data-variation-name') || 'Variation';
                 const avail = parseInt(restockVarBtn.getAttribute('data-available-qty'), 10) || 0;
                 if (vid && ipid) {
-                    openVariationRestockModal(vid, ipid, vname, avail);
+                    if (!blockPlannedProductRestock(ipid)) {
+                        openVariationRestockModal(vid, ipid, vname, avail);
+                    }
                 } else {
                     showCustomPopup('Cannot restock: missing variation or product ID.', true);
                 }
@@ -2266,14 +2293,17 @@ let currentSelectedProductId = null;
                             '">' + PI_SVG_STOREFRONT + '</button>'
                         : '';
                     if (isInventoryPage && isProductInventoryProductsTab()) {
+                        const restockBtnHtml = isPlannedInventoryProduct(ctx.inventoryProductId)
+                            ? ''
+                            : '<button type="button" class="restock-variation-btn pi-icon-restock-btn" data-variation-id="' + ctx.variationId +
+                                '" data-inventory-product-id="' + ctx.inventoryProductId + '" data-variation-name="' + attrQuote(ctx.variationName) +
+                                '" data-available-qty="' + ctx.availableQty + '" title="Restock" aria-label="Restock">' + PI_SVG_RESTOCK + '</button>';
                         return {
                             className: 'var-col-action return-actions-col',
                             style: center,
                             html: '<div class="pi-actions-cell">' +
                                 returnBtns +
-                                '<button type="button" class="restock-variation-btn pi-icon-restock-btn" data-variation-id="' + ctx.variationId +
-                                '" data-inventory-product-id="' + ctx.inventoryProductId + '" data-variation-name="' + attrQuote(ctx.variationName) +
-                                '" data-available-qty="' + ctx.availableQty + '" title="Restock" aria-label="Restock">' + PI_SVG_RESTOCK + '</button>' +
+                                restockBtnHtml +
                                 '<button type="button" class="edit-variation-status-btn pi-icon-edit-btn" data-mode="inventory" data-variation-id="' + ctx.variationId +
                                 '" title="Edit variation" aria-label="Edit variation">' + PI_SVG_EDIT + '</button>' +
                                 '<button type="button" class="inventory-variation-details-btn pi-icon-details-btn" data-variation-id="' + ctx.variationId +
@@ -2635,6 +2665,7 @@ let currentSelectedProductId = null;
         }
 
         window.restockVariationInline = async function(variationId, inventoryProductId, buttonEl, qtyOverride) {
+            if (blockPlannedProductRestock(inventoryProductId)) return;
             const modalQtyInput = document.getElementById('variationRestockQty') || document.getElementById('editVariationRestockQty');
             const qtyInput = qtyOverride != null
                 ? null
@@ -2760,6 +2791,7 @@ let currentSelectedProductId = null;
         }
 
         function openVariationRestockModal(variationId, inventoryProductId, variationName, availableQty) {
+            if (blockPlannedProductRestock(inventoryProductId)) return;
             const modal = document.getElementById('variationRestockModal');
             if (!modal) {
                 console.warn('[Restock] variationRestockModal not found in DOM');
@@ -2799,7 +2831,9 @@ let currentSelectedProductId = null;
                         showCustomPopup('Cannot restock: missing variation or product ID.', true);
                         return;
                     }
-                    openVariationRestockModal(vid, ipid, vname, avail);
+                    if (!blockPlannedProductRestock(ipid)) {
+                        openVariationRestockModal(vid, ipid, vname, avail);
+                    }
                 });
             });
         }
@@ -3740,9 +3774,8 @@ let currentSelectedProductId = null;
                 const el = document.getElementById(pair[0]);
                 if (el) el.textContent = String(pair[1]);
             });
-            const threshold = opts.reorderPoint != null ? opts.reorderPoint : 10;
-            applyStockLevelClass('inventoryDetailsStockAvailable', summary.available, threshold);
-            applyStockLevelClass('inventoryDetailsStockTotal', summary.total, threshold);
+            applyStockLevelClass('inventoryDetailsStockAvailable', summary.available);
+            applyStockLevelClass('inventoryDetailsStockTotal', summary.total);
             const variantsCard = document.getElementById('inventoryDetailsVariantsCard');
             const variantCountEl = document.getElementById('inventoryDetailsVariantCount');
             if (variantsCard && variantCountEl) {
@@ -3756,23 +3789,23 @@ let currentSelectedProductId = null;
             }
         }
 
-        function getStockLevelClass(value, threshold) {
+        /** Match Product Inventory table stockQtyClass (0 / 1–10 / 11–20 / 21+). */
+        function getStockLevelClass(value) {
             const n = Number(value) || 0;
-            const t = Math.max(0, Number(threshold) || 0);
-            const critical = Math.max(1, Math.floor(t / 2));
-            if (n <= 0) return 'stock-level-out';
-            if (t > 0 && n <= critical) return 'stock-level-critical';
-            if (t > 0 && n <= t) return 'stock-level-low';
-            if (t === 0 && n <= 10) return 'stock-level-critical';
-            if (t === 0 && n <= 20) return 'stock-level-low';
+            if (n < 0) return 'stock-level-negative';
+            if (n === 0) return 'stock-level-out';
+            if (n <= 10) return 'stock-level-critical';
+            if (n <= 20) return 'stock-level-low';
             return 'stock-level-ok';
         }
 
-        function applyStockLevelClass(valueId, value, threshold) {
+        function applyStockLevelClass(valueId, value) {
             const el = document.getElementById(valueId);
             if (!el) return;
-            el.classList.remove('stock-level-out', 'stock-level-critical', 'stock-level-low', 'stock-level-ok');
-            el.classList.add(getStockLevelClass(value, threshold));
+            el.classList.remove(
+                'stock-level-negative', 'stock-level-out', 'stock-level-critical', 'stock-level-low', 'stock-level-ok'
+            );
+            el.classList.add(getStockLevelClass(value));
         }
 
         function populateInventoryDetailsModal(opts) {

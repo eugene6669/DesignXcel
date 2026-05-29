@@ -4,6 +4,11 @@
     showReturnColumns - boolean
     showActions - boolean
 %>
+<%
+    const invFiltersSafe = (typeof locals.invFilters !== 'undefined' && locals.invFilters)
+        ? locals.invFilters
+        : { search: '', category: '' };
+%>
 <% if (allProductsList && allProductsList.length > 0) { %>
     <% if (!showReturnColumns) { %>
     <div class="stock-legend">
@@ -113,7 +118,7 @@
     </table>
 <% } else { %>
     <p class="inventory-list-empty">
-        <% if (invFilters.search || invFilters.category) { %>
+        <% if (invFiltersSafe.search || invFiltersSafe.category) { %>
             No products match your filters.
         <% } else if (showReturnColumns) { %>
             No products with returned, damaged, repaired, or disposed stock.

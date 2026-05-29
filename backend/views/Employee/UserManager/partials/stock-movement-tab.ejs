@@ -1,6 +1,6 @@
 <div id="stockMovementTab" class="tab-content<%= typeof activeTab !== 'undefined' && activeTab === 'stock-movement' ? ' active' : '' %>">
     <div class="content-area stock-movement-area">
-        <p class="bom-intro">Expand each product, then each variation, to view movement history (returned → damaged → repaired → available, restocks).</p>
+        <p class="bom-intro">Product inventory and raw material restocks. Expand each group to view movement history.</p>
         <div class="inventory-filter-card">
             <form id="stockMovementFilterForm" class="inventory-filter-form" onsubmit="return false;">
                 <div class="inventory-filter-field">
@@ -25,7 +25,10 @@
         </div>
         <div id="stockMovementLoading" class="stock-movement-loading">Loading movement history…</div>
         <div id="stockMovementListWrap" class="stock-movement-list-wrap" style="display:none;">
+            <h4 class="stock-mv-section-title">Product inventory</h4>
             <div id="stockMovementGroupedList" class="stock-movement-grouped-list"></div>
+            <h4 id="stockMovementRawSectionHead" class="stock-mv-section-title" style="display:none;margin-top:24px;">Raw materials</h4>
+            <div id="stockMovementRawMaterialsList" class="stock-movement-grouped-list"></div>
         </div>
         <p id="stockMovementEmpty" class="inventory-list-empty" style="display:none;">No stock movements recorded yet.</p>
         <nav id="stockMovementPagination" class="inventory-pagination stock-movement-pagination" style="display:none;" aria-label="Stock movement pages"></nav>

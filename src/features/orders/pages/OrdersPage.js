@@ -6,8 +6,10 @@ import apiClient from '../../../shared/services/api/apiClient';
 import ConfirmationModal from '../../../shared/components/ui/ConfirmationModal';
 import PageHeader from '../../../shared/components/layout/PageHeader';
 import { getImageUrl } from '../../../shared/utils/imageUtils';
+import OrderDetailsModal from '../components/OrderDetailsModal';
 import { Bars } from 'react-loader-spinner';
 import './orders.css';
+import '../components/delivery-tracking.css';
 
 const Orders = () => {
     const { user } = useAuth();
@@ -421,86 +423,12 @@ const Orders = () => {
                 cancelText="Keep Order"
             />
 
-            <ConfirmationModal
-                isOpen={showDetailsModal.open}
+            <OrderDetailsModal
+                open={showDetailsModal.open}
+                order={showDetailsModal.order}
                 onClose={() => setShowDetailsModal({ open: false, order: null })}
-                onConfirm={() => setShowDetailsModal({ open: false, order: null })}
-                title={`Order #${showDetailsModal.order?.OrderID} Details`}
-                message={
-                    showDetailsModal.order ? (
-                        <div className="order-details-modal">
-                            {/* Order Summary */}
-                            <div className="order-summary-section">
-                                <h4>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M9 12H15M9 16H15M17 21H7C5.89543 21 5 20.1046 5 19V5C5 3.89543 5.89543 3 7 3H12.5858C12.851 3 13.1054 3.10536 13.2929 3.29289L19.7071 9.70711C19.8946 9.89464 20 10.149 20 10.4142V19C20 20.1046 19.1046 21 18 21H17ZM17 21V9H13V5H7V19H17Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                    Order Summary
-                                </h4>
-                                <div className="summary-grid">
-                                    <div className="summary-item">
-                                        <span className="label">Order Date:</span>
-                                        <span className="value">{new Date(showDetailsModal.order.OrderDate).toLocaleDateString('en-US', {
-                                            weekday: 'short',
-                                            year: 'numeric',
-                                            month: 'short',
-                                            day: 'numeric'
-                                        })}</span>
-                                    </div>
-                                    <div className="summary-item">
-                                        <span className="label">Status:</span>
-                                        <span className={`value status ${getStatusBadgeClass(showDetailsModal.order.Status).split(' ')[1]}`}>
-                                            {getStatusIcon(showDetailsModal.order.Status)}
-                                            {showDetailsModal.order.Status}
-                                        </span>
-                                    </div>
-                                    <div className="summary-item">
-                                        <span className="label">Total Amount:</span>
-                                        <span className="value total">₱{parseFloat(showDetailsModal.order.TotalAmount).toLocaleString()}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Order Items */}
-                            <div className="order-items-section">
-                                <h4>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M20 7L4 7M10 11H6M14 15H6M4 3H20C20.5523 3 21 3.44772 21 4V20C21 20.5523 20.5523 21 20 21H4C3.44772 21 3 20.5523 3 20V4C3 3.44772 3.44772 3 4 3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                    Order Items ({showDetailsModal.order.items?.length} items)
-                                </h4>
-                                <div className="items-list">
-                                    {showDetailsModal.order.items?.map((item, index) => (
-                                        <div key={index} className="item-row">
-                                            <div className="item-image">
-                                                <img 
-                                                    src={getImageUrl(item.image)} 
-                                                    alt={item.name}
-                                                    onError={(e) => {
-                                                        e.target.src = '/logo192.png';
-                                                    }}
-                                                />
-                                            </div>
-                                            <div className="item-info">
-                                                <h5>{item.name}</h5>
-                                                <div className="item-meta">
-                                                    <span className="quantity">Qty: {item.quantity}</span>
-                                                    <span className="price">₱{item.price?.toLocaleString()}</span>
-                                                </div>
-                                                <div className="item-total">
-                                                    ₱{(item.price * item.quantity).toLocaleString()}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    ) : ''
-                }
-                confirmText="Close"
-                cancelText=""
-                showCancel={false}
+                getStatusBadgeClass={getStatusBadgeClass}
+                getStatusIcon={getStatusIcon}
             />
 
             <ConfirmationModal

@@ -1,0 +1,94 @@
+<div id="inventoryDetailsModal" class="modal pi-modal-compact inventory-details-modal" style="display:none;" aria-hidden="true">
+    <div class="modal-content inventory-details-modal-content">
+        <span class="close-button" id="closeInventoryDetailsModal" aria-label="Close">&times;</span>
+        <h3 id="inventoryDetailsModalTitle">Product Details</h3>
+
+        <div class="inventory-details-hero">
+            <div class="inventory-details-image-wrap">
+                <img id="inventoryDetailsImage" src="/images/placeholder-no-image.svg" alt="">
+            </div>
+            <div class="inventory-details-meta">
+                <div class="inventory-details-meta-row">
+                    <span class="inventory-details-label">Product Name</span>
+                    <strong id="inventoryDetailsName" class="inventory-details-value">—</strong>
+                </div>
+                <div class="inventory-details-meta-row">
+                    <span class="inventory-details-label">Category</span>
+                    <span id="inventoryDetailsCategory" class="inventory-details-value">—</span>
+                </div>
+                <div class="inventory-details-meta-row inventory-details-dims-row" id="inventoryDetailsDimsRow" style="display:none;">
+                    <span class="inventory-details-label">Dimensions</span>
+                    <span id="inventoryDetailsDims" class="inventory-details-value">—</span>
+                </div>
+                <div id="inventoryDetailsProductPricing">
+                    <div class="inventory-details-meta-row">
+                        <span class="inventory-details-label">Sale Price</span>
+                        <span id="inventoryDetailsParentSalePrice" class="inventory-details-value">—</span>
+                    </div>
+                    <div class="inventory-details-meta-row">
+                        <span class="inventory-details-label">Item Cost</span>
+                        <span id="inventoryDetailsParentItemCost" class="inventory-details-value">—</span>
+                    </div>
+                    <div class="inventory-details-meta-row">
+                        <span class="inventory-details-label">Item Sale Price Total</span>
+                        <span id="inventoryDetailsSalePriceTotal" class="inventory-details-value">—</span>
+                    </div>
+                    <div class="inventory-details-meta-row">
+                        <span class="inventory-details-label">Item Cost Price Total</span>
+                        <span id="inventoryDetailsCostPriceTotal" class="inventory-details-value">—</span>
+                    </div>
+                </div>
+                <div id="inventoryDetailsVariationPricing" style="display:none;">
+                    <div class="inventory-details-meta-row">
+                        <span class="inventory-details-label">SKU</span>
+                        <span id="inventoryDetailsSku" class="inventory-details-value">—</span>
+                    </div>
+                    <div class="inventory-details-meta-row">
+                        <span class="inventory-details-label">Sale Price</span>
+                        <span id="inventoryDetailsUnitSalePrice" class="inventory-details-value">—</span>
+                    </div>
+                    <div class="inventory-details-meta-row">
+                        <span class="inventory-details-label">Item Cost</span>
+                        <span id="inventoryDetailsUnitCost" class="inventory-details-value">—</span>
+                    </div>
+                    <div class="inventory-details-meta-row">
+                        <span class="inventory-details-label">Item Sale Price Total</span>
+                        <span id="inventoryDetailsVariationSalePriceTotal" class="inventory-details-value">—</span>
+                    </div>
+                    <div class="inventory-details-meta-row">
+                        <span class="inventory-details-label">Item Cost Price Total</span>
+                        <span id="inventoryDetailsVariationCostPriceTotal" class="inventory-details-value">—</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h4 class="inventory-details-section-title">Stock Summary</h4>
+        <div class="inventory-stock-summary-grid">
+            <div class="inventory-stock-card stock-available">
+                <span class="inventory-stock-card-label">Available</span>
+                <span class="inventory-stock-card-value" id="inventoryDetailsStockAvailable">0</span>
+            </div>
+            <div class="inventory-stock-card stock-returned">
+                <span class="inventory-stock-card-label">Returned</span>
+                <span class="inventory-stock-card-value" id="inventoryDetailsStockReturned">0</span>
+            </div>
+            <div class="inventory-stock-card stock-damaged">
+                <span class="inventory-stock-card-label">Damaged</span>
+                <span class="inventory-stock-card-value" id="inventoryDetailsStockDamaged">0</span>
+            </div>
+            <div class="inventory-stock-card stock-repaired">
+                <span class="inventory-stock-card-label">Repaired</span>
+                <span class="inventory-stock-card-value" id="inventoryDetailsStockRepaired">0</span>
+            </div>
+            <div class="inventory-stock-card stock-variants" id="inventoryDetailsVariantsCard" style="display:none;">
+                <span class="inventory-stock-card-label">Variants</span>
+                <span class="inventory-stock-card-value" id="inventoryDetailsVariantCount">0</span>
+            </div>
+            <div class="inventory-stock-card stock-total">
+                <span class="inventory-stock-card-label">Total Stock</span>
+                <span class="inventory-stock-card-value" id="inventoryDetailsStockTotal">0</span>
+            </div>
+        </div>
+    </div>
+</div>

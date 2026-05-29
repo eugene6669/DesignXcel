@@ -48,8 +48,9 @@ const PERMISSION_ALIASES = {
     orders_completed_returned: ['orders_completed_returned', 'orders_orders_completed_returned'],
     users_manage_users: ['manage_users'],
     dashboard_access: ['dashboard'],
-    inventory_product_inventory: ['product_inventory', 'inventory_products'],
-    inventory_product_listing: ['product_listing', 'products_listing', 'inventory_products'],
+    inventory_product_inventory: ['product_inventory', 'inventory_products', 'products'],
+    inventory_product_listing: ['product_listing', 'products_listing', 'inventory_products', 'products'],
+    inventory_storefront: ['storefront'],
     reviews_reviews: ['reviews'],
     chat_chat_support: ['chat_support'],
     content_cms: ['cms'],
@@ -58,6 +59,9 @@ const PERMISSION_ALIASES = {
 
 // Map permissions to their corresponding InventoryManager routes
 const INVENTORY_MANAGER_ROUTE_MAP = {
+    inventory_product_listing: '/Employee/InventoryManager/InventoryProducts',
+    inventory_product_inventory: '/Employee/InventoryManager/ProductInventory',
+    inventory_storefront: '/Employee/InventoryManager/Storefront',
     inventory_products: '/Employee/InventoryManager/InventoryProducts',
     inventory_variations: '/Employee/InventoryManager/InventoryVariations',
     inventory_materials: '/Employee/InventoryManager/InventoryMaterials',

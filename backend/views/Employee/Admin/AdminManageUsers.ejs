@@ -422,6 +422,8 @@
                         id="tab-employee-accounts">Employee Accounts</button>
                     <button class="cms-tab-btn" onclick="showTab('customer-accounts')"
                         id="tab-customer-accounts">Customer Accounts</button>
+                    <button class="cms-tab-btn" onclick="showTab('role-manager')"
+                        id="tab-role-manager">Role Manager</button>
                 </div>
 
                 <div class="content-area">
@@ -577,6 +579,24 @@
                                 </tbody>
                             </table>
                             <p id="noEmployeeAccounts" style="display:none;">No employee accounts found.</p>
+                        </div>
+                    </div>
+
+                    <!-- Role Manager Tab -->
+                    <div class="cms-tab-content" id="tab-content-role-manager" style="display:none;">
+                        <div class="role-manager-toolbar">
+                            <button type="button" class="btn-add-role" id="btnAddRole">ADD ROLE</button>
+                            <div class="role-search-wrap">
+                                <input type="search" id="roleSearchInput" placeholder="Search Roles" aria-label="Search roles">
+                            </div>
+                        </div>
+                        <div class="role-matrix-wrap">
+                            <table class="role-matrix-table" id="roleMatrixTable">
+                                <thead id="roleMatrixHead">
+                                    <tr><th colspan="2">Loading roles…</th></tr>
+                                </thead>
+                                <tbody id="roleMatrixBody"></tbody>
+                            </table>
                         </div>
                     </div>
 
@@ -850,62 +870,10 @@
                     let currentUserPermissions = [];
                     let originalPermissions = {};
 
-                    // Define permission sections based on your project structure
-                    const permissionSections = [
-                        {
-                            section: 'inventory', name: 'Inventory Section', permissions: [
-                                { key: 'products', name: 'Products Management' },
-                                { key: 'variations', name: 'Variations Management' },
-                                { key: 'materials', name: 'Raw Materials Management' },
-                                { key: 'alerts', name: 'Alerts Management' },
-                                { key: 'archived', name: 'Archived Items' },
-                                { key: 'reports', name: 'Inventory Reports' }
-                            ]
-                        },
-                        {
-                            section: 'transactions', name: 'Transactions Section', permissions: [
-                                { key: 'delivery_rates', name: 'Delivery Rates' },
-                                { key: 'walk_in', name: 'Walk In Transactions' },
-                                { key: 'bulk_orders', name: 'Bulk Orders' }
-                            ]
-                        },
-                        {
-                            section: 'orders', name: 'Orders Section', permissions: [
-                                { key: 'orders_pending', name: 'Orders Pending' },
-                                { key: 'orders_processing', name: 'Orders Processing' },
-                                { key: 'orders_shipping', name: 'Orders Shipping' },
-                                { key: 'orders_delivery', name: 'Orders Delivery' },
-                                { key: 'orders_receive', name: 'Orders Receive' },
-                                { key: 'orders_cancelled', name: 'Cancelled Orders' },
-                                { key: 'orders_completed', name: 'Completed Orders' },
-                                { key: 'orders_returned', name: 'Returned Orders' },
-                                { key: 'orders_completed_refunded', name: 'Completed Refunded' },
-                                { key: 'orders_completed_returned', name: 'Completed Replacement' }
-                            ]
-                        },
-                        {
-                            section: 'users', name: 'User Management Section', permissions: [
-                                { key: 'manage_users', name: 'Manage Users Functionality' }
-                            ]
-                        },
-                        {
-                            section: 'reviews', name: 'Customer Reviews Section', permissions: [
-                                { key: 'reviews', name: 'Reviews Management' }
-                            ]
-                        },
-                        {
-                            section: 'chat', name: 'Support & Communication Section', permissions: [
-                                { key: 'chat_support', name: 'Chat Support' },
-                                { key: 'messages', name: 'Messages' }
-                            ]
-                        },
-                        {
-                            section: 'content', name: 'Content & System Section', permissions: [
-                                { key: 'cms', name: 'Content Management System (CMS)' },
-                                { key: 'logs', name: 'Activity Logs Viewing' }
-                            ]
-                        }
-                    ];
+                    <%- include('../partials/manage-users-permission-catalog', {
+                        permissionSections: typeof permissionSections !== 'undefined' ? permissionSections : [],
+                        permissionLegacyKeys: typeof permissionLegacyKeys !== 'undefined' ? permissionLegacyKeys : {}
+                    }) %>
 
                     // Handle edit user button clicks
                     document.addEventListener('click', function (e) {
@@ -1004,12 +972,7 @@
 
                             if (data.success) {
                                 currentUserPermissions = data.permissions || [];
-                                originalPermissions = {};
-
-                                // Create original permissions backup
-                                currentUserPermissions.forEach(perm => {
-                                    originalPermissions[perm.PermissionName] = perm.CanAccess;
-                                });
+                                originalPermissions = buildOriginalPermissionsMap(currentUserPermissions);
 
                                 console.log('Loaded permissions:', currentUserPermissions);
                                 console.log('Original permissions:', originalPermissions);
@@ -1040,17 +1003,8 @@
                             html += '<h4 style="margin: 0 0 15px 0; color: #333; border-bottom: 2px solid #007bff; padding-bottom: 8px;">' + section.name + '</h4>';
 
                             section.permissions.forEach(permission => {
-                                const permissionName = section.section + '_' + permission.key;
-                                const permissionObj = currentUserPermissions.find(p => p.PermissionName === permissionName);
-                                const hasAccess = permissionObj?.CanAccess || false;
-
-                                if (permissionName === 'inventory_products') {
-                                    console.log('Debug ' + permissionName + ':', {
-                                        permissionObj,
-                                        hasAccess,
-                                        currentUserPermissions: currentUserPermissions.filter(p => p.PermissionName.includes('inventory'))
-                                    });
-                                }
+                                const permissionName = permission.key;
+                                const hasAccess = resolveUserPermissionAccess(permissionName, currentUserPermissions);
 
                                 html += '<div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee;">';
                                 html += '<span style="flex: 1;">' + permission.name + '</span>';
@@ -1321,12 +1275,107 @@
                     border-radius: 0 0 4px 4px;
                     min-height: 400px;
                 }
+                .role-manager-toolbar {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: 1rem;
+                    margin-bottom: 1rem;
+                    flex-wrap: wrap;
+                }
+                .btn-add-role {
+                    background: #2563eb;
+                    color: #fff;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 0.65rem 1.25rem;
+                    font-weight: 700;
+                    cursor: pointer;
+                    letter-spacing: 0.02em;
+                }
+                .btn-add-role:hover { background: #1d4ed8; }
+                .role-search-wrap input {
+                    min-width: 220px;
+                    padding: 0.55rem 0.75rem;
+                    border: 1px solid #d1d5db;
+                    border-radius: 6px;
+                }
+                .role-matrix-wrap {
+                    overflow: auto;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    max-height: 70vh;
+                }
+                .role-matrix-table {
+                    width: max-content;
+                    min-width: 100%;
+                    border-collapse: collapse;
+                    font-size: 0.9rem;
+                }
+                .role-matrix-table th,
+                .role-matrix-table td {
+                    border: 1px solid #e5e7eb;
+                    padding: 0.55rem 0.65rem;
+                    text-align: center;
+                    white-space: nowrap;
+                }
+                .role-matrix-table thead th {
+                    background: #ede9fe;
+                    color: #4c1d95;
+                    font-weight: 600;
+                    position: sticky;
+                    top: 0;
+                    z-index: 2;
+                }
+                .role-matrix-table th.role-col,
+                .role-matrix-table td.role-col {
+                    text-align: left;
+                    position: sticky;
+                    left: 0;
+                    background: #f5f3ff;
+                    z-index: 1;
+                    min-width: 180px;
+                }
+                .role-matrix-table thead th.role-col { z-index: 3; }
+                .role-matrix-table input[type="checkbox"] {
+                    width: 18px;
+                    height: 18px;
+                    accent-color: #7c3aed;
+                    cursor: pointer;
+                }
+                .role-actions-btn {
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    padding: 0 0.35rem;
+                    color: #6b7280;
+                    vertical-align: middle;
+                }
+                .role-actions-menu {
+                    position: absolute;
+                    background: #fff;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 6px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+                    z-index: 10;
+                    min-width: 100px;
+                }
+                .role-actions-menu button {
+                    display: block;
+                    width: 100%;
+                    text-align: left;
+                    padding: 0.5rem 0.75rem;
+                    border: none;
+                    background: none;
+                    cursor: pointer;
+                }
+                .role-actions-menu button:hover { background: #f3f4f6; }
             `;
                     document.head.appendChild(style);
 
                     // Tab functionality
                     window.showTab = function (tab) {
-                        const tabs = ['employee-accounts', 'customer-accounts'];
+                        const tabs = ['employee-accounts', 'customer-accounts', 'role-manager'];
                         tabs.forEach(t => {
                             const tabContent = document.getElementById('tab-content-' + t);
                             const tabBtn = document.getElementById('tab-' + t);
@@ -1339,6 +1388,9 @@
 
                         if (tab === 'customer-accounts') {
                             loadCustomerAccounts();
+                        }
+                        if (tab === 'role-manager' && window.RoleManager) {
+                            window.RoleManager.load();
                         }
                     };
 
@@ -2003,7 +2055,7 @@ Consider archiving instead if you want to preserve the data.`;
 
                 // Global showTab function for tab navigation
                 window.showTab = function (tab) {
-                        const tabs = ['employee-accounts', 'customer-accounts'];
+                        const tabs = ['employee-accounts', 'customer-accounts', 'role-manager'];
                         tabs.forEach(t => {
                             const tabContent = document.getElementById('tab-content-' + t);
                             const tabBtn = document.getElementById('tab-' + t);
@@ -2017,8 +2069,12 @@ Consider archiving instead if you want to preserve the data.`;
                     if (tab === 'customer-accounts') {
                         loadCustomerAccounts();
                     }
+                    if (tab === 'role-manager' && window.RoleManager) {
+                        window.RoleManager.load();
+                    }
                 };
             </script>
+            <script src="/js/Employee/Admin/role-manager.js?v=<%= Date.now() %>"></script>
 
 </body>
 

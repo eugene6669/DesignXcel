@@ -1,0 +1,202 @@
+.delivery-tracking-panel {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 0.75rem;
+}
+
+.delivery-tracking-panel--compact {
+  margin-top: 0;
+}
+
+.delivery-tracking-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.delivery-tracking-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.delivery-tracking-subtitle {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.delivery-tracking-ref {
+  font-size: 0.75rem;
+  color: #6b7280;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+  white-space: nowrap;
+}
+
+.delivery-tracking-steps {
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  gap: 0.25rem;
+  position: relative;
+}
+
+.delivery-tracking-steps::before {
+  content: '';
+  position: absolute;
+  top: 9px;
+  left: 8%;
+  right: 8%;
+  height: 2px;
+  background: #e5e7eb;
+  z-index: 0;
+}
+
+.delivery-tracking-step {
+  flex: 1;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.delivery-tracking-step-dot {
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 0 auto 0.35rem;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #d1d5db;
+  box-sizing: border-box;
+}
+
+.delivery-tracking-step.is-done .delivery-tracking-step-dot {
+  border-color: #F0B21B;
+  background: #F0B21B;
+}
+
+.delivery-tracking-step.is-current .delivery-tracking-step-dot {
+  border-color: #F0B21B;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(240, 178, 27, 0.35);
+}
+
+.delivery-tracking-step-label {
+  display: block;
+  font-size: 0.65rem;
+  color: #9ca3af;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.delivery-tracking-step.is-done .delivery-tracking-step-label,
+.delivery-tracking-step.is-current .delivery-tracking-step-label {
+  color: #374151;
+  font-weight: 600;
+}
+
+.delivery-tracking-map-wrap {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  background: #e5e7eb;
+  min-height: 220px;
+}
+
+.delivery-tracking-panel--compact .delivery-tracking-map-wrap {
+  min-height: 200px;
+}
+
+.delivery-tracking-map {
+  width: 100%;
+  height: 260px;
+  z-index: 0;
+}
+
+.delivery-tracking-panel--compact .delivery-tracking-map {
+  height: 220px;
+}
+
+.delivery-tracking-map-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.delivery-tracking-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+  color: #6b7280;
+  line-height: 1.45;
+}
+
+.delivery-tracking-note--warn {
+  color: #b45309;
+}
+
+.dt-marker-wrap {
+  background: transparent !important;
+  border: none !important;
+}
+
+.dt-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  border: 3px solid #fff;
+}
+
+.dt-marker--warehouse {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #F0B21B 0%, #e6a632 100%);
+  color: #2c3e50;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  line-height: 30px;
+}
+
+.dt-marker--dest {
+  width: 32px;
+  height: 32px;
+  background: #2563eb;
+  font-size: 16px;
+}
+
+.dt-marker--courier {
+  width: 36px;
+  height: 36px;
+  background: #fff;
+  font-size: 18px;
+  border-color: #F0B21B;
+}
+
+@media (max-width: 640px) {
+  .delivery-tracking-step-label {
+    font-size: 0.6rem;
+  }
+
+  .delivery-tracking-map {
+    height: 220px;
+  }
+}

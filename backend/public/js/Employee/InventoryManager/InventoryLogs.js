@@ -1,7 +1,7 @@
-// Enhanced InventoryLogs.js with filtering and detailed display
+// Enhanced Inventory ManagerLogs.js with filtering and detailed display
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Enhanced InventoryLogs.js loaded, fetching activity logs...');
+    console.log('Enhanced Inventory ManagerLogs.js loaded, fetching activity logs...');
     
     let allLogs = []; // Store all logs for filtering
     let filteredLogs = []; // Store filtered logs
@@ -14,8 +14,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function fetchActivityLogs() {
         try {
-            console.log('Making request to /Employee/InventoryManager/Logs/Data...');
-            const response = await fetch('/Employee/InventoryManager/Logs/Data');
+            // Dynamically determine the correct endpoint based on current URL
+            const currentPath = window.location.pathname;
+            let logsEndpoint = '/Employee/InventoryManager/Logs/Data'; // Default to Admin
+            
+            if (currentPath.includes('/TransactionManager/')) {
+                logsEndpoint = '/Employee/TransactionManager/Logs/Data';
+            } else if (currentPath.includes('/InventoryManager/')) {
+                logsEndpoint = '/Employee/InventoryManager/Logs/Data';
+            } else if (currentPath.includes('/UserManager/')) {
+                logsEndpoint = '/Employee/UserManager/Logs/Data';
+            } else if (currentPath.includes('/OrderSupport/')) {
+                logsEndpoint = '/Employee/OrderSupport/Logs/Data';
+            }
+            
+            console.log(`Making request to ${logsEndpoint}...`);
+            const response = await fetch(logsEndpoint);
             console.log('Response received:', response.status, response.statusText);
             
             const data = await response.json();
@@ -105,6 +119,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function displayActivityLogs(logs) {
         console.log('Displaying logs:', logs);
         const tableBody = document.querySelector('#activityLogsTable tbody');
+        const table = document.getElementById('activityLogsTable');
         const noLogsMessage = document.getElementById('noLogsMessage');
         const errorMessage = document.getElementById('errorMessage');
         
@@ -119,13 +134,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (logs.length === 0) {
-            tableBody.style.display = 'none';
+            table.style.display = 'none';
             noLogsMessage.style.display = 'block';
-            noLogsMessage.textContent = 'No activity logs found matching your criteria.';
             return;
         }
 
-        tableBody.style.display = 'table-row-group';
+        table.style.display = 'table';
         noLogsMessage.style.display = 'none';
 
         logs.forEach(log => {
@@ -189,15 +203,14 @@ document.addEventListener('DOMContentLoaded', function() {
     function createChangesDisplay(changes) {
         if (!changes) return '<span class="no-changes">No changes</span>';
         
-        try {
-            const parsedChanges = typeof changes === 'string' ? JSON.parse(changes) : changes;
-            
-            if (!parsedChanges || Object.keys(parsedChanges).length === 0) {
+        // If changes is already an object, use it directly
+        if (typeof changes === 'object') {
+            if (Object.keys(changes).length === 0) {
                 return '<span class="no-changes">No changes</span>';
             }
             
             let changesHtml = '<div class="changes-display">';
-            for (const [field, change] of Object.entries(parsedChanges)) {
+            for (const [field, change] of Object.entries(changes)) {
                 changesHtml += `
                     <div class="change-item">
                         <strong>${field}:</strong>
@@ -207,12 +220,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 `;
             }
             changesHtml += '</div>';
-            
             return changesHtml;
-        } catch (error) {
-            console.error('Error parsing changes:', error);
-            return `<div class="changes-display">${changes}</div>`;
         }
+        
+        // If changes is a string, try to parse as JSON first
+        if (typeof changes === 'string') {
+            try {
+                const parsedChanges = JSON.parse(changes);
+                
+                if (!parsedChanges || Object.keys(parsedChanges).length === 0) {
+                    return '<span class="no-changes">No changes</span>';
+                }
+                
+                let changesHtml = '<div class="changes-display">';
+                for (const [field, change] of Object.entries(parsedChanges)) {
+                    changesHtml += `
+                        <div class="change-item">
+                            <strong>${field}:</strong>
+                            <span class="old-value">${change.old || 'null'}</span> → 
+                            <span class="new-value">${change.new || 'null'}</span>
+                        </div>
+                    `;
+                }
+                changesHtml += '</div>';
+                return changesHtml;
+            } catch (error) {
+                // If JSON parsing fails, treat as plain text
+                return `<div class="changes-display">${changes}</div>`;
+            }
+        }
+        
+        // Fallback for any other type
+        return `<div class="changes-display">${String(changes)}</div>`;
     }
 
     function getTimeAgo(date) {
@@ -228,9 +267,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function showError(message) {
-        document.getElementById('activityLogsTable').style.display = 'none';
-        document.getElementById('errorMessage').style.display = 'block';
-        document.getElementById('errorMessage').textContent = message;
+        const table = document.getElementById('activityLogsTable');
+        const noLogsMessage = document.getElementById('noLogsMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        
+        if (table) table.style.display = 'none';
+        if (noLogsMessage) noLogsMessage.style.display = 'none';
+        if (errorMessage) {
+            errorMessage.style.display = 'block';
+            errorMessage.textContent = message;
+        }
     }
 
     // Debounce function for search input
@@ -346,6 +392,5 @@ document.addEventListener('DOMContentLoaded', function() {
     // Make functions globally available
     window.applyFilters = applyFilters;
     window.clearFilters = clearFilters;
-    window.loadActivityLogs = fetchActivityLogs;
     window.exportToCSV = exportToCSV;
 });

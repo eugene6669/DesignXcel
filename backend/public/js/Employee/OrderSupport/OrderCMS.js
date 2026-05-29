@@ -1,9 +1,9 @@
-// Order Support CMS JavaScript
-// Handles content management system functionality for order manager users
+// Admin CMS JavaScript
+// Handles content management system functionality for admin users
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize order manager CMS functionality
-    initializeOrderCMS();
+    // Initialize admin CMS functionality
+    initializeAdminCMS();
     
     // Load CMS data
     loadCMSData();
@@ -12,10 +12,10 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
 });
 
-function initializeOrderCMS() {
-    console.log('Initializing Order Support CMS...');
+function initializeAdminCMS() {
+    console.log('Initializing Admin CMS...');
     
-    // Order Support system - no permission checking needed
+    // Admin-only system - no permission checking needed
     // Initialize CMS-specific features
     initializeContentEditor();
     initializeMediaManager();
@@ -460,6 +460,11 @@ function setupEventListeners() {
     
     // Setup thumbnail preview
     setupThumbnailPreview();
+
+    // Setup About tab live preview (safe no-op if missing)
+    setTimeout(() => {
+        setupAboutPreview();
+    }, 100);
 }
 
 function setupContentTypeActions() {
@@ -554,19 +559,19 @@ function setupTemplateActions() {
 
 // Action functions
 function viewContentType(typeId) {
-    window.location.href = `/Employee/OrderSupport/CMS/ContentType/${typeId}`;
+    window.location.href = `/Employee/OrderSupport/OrderCMS/ContentType/${typeId}`;
 }
 
 function createContent(typeId) {
-    window.location.href = `/Employee/OrderSupport/CMS/CreateContent?type=${typeId}`;
+    window.location.href = `/Employee/OrderSupport/OrderCMS/CreateContent?type=${typeId}`;
 }
 
 function editContent(contentId) {
-    window.location.href = `/Employee/OrderSupport/CMS/EditContent/${contentId}`;
+    window.location.href = `/Employee/OrderSupport/OrderCMS/EditContent/${contentId}`;
 }
 
 function previewContent(contentId) {
-    window.open(`/Employee/OrderSupport/CMS/PreviewContent/${contentId}`, '_blank');
+    window.open(`/Employee/OrderSupport/OrderCMS/PreviewContent/${contentId}`, '_blank');
 }
 
 function deleteContent(contentId) {
@@ -633,11 +638,11 @@ function deleteMedia(mediaId) {
 }
 
 function editPage(pageId) {
-    window.location.href = `/Employee/OrderSupport/CMS/EditPage/${pageId}`;
+    window.location.href = `/Employee/OrderSupport/OrderCMS/EditPage/${pageId}`;
 }
 
 function previewPage(pageId) {
-    window.open(`/Employee/OrderSupport/CMS/PreviewPage/${pageId}`, '_blank');
+    window.open(`/Employee/OrderSupport/OrderCMS/PreviewPage/${pageId}`, '_blank');
 }
 
 function publishPage(pageId) {
@@ -666,11 +671,11 @@ function publishPage(pageId) {
 }
 
 function useTemplate(templateId) {
-    window.location.href = `/Employee/OrderSupport/CMS/CreatePage?template=${templateId}`;
+    window.location.href = `/Employee/OrderSupport/OrderCMS/CreatePage?template=${templateId}`;
 }
 
 function previewTemplate(templateId) {
-    window.open(`/Employee/OrderSupport/CMS/PreviewTemplate/${templateId}`, '_blank');
+    window.open(`/Employee/OrderSupport/OrderCMS/PreviewTemplate/${templateId}`, '_blank');
 }
 
 function openMediaSelector() {
@@ -915,7 +920,6 @@ function loadProducts() {
     fetchProducts().then(products => {
         tbody.innerHTML = products.map(p => `
             <tr>
-                <td>${p.ProductID}</td>
                 <td>${p.Name}</td>
                 <td>${p.Category || 'N/A'}</td>
                 <td>₱${parseFloat(p.Price).toFixed(2)}</td>
@@ -924,8 +928,12 @@ function loadProducts() {
                            onchange="toggleProductFeatured(${p.ProductID}, this.checked)">
                 </td>
                 <td>
-                    <button onclick="editProduct(${p.ProductID})" class="btn-edit">Edit</button>
-                    <button onclick="deleteProduct(${p.ProductID})" class="btn-delete">Delete</button>
+                    <input type="checkbox" ${p.IsBestSeller ? 'checked' : ''} 
+                           onchange="toggleProductBestSeller(${p.ProductID}, this.checked)">
+                </td>
+                <td>
+                    <input type="checkbox" ${p.IsNewArrival ? 'checked' : ''} 
+                           onchange="toggleProductNewArrival(${p.ProductID}, this.checked)">
                 </td>
             </tr>
         `).join('');
@@ -961,9 +969,57 @@ function toggleProductFeatured(productId, featured) {
     });
 }
 
+function toggleProductBestSeller(productId, bestSeller) {
+    fetch(`/api/admin/products/${productId}/best-seller`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bestSeller })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            if (window.EmployeeUtils) {
+                window.EmployeeUtils.showNotification('Product best seller status updated');
+            }
+        } else if (window.EmployeeUtils) {
+            window.EmployeeUtils.showNotification('Failed to update product', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error updating product:', error);
+        if (window.EmployeeUtils) {
+            window.EmployeeUtils.showNotification('Error updating product', 'error');
+        }
+    });
+}
+
+function toggleProductNewArrival(productId, newArrival) {
+    fetch(`/api/admin/products/${productId}/new-arrival`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newArrival })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            if (window.EmployeeUtils) {
+                window.EmployeeUtils.showNotification('Product new arrival status updated');
+            }
+        } else if (window.EmployeeUtils) {
+            window.EmployeeUtils.showNotification('Failed to update product', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error updating product:', error);
+        if (window.EmployeeUtils) {
+            window.EmployeeUtils.showNotification('Error updating product', 'error');
+        }
+    });
+}
+
 function editProduct(productId) {
     // Open product edit modal or redirect to product edit page
-    window.open(`/Employee/OrderSupport/Products?edit=${productId}`, '_blank');
+    window.open(`/Employee/OrderSupport/ProductInventory?tab=ProductInventory&inventoryProductId=${productId}`, '_blank');
 }
 
 function deleteProduct(productId) {
@@ -1012,31 +1068,57 @@ function loadTestimonials() {
         return;
     }
     
-    container.innerHTML = 'Loading testimonials...';
+    container.innerHTML = 'Loading testimonials (latest approved product reviews)...';
     
     fetchTestimonials().then(testimonials => {
         if (testimonials.length === 0) {
-            container.innerHTML = '<p style="color: #666; text-align: center; padding: 2em;">No testimonials found. Add your first testimonial above!</p>';
+            container.innerHTML = '<p style="color: #666; text-align: center; padding: 2em;">No eligible reviews found. Approve product reviews with comments in the Reviews section, then return here to toggle "Show on Website".</p>';
             return;
         }
         
-        container.innerHTML = testimonials.map(t => `
-            <div class="testimonial-item" style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.5em; margin-bottom: 1em; background: #fff;">
-                <div style="display: flex; align-items: center; margin-bottom: 1em;">
-                    ${t.imageUrl ? `<img src="${t.imageUrl}" alt="${t.name}" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; margin-right: 1em;">` : ''}
-                    <div>
-                        <h4 style="margin: 0; color: #333; font-size: 1.1em;">${t.name}</h4>
-                        ${t.profession ? `<p style="margin: 0.25em 0 0 0; color: #666; font-size: 0.9em;">${t.profession}</p>` : ''}
-                        ${t.rating ? `<div style="color: #F0B21B; font-size: 0.9em; margin-top: 0.25em;">${'★'.repeat(Math.floor(t.rating))}${t.rating}</div>` : ''}
+        container.innerHTML = testimonials.map(t => {
+            // Construct proper image URL
+            const imageUrl = t.imageUrl ? (t.imageUrl.startsWith('http') ? t.imageUrl : `${window.location.origin}${t.imageUrl}`) : null;
+            return `
+                <div class="testimonial-item" style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.5em; margin-bottom: 1em; background: #fff;">
+                    <div style="display: flex; align-items: center; margin-bottom: 1em;">
+                        ${imageUrl ? `<img src="${imageUrl}" alt="${t.name}" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; margin-right: 1em;" onerror="this.style.display='none'">` : ''}
+                        <div>
+                            <h4 style="margin: 0; color: #333; font-size: 1.1em;">${t.name}</h4>
+                            ${t.profession ? `<p style="margin: 0.25em 0 0 0; color: #666; font-size: 0.9em;">${t.profession}</p>` : ''}
+                            ${t.rating ? `<div style="color: #F0B21B; font-size: 0.9em; margin-top: 0.25em;">${'★'.repeat(Math.floor(t.rating))}${t.rating}</div>` : ''}
+                        </div>
                     </div>
+                    <p style="color: #555; line-height: 1.6; margin-bottom: 1em;">${t.content}</p>
+                    <div style="font-size: 12px; color: #888; margin-bottom:.5em;">Source: Product Review</div>
+                    <label style="font-size:0.98em;align-items:center;display:flex;gap:0.5em;margin-bottom:.25em;">
+                      <input type="checkbox" data-tid="${t.id}" class="testimonial-toggle-show"
+                        ${t.showOnFrontend ? 'checked' : ''}
+                      />
+                      <span>Show on Website</span>
+                      <span style="color:${t.showOnFrontend ? '#14a800':'#d14524'}; font-size:0.98em; font-weight:500;">${t.showOnFrontend ? 'Shown' : 'Not Shown'}</span>
+                    </label>
                 </div>
-                <p style="color: #555; line-height: 1.6; margin-bottom: 1em;">${t.content}</p>
-                <div class="testimonial-actions" style="display: flex; gap: 0.5em;">
-                    <button onclick="editTestimonial(${t.id})" class="btn-edit" style="background: #F0B21B; color: white; border: none; padding: 0.5em 1em; border-radius: 4px; cursor: pointer; font-size: 0.9em;">Edit</button>
-                    <button onclick="deleteTestimonial(${t.id})" class="btn-delete" style="background: #dc3545; color: white; border: none; padding: 0.5em 1em; border-radius: 4px; cursor: pointer; font-size: 0.9em;">Delete</button>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join("");
+        // Attach toggle logic
+        Array.from(container.querySelectorAll('.testimonial-toggle-show')).forEach(chk => {
+          chk.addEventListener('change', function(e) {
+            const tid = this.getAttribute('data-tid');
+            if (!tid) return;
+            this.disabled = true;
+            fetch(`/api/cms/testimonials/${tid}/toggle-show`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ show: this.checked }),
+            }).then(r => r.json()).then(res => {
+              this.disabled = false;
+              if (!res.success) alert('Failed to update testimonial show flag.');
+              // Reload to show updated statuses
+              loadTestimonials();
+            }).catch(() => { this.disabled = false; alert('Error updating show-on-website flag.'); });
+          });
+        });
     }).catch(error => {
         container.innerHTML = '<p style="color: #dc3545; text-align: center; padding: 2em;">Error loading testimonials. Please try again.</p>';
         console.error('Error loading testimonials:', error);
@@ -1066,7 +1148,8 @@ function editTestimonial(testimonialId) {
             // Set current image
             const currentImage = document.getElementById('edit-current-testimonial-image');
             if (testimonial.imageUrl) {
-                currentImage.src = testimonial.imageUrl;
+                const imageUrl = testimonial.imageUrl.startsWith('http') ? testimonial.imageUrl : `${window.location.origin}${testimonial.imageUrl}`;
+                currentImage.src = imageUrl;
                 currentImage.style.display = 'block';
             } else {
                 currentImage.style.display = 'none';
@@ -1432,37 +1515,52 @@ function loadAboutContent() {
         .then(result => {
             if (result.success && result.content) {
                 const content = result.content;
+                const setValue = (id, value) => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = value ?? '';
+                };
+
                 // Populate all form fields with existing data
-                document.getElementById('about-layout').value = content.layout || 'default';
-                document.getElementById('our-story-title').value = content.ourStoryTitle || '';
-                document.getElementById('our-story-content').value = content.ourStoryContent || '';
-                document.getElementById('story-subtitle').value = content.storySubtitle || '';
-                document.getElementById('projects-count').value = content.projectsCount || '';
-                document.getElementById('clients-count').value = content.clientsCount || '';
-                document.getElementById('mission-title').value = content.missionTitle || '';
-                document.getElementById('mission-content').value = content.missionContent || '';
-                document.getElementById('feature-1').value = content.feature1 || '';
-                document.getElementById('feature-2').value = content.feature2 || '';
-                document.getElementById('feature-3').value = content.feature3 || '';
-                document.getElementById('vision-title').value = content.visionTitle || '';
-                document.getElementById('vision-content').value = content.visionContent || '';
-                document.getElementById('value-1-title').value = content.value1Title || '';
-                document.getElementById('value-1-description').value = content.value1Description || '';
-                document.getElementById('value-2-title').value = content.value2Title || '';
-                document.getElementById('value-2-description').value = content.value2Description || '';
-                document.getElementById('value-3-title').value = content.value3Title || '';
-                document.getElementById('value-3-description').value = content.value3Description || '';
-                document.getElementById('value-4-title').value = content.value4Title || '';
-                document.getElementById('value-4-description').value = content.value4Description || '';
-                document.getElementById('philosophy-title').value = content.philosophyTitle || '';
-                document.getElementById('philosophy-subtitle').value = content.philosophySubtitle || '';
-                document.getElementById('philosophy-description').value = content.philosophyDescription || '';
-                document.getElementById('typo-1-title').value = content.typo1Title || '';
-                document.getElementById('typo-1-description').value = content.typo1Description || '';
-                document.getElementById('typo-2-title').value = content.typo2Title || '';
-                document.getElementById('typo-2-description').value = content.typo2Description || '';
-                document.getElementById('typo-3-title').value = content.typo3Title || '';
-                document.getElementById('typo-3-description').value = content.typo3Description || '';
+                setValue('about-layout', content.layout || 'default');
+                setValue('our-story-title', content.ourStoryTitle || '');
+                setValue('our-story-content', content.ourStoryContent || '');
+                setValue('story-subtitle', content.storySubtitle || '');
+                setValue('projects-count', content.projectsCount || '');
+                setValue('clients-count', content.clientsCount || '');
+                setValue('story-image-url', content.storyImageUrl || '');
+
+                setValue('mission-title', content.missionTitle || '');
+                setValue('mission-content', content.missionContent || '');
+                setValue('feature-1', content.feature1 || '');
+                setValue('feature-2', content.feature2 || '');
+                setValue('feature-3', content.feature3 || '');
+                setValue('mission-image-url', content.missionImageUrl || '');
+
+                setValue('vision-title', content.visionTitle || '');
+                // Older CMS templates referenced `vision-content` but never rendered the field.
+                // Keep this optional to avoid breaking the entire About tab.
+                setValue('vision-content', content.visionContent || '');
+
+                setValue('value-1-title', content.value1Title || '');
+                setValue('value-1-description', content.value1Description || '');
+                setValue('value-2-title', content.value2Title || '');
+                setValue('value-2-description', content.value2Description || '');
+                setValue('value-3-title', content.value3Title || '');
+                setValue('value-3-description', content.value3Description || '');
+                setValue('value-4-title', content.value4Title || '');
+                setValue('value-4-description', content.value4Description || '');
+
+                setValue('philosophy-title', content.philosophyTitle || '');
+                setValue('philosophy-subtitle', content.philosophySubtitle || '');
+                setValue('philosophy-description', content.philosophyDescription || '');
+                setValue('typo-1-title', content.typo1Title || '');
+                setValue('typo-1-description', content.typo1Description || '');
+                setValue('typo-2-title', content.typo2Title || '');
+                setValue('typo-2-description', content.typo2Description || '');
+                setValue('typo-3-title', content.typo3Title || '');
+                setValue('typo-3-description', content.typo3Description || '');
+
+                updateAboutPreviewFromForm();
             }
         })
         .catch(error => {
@@ -1499,6 +1597,117 @@ function saveAboutContent(formData) {
         }
         return { success: false, error: error.message };
     });
+}
+
+function updateAboutPreviewFromForm() {
+    const get = (id) => {
+        const el = document.getElementById(id);
+        return el ? el.value : '';
+    };
+
+    const setText = (id, value, fallback = '') => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = (value && String(value).trim()) ? value : fallback;
+    };
+
+    const setImg = (id, url, fallbackUrl) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const finalUrl = (url && String(url).trim()) ? url : fallbackUrl;
+        el.src = finalUrl;
+    };
+
+    setText('about-preview-story-title', get('our-story-title') || 'Our Story');
+    setText('about-preview-story-subtitle', get('story-subtitle') || 'Crafting Excellence Since 2000');
+    setText('about-preview-story-desc', get('our-story-content') || 'Tell your story here.');
+    setText('about-preview-projects', get('projects-count') || '2000+');
+    setText('about-preview-clients', get('clients-count') || '500+');
+    setImg(
+        'about-preview-story-image',
+        get('story-image-url'),
+        'https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&h=400&fit=crop'
+    );
+
+    setText('about-preview-mission-title', get('mission-title') || 'Our Mission');
+    setText('about-preview-mission-desc', get('mission-content') || 'Describe your mission here.');
+    setText('about-preview-feature-1', get('feature-1') || 'Premium Materials');
+    setText('about-preview-feature-2', get('feature-2') || 'Ergonomic Design');
+    setText('about-preview-feature-3', get('feature-3') || 'Sustainable Practices');
+    setImg(
+        'about-preview-mission-image',
+        get('mission-image-url'),
+        'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=600&h=400&fit=crop'
+    );
+
+    setText('about-preview-values-title', get('vision-title') || 'Our Values');
+    setText('about-preview-value-1-title', get('value-1-title') || 'Innovation');
+    setText('about-preview-value-1-desc', get('value-1-description') || '');
+    setText('about-preview-value-2-title', get('value-2-title') || 'Quality');
+    setText('about-preview-value-2-desc', get('value-2-description') || '');
+    setText('about-preview-value-3-title', get('value-3-title') || 'Service');
+    setText('about-preview-value-3-desc', get('value-3-description') || '');
+    setText('about-preview-value-4-title', get('value-4-title') || 'Sustainability');
+    setText('about-preview-value-4-desc', get('value-4-description') || '');
+
+    setText('about-preview-philosophy-title', get('philosophy-title') || 'Design Philosophy');
+    setText('about-preview-philosophy-subtitle', get('philosophy-subtitle') || '', '');
+    setText('about-preview-philosophy-desc', get('philosophy-description') || '');
+
+    setText('about-preview-typo-1-title', get('typo-1-title') || 'Clean & Modern');
+    setText('about-preview-typo-1-desc', get('typo-1-description') || '');
+    setText('about-preview-typo-2-title', get('typo-2-title') || 'Consistent Hierarchy');
+    setText('about-preview-typo-2-desc', get('typo-2-description') || '');
+    setText('about-preview-typo-3-title', get('typo-3-title') || 'Accessible Design');
+    setText('about-preview-typo-3-desc', get('typo-3-description') || '');
+}
+
+function setupAboutPreview() {
+    const aboutForm = document.getElementById('about-form');
+    if (!aboutForm) return;
+
+    const bindIds = [
+        'about-layout',
+        'our-story-title',
+        'story-subtitle',
+        'our-story-content',
+        'projects-count',
+        'clients-count',
+        'story-image-url',
+        'mission-title',
+        'mission-content',
+        'feature-1',
+        'feature-2',
+        'feature-3',
+        'mission-image-url',
+        'vision-title',
+        'value-1-title',
+        'value-1-description',
+        'value-2-title',
+        'value-2-description',
+        'value-3-title',
+        'value-3-description',
+        'value-4-title',
+        'value-4-description',
+        'philosophy-title',
+        'philosophy-subtitle',
+        'philosophy-description',
+        'typo-1-title',
+        'typo-1-description',
+        'typo-2-title',
+        'typo-2-description',
+        'typo-3-title',
+        'typo-3-description'
+    ];
+
+    bindIds.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('input', updateAboutPreviewFromForm);
+        el.addEventListener('change', updateAboutPreviewFromForm);
+    });
+
+    updateAboutPreviewFromForm();
 }
 
 // Theme Tab Functionality
@@ -2908,7 +3117,7 @@ function setupTestimonialEditForm() {
 }
 
 // Export functions for use in other modules
-window.OrderCMS = {
+window.AdminCMS = {
     loadCMSData,
     loadContentTypes,
     loadRecentContent,
@@ -2925,7 +3134,7 @@ window.OrderCMS = {
     publishPage,
     useTemplate,
     previewTemplate,
-    initializeOrderCMS,
+    initializeAdminCMS,
     handleAutoMessagesFormSubmit,
     handleHeaderOfferFormSubmit,
     renderAutoMessagesList,
@@ -3011,4 +3220,3 @@ console.log('Project functions made globally available:', {
     saveProjectItem: typeof window.saveProjectItem,
     closeProjectEditModal: typeof window.closeProjectEditModal
 });
-

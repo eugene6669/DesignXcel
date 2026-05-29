@@ -16,16 +16,6 @@
                 <select id="editInventoryProductCategory" name="category" required></select>
             </div>
             <div class="form-group">
-                <label for="editInventoryProductSalePrice">Sale Price (₱) <span style="color:#dc3545;">*</span></label>
-                <input type="text" id="editInventoryProductSalePrice" name="price" inputmode="decimal" autocomplete="off" required placeholder="0.00" style="text-align:right;">
-                <small style="display:block;margin-top:4px;color:#666;">Applies to all variations of this product.</small>
-            </div>
-            <div class="form-group">
-                <label for="editInventoryProductCostPrice">Item Cost Price (₱) <span style="color:#dc3545;">*</span></label>
-                <input type="text" id="editInventoryProductCostPrice" name="costPrice" inputmode="decimal" autocomplete="off" required placeholder="0.00" style="text-align:right;">
-                <small style="display:block;margin-top:4px;color:#666;">Applies to all variations. Must not exceed sale price.</small>
-            </div>
-            <div class="form-group">
                 <label for="editInventoryProductDescription">Description</label>
                 <textarea id="editInventoryProductDescription" name="description" rows="3" placeholder="Optional"></textarea>
             </div>
@@ -39,8 +29,8 @@
                 <input type="file" id="editInventoryProductThumbnails" name="productThumbnail" accept="image/*" multiple>
             </div>
             <div class="form-group pi-section" id="editInventoryProductRecipeSection">
-                <h4 style="margin:0 0 8px;font-size:0.95em;">Manufacturing recipe</h4>
-                <div id="editInventoryProductBomBundleDisplay" class="pi-recipe-bom-label" style="font-size:0.88em;margin-bottom:6px;color:#444;"><em>Loading recipe…</em></div>
+                <h4 style="margin:0 0 8px;font-size:0.95em;">Raw Materials</h4>
+                <div id="editInventoryProductBomBundleDisplay" class="pi-recipe-bom-label" style="font-size:0.88em;margin-bottom:6px;color:#444;"><em>Loading raw materials…</em></div>
                 <div id="editInventoryProductRecipeList" class="pi-recipe-materials-list" style="font-size:0.88em;color:#333;"></div>
             </div>
             <div class="pi-form-actions">

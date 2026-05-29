@@ -79,6 +79,13 @@ const {
     reactivateStockMovement
 } = require('./utils/inventoryStockMovement');
 const { serializeActivityLogChanges, fetchActivityLogs } = require('./utils/activityLogHelpers');
+const { ROLES: EMPLOYEE_SYNC_ROLES, getRoleViewPath } = require('./utils/employeeRoleViewSync');
+const { makeRenderRoleActivityLogsPage } = require('./utils/employeeActivityLogsPage');
+const {
+    renderRoleProductsListing,
+    renderRoleProductInventory,
+    registerEmployeeRoleProductRoutes
+} = require('./utils/employeeRoleProductRoutes');
 const { invalidateAdminPageCache } = require('./utils/adminPageCache');
 const {
     detectSalesReportSchema,
@@ -99,7 +106,10 @@ const {
     ALL_ROLE_PERMISSION_KEYS,
     DEFAULT_ROLE_PERMISSIONS,
     permissionsToModuleMatrix,
-    flattenMatrixToPermissions
+    flattenMatrixToPermissions,
+    USER_PERMISSION_SECTIONS,
+    USER_PERMISSION_LEGACY_KEYS,
+    getPermissionSection
 } = require('./utils/rolePermissionModules');
 const { autoFitWorksheetColumns, autoFitWorksheetRows, rowsToCsv } = require('./utils/excelAutoFit');
 const { resolveProductId } = require('./utils/productIdResolver');
@@ -715,6 +725,27 @@ module.exports = function (sql, pool, getStripe = null) {
                 WHERE InventoryProductID = @inventoryProductId AND IsActive = 1
             `);
         return (result.recordset[0]?.Cnt || 0) > 0;
+    }
+
+    async function rejectIfPlannedInventoryProduct(inventoryProductId, transaction = null) {
+        const request = transaction ? transaction.request() : pool.request();
+        const result = await request
+            .input('id', sql.Int, inventoryProductId)
+            .query(`
+                SELECT COALESCE(NULLIF(LTRIM(RTRIM(ListingStage)), ''), 'built') AS ListingStage
+                FROM InventoryProducts
+                WHERE InventoryProductID = @id AND IsActive = 1
+            `);
+        if (!result.recordset.length) {
+            return { blocked: true, message: 'Product not found.' };
+        }
+        if (String(result.recordset[0].ListingStage || '').toLowerCase() === 'planned') {
+            return {
+                blocked: true,
+                message: 'Cannot restock a planned product. Build the product first using the Build button.'
+            };
+        }
+        return { blocked: false };
     }
 
     /**
@@ -2345,6 +2376,8 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     }
 
+    const renderRoleActivityLogsPage = makeRenderRoleActivityLogsPage(pool);
+
     // =============================================================================
     // AUTHENTICATION & AUTHORIZATION MIDDLEWARE
     // =============================================================================
@@ -3077,6 +3110,18 @@ module.exports = function (sql, pool, getStripe = null) {
     // INVENTORY MANAGER ROUTES
     // =============================================================================
 
+    const productRouteDeps = {
+        pool,
+        loadProductInventoryPageData,
+        ensureListingStageColumn,
+        ensureStorefrontDisplayQuantityColumn,
+        ensureVariationMediaColumns,
+        ensureBomBundleSchema,
+        ensureInventoryStockMovementSchema,
+        formatInventoryDate
+    };
+    const productRouteMiddleware = { isAuthenticated, checkPermission };
+
     // Inventory Manager Dashboard
     router.get('/Employee/InventoryManager', isAuthenticated, (req, res) => {
         console.log('=== INVENTORY MANAGER ROUTE ACCESSED ===');
@@ -3086,210 +3131,10 @@ module.exports = function (sql, pool, getStripe = null) {
         console.log('================================');
         res.render('Employee/InventoryManager/InventoryManager', { user: req.session.user });
     });
-    // Inventory Manager - Products (canonical route)
-    router.get('/Employee/InventoryManager/Products', isAuthenticated, checkPermission('inventory_products'), async (req, res) => {
-        try {
-            await pool.connect();
-            const page = parseInt(req.query.page) || 1;
-            const limit = 10;
-            const offset = (page - 1) * limit;
-
-            const countResult = await pool.request().query('SELECT COUNT(*) as count FROM Products WHERE IsActive = 1');
-            const total = countResult.recordset[0].count;
-            const totalPages = Math.ceil(total / limit);
-
-            const result = await pool.request().query(`
-                SELECT 
-                    p.*,
-                    COALESCE(ip.SKU, ipById.SKU, p.SKU) as EffectiveSKU,
-                    pd.DiscountID,
-                    pd.DiscountType,
-                    pd.DiscountValue,
-                    pd.StartDate as DiscountStartDate,
-                    pd.EndDate as DiscountEndDate,
-                    pd.IsActive as DiscountIsActive,
-                    CASE 
-                        WHEN pd.DiscountType = 'percentage' THEN 
-                            p.Price - (p.Price * pd.DiscountValue / 100)
-                        WHEN pd.DiscountType = 'fixed' THEN 
-                            CASE WHEN p.Price - pd.DiscountValue < 0 THEN 0 ELSE p.Price - pd.DiscountValue END
-                        ELSE p.Price
-                    END as DiscountedPrice,
-                    CASE 
-                        WHEN pd.DiscountType = 'percentage' THEN 
-                            p.Price * pd.DiscountValue / 100
-                        WHEN pd.DiscountType = 'fixed' THEN 
-                            CASE WHEN pd.DiscountValue > p.Price THEN p.Price ELSE pd.DiscountValue END
-                        ELSE 0
-                    END as DiscountAmount
-                FROM Products p
-                LEFT JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
-                LEFT JOIN InventoryProducts ipById ON ipById.InventoryProductID = p.ProductID AND ipById.IsActive = 1
-                LEFT JOIN ProductDiscounts pd ON p.ProductID = pd.ProductID 
-                    AND pd.IsActive = 1 
-                    AND GETDATE() BETWEEN pd.StartDate AND pd.EndDate
-                WHERE p.IsActive = 1
-                ORDER BY p.ProductID DESC
-                OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY
-            `);
-            const products = result.recordset;
-            res.render('Employee/InventoryManager/InventoryProducts', { user: req.session.user, products, page, totalPages });
-        } catch (err) {
-            console.error('Error fetching products:', err);
-            res.render('Employee/InventoryManager/InventoryProducts', { user: req.session.user, products: [], page: 1, totalPages: 1 });
-        }
+    EMPLOYEE_SYNC_ROLES.forEach((role) => {
+        registerEmployeeRoleProductRoutes(router, role, productRouteDeps, productRouteMiddleware);
     });
 
-    // Backwards-compatible alias: old /InventoryProducts path redirects to /Products
-    router.get('/Employee/InventoryManager/InventoryProducts', isAuthenticated, checkPermission('inventory_products'), (req, res) => {
-        const queryString = Object.keys(req.query).length
-            ? '?' + new URLSearchParams(req.query).toString()
-            : '';
-        res.redirect('/Employee/InventoryManager/Products' + queryString);
-    });
-
-    // Inventory Manager - Product Inventory (InventoryProducts table)
-    router.get('/Employee/InventoryManager/ProductInventory', isAuthenticated, checkPermission('inventory_products'), async (req, res) => {
-        let inventoryItems = [];
-        let products = [];
-        let categories = [];
-        let allInventoryProducts = [];
-
-        try {
-            await pool.connect();
-
-            // Fetch all products from InventoryProducts table with inventory data
-            try {
-                const allProductsResult = await pool.request().query(`
-                    SELECT 
-                        ip.InventoryProductID,
-                        ip.Name as InventoryProductName,
-                        ip.SKU as InventoryProductSKU,
-                        ip.Category as InventoryProductCategory,
-                        ip.Price as InventoryProductPrice,
-                        COALESCE(
-                            -- Prefer customer-facing product URLs (often already Azure/public)
-                            NULLIF(pLinked.ImageURL, ''),
-                            NULLIF(pById.ImageURL, ''),
-                            NULLIF(pBySku.ImageURL, ''),
-                            NULLIF(JSON_VALUE(pLinked.ThumbnailURLs, '$[0]'), ''),
-                            NULLIF(JSON_VALUE(pById.ThumbnailURLs, '$[0]'), ''),
-                            NULLIF(JSON_VALUE(pBySku.ThumbnailURLs, '$[0]'), ''),
-                            -- Fallback to InventoryProducts.ImageURL (often local /uploads path)
-                            NULLIF(ip.ImageURL, '')
-                        ) as InventoryProductImageURL,
-                        ip.DateAdded,
-                        (COALESCE(ip.AvailableQuantity, 0) + COALESCE(ip.DamagedQuantity, 0)) as TotalQuantity,
-                        COALESCE(ip.AvailableQuantity, 0) as AvailableQuantity,
-                        COALESCE(ip.DamagedQuantity, 0) as DamagedQuantity,
-                        COALESCE(ip.ReturnedQuantity, 0) as ReturnedQuantity,
-                        COALESCE(ip.RepairedQuantity, 0) as RepairedQuantity,
-                        COALESCE(ip.DisposedQuantity, 0) as DisposedQuantity,
-                        CASE 
-                            WHEN COALESCE(ip.AvailableQuantity, 0) > 0 THEN 'available'
-                            WHEN COALESCE(ip.RepairedQuantity, 0) > 0 THEN 'repaired'
-                            WHEN COALESCE(ip.DamagedQuantity, 0) > 0 THEN 'damaged'
-                            WHEN COALESCE(ip.ReturnedQuantity, 0) > 0 THEN 'returned'
-                            WHEN COALESCE(ip.DisposedQuantity, 0) > 0 THEN 'disposed'
-                            ELSE COALESCE(ip.InventoryStatus, 'available')
-                        END as InventoryStatus,
-                        ip.Dimensions,
-                        ip.InventoryNotes as Notes,
-                        ip.DateUpdated
-                    FROM InventoryProducts ip
-                    LEFT JOIN Products pLinked ON pLinked.ProductID = ip.ProductID AND pLinked.IsActive = 1
-                    LEFT JOIN Products pById ON pById.ProductID = ip.InventoryProductID AND pById.IsActive = 1
-                    LEFT JOIN Products pBySku 
-                        ON UPPER(LTRIM(RTRIM(pBySku.SKU))) = UPPER(LTRIM(RTRIM(ip.SKU))) 
-                        AND pBySku.IsActive = 1
-                    WHERE ip.IsActive = 1
-                    ORDER BY ip.DateAdded DESC
-                `);
-                allInventoryProducts = allProductsResult.recordset || [];
-                inventoryItems = allInventoryProducts;
-            } catch (allProductsErr) {
-                console.error('Error fetching all inventory products (InventoryManager):', allProductsErr);
-                allInventoryProducts = [];
-                inventoryItems = [];
-            }
-
-            // Fetch products for dropdown (from both Products and InventoryProducts tables)
-            try {
-                const productsFromProducts = await pool.request().query(`
-                    SELECT 
-                        ProductID as ID,
-                        Name,
-                        SKU,
-                        Category,
-                        Price,
-                        'Products' as SourceTable
-                    FROM Products
-                    WHERE IsActive = 1
-                `);
-
-                const productsFromInventory = await pool.request().query(`
-                    SELECT 
-                        InventoryProductID as ID,
-                        Name,
-                        SKU,
-                        Category,
-                        Price,
-                        'InventoryProducts' as SourceTable
-                    FROM InventoryProducts
-                    WHERE IsActive = 1
-                `);
-
-                products = [
-                    ...productsFromProducts.recordset.map(p => ({ ...p, SourceTable: 'Products' })),
-                    ...productsFromInventory.recordset.map(p => ({ ...p, SourceTable: 'InventoryProducts' }))
-                ];
-            } catch (productsErr) {
-                console.error('Error fetching products for dropdown (InventoryManager):', productsErr);
-                products = [];
-            }
-
-            // Fetch categories for dropdown
-            try {
-                const categoriesFromProducts = await pool.request().query(`
-                    SELECT DISTINCT Category 
-                    FROM Products 
-                    WHERE IsActive = 1 AND Category IS NOT NULL
-                `);
-
-                const categoriesFromInventory = await pool.request().query(`
-                    SELECT DISTINCT Category 
-                    FROM InventoryProducts 
-                    WHERE IsActive = 1 AND Category IS NOT NULL
-                `);
-
-                const allCategories = new Set();
-                categoriesFromProducts.recordset.forEach(r => allCategories.add(r.Category));
-                categoriesFromInventory.recordset.forEach(r => allCategories.add(r.Category));
-                categories = Array.from(allCategories).sort();
-            } catch (categoriesErr) {
-                console.error('Error fetching categories (InventoryManager ProductInventory):', categoriesErr);
-                categories = [];
-            }
-
-            res.render('Employee/InventoryManager/InventoryProductInventory', {
-                user: req.session.user,
-                inventoryItems,
-                products,
-                categories,
-                allInventoryProducts
-            });
-        } catch (err) {
-            console.error('Error in InventoryManager ProductInventory route:', err);
-            req.flash('error', 'Could not fetch inventory items.');
-            res.render('Employee/InventoryManager/InventoryProductInventory', {
-                user: req.session.user,
-                inventoryItems: [],
-                products: [],
-                categories: [],
-                allInventoryProducts: []
-            });
-        }
-    });
     // Inventory Manager - Add Product
     router.post('/Employee/InventoryManager/InventoryProducts/Add', isAuthenticated, checkPermission('inventory_products'), productUpload.fields([
         { name: 'image', maxCount: 1 },
@@ -4422,7 +4267,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
     // Inventory Manager - Logs
     router.get('/Employee/InventoryManager/InventoryLogs', isAuthenticated, checkPermission('content_logs'), (req, res) => {
-        res.render('Employee/InventoryManager/InventoryLogs', { user: req.session.user });
+        renderRoleActivityLogsPage(req, res, EMPLOYEE_SYNC_ROLES.find((r) => r.roleName === 'InventoryManager'));
     });
 
     // Inventory Manager - CMS
@@ -4662,10 +4507,21 @@ module.exports = function (sql, pool, getStripe = null) {
             // Decrypt user data before sending to frontend using transparent encryption service
             const decryptedUsers = result.recordset;
 
-            res.render('Employee/InventoryManager/InventoryManageUsers', { user: req.session.user, users: decryptedUsers });
+            res.render('Employee/InventoryManager/InventoryManageUsers', {
+                user: req.session.user,
+                users: decryptedUsers,
+                permissionSections: USER_PERMISSION_SECTIONS,
+                permissionLegacyKeys: USER_PERMISSION_LEGACY_KEYS
+            });
         } catch (err) {
             console.error('Error fetching inventory manager users:', err);
-            res.render('Employee/InventoryManager/InventoryManageUsers', { user: req.session.user, users: [], error: 'Failed to load users.' });
+            res.render('Employee/InventoryManager/InventoryManageUsers', {
+                user: req.session.user,
+                users: [],
+                error: 'Failed to load users.',
+                permissionSections: USER_PERMISSION_SECTIONS,
+                permissionLegacyKeys: USER_PERMISSION_LEGACY_KEYS
+            });
         }
     });
 
@@ -5187,64 +5043,6 @@ module.exports = function (sql, pool, getStripe = null) {
         console.log('================================');
         res.render('Employee/TransactionManager/TransactionManager', { user: req.session.user });
     });
-    // Transaction Manager - Products
-    router.get('/Employee/TransactionManager/TransactionProducts', isAuthenticated, checkPermission('inventory_products'), async (req, res) => {
-        try {
-            await pool.connect();
-
-            // Cleanup expired discounts before querying products
-            await cleanupExpiredDiscountsSafe(pool);
-
-            const page = parseInt(req.query.page) || 1;
-            const limit = 10;
-            const offset = (page - 1) * limit;
-
-            const countResult = await pool.request().query('SELECT COUNT(*) as count FROM Products WHERE IsActive = 1');
-            const total = countResult.recordset[0].count;
-            const totalPages = Math.ceil(total / limit);
-
-            const result = await pool.request().query(`
-                SELECT 
-                    p.*,
-                    COALESCE(ip.SKU, ipById.SKU, p.SKU) as EffectiveSKU,
-                    pd.DiscountID,
-                    pd.DiscountType,
-                    pd.DiscountValue,
-                    pd.StartDate as DiscountStartDate,
-                    pd.EndDate as DiscountEndDate,
-                    pd.IsActive as DiscountIsActive,
-                    CASE 
-                        WHEN pd.DiscountType = 'percentage' THEN 
-                            p.Price - (p.Price * pd.DiscountValue / 100)
-                        WHEN pd.DiscountType = 'fixed' THEN 
-                            CASE WHEN p.Price - pd.DiscountValue < 0 THEN 0 ELSE p.Price - pd.DiscountValue END
-                        ELSE p.Price
-                    END as DiscountedPrice,
-                    CASE 
-                        WHEN pd.DiscountType = 'percentage' THEN 
-                            p.Price * pd.DiscountValue / 100
-                        WHEN pd.DiscountType = 'fixed' THEN 
-                            CASE WHEN pd.DiscountValue > p.Price THEN p.Price ELSE pd.DiscountValue END
-                        ELSE 0
-                    END as DiscountAmount
-                FROM Products p
-                LEFT JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
-                LEFT JOIN InventoryProducts ipById ON ipById.InventoryProductID = p.ProductID AND ipById.IsActive = 1
-                LEFT JOIN ProductDiscounts pd ON p.ProductID = pd.ProductID 
-                    AND pd.IsActive = 1 
-                    AND GETDATE() BETWEEN pd.StartDate AND pd.EndDate
-                WHERE p.IsActive = 1
-                ORDER BY p.ProductID DESC
-                OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY
-            `);
-            const products = result.recordset;
-            res.render('Employee/TransactionManager/TransactionProducts', { user: req.session.user, products, page, totalPages });
-        } catch (err) {
-            console.error('Error fetching products:', err);
-            res.render('Employee/TransactionManager/TransactionProducts', { user: req.session.user, products: [], page: 1, totalPages: 1 });
-        }
-    });
-
     // Transaction Manager - Materials
     router.get('/Employee/TransactionManager/TransactionMaterials', isAuthenticated, checkPermission('inventory_materials'), async (req, res) => {
         try {
@@ -5335,7 +5133,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
     // Transaction Manager - Logs
     router.get('/Employee/TransactionManager/TransactionLogs', isAuthenticated, checkPermission('content_logs'), (req, res) => {
-        res.render('Employee/TransactionManager/TransactionLogs', { user: req.session.user });
+        renderRoleActivityLogsPage(req, res, EMPLOYEE_SYNC_ROLES.find((r) => r.roleName === 'TransactionManager'));
     });
 
     // Transaction Manager - CMS
@@ -5391,14 +5189,18 @@ module.exports = function (sql, pool, getStripe = null) {
 
             res.render('Employee/TransactionManager/TransactionManageUsers', {
                 user: req.session.user,
-                users: decryptedUsers
+                users: decryptedUsers,
+                permissionSections: USER_PERMISSION_SECTIONS,
+                permissionLegacyKeys: USER_PERMISSION_LEGACY_KEYS
             });
         } catch (err) {
             console.error('Error fetching users:', err);
             res.render('Employee/TransactionManager/TransactionManageUsers', {
                 user: req.session.user,
                 users: [],
-                error: 'Failed to load users.'
+                error: 'Failed to load users.',
+                permissionSections: USER_PERMISSION_SECTIONS,
+                permissionLegacyKeys: USER_PERMISSION_LEGACY_KEYS
             });
         }
     });
@@ -6318,64 +6120,6 @@ module.exports = function (sql, pool, getStripe = null) {
         res.render('Employee/UserManager/UserManager', { user: req.session.user });
     });
 
-    // User Manager - Products
-    router.get('/Employee/UserManager/UserProducts', isAuthenticated, checkPermission('inventory_products'), async (req, res) => {
-        try {
-            await pool.connect();
-
-            // Cleanup expired discounts before querying products
-            await cleanupExpiredDiscountsSafe(pool);
-
-            const page = parseInt(req.query.page) || 1;
-            const limit = 10;
-            const offset = (page - 1) * limit;
-
-            const countResult = await pool.request().query('SELECT COUNT(*) as count FROM Products WHERE IsActive = 1');
-            const total = countResult.recordset[0].count;
-            const totalPages = Math.ceil(total / limit);
-
-            const result = await pool.request().query(`
-                SELECT 
-                    p.*,
-                    COALESCE(ip.SKU, ipById.SKU, p.SKU) as EffectiveSKU,
-                    pd.DiscountID,
-                    pd.DiscountType,
-                    pd.DiscountValue,
-                    pd.StartDate as DiscountStartDate,
-                    pd.EndDate as DiscountEndDate,
-                    pd.IsActive as DiscountIsActive,
-                    CASE 
-                        WHEN pd.DiscountType = 'percentage' THEN 
-                            p.Price - (p.Price * pd.DiscountValue / 100)
-                        WHEN pd.DiscountType = 'fixed' THEN 
-                            CASE WHEN p.Price - pd.DiscountValue < 0 THEN 0 ELSE p.Price - pd.DiscountValue END
-                        ELSE p.Price
-                    END as DiscountedPrice,
-                    CASE 
-                        WHEN pd.DiscountType = 'percentage' THEN 
-                            p.Price * pd.DiscountValue / 100
-                        WHEN pd.DiscountType = 'fixed' THEN 
-                            CASE WHEN pd.DiscountValue > p.Price THEN p.Price ELSE pd.DiscountValue END
-                        ELSE 0
-                    END as DiscountAmount
-                FROM Products p
-                LEFT JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
-                LEFT JOIN InventoryProducts ipById ON ipById.InventoryProductID = p.ProductID AND ipById.IsActive = 1
-                LEFT JOIN ProductDiscounts pd ON p.ProductID = pd.ProductID 
-                    AND pd.IsActive = 1 
-                    AND GETDATE() BETWEEN pd.StartDate AND pd.EndDate
-                WHERE p.IsActive = 1
-                ORDER BY p.ProductID DESC
-                OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY
-            `);
-            const products = result.recordset;
-            res.render('Employee/UserManager/UserProducts', { user: req.session.user, products, page, totalPages });
-        } catch (err) {
-            console.error('Error fetching products:', err);
-            res.render('Employee/UserManager/UserProducts', { user: req.session.user, products: [], page: 1, totalPages: 1 });
-        }
-    });
-
     // User Manager - Materials
     router.get('/Employee/UserManager/UserMaterials', isAuthenticated, checkPermission('inventory_materials'), async (req, res) => {
         try {
@@ -6467,7 +6211,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
     // User Manager - Logs
     router.get('/Employee/UserManager/UserLogs', isAuthenticated, checkPermission('content_logs'), (req, res) => {
-        res.render('Employee/UserManager/UserLogs', { user: req.session.user });
+        renderRoleActivityLogsPage(req, res, EMPLOYEE_SYNC_ROLES.find((r) => r.roleName === 'UserManager'));
     });
 
     // User Manager - CMS
@@ -6523,14 +6267,18 @@ module.exports = function (sql, pool, getStripe = null) {
 
             res.render('Employee/UserManager/UserManageUsers', {
                 user: req.session.user,
-                users: decryptedUsers
+                users: decryptedUsers,
+                permissionSections: USER_PERMISSION_SECTIONS,
+                permissionLegacyKeys: USER_PERMISSION_LEGACY_KEYS
             });
         } catch (err) {
             console.error('Error fetching users:', err);
             res.render('Employee/UserManager/UserManageUsers', {
                 user: req.session.user,
                 users: [],
-                error: 'Failed to load users.'
+                error: 'Failed to load users.',
+                permissionSections: USER_PERMISSION_SECTIONS,
+                permissionLegacyKeys: USER_PERMISSION_LEGACY_KEYS
             });
         }
     });
@@ -8664,64 +8412,6 @@ module.exports = function (sql, pool, getStripe = null) {
         res.render('Employee/OrderSupport/OrderManager', { user: req.session.user });
     });
 
-    // Order Support - Products
-    router.get('/Employee/OrderSupport/OrderProducts', isAuthenticated, checkPermission('inventory_products'), async (req, res) => {
-        try {
-            await pool.connect();
-
-            // Cleanup expired discounts before querying products
-            await cleanupExpiredDiscountsSafe(pool);
-
-            const page = parseInt(req.query.page) || 1;
-            const limit = 10;
-            const offset = (page - 1) * limit;
-
-            const countResult = await pool.request().query('SELECT COUNT(*) as count FROM Products WHERE IsActive = 1');
-            const total = countResult.recordset[0].count;
-            const totalPages = Math.ceil(total / limit);
-
-            const result = await pool.request().query(`
-                SELECT 
-                    p.*,
-                    COALESCE(ip.SKU, ipById.SKU, p.SKU) as EffectiveSKU,
-                    pd.DiscountID,
-                    pd.DiscountType,
-                    pd.DiscountValue,
-                    pd.StartDate as DiscountStartDate,
-                    pd.EndDate as DiscountEndDate,
-                    pd.IsActive as DiscountIsActive,
-                    CASE 
-                        WHEN pd.DiscountType = 'percentage' THEN 
-                            p.Price - (p.Price * pd.DiscountValue / 100)
-                        WHEN pd.DiscountType = 'fixed' THEN 
-                            CASE WHEN p.Price - pd.DiscountValue < 0 THEN 0 ELSE p.Price - pd.DiscountValue END
-                        ELSE p.Price
-                    END as DiscountedPrice,
-                    CASE 
-                        WHEN pd.DiscountType = 'percentage' THEN 
-                            p.Price * pd.DiscountValue / 100
-                        WHEN pd.DiscountType = 'fixed' THEN 
-                            CASE WHEN pd.DiscountValue > p.Price THEN p.Price ELSE pd.DiscountValue END
-                        ELSE 0
-                    END as DiscountAmount
-                FROM Products p
-                LEFT JOIN InventoryProducts ip ON ip.ProductID = p.ProductID AND ip.IsActive = 1
-                LEFT JOIN InventoryProducts ipById ON ipById.InventoryProductID = p.ProductID AND ipById.IsActive = 1
-                LEFT JOIN ProductDiscounts pd ON p.ProductID = pd.ProductID 
-                    AND pd.IsActive = 1 
-                    AND GETDATE() BETWEEN pd.StartDate AND pd.EndDate
-                WHERE p.IsActive = 1
-                ORDER BY p.ProductID DESC
-                OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY
-            `);
-            const products = result.recordset;
-            res.render('Employee/OrderSupport/OrderProducts', { user: req.session.user, products, page, totalPages });
-        } catch (err) {
-            console.error('Error fetching products:', err);
-            res.render('Employee/OrderSupport/OrderProducts', { user: req.session.user, products: [], page: 1, totalPages: 1 });
-        }
-    });
-
     // Order Support - Materials
     router.get('/Employee/OrderSupport/OrderMaterials', isAuthenticated, checkPermission('inventory_materials'), async (req, res) => {
         try {
@@ -8812,7 +8502,7 @@ module.exports = function (sql, pool, getStripe = null) {
 
     // Order Support - Logs
     router.get('/Employee/OrderSupport/OrderLogs', isAuthenticated, checkPermission('content_logs'), (req, res) => {
-        res.render('Employee/OrderSupport/OrderLogs', { user: req.session.user });
+        renderRoleActivityLogsPage(req, res, EMPLOYEE_SYNC_ROLES.find((r) => r.roleName === 'OrderSupport'));
     });
 
     // Order Support - CMS
@@ -8868,14 +8558,18 @@ module.exports = function (sql, pool, getStripe = null) {
 
             res.render('Employee/OrderSupport/OrderManageUsers', {
                 user: req.session.user,
-                users: decryptedUsers
+                users: decryptedUsers,
+                permissionSections: USER_PERMISSION_SECTIONS,
+                permissionLegacyKeys: USER_PERMISSION_LEGACY_KEYS
             });
         } catch (err) {
             console.error('Error fetching users:', err);
             res.render('Employee/OrderSupport/OrderManageUsers', {
                 user: req.session.user,
                 users: [],
-                error: 'Failed to load users.'
+                error: 'Failed to load users.',
+                permissionSections: USER_PERMISSION_SECTIONS,
+                permissionLegacyKeys: USER_PERMISSION_LEGACY_KEYS
             });
         }
     });
@@ -12390,11 +12084,30 @@ module.exports = function (sql, pool, getStripe = null) {
             // Decrypt user data before sending to frontend using transparent encryption service
             const decryptedUsers = result.recordset;
 
-            res.render('Employee/Admin/AdminManageUsers', { user: req.session.user, users: decryptedUsers });
+            res.render('Employee/Admin/AdminManageUsers', {
+                user: req.session.user,
+                users: decryptedUsers,
+                permissionSections: USER_PERMISSION_SECTIONS,
+                permissionLegacyKeys: USER_PERMISSION_LEGACY_KEYS
+            });
         } catch (err) {
             console.error('Error fetching users:', err);
-            res.render('Employee/Admin/AdminManageUsers', { user: req.session.user, users: [], error: 'Failed to load users.' });
+            res.render('Employee/Admin/AdminManageUsers', {
+                user: req.session.user,
+                users: [],
+                error: 'Failed to load users.',
+                permissionSections: USER_PERMISSION_SECTIONS,
+                permissionLegacyKeys: USER_PERMISSION_LEGACY_KEYS
+            });
         }
+    });
+
+    router.get('/Employee/Admin/ManageUsers/PermissionCatalog', isAuthenticated, checkPermission('users_manage_users'), (req, res) => {
+        res.json({
+            success: true,
+            sections: USER_PERMISSION_SECTIONS,
+            modules: ROLE_MANAGER_MODULES.map(m => ({ key: m.key, label: m.label }))
+        });
     });
     // Edit User route
     router.post('/Employee/Admin/Users/Edit', isAuthenticated, checkPermission('users_manage_users'), async (req, res) => {
@@ -14587,15 +14300,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     });
                 }
 
-                // Determine section from permission name
-                let section = 'other';
-                if (permission_name.startsWith('inventory_')) section = 'inventory';
-                else if (permission_name.startsWith('transactions_')) section = 'transactions';
-                else if (permission_name.startsWith('orders_')) section = 'orders';
-                else if (permission_name.startsWith('users_')) section = 'users';
-                else if (permission_name.startsWith('reviews_')) section = 'reviews';
-                else if (permission_name.startsWith('chat_')) section = 'chat';
-                else if (permission_name.startsWith('content_')) section = 'content';
+                const section = getPermissionSection(permission_name);
 
                 // Check if permission exists
                 const existingResult = await pool.request()
@@ -17746,19 +17451,28 @@ module.exports = function (sql, pool, getStripe = null) {
             // Prices are VAT-inclusive; do not show a separate tax/VAT breakdown
             const finalTotalTaxes = 0;
 
-            // Simple Sales Report Statistics (remove broad accounting/COGS/return-cost calculations)
+            // Sales report metrics (P&L-style) + simple display totals
             const totalCustomersSimple = new Set(result.recordset.map(o => o.CustomerEmail)).size;
             const deliveryTotal = result.recordset.reduce((sum, order) => sum + parseFloat(order.DeliveryCost || 0), 0);
             const salesTotal = result.recordset.reduce((sum, order) => sum + parseFloat(order.TotalAmount || 0), 0);
             const avgOrderValueSimple = totalOrders > 0 ? (salesTotal / totalOrders) : 0;
 
+            const reportMetrics = aggregateSalesReportFromOrders(result.recordset, {
+                cogs: 0,
+                damageInventoryCost: inventoryLoss || 0,
+                replacementCost: 0,
+                totalOrders,
+                returnedOrdersCount
+            });
+
             const stats = {
-                totalOrders: totalOrders,
+                ...reportMetrics,
+                totalOrders,
                 totalCustomers: totalCustomersSimple,
-                totalDiscounts: finalTotalDiscounts,
+                totalDiscounts: reportMetrics.totalDiscounts ?? finalTotalDiscounts,
                 totalTaxes: finalTotalTaxes,
-                deliveryTotal: deliveryTotal,
-                salesTotal: salesTotal,
+                deliveryTotal,
+                salesTotal,
                 averageOrderValue: avgOrderValueSimple
             };
 
@@ -25750,6 +25464,11 @@ module.exports = function (sql, pool, getStripe = null) {
                         return res.json({ success: false, message: 'Product not found.' });
                     }
 
+                    const plannedCheck = await rejectIfPlannedInventoryProduct(inventoryProductId);
+                    if (plannedCheck.blocked) {
+                        return res.json({ success: false, message: plannedCheck.message });
+                    }
+
                     const product = productResult.recordset[0];
                     const linkedProductId = product.ProductID || null;
                     const hasVariations = await productHasActiveInventoryVariations(inventoryProductId);
@@ -28315,35 +28034,40 @@ module.exports = function (sql, pool, getStripe = null) {
                     WHERE InventoryProductID = @id AND IsActive = 1
                 `);
 
-            if (!productResult.recordset.length) {
-                return res.json({ success: false, message: 'Product not found.' });
-            }
+                    if (!productResult.recordset.length) {
+                        return res.json({ success: false, message: 'Product not found.' });
+                    }
 
-            const product = productResult.recordset[0];
-            const linkedProductId = product.ProductID || null;
-            const hasVariations = await productHasActiveInventoryVariations(inventoryProductId);
+                    const plannedCheck = await rejectIfPlannedInventoryProduct(inventoryProductId);
+                    if (plannedCheck.blocked) {
+                        return res.json({ success: false, message: plannedCheck.message });
+                    }
 
-            if (hasVariations) {
-                if (!variationId) {
-                    return res.json({
-                        success: false,
-                        message: 'This product uses variation stock. Select a variation to restock.'
-                    });
-                }
+                    const product = productResult.recordset[0];
+                    const linkedProductId = product.ProductID || null;
+                    const hasVariations = await productHasActiveInventoryVariations(inventoryProductId);
 
-                const varCheck = await pool.request()
-                    .input('variationId', sql.Int, variationId)
-                    .input('inventoryProductId', sql.Int, inventoryProductId)
-                    .query(`
-                        SELECT VariationID FROM InventoryProductVariations
-                        WHERE VariationID = @variationId AND InventoryProductID = @inventoryProductId AND IsActive = 1
-                    `);
+                    if (hasVariations) {
+                        if (!variationId) {
+                            return res.json({
+                                success: false,
+                                message: 'This product uses variation stock. Select a variation to restock.'
+                            });
+                        }
 
-                if (!varCheck.recordset.length) {
-                    return res.json({ success: false, message: 'Variation not found for this product.' });
-                }
+                        const varCheck = await pool.request()
+                            .input('variationId', sql.Int, variationId)
+                            .input('inventoryProductId', sql.Int, inventoryProductId)
+                            .query(`
+                                SELECT VariationID FROM InventoryProductVariations
+                                WHERE VariationID = @variationId AND InventoryProductID = @inventoryProductId AND IsActive = 1
+                            `);
 
-                const restockVarTx = new sql.Transaction(pool);
+                        if (!varCheck.recordset.length) {
+                            return res.json({ success: false, message: 'Variation not found for this product.' });
+                        }
+
+                        const restockVarTx = new sql.Transaction(pool);
                 await restockVarTx.begin();
                 try {
                     await restockVarTx.request()
@@ -33759,6 +33483,48 @@ module.exports = function (sql, pool, getStripe = null) {
             req.flash('error', 'Failed to load storefront products.');
             res.redirect('/Employee/Admin/Inventory?tab=ProductInventory');
         }
+    });
+
+    EMPLOYEE_SYNC_ROLES.forEach((role) => {
+        const roleBase = `/Employee/${role.urlSegment}`;
+        const storefrontView = getRoleViewPath(role, 'AdminStorefront');
+        router.get(`${roleBase}/Storefront`, isAuthenticated, async (req, res) => {
+            try {
+                await pool.connect();
+                await ensureListingStageColumn(pool);
+                await ensureStorefrontDisplayQuantityColumn(pool);
+                const pageData = await loadStorefrontPageData(pool, {
+                    search: req.query.search || '',
+                    category: req.query.category || '',
+                    page: parseInt(req.query.page, 10) || 1,
+                    limit: 50,
+                    inventoryProductId: req.query.inventoryProductId
+                });
+                if (pageData.redirectToPage) {
+                    const q = new URLSearchParams(req.query);
+                    q.set('page', String(pageData.redirectToPage));
+                    return res.redirect(`${roleBase}/Storefront?` + q.toString());
+                }
+                res.render(storefrontView, {
+                    user: req.session.user,
+                    error: req.flash('error'),
+                    success: req.flash('success'),
+                    materials: pageData.materials,
+                    units: pageData.units,
+                    categories: pageData.categories,
+                    bomBundles: pageData.bomBundles || [],
+                    allInventoryProducts: pageData.allInventoryProducts,
+                    pagination: pageData.pagination,
+                    listFilters: pageData.listFilters,
+                    inventoryProductIdFocus: pageData.inventoryProductIdFocus,
+                    formatInventoryDate: formatInventoryDate
+                });
+            } catch (err) {
+                console.error(`Error loading ${role.roleName} Storefront page:`, err);
+                req.flash('error', 'Failed to load storefront products.');
+                res.redirect(`${roleBase}/ProductInventory?tab=ProductInventory`);
+            }
+        });
     });
 
     router.get('/Employee/Admin/ProductsListing', isAuthenticated, async (req, res) => {

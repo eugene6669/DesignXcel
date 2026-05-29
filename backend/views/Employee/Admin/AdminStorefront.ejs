@@ -1309,11 +1309,6 @@
                     }
                 %>
 
-                <div class="stock-legend">
-                    <span><i style="background:#DC3545;"></i> Out of stock (0)</span>
-                    <span><i style="background:#FF9800;"></i> Critical (1–10)</span>
-                    <span><i style="background:#d4af37;"></i> Low (11–20)</span>
-                </div>
                 <div class="inventory-filter-card" data-inventory-search="<%= (invFilters.search || '').replace(/"/g, '&quot;') %>">
                     <form method="get" action="/Employee/Admin/Storefront" class="inventory-filter-form">
                         <input type="hidden" name="page" value="1">

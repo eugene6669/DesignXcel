@@ -2,30 +2,97 @@
   locals:
     allProductsList, invFilters, stockQtyClass, formatListDate
     showReturnColumns (boolean, default false)
+    showVariationReturnColumns (boolean, optional — nested variation return cols)
     showActions (boolean, default false)
-    showVariationActions (boolean, optional — defaults true when showReturnColumns)
+    showVariationActions (boolean, optional — variation row Actions column; defaults true when showReturnColumns)
+    showAddVariationButton (boolean, optional — “+ Add Variation” in expanded header; defaults to showVariationActions)
     showStorefront (boolean, default false)
+    showStorefrontInActions (boolean) — storefront toggle in Actions column instead of its own column
+    parentQtyField (optional: 'total' | 'available') — parent qty column value source
     showDiscount (boolean, default false)
+    showListingStage (boolean, default false) — planned / built workflow column
+    listingBuildUrlPrefix (optional, default Inventory build URL)
+    actionStyle (optional: 'listing' | 'inventory')
+    showParentQty (boolean, default true) — hide parent total qty column on listing page
+    showParentDimensions (boolean) — L×W×H column on parent product row (inventory)
+    showVariationDimensions (boolean) — L×W×H column on nested variation rows (inventory)
+    formatDimensionsCompact (function) — formats parent Dimensions JSON for display
+    showStorefrontStockSplit (boolean) — separate storefront display stock vs actual inventory stock columns
+    showParentPriceColumns (boolean, default true) — parent sale price column
+    showParentItemCostColumn (boolean, default true) — parent Item Cost Total column
+    parentSalePriceHeader (string, default 'Sale Price')
+    showParentDualQty (boolean) — Total Qty + Available columns on parent row
+    parentAvailableQtyLabel (string, default 'Available')
+    showVariationQtyColumn (boolean, default true) — single qty column on variation rows
+    showVariationQtyTotalColumn (boolean) — Total Qty column on variation rows
+    variationQtyTotalLabel (string, default 'Total Qty')
+    showVariationSalePrice (boolean, default true)
+    showVariationItemCost (boolean, default true)
+    variationItemCostMode ('total' | 'unit', default 'total')
     emptyListMessage (optional string)
+    showStockLegend (boolean, default true)
+    showSkuColumn (boolean, default true)
+    showStatusColumn (boolean, default true)
+    showParentDescription (boolean, default false)
 %>
 <%
     const showReturnCols = typeof showReturnColumns !== 'undefined' ? !!showReturnColumns : false;
+    const showVariationReturnCols = typeof showVariationReturnColumns !== 'undefined' ? !!showVariationReturnColumns : showReturnCols;
+    const showParentQtyCol = typeof showParentQty !== 'undefined' ? !!showParentQty : true;
     const showAct = typeof showActions !== 'undefined' ? !!showActions : false;
     const showVarAct = typeof showVariationActions !== 'undefined' ? !!showVariationActions : showReturnCols;
+    const showAddVarBtn = typeof showAddVariationButton !== 'undefined' ? !!showAddVariationButton : showVarAct;
     const showSf = typeof showStorefront !== 'undefined' ? !!showStorefront : false;
+    const showSfInActions = typeof showStorefrontInActions !== 'undefined' ? !!showStorefrontInActions : false;
+    const showSfColumn = showSf && !showSfInActions;
+    const parentQtyFieldMode = typeof parentQtyField !== 'undefined' ? parentQtyField : 'available';
+    const showParentDims = typeof showParentDimensions !== 'undefined' ? !!showParentDimensions : false;
+    const showVarDims = typeof showVariationDimensions !== 'undefined' ? !!showVariationDimensions : false;
+    const fmtDims = typeof formatDimensionsCompact === 'function' ? formatDimensionsCompact : function() { return '—'; };
+    const showSfStockSplit = typeof showStorefrontStockSplit !== 'undefined' && showStorefrontStockSplit;
+    const showParentPrices = typeof showParentPriceColumns !== 'undefined' ? !!showParentPriceColumns : true;
+    const showParentItemCost = typeof showParentItemCostColumn !== 'undefined' ? !!showParentItemCostColumn : showParentPrices;
+    const parentSaleHeader = typeof parentSalePriceHeader !== 'undefined' ? parentSalePriceHeader : 'Sale Price';
+    const showParentDualQtyCol = typeof showParentDualQty !== 'undefined' ? !!showParentDualQty : false;
+    const parentAvailQtyLabel = typeof parentAvailableQtyLabel !== 'undefined' ? parentAvailableQtyLabel : 'Available';
+    const showVarQtyCol = typeof showVariationQtyColumn !== 'undefined' ? !!showVariationQtyColumn : true;
+    const showVarQtyTotalCol = typeof showVariationQtyTotalColumn !== 'undefined' ? !!showVariationQtyTotalColumn : false;
+    const varQtyTotalLabel = typeof variationQtyTotalLabel !== 'undefined' ? variationQtyTotalLabel : 'Total Qty';
+    const showVarSalePrice = typeof showVariationSalePrice !== 'undefined' ? !!showVariationSalePrice : true;
+    const showVarItemCost = typeof showVariationItemCost !== 'undefined' ? !!showVariationItemCost : true;
+    const varItemCostMode = typeof variationItemCostMode !== 'undefined' ? variationItemCostMode : 'total';
     const showDisc = typeof showDiscount !== 'undefined' ? !!showDiscount : false;
-    const productColspan = showReturnCols ? 5 : (7 + (showDisc ? 1 : 0) + (showSf ? 1 : 0) + (showAct ? 1 : 0));
+    const showLegend = typeof showStockLegend !== 'undefined' ? !!showStockLegend : true;
+    const showSkuCol = typeof showSkuColumn !== 'undefined' ? !!showSkuColumn : true;
+    const showStatusCol = typeof showStatusColumn !== 'undefined' ? !!showStatusColumn : true;
+    const showParentDescCol = typeof showParentDescription !== 'undefined' ? !!showParentDescription : false;
+    const showStage = typeof showListingStage !== 'undefined' ? !!showListingStage : false;
+    const actionStyleMode = typeof actionStyle !== 'undefined' ? actionStyle : 'listing';
+    const buildUrlPrefix = typeof listingBuildUrlPrefix !== 'undefined' ? listingBuildUrlPrefix : '/Employee/UserManager/ProductInventory?tab=ProductInventory&buildFrom=';
+    let productColspan = showReturnCols ? 5 : (7 + (showDisc ? 1 : 0) + (showSfColumn ? 1 : 0) + (showStage ? 1 : 0) + (showAct ? 1 : 0));
+    if (!showReturnCols && !showParentQtyCol) productColspan -= 1;
+    if (!showReturnCols && showParentQtyCol && showSfStockSplit) productColspan += 1;
+    if (!showReturnCols && showParentDims) productColspan += 1;
+    if (!showReturnCols && showParentQtyCol && showParentDualQtyCol) productColspan += 1;
+    if (!showReturnCols && !showParentPrices) productColspan -= 1;
+    if (!showReturnCols && !showParentItemCost) productColspan -= 1;
+    if (!showReturnCols && showSkuCol) productColspan += 1;
+    if (!showReturnCols && showStatusCol) productColspan += 1;
+    if (!showReturnCols && showParentDescCol) productColspan += 1;
     const fmtDate = typeof formatListDate === 'function'
         ? formatListDate
         : function(v) { return v ? String(v) : 'N/A'; };
     const parentQtyLabel = typeof qtyParentLabel !== 'undefined' ? qtyParentLabel : 'Qty';
     const varQtyLabel = typeof variationQtyLabel !== 'undefined' ? variationQtyLabel : 'Qty';
+    const invFiltersSafe = (typeof locals.invFilters !== 'undefined' && locals.invFilters)
+        ? locals.invFilters
+        : { search: '', category: '' };
 %>
 <% if (allProductsList && allProductsList.length > 0) { %>
-    <% if (!showReturnCols) { %>
+    <% if (!showReturnCols && showLegend) { %>
     <div class="stock-legend">
         <span><i style="background:#DC3545;"></i> Out of stock (0)</span>
-        <span><i style="background:#FF9800;"></i> Critical (1–10)</span>
+        <span><i style="background:#FF9800;"></i> Critical Stock (1–10)</span>
         <span><i style="background:#d4af37;"></i> Low (11–20)</span>
     </div>
     <% } %>
@@ -33,18 +100,33 @@
         <thead>
             <tr>
                 <th>Product Name</th>
+                <% if (!showReturnCols && showSkuCol) { %><th>SKU</th><% } %>
                 <th>Category</th>
-                <% if (!showReturnCols) { %><th class="qty-col" title="Sum of available quantity across all variations"><%= parentQtyLabel %></th><% } %>
-                <% if (!showReturnCols) { %><th class="pi-price-col" style="text-align:right;">Sale Price</th><% } %>
-                <% if (!showReturnCols) { %><th class="pi-price-col" style="text-align:right;" title="Sum of item cost × qty across all variations">Item Cost Total</th><% } %>
+                <% if (!showReturnCols && showParentDescCol) { %><th>Description</th><% } %>
+                <% if (!showReturnCols && showParentDims) { %>
+                <th class="pi-dims-col" title="Length × Width × Height (cm)">Dims</th>
+                <% } %>
+                <% if (!showReturnCols && showParentQtyCol && showSfStockSplit) { %>
+                <th class="qty-col" title="Quantity shown to customers on the storefront">Available Stock</th>
+                <th class="qty-col" title="Actual sellable units in inventory">Actual Stock</th>
+                <% } else if (!showReturnCols && showParentQtyCol && showParentDualQtyCol) { %>
+                <th class="qty-col" title="Total on-hand across all variations"><%= parentQtyLabel %></th>
+                <th class="qty-col" title="Sellable quantity across all variations"><%= parentAvailQtyLabel %></th>
+                <% } else if (!showReturnCols && showParentQtyCol) { %>
+                <th class="qty-col" title="Sum of available quantity across all variations"><%= parentQtyLabel %></th>
+                <% } %>
+                <% if (!showReturnCols && showParentPrices) { %><th class="pi-price-col" style="text-align:right;"><%= parentSaleHeader %></th><% } %>
+                <% if (!showReturnCols && showParentItemCost) { %><th class="pi-price-col" style="text-align:right;" title="Sum of item cost × qty across all variations">Item Cost Total</th><% } %>
                 <% if (showReturnCols) { %>
                 <th class="qty-col return-qty-th return-qty-th-returned">Returned</th>
                 <th class="qty-col return-qty-th return-qty-th-damaged">Damaged</th>
                 <th class="qty-col return-qty-th return-qty-th-repaired">Repaired</th>
                 <% } %>
                 <% if (!showReturnCols && showDisc) { %><th>Discount</th><% } %>
+                <% if (!showReturnCols && showStage) { %><th>Stage</th><% } %>
+                <% if (!showReturnCols && showStatusCol) { %><th>Stock Status</th><% } %>
                 <% if (!showReturnCols) { %><th>Last Added</th><% } %>
-                <% if (!showReturnCols && showSf) { %><th class="pi-storefront-col">Storefront</th><% } %>
+                <% if (!showReturnCols && showSfColumn) { %><th class="pi-storefront-col">Storefront</th><% } %>
                 <% if (showAct && !showReturnCols) { %><th>Actions</th><% } %>
             </tr>
         </thead>
@@ -90,6 +172,7 @@
                 const damagedQty = item.DamagedQuantity || 0;
                 const returnedQty = item.ReturnedQuantity || 0;
                 const repairedQty = item.RepairedQuantity || 0;
+                const totalQty = Number(item.TotalQuantity) || 0;
                 const productId = item.InventoryProductID;
                 const inventoryStatus = item.InventoryStatus || (availableQty > 0 ? 'available' : 'no_stock');
                 const statusClass = inventoryStatus === 'available' ? 'status-available' :
@@ -101,11 +184,69 @@
                 const showOnStorefront = item.ShowOnStorefront !== false && item.ShowOnStorefront !== 0 && item.ShowOnStorefront !== '0';
                 const linkedProductId = item.LinkedProductID || item.ProductID || null;
                 const productPrice = Number(item.InventoryProductPrice) || 0;
+                const itemSalePriceTotal = Number(item.InventoryItemSalePriceTotal);
+                const parentSaleDisplay = !Number.isNaN(itemSalePriceTotal) && itemSalePriceTotal > 0
+                    ? itemSalePriceTotal
+                    : productPrice;
                 const itemCostTotal = Number(item.InventoryItemCostTotal) || 0;
                 const hasDiscount = item.DiscountID && item.DiscountedPrice != null;
                 const lastAddedDisplay = item.LastDateAddedLabel || fmtDate(item.LastDateAdded);
+                const listingStage = (item.ListingStage || 'built').toLowerCase();
+                const isPlanned = listingStage === 'planned';
+                const sku = item.InventoryProductSKU || 'N/A';
+                const parentDescription = item.InventoryProductDescription || item.Description || item.Notes || '—';
+                const parentQtyDisplay = parentQtyFieldMode === 'total'
+                    ? (Number(item.TotalQuantity) || 0)
+                    : (Number(availableQty) || 0);
+                const storefrontQtyDisplay = Number(item.StorefrontStockQuantity) || 0;
+                const actualStockDisplay = Number(availableQty) || 0;
+                const reservedQtyDisplay = Math.max(0, totalQty - actualStockDisplay);
+                const statusText = actualStockDisplay <= 0
+                    ? 'Out of Stock'
+                    : actualStockDisplay <= 10
+                        ? 'Critical Stock'
+                        : actualStockDisplay <= 20
+                            ? 'Low Stock'
+                            : 'In Stock';
+                const parentDimsDisplay = (function() {
+                    const rawFromFormatter = fmtDims(item.Dimensions);
+                    if (rawFromFormatter != null && String(rawFromFormatter).trim() && String(rawFromFormatter).trim() !== '—') {
+                        return String(rawFromFormatter).trim();
+                    }
+                    try {
+                        const src = item.Dimensions;
+                        const d = typeof src === 'string' ? JSON.parse(src) : src;
+                        if (!d || typeof d !== 'object') return '—';
+                        const pick = function() {
+                            for (let i = 0; i < arguments.length; i += 1) {
+                                const v = d[arguments[i]];
+                                if (v != null && v !== '') return v;
+                            }
+                            return null;
+                        };
+                        const fmt = function(v) {
+                            if (v == null || v === '') return '—';
+                            const n = Number(v);
+                            return Number.isFinite(n) ? (Number.isInteger(n) ? String(n) : n.toFixed(1)) : String(v);
+                        };
+                        const l = fmt(pick('length', 'Length', 'L', 'l'));
+                        const w = fmt(pick('width', 'Width', 'W', 'w'));
+                        const h = fmt(pick('height', 'Height', 'H', 'h'));
+                        if (l === '—' && w === '—' && h === '—') return '—';
+                        return l + '×' + w + '×' + h;
+                    } catch (e) {
+                        return '—';
+                    }
+                })();
+                const statusStyle = actualStockDisplay <= 0
+                    ? 'background:#fde8e8;color:#b42318;'
+                    : actualStockDisplay <= 10
+                        ? 'background:#fff4e5;color:#b54708;'
+                        : actualStockDisplay <= 20
+                            ? 'background:#fff8db;color:#8a6700;'
+                            : 'background:#e8f5e9;color:#1e7e34;';
             %>
-            <tr class="product-listing-row" data-inventory-product-id="<%= productId %>" data-product-name="<%= productName.replace(/"/g, '&quot;') %>" data-linked-product-id="<%= linkedProductId || '' %>" data-product-price="<%= productPrice %>">
+            <tr class="product-listing-row product-listing-parent-row" data-inventory-product-id="<%= productId %>" data-listing-stage="<%= listingStage %>" data-product-name="<%= productName.replace(/"/g, '&quot;') %>" data-product-sku="<%= (item.InventoryProductSKU || '').replace(/"/g, '&quot;') %>" data-linked-product-id="<%= linkedProductId || '' %>" data-product-price="<%= productPrice %>"<% if (showSfStockSplit) { %> data-storefront-display-qty="<%= storefrontQtyDisplay %>"<% } %>>
                 <td class="pi-product-name-col">
                     <div class="pi-name-with-image-cell">
                         <% if (productImagePrimary) { %>
@@ -126,14 +267,29 @@
                         </div>
                     </div>
                 </td>
+                <% if (!showReturnCols && showSkuCol) { %>
+                <td><%= sku %></td>
+                <% } %>
                 <td><%= productCategory %></td>
-                <% if (!showReturnCols) { %>
-                <td class="qty-col"><span class="stock-qty <%= stockQtyClass(availableQty) %>"><%= availableQty %></span></td>
+                <% if (!showReturnCols && showParentDescCol) { %>
+                <td title="<%= String(parentDescription).replace(/"/g, '&quot;') %>"><%= parentDescription %></td>
                 <% } %>
-                <% if (!showReturnCols) { %>
-                <td class="pi-price-col" style="text-align:right;">₱<%= productPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                <% if (!showReturnCols && showParentDims) { %>
+                <td class="pi-dims-col" style="text-align:center;"><%= parentDimsDisplay %></td>
                 <% } %>
-                <% if (!showReturnCols) { %>
+                <% if (!showReturnCols && showParentQtyCol && showSfStockSplit) { %>
+                <td class="qty-col"><span class="stock-qty <%= stockQtyClass(storefrontQtyDisplay) %>"><%= storefrontQtyDisplay %></span></td>
+                <td class="qty-col"><span class="stock-qty <%= stockQtyClass(actualStockDisplay) %>"><%= actualStockDisplay %></span></td>
+                <% } else if (!showReturnCols && showParentQtyCol && showParentDualQtyCol) { %>
+                <td class="qty-col"><span class="stock-qty <%= stockQtyClass(parentQtyDisplay) %>"><%= parentQtyDisplay %></span></td>
+                <td class="qty-col"><span class="stock-qty <%= stockQtyClass(actualStockDisplay) %>"><%= actualStockDisplay %></span></td>
+                <% } else if (!showReturnCols && showParentQtyCol) { %>
+                <td class="qty-col"><span class="stock-qty <%= stockQtyClass(parentQtyDisplay) %>"><%= parentQtyDisplay %></span></td>
+                <% } %>
+                <% if (!showReturnCols && showParentPrices) { %>
+                <td class="pi-price-col parent-sale-total-col" style="text-align:right;">₱<%= parentSaleDisplay.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
+                <% } %>
+                <% if (!showReturnCols && showParentItemCost) { %>
                 <td class="pi-price-col item-cost-total-col" style="text-align:right;">₱<%= itemCostTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) %></td>
                 <% } %>
                 <% if (showReturnCols) { %>
@@ -159,10 +315,26 @@
                     <% } %>
                 </td>
                 <% } %>
+                <% if (!showReturnCols && showStage) { %>
+                <td>
+                    <% if (isPlanned) { %>
+                        <span class="status-badge" style="background:#fff3cd;color:#856404;">Planned</span>
+                    <% } else { %>
+                        <span class="status-badge status-available">Built</span>
+                    <% } %>
+                </td>
+                <% } %>
+                <% if (!showReturnCols && showStatusCol) { %>
+                <td>
+                    <span class="status-badge" style="<%= statusStyle %>" title="On Hand: <%= totalQty %>, Reserved: <%= reservedQtyDisplay %>, Available: <%= actualStockDisplay %>">
+                        <%= statusText %>
+                    </span>
+                </td>
+                <% } %>
                 <% if (!showReturnCols) { %>
                 <td class="last-added-cell"><%= lastAddedDisplay %></td>
                 <% } %>
-                <% if (!showReturnCols && showSf) { %>
+                <% if (!showReturnCols && showSfColumn) { %>
                 <td class="pi-storefront-col" style="text-align:center;">
                     <button type="button" class="product-storefront-btn pi-icon-storefront-btn<%= showOnStorefront ? ' is-visible' : '' %>"
                         data-inventory-product-id="<%= productId %>"
@@ -177,50 +349,98 @@
                 <% if (showAct && !showReturnCols) { %>
                 <td class="pi-actions-col">
                     <div class="pi-actions-cell">
+                        <% if (actionStyleMode === 'inventory' && !showReturnCols) { %>
+                        <div class="pi-actions-extra-triggers" hidden aria-hidden="true">
+                            <% if (showAddVarBtn) { %>
+                            <button type="button" class="add-variation-row-btn pi-menu-extra-action" data-id="<%= productId %>" data-name="<%= productName.replace(/'/g, "\\'").replace(/"/g, "&quot;") %>" data-is-from-products="false" data-pi-menu-label="Add variation" aria-label="Add variation"></button>
+                            <% } %>
+                            <a href="/Employee/UserManager/ProductInventory?tab=stock-movement&amp;inventoryProductId=<%= productId %>" class="pi-menu-extra-link" data-pi-menu-label="Stock movement" aria-label="Stock movement"></a>
+                        </div>
+                        <% } %>
+                        <% if (actionStyleMode === 'inventory') { %>
+                        <% if (isPlanned) { %>
+                        <a href="<%= buildUrlPrefix %><%= productId %>" class="build-inventory-product-btn pi-icon-build-btn" title="Build product (materials &amp; stock)" aria-label="Build product">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" class="pi-build-icon"><image href="/images/icons/build-inventory-mesh.png" width="24" height="24" preserveAspectRatio="xMidYMid slice"/></svg>
+                        </a>
+                        <% } %>
+                        <button type="button" class="edit-inventory-product-quick-btn pi-icon-edit-btn" data-product-id="<%= productId %>" title="Edit product" aria-label="Edit product">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                        </button>
+                        <button type="button" class="inventory-product-details-btn pi-icon-details-btn" data-product-id="<%= productId %>" title="Product details" aria-label="Product details">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 4.5V3a3 3 0 016 0v1.5M9 10h6M9 14h6M9 18h6"/></svg>
+                        </button>
+                        <button type="button" class="delete-inventory-btn pi-icon-archive-btn"
+                            data-product-id="<%= productId %>"
+                            data-product-name="<%= productName.replace(/'/g, "\\'").replace(/"/g, "&quot;") %>"
+                            data-is-from-products="false"
+                            title="Archive product"
+                            aria-label="Archive product">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                        </button>
+                        <% } else if (showSfInActions) { %>
                         <button type="button" class="edit-inventory-product-btn pi-icon-edit-btn" data-product-id="<%= productId %>" title="Edit product catalog" aria-label="Edit product catalog">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                         </button>
+                        <button type="button" class="product-storefront-btn pi-icon-storefront-btn<%= showOnStorefront ? ' is-visible' : '' %>"
+                            data-inventory-product-id="<%= productId %>"
+                            data-show-on-storefront="<%= showOnStorefront ? '1' : '0' %>"
+                            data-product-name="<%= productName.replace(/"/g, '&quot;') %>"
+                            title="<%= showOnStorefront ? 'Visible on storefront' : 'Hidden from storefront' %>"
+                            aria-label="<%= showOnStorefront ? 'Hide from storefront' : 'Show on storefront' %>">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                        </button>
+                        <% } else if (actionStyleMode === 'listing') { %>
+                        <% if (isPlanned) { %>
+                        <button type="button" class="edit-plan-product-btn pi-icon-edit-btn" data-product-id="<%= productId %>" title="Edit planned product" aria-label="Edit planned product">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                        </button>
+                        <% } %>
+                        <% } %>
                     </div>
                 </td>
                 <% } %>
             </tr>
-            <tr class="variations-row" data-inventory-product-id="<%= productId %>" style="display:none;">
-                <td colspan="<%= productColspan %>" style="padding:16px 20px;background:#f8f9fa;border-top:2px solid #dee2e6;">
-                    <div class="variations-container" data-inventory-product-id="<%= productId %>" data-show-return-columns="<%= showReturnCols ? '1' : '0' %>" data-show-storefront="<%= showSf ? '1' : '0' %>" data-show-variation-actions="<%= showVarAct ? '1' : '0' %>" data-show-discount="<%= showDisc ? '1' : '0' %>" data-discount-id="<%= item.DiscountID || '' %>" data-discount-type="<%= item.DiscountType || '' %>" data-discount-value="<%= item.DiscountValue != null ? item.DiscountValue : '' %>" data-discounted-price="<%= item.DiscountedPrice != null ? item.DiscountedPrice : '' %>">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-                            <h4 style="margin:0;color:#333;font-size:0.95em;">Product Variations</h4>
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                <% if (showVarAct) { %>
-                                <button type="button" class="add-variation-row-btn variations-btn pi-btn pi-btn-sm" data-id="<%= productId %>" data-name="<%= productName.replace(/'/g, "\\'").replace(/"/g, "&quot;") %>" data-is-from-products="false" style="background:#6f42c1;color:#fff;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:0.85em;">+ Add Variation</button>
-                                <% } %>
-                                <button type="button" class="refresh-variations-btn pi-btn pi-btn-sm" data-inventory-product-id="<%= productId %>" style="background:#28a745;color:#fff;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:0.85em;">Refresh</button>
-                            </div>
-                        </div>
+            <tr class="variations-row product-listing-variations-row" data-inventory-product-id="<%= productId %>" style="display:none;">
+                <td colspan="<%= productColspan %>" class="variations-row-cell">
+                    <div class="variations-container" data-inventory-product-id="<%= productId %>" data-show-return-columns="<%= showVariationReturnCols ? '1' : '0' %>" data-show-storefront="<%= showSf ? '1' : '0' %>" data-show-storefront-in-actions="<%= showSfInActions ? '1' : '0' %>" data-show-storefront-stock-split="<%= showSfStockSplit ? '1' : '0' %>" data-show-variation-dimensions="<%= showVarDims ? '1' : '0' %>" data-show-parent-dimensions="<%= showParentDims ? '1' : '0' %>" data-show-variation-qty="<%= showVarQtyCol ? '1' : '0' %>" data-show-variation-qty-total="<%= showVarQtyTotalCol ? '1' : '0' %>" data-show-variation-sale-price="<%= showVarSalePrice ? '1' : '0' %>" data-show-variation-item-cost="<%= showVarItemCost ? '1' : '0' %>" data-variation-item-cost-mode="<%= varItemCostMode %>" data-show-variation-actions="<%= showVarAct ? '1' : '0' %>" data-show-discount="<%= showDisc ? '1' : '0' %>" data-discount-id="<%= item.DiscountID || '' %>" data-discount-type="<%= item.DiscountType || '' %>" data-discount-value="<%= item.DiscountValue != null ? item.DiscountValue : '' %>" data-discounted-price="<%= item.DiscountedPrice != null ? item.DiscountedPrice : '' %>">
+                        <h4 style="margin:0 0 12px;color:#333;font-size:0.95em;">Product Variations</h4>
                         <div class="variations-loading" style="text-align:center;padding:16px;color:#666;">
                             <p>Expand to load variations.</p>
                         </div>
                         <div class="variations-table-container" style="display:none;">
-                            <table class="variations-nested-table<%= showReturnCols ? ' variations-returns-table' : '' %>" style="width:100%;border-collapse:collapse;table-layout:fixed;">
+                            <table class="variations-nested-table<%= showVariationReturnCols ? ' variations-returns-table' : '' %>" style="width:100%;border-collapse:collapse;table-layout:fixed;">
                                 <thead>
                                     <tr style="background:#e9ecef;">
                                         <th data-var-col="name" class="var-col-name">Variation</th>
                                         <th data-var-col="sku" class="var-col-sku">SKU</th>
-                                        <th data-var-col="color" class="var-col-color">Color</th>
-                                        <% if (!showReturnCols) { %>
+                                        <% if (showVarDims) { %>
+                                        <th data-var-col="dimensions" class="var-col-dims" title="Length × Width × Height (cm)">Dims</th>
+                                        <% } %>
+                                        <% if (!showVariationReturnCols && showSfStockSplit) { %>
+                                        <th data-var-col="qty-available" class="var-col-qty" title="Quantity shown to customers on the storefront">Available Stock</th>
+                                        <th data-var-col="qty-actual" class="var-col-qty" title="Actual sellable units in inventory">Actual Stock</th>
+                                        <% } else if (!showVariationReturnCols && showVarQtyTotalCol) { %>
+                                        <th data-var-col="qty-total" class="var-col-qty"><%= varQtyTotalLabel %></th>
+                                        <% } %>
+                                        <% if (!showVariationReturnCols && showVarQtyCol && !showSfStockSplit) { %>
                                         <th data-var-col="qty" class="var-col-qty"><%= varQtyLabel %></th>
                                         <% } %>
-                                        <% if (showReturnCols) { %>
+                                        <% if (showVariationReturnCols && showVarQtyTotalCol) { %>
+                                        <th data-var-col="qty-total" class="var-col-qty"><%= varQtyTotalLabel %></th>
+                                        <% } %>
+                                        <% if (showVariationReturnCols) { %>
+                                        <th data-var-col="qty" class="var-col-qty"><%= varQtyLabel %></th>
                                         <th data-var-col="returned" class="var-col-qty return-qty-th return-qty-th-returned">Returned</th>
                                         <th data-var-col="damaged" class="var-col-qty return-qty-th return-qty-th-damaged">Damaged</th>
                                         <th data-var-col="repaired" class="var-col-qty return-qty-th return-qty-th-repaired">Repaired</th>
                                         <% } %>
-                                        <th data-var-col="sale-price" class="var-col-price">Sale Price</th>
-                                        <% if (!showReturnCols) { %><th data-var-col="item-cost" class="var-col-price" title="Item cost × sellable quantity">Item Cost</th><% } %>
+                                        <% if (showVarSalePrice) { %><th data-var-col="sale-price" class="var-col-price">Sale Price</th><% } %>
+                                        <% if (!showVariationReturnCols && showVarItemCost) { %><th data-var-col="item-cost" class="var-col-price" title="<%= varItemCostMode === 'unit' ? 'Cost per unit' : 'Item cost × sellable quantity' %>">Item Cost</th><% } %>
                                         <% if (showDisc) { %><th data-var-col="discount" class="var-col-discount">Discount</th><% } %>
-                                        <% if (!showReturnCols) { %>
+                                        <% if (!showVariationReturnCols) { %>
                                         <th data-var-col="last-added" class="var-col-date">Last Added</th>
                                         <% } %>
-                                        <% if (!showReturnCols && showSf) { %><th data-var-col="storefront" class="var-col-storefront">Storefront</th><% } %>
+                                        <% if (!showVariationReturnCols && showSfColumn) { %><th data-var-col="storefront" class="var-col-storefront">Storefront</th><% } %>
                                         <% if (showVarAct) { %>
                                         <th data-var-col="actions" class="var-col-action">Actions</th>
                                         <% } %>
@@ -240,7 +460,7 @@
     </table>
 <% } else { %>
     <p class="inventory-list-empty">
-        <% if (invFilters.search || invFilters.category) { %>
+        <% if (invFiltersSafe.search || invFiltersSafe.category) { %>
             No products match your filters.
         <% } else if (typeof emptyListMessage !== 'undefined' && emptyListMessage) { %>
             <%= emptyListMessage %>

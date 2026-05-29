@@ -1,0 +1,87 @@
+<div id="addPlanProductModal" class="modal pi-modal-compact pi-create-product-modal">
+    <div class="modal-content">
+        <span class="close-button" id="closePlanModal">&times;</span>
+        <h3>Plan New Product</h3>
+        <p style="font-size:0.88em;color:#64748b;margin:0 0 12px;">
+            Set catalog details here. In <strong>Inventory</strong> you will add a raw materials bundle, raw materials, and opening stock.
+        </p>
+        <form id="addPlanProductForm" class="pi-create-form" action="/Employee/UserManager/UserProducts/Add" method="POST" enctype="multipart/form-data">
+            <div class="pi-plan-layout">
+                <div class="pi-plan-col pi-plan-col-left">
+                    <h4 class="pi-plan-col-group-title">Product Details</h4>
+                    <div class="pi-section">
+                        <div class="pi-form-grid pi-create-top">
+                            <div class="form-group">
+                                <label for="planName">Product Name <span style="color:#dc3545;">*</span></label>
+                                <input type="text" id="planName" name="name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="planProductCostPrice">Item Cost Price (₱) <span style="color:#dc3545;">*</span></label>
+                                <input type="text" id="planProductCostPrice" name="costPrice" inputmode="decimal" autocomplete="off" required placeholder="0.00">
+                            </div>
+                            <div class="form-group">
+                                <label for="planProductPrice">Sale Price (₱) <span style="color:#dc3545;">*</span></label>
+                                <input type="text" id="planProductPrice" name="price" inputmode="decimal" autocomplete="off" required placeholder="0.00">
+                            </div>
+                            <div class="form-group">
+                                <label for="planCategory">Category <span style="color:#dc3545;">*</span></label>
+                                <select id="planCategory" name="category" required>
+                                    <option value="">Select category</option>
+                                    <% if (categories && categories.length > 0) { %>
+                                        <% categories.forEach(cat => { %>
+                                            <option value="<%= cat %>"><%= cat %></option>
+                                        <% }); %>
+                                    <% } %>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="planDescription">Description / notes</label>
+                            <textarea id="planDescription" name="description" rows="2" placeholder="Optional"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="planReorderPoint">Stock Threshold (Reorder Point)</label>
+                            <input type="number" id="planReorderPoint" name="reorderPoint" min="0" step="1" value="10">
+                            <small style="display:block;margin-top:4px;color:#666;">Used for low/critical stock alerts once built.</small>
+                        </div>
+
+                        <div class="form-group pi-product-dims">
+                            <label>Dimensions (L × W × H cm)</label>
+                            <div class="pi-var-dims-inline">
+                                <label for="planProductLength">L</label>
+                                <input type="number" id="planProductLength" name="length" step="0.1" min="0" placeholder="cm">
+                                <label for="planProductWidth">W</label>
+                                <input type="number" id="planProductWidth" name="width" step="0.1" min="0" placeholder="cm">
+                                <label for="planProductHeight">H</label>
+                                <input type="number" id="planProductHeight" name="height" step="0.1" min="0" placeholder="cm">
+                            </div>
+                            <small style="display:block;margin-top:4px;color:#666;">Same size for all variations of this product.</small>
+                        </div>
+
+                        <div>
+                            <label for="planProductMainImage">Product Main Image</label>
+                            <input type="file" id="planProductMainImage" name="productMainImage" accept="image/*">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pi-plan-col pi-plan-col-right">
+                    <div class="pi-section">
+                        <h4>Product Variations <span style="color:#dc3545;">*</span></h4>
+                        <p style="font-size:0.85em;color:#666;margin:0 0 8px;">At least one variation with a main image.</p>
+                        <div id="planProductVariationsList"></div>
+                        <button type="button" id="addPlanProductVariationBtn" class="pi-btn pi-btn-primary pi-btn-sm" style="margin-top:6px;">+ Add Variation</button>
+                    </div>
+                    <input type="hidden" id="planVariationsJson" name="variationsJson" value="">
+                </div>
+            </div>
+
+            <div class="pi-form-actions">
+                <button type="button" id="cancelPlanProduct" class="pi-btn pi-btn-secondary">Cancel</button>
+                <button type="submit" class="pi-btn pi-btn-primary" id="submitPlanProductBtn">Save Plan</button>
+            </div>
+        </form>
+    </div>
+</div>

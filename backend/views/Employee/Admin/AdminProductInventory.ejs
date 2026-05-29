@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -914,17 +914,6 @@
             margin-bottom: 10px;
         }
         .stock-mv-section-title { margin: 0; font-size: 1em; color: #495057; font-weight: 600; }
-        .stock-mv-archive-all-btn {
-            font-size: 0.82em;
-            padding: 6px 12px;
-            border: 1px solid #dc3545;
-            background: #fff;
-            color: #dc3545;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 600;
-        }
-        .stock-mv-archive-all-btn:hover { background: #dc3545; color: #fff; }
         .stock-mv-header-row {
             display: flex;
             align-items: center;
@@ -936,36 +925,6 @@
             flex: 1;
             min-width: 0;
         }
-        .stock-mv-archive-btn {
-            flex-shrink: 0;
-            border: none;
-            border-radius: 6px;
-            width: 34px;
-            height: 34px;
-            padding: 0;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background-color: #DC3545;
-            color: #fff;
-            transition: background 0.2s, transform 0.15s;
-        }
-        .stock-mv-archive-btn:hover { background-color: #c82333; transform: translateY(-1px); }
-        .stock-mv-archive-btn svg { width: 16px; height: 16px; stroke: currentColor; }
-        .stock-mv-archive-group-btn {
-            flex-shrink: 0;
-            font-size: 0.75em;
-            padding: 5px 10px;
-            border-radius: 6px;
-            border: 1px solid #dc3545;
-            background: #fff5f5;
-            color: #dc3545;
-            cursor: pointer;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-        .stock-mv-archive-group-btn:hover { background: #dc3545; color: #fff; }
         .rm-qty-display.rm-qty-updated { animation: rmQtyFlash 1s ease; }
         @keyframes rmQtyFlash {
             0% { background: #d4edda; transform: scale(1.08); }
@@ -996,7 +955,6 @@
         .stock-mv-product-header { border-bottom: 1px solid #e9ecef; }
         .stock-mv-header-row .stock-mv-product-header { border-bottom: none; }
         .stock-mv-product-block > .stock-mv-header-row { border-bottom: 1px solid #e9ecef; }
-        .stock-mv-nested-table .stock-mv-action-col { width: 48px; text-align: center; }
         .stock-mv-product-block.is-expanded .stock-mv-product-header { background: #e9ecef; border-bottom-color: #dee2e6; }
         .stock-mv-variation-header { background: #fff; padding-left: 36px; border-top: 1px solid #eee; }
         .stock-mv-variation-block.is-expanded .stock-mv-variation-header { background: #f3f4f6; }
@@ -1297,13 +1255,12 @@
             font-weight: 700;
             line-height: 1.2;
         }
-        .inventory-stock-card.stock-available .inventory-stock-card-value { color: #198754; }
         .inventory-stock-card.stock-returned .inventory-stock-card-value { color: #1d4ed8; }
         .inventory-stock-card.stock-damaged .inventory-stock-card-value { color: #dc3545; }
         .inventory-stock-card.stock-repaired .inventory-stock-card-value { color: #198754; }
         .inventory-stock-card.stock-variants .inventory-stock-card-value { color: #6f42c1; }
-        .inventory-stock-card.stock-total .inventory-stock-card-value { color: #212529; }
-        .inventory-stock-card-value.stock-level-out { color: #dc3545 !important; }
+        .inventory-stock-card-value.stock-level-negative { color: #b02a37 !important; }
+        .inventory-stock-card-value.stock-level-out { color: #DC3545 !important; }
         .inventory-stock-card-value.stock-level-critical { color: #FF9800 !important; }
         .inventory-stock-card-value.stock-level-low { color: #d4af37 !important; }
         .inventory-stock-card-value.stock-level-ok { color: #28a745 !important; }
@@ -2002,11 +1959,6 @@
                 %>
 
 
-                <div class="stock-legend">
-                    <span><i style="background:#DC3545;"></i> Out of stock (0)</span>
-                    <span><i style="background:#FF9800;"></i> Critical (1–10)</span>
-                    <span><i style="background:#d4af37;"></i> Low (11–20)</span>
-                </div>
                 <div class="inventory-filter-card" data-inventory-search="<%= (invFilters.search || '').replace(/"/g, '&quot;') %>">
                     <form method="get" action="/Employee/Admin/Inventory" class="inventory-filter-form">
                         <input type="hidden" name="tab" value="ProductInventory">
@@ -2193,9 +2145,9 @@
     </div>
 
     <script src="/js/Employee/Admin/admin-modals.js?v=20260541" defer></script>
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260573" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260577" defer></script>
     <script src="/js/Employee/Admin/product-inventory-tabs.js?v=20260541" defer></script>
-    <script src="/js/Employee/Admin/stock-movement-tab.js?v=20260554" defer></script>
+    <script src="/js/Employee/Admin/stock-movement-tab.js?v=20260578" defer></script>
     <script src="/js/Employee/Admin/raw-materials-tab.js?v=20260573" defer></script>
     <script src="/js/Employee/Admin/bom-bundles-tab.js?v=20260570" defer></script>
 

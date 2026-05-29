@@ -220,6 +220,17 @@
             font-weight: bold;
         }
 
+        #lowStockProductsTable tbody tr.alert-row-link,
+        #lowStockMaterialsTable tbody tr.alert-row-link {
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+        }
+
+        #lowStockProductsTable tbody tr.alert-row-link:hover,
+        #lowStockMaterialsTable tbody tr.alert-row-link:hover {
+            background-color: #fff8e6;
+        }
+
     </style>
 </head>
 <body>
@@ -293,7 +304,7 @@
         </div>
     </div>
 
-    <script src="/js/Employee/Admin/AdminAlerts.js"></script>
+    <script src="/js/Employee/UserManager/UserAlerts.js"></script>
     <script>
         // Dropdown functionality for sidebar
         document.querySelectorAll('.dropdown-toggle').forEach(item => {

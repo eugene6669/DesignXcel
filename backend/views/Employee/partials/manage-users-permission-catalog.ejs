@@ -1,0 +1,27 @@
+<%
+var catalogSections = (typeof permissionSections !== 'undefined' && permissionSections) ? permissionSections : [];
+var catalogLegacyKeys = (typeof permissionLegacyKeys !== 'undefined' && permissionLegacyKeys) ? permissionLegacyKeys : {};
+%>
+                    const permissionSections = <%- JSON.stringify(catalogSections) %>;
+                    const permissionLegacyKeys = <%- JSON.stringify(catalogLegacyKeys) %>;
+
+                    function resolveUserPermissionAccess(permissionName, permissionRows) {
+                        const direct = permissionRows.find(p => p.PermissionName === permissionName);
+                        if (direct) return !!direct.CanAccess;
+                        const legacy = permissionLegacyKeys[permissionName] || [];
+                        for (let i = 0; i < legacy.length; i++) {
+                            const row = permissionRows.find(p => p.PermissionName === legacy[i]);
+                            if (row && row.CanAccess) return true;
+                        }
+                        return false;
+                    }
+
+                    function buildOriginalPermissionsMap(permissionRows) {
+                        const map = {};
+                        permissionSections.forEach(function (section) {
+                            section.permissions.forEach(function (permission) {
+                                map[permission.key] = resolveUserPermissionAccess(permission.key, permissionRows);
+                            });
+                        });
+                        return map;
+                    }

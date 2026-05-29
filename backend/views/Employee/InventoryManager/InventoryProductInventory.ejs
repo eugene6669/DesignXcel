@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Product Inventory - Design Excellence</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <%- include('partials/pi-row-actions-assets') %>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -234,6 +235,11 @@
         .edit-raw-material-btn,
         .edit-bom-bundle-btn,
         .pi-icon-edit-btn,
+        a.pi-icon-build-btn,
+        .pi-icon-build-btn,
+        .pi-icon-details-btn,
+        .inventory-product-details-btn,
+        .inventory-variation-details-btn,
         .pi-icon-restock-btn,
         .pi-icon-archive-btn,
         .delete-inventory-btn,
@@ -262,9 +268,40 @@
         .edit-variation-status-btn,
         .edit-raw-material-btn,
         .edit-bom-bundle-btn,
-        .pi-icon-edit-btn {
+        .pi-icon-edit-btn,
+        a.pi-icon-build-btn,
+        .pi-icon-build-btn {
             background-color: #FFC107;
             color: #333;
+            text-decoration: none;
+        }
+        .pi-icon-edit-btn:hover,
+        a.pi-icon-build-btn:hover,
+        .pi-icon-build-btn:hover {
+            background-color: #e0ac06;
+            transform: translateY(-1px);
+            color: #333;
+        }
+        .pi-icon-details-btn,
+        .inventory-product-details-btn,
+        .inventory-variation-details-btn {
+            background-color: #d4af37;
+            color: #1a1a1a;
+            border: 1px solid #B8860B;
+        }
+        .pi-icon-details-btn:hover,
+        .inventory-product-details-btn:hover,
+        .inventory-variation-details-btn:hover {
+            background-color: #e0ac06;
+            transform: translateY(-1px);
+            color: #1a1a1a;
+        }
+        .pi-actions-cell .inventory-product-details-btn.pi-icon-details-btn,
+        .pi-actions-cell .inventory-variation-details-btn.pi-icon-details-btn,
+        .pi-actions-cell .product-storefront-btn.pi-icon-storefront-btn {
+            display: inline-flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
         }
         .pi-icon-restock-btn,
         .restock-variation-btn,
@@ -311,6 +348,8 @@
         .edit-raw-material-btn svg,
         .edit-bom-bundle-btn svg,
         .pi-icon-edit-btn svg,
+        a.pi-icon-build-btn svg,
+        .pi-icon-build-btn svg,
         .pi-icon-restock-btn svg,
         .restock-variation-btn svg,
         .restock-raw-material-btn svg,
@@ -324,6 +363,10 @@
             height: 16px;
             stroke: currentColor;
             flex-shrink: 0;
+        }
+        a.pi-icon-build-btn svg.pi-build-icon,
+        .pi-icon-build-btn svg.pi-build-icon {
+            stroke: none;
         }
 
         .pi-media-preview-main img {
@@ -560,6 +603,51 @@
             margin-top: 20px;
         }
 
+        .archive-confirm-content {
+            text-align: center;
+        }
+
+        .archive-confirm-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 16px;
+            border-radius: 50%;
+            background: #fff3e0;
+            color: #e65100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .archive-confirm-message {
+            text-align: center;
+            font-size: 1.05em;
+            color: #334155;
+            margin: 0 0 8px;
+            line-height: 1.5;
+        }
+
+        .archive-confirm-hint {
+            text-align: center;
+            font-size: 0.9em;
+            color: #64748b;
+            margin: 0 0 20px;
+        }
+
+        .archive-confirm-btn-danger {
+            background: #dc3545 !important;
+        }
+
+        .archive-confirm-btn-danger:hover {
+            background: #c82333 !important;
+        }
+
+        tr.inventory-focus-row,
+        tr.inventory-focus-row td {
+            background-color: #fff8e1 !important;
+            box-shadow: inset 0 0 0 2px #ffc107;
+        }
+
         .inventory-confirm-btn {
             background-color: #F0B21B;
             color: white;
@@ -627,7 +715,7 @@
 
         /* Tab panels: visibility controlled by #id.tab-content rules below */
 
-        /* Stock qty alerts — number only (not full row) */
+        /* Stock qty alerts â€” number only (not full row) */
         .stock-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; font-size: 0.8em; color: #555; align-items: center; }
         .stock-legend span { display: inline-flex; align-items: center; gap: 6px; }
         .stock-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
@@ -639,7 +727,7 @@
         .stock-qty-normal { color: #28a745; }
         .stock-qty-available { color: #28a745; }
 
-        /* Inventory product list — compact rows + column grid (matches Products listing) */
+        /* Inventory product list â€” compact rows + column grid (matches Products listing) */
         .inventory-listing-table {
             width: 100%;
             border-collapse: collapse;
@@ -694,7 +782,6 @@
         .variations-row > td {
             padding: 10px 12px !important;
             background: #f8f9fa;
-            border-top: 2px solid #dee2e6;
         }
         .variations-container h4 { margin: 0; font-size: 0.9em; color: #333; }
         .variations-nested-table.inventory-listing-table { margin-top: 6px; font-size: 0.85em; }
@@ -774,6 +861,29 @@
         .inventory-list-toolbar input,
         .inventory-list-toolbar select { padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.9em; }
         .inventory-list-summary { font-size: 0.78em; color: #868e96; margin: 6px 0 0; white-space: nowrap; }
+        .products-listing-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9em; }
+        .products-listing-table th,
+        .products-listing-table td { padding: 10px; border: 1px solid #dee2e6; vertical-align: middle; }
+        .products-listing-table thead th { background: #f2f2f2; font-weight: 600; }
+        .products-listing-table .variations-nested-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.85em; }
+        .products-listing-table .variations-nested-table th,
+        .products-listing-table .variations-nested-table td { padding: 8px 10px; border: 1px solid #dee2e6; vertical-align: middle; }
+        .products-listing-table .variations-nested-table thead th { background: #e9ecef; font-weight: 600; }
+        .page-inventory .variations-nested-table .var-col-sku .variation-sku-value,
+        .page-inventory .variation-flat-row .variation-sku-value {
+            font-size: 1.3em !important;
+            line-height: 1.3;
+            font-weight: 800;
+        }
+        .var-col-dims { width: 78px; max-width: 88px; text-align: center; }
+        .var-dims-compact {
+            display: inline-block;
+            font-size: 0.72em;
+            line-height: 1.2;
+            white-space: nowrap;
+            color: #475569;
+            font-variant-numeric: tabular-nums;
+        }
         .inventory-list-empty { color: #666; margin: 16px 0; }
         .inventory-pagination { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin: 20px 0 8px; }
         .inventory-pagination a,
@@ -795,6 +905,32 @@
         .stock-movement-page-size { padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 0.9em; min-width: 72px; }
         .stock-movement-list-wrap { margin-bottom: 8px; }
         .stock-movement-grouped-list { display: flex; flex-direction: column; gap: 8px; }
+        .stock-mv-section-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .stock-mv-section-title { margin: 0; font-size: 1em; color: #495057; font-weight: 600; }
+        .stock-mv-header-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+        }
+        .stock-mv-header-row .stock-mv-product-header,
+        .stock-mv-header-row .stock-mv-variation-header {
+            flex: 1;
+            min-width: 0;
+        }
+        .rm-qty-display.rm-qty-updated { animation: rmQtyFlash 1s ease; }
+        @keyframes rmQtyFlash {
+            0% { background: #d4edda; transform: scale(1.08); }
+            100% { background: transparent; transform: scale(1); }
+        }
+        #rawMaterialRestockConfirmModal { z-index: 3500; }
         .stock-mv-product-block {
             border: 1px solid #dee2e6;
             border-radius: 6px;
@@ -817,6 +953,8 @@
         .stock-mv-product-header:hover,
         .stock-mv-variation-header:hover { background: #eef1f4; }
         .stock-mv-product-header { border-bottom: 1px solid #e9ecef; }
+        .stock-mv-header-row .stock-mv-product-header { border-bottom: none; }
+        .stock-mv-product-block > .stock-mv-header-row { border-bottom: 1px solid #e9ecef; }
         .stock-mv-product-block.is-expanded .stock-mv-product-header { background: #e9ecef; border-bottom-color: #dee2e6; }
         .stock-mv-variation-header { background: #fff; padding-left: 36px; border-top: 1px solid #eee; }
         .stock-mv-variation-block.is-expanded .stock-mv-variation-header { background: #f3f4f6; }
@@ -910,17 +1048,13 @@
         }
         .inventory-filter-actions .pi-btn-primary,
         .inventory-filter-actions .inventory-filter-apply-btn {
-            background-color: #FFC107;
-            color: #333;
-            padding: 4px 10px;
-            font-size: 0.78em;
-            line-height: 1.2;
-            min-height: 0;
+            background-color: #d4be17;
+            color: #1a1a1a;
         }
         .inventory-filter-actions .pi-btn-primary:hover,
         .inventory-filter-actions .inventory-filter-apply-btn:hover {
-            background-color: #e0ac06;
-            color: #333;
+            background-color: #B8860B;
+            color: #1a1a1a;
         }
         .inventory-filter-actions .pi-btn-secondary {
             background: #6c757d;
@@ -984,14 +1118,14 @@
         .pi-categories-list .pi-category-row button { padding: 3px 8px; font-size: 0.78em; }
         .pi-modal-categories .pi-form-actions { margin-top: 8px; padding-top: 8px; }
 
-        /* Raw materials tab — compact */
+        /* Raw materials tab â€” compact */
         .rm-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; justify-content: flex-end; }
         .rm-toolbar .add-material-btn { padding: 7px 12px; font-size: 0.85em; margin: 0; }
         .rm-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; font-size: 0.8em; color: #555; }
         .rm-legend span { display: inline-flex; align-items: center; gap: 5px; }
         .rm-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
 
-        /* Products tab modals — compact */
+        /* Products tab modals â€” compact */
         .pi-modal-compact .modal-content {
             max-width: 520px;
             padding: 16px 18px;
@@ -1050,30 +1184,193 @@
             font-size: 0.85em;
             font-weight: 600;
         }
-        .pi-modal-compact .pi-btn-primary { background: #28a745; color: #fff; }
+        .pi-modal-compact .pi-btn-primary { background: #d4af37; color: #1a1a1a; }
         #addProductModal .pi-btn-primary {
             background: #D4A017;
             color: #1a1a1a;
+        }
+        .inventory-details-modal-content { max-width: 520px; }
+        .inventory-details-hero {
+            display: flex;
+            gap: 16px;
+            padding: 14px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #f8f9fa;
+            margin-bottom: 18px;
+        }
+        .inventory-details-image-wrap {
+            flex: 0 0 88px;
+            width: 88px;
+            height: 88px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #dee2e6;
+            background: #fff;
+        }
+        .inventory-details-image-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .inventory-details-meta { flex: 1; min-width: 0; }
+        .inventory-details-meta-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 6px;
+            font-size: 0.9em;
+        }
+        .inventory-details-meta-row:last-child { margin-bottom: 0; }
+        .inventory-details-label { color: #666; }
+        .inventory-details-value { color: #212529; text-align: right; }
+        #inventoryDetailsName { font-size: 1.05em; }
+        .inventory-details-section-title {
+            margin: 0 0 10px;
+            font-size: 0.95em;
+            font-weight: 600;
+            color: #333;
+        }
+        .inventory-stock-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .inventory-stock-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 12px 10px;
+            text-align: center;
+            background: #fff;
+        }
+        .inventory-stock-card-label {
+            display: block;
+            font-size: 0.78em;
+            color: #666;
+            margin-bottom: 6px;
+        }
+        .inventory-stock-card-value {
+            display: block;
+            font-size: 1.5em;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        .inventory-stock-card.stock-returned .inventory-stock-card-value { color: #1d4ed8; }
+        .inventory-stock-card.stock-damaged .inventory-stock-card-value { color: #dc3545; }
+        .inventory-stock-card.stock-repaired .inventory-stock-card-value { color: #198754; }
+        .inventory-stock-card.stock-variants .inventory-stock-card-value { color: #6f42c1; }
+        .inventory-stock-card-value.stock-level-negative { color: #b02a37 !important; }
+        .inventory-stock-card-value.stock-level-out { color: #DC3545 !important; }
+        .inventory-stock-card-value.stock-level-critical { color: #FF9800 !important; }
+        .inventory-stock-card-value.stock-level-low { color: #d4af37 !important; }
+        .inventory-stock-card-value.stock-level-ok { color: #28a745 !important; }
+        .inventory-stock-summary-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+        @media (max-width: 480px) {
+            .inventory-stock-summary-grid { grid-template-columns: 1fr 1fr; }
         }
         #addProductModal .pi-btn-primary:hover {
             background: #B8860B;
             color: #1a1a1a;
         }
-        /* Create product modal — compact + mobile */
+        /* Build planned product modal — horizontal layout (reduce scroll) */
         #addProductModal.pi-create-product-modal .modal-content {
-            max-width: min(720px, calc(100vw - 24px));
+            max-width: min(980px, calc(100vw - 24px));
             padding: 14px 16px;
             margin: 12px auto;
         }
-        #addProductModal .pi-create-form .pi-create-top {
+        #addProductModal .pi-build-layout {
             display: grid;
-            grid-template-columns: 1fr 140px 1fr;
+            grid-template-columns: minmax(360px, 1fr) minmax(360px, 1fr);
             gap: 10px 12px;
             align-items: start;
         }
+        #addProductModal .pi-build-layout .pi-build-col { min-width: 0; }
+        #addProductModal .pi-build-layout .pi-section { margin-top: 0; }
+        #addProductModal .pi-plan-col-group-title {
+            margin: 0 0 8px;
+            text-align: left;
+            font-size: 0.95em;
+            font-weight: 700;
+            color: #334155;
+        }
+        #addProductModal .pi-build-col-left,
+        #addProductModal .pi-build-col-right {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px;
+        }
+        #addProductModal .pi-build-modal-hint {
+            font-size: 0.82em;
+            color: #64748b;
+            margin: 0 0 10px;
+        }
+        #addProductModal .req { color: #dc3545; }
+        #addProductModal .pi-create-form .pi-create-top {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 10px;
+            align-items: start;
+        }
+        #addProductModal .pi-create-form .pi-create-top .pi-create-name {
+            grid-column: 1 / -1;
+        }
         #addProductModal .pi-create-form .pi-create-top .form-group { margin-bottom: 0; }
+        #addProductModal .pi-create-cat-desc {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+            align-items: start;
+            margin: 8px 0 6px;
+        }
+        #addProductModal .pi-create-cat-desc .form-group { margin-bottom: 0; }
+        #addProductModal .pi-create-cat-desc textarea {
+            min-height: 38px;
+            resize: vertical;
+        }
+        #addProductModal .pi-section-tight {
+            margin-top: 6px;
+            padding: 8px 10px;
+        }
+        #addProductModal .pi-section-tight h4 { margin: 0 0 4px; font-size: 0.95em; }
+        #addProductModal .pi-section-note { margin: 0 0 4px; font-size: 0.78em; color: #666; }
+        #addProductModal .pi-var-total { font-size: 0.82em; margin: 0 0 6px; color: #007bff; font-weight: 600; }
+        #addProductModal .pi-add-var-btn { margin-top: 4px; }
+        #addProductModal .pi-build-recipe .pi-build-bom-row {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 8px 10px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        #addProductModal .pi-build-recipe .pi-build-bom-row label {
+            margin: 0;
+            font-weight: 600;
+            font-size: 0.88em;
+            white-space: nowrap;
+        }
+        #addProductModal .pi-raw-materials-head {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 4px;
+        }
+        #addProductModal .pi-raw-materials-head h4 { margin: 0; font-size: 0.95em; }
+        #addProductModal .pi-raw-materials-sub { font-size: 0.75em; color: #666; }
+        #addProductModal .pi-recipe-status { font-size: 0.78em; margin-bottom: 6px; color: #666; }
+        #addProductModal .pi-materials-summary {
+            margin-top: 6px;
+            padding: 6px 8px;
+            font-size: 0.8em;
+            background: #fff;
+            border-radius: 4px;
+        }
+        #addProductModal .pi-materials-summary strong { font-size: 0.9em; }
         #addProductModal #createProductPrice,
-        #addProductModal #createProductCostPrice { text-align: right; }
+        #addProductModal #createProductCostPrice { text-align: left; }
         #addProductModal .pi-create-form textarea { min-height: 56px; }
         #addProductModal .pi-section { margin-top: 8px; padding: 10px; }
         #addProductModal .pi-section h4 { margin-bottom: 4px; }
@@ -1081,22 +1378,92 @@
         #addProductModal #createBomBundleSelect { max-width: none; margin-bottom: 8px; padding: 6px 8px; }
         #addProductModal .materials-section { padding: 8px; }
         #addProductModal #createInventoryMaterialsSummary { margin-top: 6px; padding: 6px; font-size: 0.82em; }
+        #addProductModal #createInventoryMaterialsContainer .material-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 72px 30px;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        #addProductModal #createInventoryMaterialsContainer .material-select {
+            width: 100%;
+            min-width: 0;
+            flex: unset;
+            padding: 6px 8px;
+            font-size: 0.82em;
+            line-height: 1.35;
+            white-space: normal;
+            word-wrap: break-word;
+            height: auto;
+            min-height: 34px;
+        }
+        #addProductModal #createInventoryMaterialsContainer .material-select option {
+            white-space: normal;
+            padding: 4px 6px;
+        }
+        #addProductModal #createInventoryMaterialsContainer .material-quantity {
+            width: 100%;
+            flex: unset;
+            padding: 6px;
+            font-size: 0.88em;
+            box-sizing: border-box;
+        }
+        #addProductModal #createInventoryMaterialsContainer .remove-material-btn {
+            width: 30px;
+            height: 30px;
+            padding: 0;
+            flex-shrink: 0;
+            font-size: 1.15em;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
         #addProductModal .pi-variation-row {
             display: grid;
-            grid-template-columns: 1fr 1fr 72px;
+            grid-template-columns: 1fr 88px;
             gap: 8px;
             margin-bottom: 10px;
             padding: 10px;
             border: 1px solid #e9ecef;
             border-radius: 6px;
             background: #fff;
+            position: relative;
+            padding-top: 34px;
         }
         #addProductModal .pi-variation-row .pi-var-full { grid-column: 1 / -1; }
         #addProductModal .pi-variation-row .pi-var-media {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 8px;
             grid-column: 1 / -1;
+        }
+        .pi-create-product-modal .pi-var-dims-inline {
+            display: grid;
+            grid-template-columns: 28px 1fr 28px 1fr 28px 1fr;
+            gap: 2px 6px;
+            align-items: center;
+            grid-column: 1 / -1;
+            margin: 2px 0 4px;
+        }
+        .pi-create-product-modal .pi-var-dims-inline label {
+            font-size: 0.72em;
+            font-weight: 600;
+            color: #64748b;
+            margin: 0;
+        }
+        .pi-create-product-modal .pi-var-dims-inline input {
+            padding: 4px 6px;
+            font-size: 0.85em;
+            min-width: 0;
+        }
+        .pi-create-product-modal .pi-var-planned-preview {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+            font-size: 0.82em;
+            color: #64748b;
         }
         #addProductModal .pi-variation-row label {
             display: block;
@@ -1116,9 +1483,10 @@
             box-sizing: border-box;
         }
         #addProductModal .pi-variation-remove {
-            grid-column: 1 / -1;
-            display: flex;
-            justify-content: flex-end;
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            margin: 0;
         }
         #addProductModal .pi-variation-remove button {
             background: #dc3545;
@@ -1130,6 +1498,28 @@
             cursor: pointer;
             font-size: 1.1em;
             line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+
+        /* Build modal: Add Variation button matches yellow theme */
+        #addProductModal #addCreateProductVariationBtn {
+            background: #FFC107;
+            color: #333;
+            border: 1px solid #e0ac06;
+            font-weight: 600;
+        }
+        #addProductModal #addCreateProductVariationBtn:hover {
+            background: #e0ac06;
+            color: #333;
+        }
+        #addProductModal #addCreateInventoryMaterialBtn {
+            color: #000;
+        }
+        #addProductModal #addCreateInventoryMaterialBtn:hover {
+            color: #000;
         }
         @media (max-width: 640px) {
             #addProductModal.pi-create-product-modal .modal-content {
@@ -1138,7 +1528,14 @@
                 margin: 8px auto;
                 max-height: 92vh;
             }
+            #addProductModal .pi-build-layout { grid-template-columns: 1fr; }
             #addProductModal .pi-create-form .pi-create-top {
+                grid-template-columns: 1fr;
+            }
+            #addProductModal .pi-create-cat-desc {
+                grid-template-columns: 1fr;
+            }
+            #addProductModal .pi-build-recipe .pi-build-bom-row {
                 grid-template-columns: 1fr;
             }
             #addProductModal .pi-variation-row {
@@ -1205,7 +1602,7 @@
             height: auto !important;
             overflow: visible !important;
         }
-        /* BOM modal — compact, wrapping selects */
+        /* BOM modal â€” compact, wrapping selects */
         #bomBundleModal.bom-modal { display: none; }
         #bomBundleModal.bom-modal[style*="display: block"] { display: block !important; }
         .bom-modal { z-index: 1100; }
@@ -1306,6 +1703,14 @@
         #variationsTable .variations-table-status-cell.is-error {
             color: #c82333;
         }
+        .page-inventory .products-list-hint { font-size: 0.85em; color: #666; margin: 0 0 10px; }
+        .product-workflow-steps {
+            display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 1rem; padding: 12px 14px;
+            background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.88em;
+        }
+        .product-workflow-steps span { color: #64748b; }
+        .product-workflow-steps strong { color: #0f172a; }
+        .product-workflow-steps .step-active { color: #4f46e5; font-weight: 600; }
 
         .variations-btn {
             background-color: #6f42c1;
@@ -1334,15 +1739,25 @@
         }
         .variations-container {
             max-height: 600px;
+            overflow-x: auto;
             overflow-y: auto;
+        }
+        body.pi-actions-menu-active .variations-container,
+        body.pi-actions-menu-active .variations-table-container {
+            overflow: visible !important;
         }
         .variations-table-container table {
             font-size: 0.9em;
         }
         .variations-table-container td,
         .variations-table-container th {
-            padding: 8px;
+            padding: 8px 10px;
+            border: 1px solid #dee2e6;
             vertical-align: middle;
+        }
+        .variations-table-container thead th {
+            background: #e9ecef;
+            font-weight: 600;
         }
 
         .modal-notification {
@@ -1384,13 +1799,46 @@
             font-weight: 500;
             margin: 15px 0;
         }
+        /* Unified action/button color system (match edit button) */
+        .pi-btn.pi-btn-primary {
+            background: #FFC107 !important;
+            color: #333 !important;
+            border: 1px solid #e0ac06 !important;
+            font-weight: 600 !important;
+        }
+        .pi-btn.pi-btn-primary:hover {
+            background: #e0ac06 !important;
+            color: #333 !important;
+        }
+        .inventory-product-details-btn.pi-icon-details-btn,
+        .inventory-variation-details-btn.pi-icon-details-btn,
+        .product-storefront-btn.pi-icon-storefront-btn.is-visible,
+        .variation-storefront-btn.pi-icon-storefront-btn.is-visible,
+        .add-inventory-discount-btn {
+            background: #FFC107 !important;
+            color: #333 !important;
+            border: 1px solid #e0ac06 !important;
+            font-weight: 600 !important;
+        }
+        .inventory-product-details-btn.pi-icon-details-btn:hover,
+        .inventory-variation-details-btn.pi-icon-details-btn:hover,
+        .product-storefront-btn.pi-icon-storefront-btn.is-visible:hover,
+        .variation-storefront-btn.pi-icon-storefront-btn.is-visible:hover,
+        .add-inventory-discount-btn:hover {
+            background: #e0ac06 !important;
+            color: #333 !important;
+        }
+        .inventory-product-details-btn.pi-icon-details-btn svg,
+        .inventory-variation-details-btn.pi-icon-details-btn svg {
+            stroke: #111 !important;
+        }
     </style>
 </head>
 <body class="page-inventory">
     <!-- Custom Success/Error Popup -->
     <div id="customPopup" class="custom-popup">
         <div class="custom-popup-content">
-            <span class="custom-popup-icon">✓</span>
+            <span class="custom-popup-icon">âœ“</span>
             <span class="custom-popup-message"></span>
         </div>
     </div>
@@ -1403,12 +1851,20 @@
         <div class="main-content">
             <div class="header">
                 <h2>Inventory Management</h2>
+                <p class="products-list-hint">Step 2: build products from your listing — raw materials bundles, raw materials, <strong>dimensions</strong>, variations, and stock. Then publish on the <a href="/Employee/InventoryManager/Storefront">Storefront</a>.</p>
+                <div class="product-workflow-steps" role="list">
+                    <span><strong>1. Products Listing</strong> — plan</span>
+                    <span>&rarr;</span>
+                    <span><strong class="step-active">2. Inventory</strong> — build &amp; stock</span>
+                    <span>&rarr;</span>
+                    <span><strong>3. Storefront</strong> — customer-facing</span>
+                </div>
             </div>
 
             <div class="tab-navigation" role="tablist">
                 <button type="button" class="tab-button<%= (typeof activeTab !== 'undefined' && (activeTab === 'ProductInventory' || activeTab === 'products')) || (typeof activeTab === 'undefined') ? ' active' : '' %>" data-tab="ProductInventory" id="tabBtnProductInventory">Product Inventory</button>
                 <button type="button" class="tab-button<%= typeof activeTab !== 'undefined' && activeTab === 'raw-materials' ? ' active' : '' %>" data-tab="raw-materials" id="tabBtnRawMaterials">Raw Materials</button>
-                <button type="button" class="tab-button<%= typeof activeTab !== 'undefined' && activeTab === 'bom-bundles' ? ' active' : '' %>" data-tab="bom-bundles" id="tabBtnBomBundles">BOM Bundles</button>
+                <button type="button" class="tab-button<%= typeof activeTab !== 'undefined' && (activeTab === 'rawmaterials-bundles' || activeTab === 'bom-bundles') ? ' active' : '' %>" data-tab="rawmaterials-bundles" id="tabBtnBomBundles">Raw Materials Bundles</button>
                 <button type="button" class="tab-button<%= typeof activeTab !== 'undefined' && activeTab === 'stock-movement' ? ' active' : '' %>" data-tab="stock-movement" id="tabBtnStockMovement">Stock Movement</button>
             </div>
 
@@ -1417,6 +1873,9 @@
                 <% 
                     // Use allInventoryProducts directly from InventoryProducts table
                     // All products now have inventory data stored directly in InventoryProducts
+                    const fmtDate = typeof formatInventoryDate === 'function'
+                        ? formatInventoryDate
+                        : function(v) { return v ? String(v) : 'N/A'; };
                     const allProductsList = typeof allInventoryProducts !== 'undefined' && allInventoryProducts.length > 0 
                         ? allInventoryProducts.map(product => ({
                             InventoryProductID: product.InventoryProductID,
@@ -1427,7 +1886,10 @@
                             InventoryProductCostPrice: product.InventoryProductCostPrice,
                             InventoryItemCostTotal: product.InventoryItemCostTotal || 0,
                             InventoryProductImageURL: product.InventoryProductImageURL,
-                            LastDateAdded: product.DateAdded,
+                            InventoryProductSKU: product.InventoryProductSKU || '',
+                            Dimensions: product.Dimensions || null,
+                            LastDateAdded: product.LastDateAdded || product.DateAdded,
+                            LastDateAddedLabel: fmtDate(product.LastDateAdded || product.DateAdded, 'N/A'),
                             TotalQuantity: product.TotalQuantity || 0,
                             AvailableQuantity: product.AvailableQuantity || 0,
                             DamagedQuantity: product.DamagedQuantity || 0,
@@ -1435,10 +1897,33 @@
                             RepairedQuantity: product.RepairedQuantity || 0,
                             DisposedQuantity: product.DisposedQuantity || 0,
                             InventoryStatus: product.InventoryStatus || 'no_stock',
+                            ListingStage: product.ListingStage || 'built',
                             Notes: product.Notes || '',
                             hasInventory: (product.TotalQuantity || 0) > 0
                         }))
                         : [];
+                    const buildFromInventoryProductId = typeof buildFromQuery !== 'undefined' ? buildFromQuery : '';
+                    function formatListDate(val) {
+                        return fmtDate(val, 'N/A');
+                    }
+                    function formatDimensionsCompact(val) {
+                        if (!val) return '—';
+                        try {
+                            const d = typeof val === 'string' ? JSON.parse(val) : val;
+                            const fmt = function(v) {
+                                if (v == null || v === '') return null;
+                                const n = Number(v);
+                                return isNaN(n) ? String(v) : (Number.isInteger(n) ? String(n) : n.toFixed(1));
+                            };
+                            const l = fmt(d.length);
+                            const w = fmt(d.width);
+                            const h = fmt(d.height);
+                            if (l == null && w == null && h == null) return '—';
+                            return (l != null ? l : '—') + '×' + (w != null ? w : '—') + '×' + (h != null ? h : '—');
+                        } catch (e) {
+                            return '—';
+                        }
+                    }
                     const invPag = typeof pagination !== 'undefined' ? pagination : { page: 1, limit: 25, totalCount: 0, totalPages: 1 };
                     const invFilters = typeof listFilters !== 'undefined' ? listFilters : { search: '', category: '' };
                     const invCategories = typeof categories !== 'undefined' ? categories : [];
@@ -1446,8 +1931,8 @@
                         const parts = [];
                         if (typeof activeTab !== 'undefined' && activeTab === 'raw-materials') {
                             parts.push('tab=raw-materials');
-                        } else if (typeof activeTab !== 'undefined' && activeTab === 'bom-bundles') {
-                            parts.push('tab=bom-bundles');
+                        } else if (typeof activeTab !== 'undefined' && (activeTab === 'rawmaterials-bundles' || activeTab === 'bom-bundles')) {
+                            parts.push('tab=rawmaterials-bundles');
                         } else if (typeof activeTab !== 'undefined' && activeTab === 'stock-movement') {
                             parts.push('tab=stock-movement');
                         } else {
@@ -1492,14 +1977,14 @@
                             </select>
                         </div>
                         <div class="inventory-filter-actions">
-                            <button type="submit" class="pi-btn pi-btn-primary inventory-filter-apply-btn">Apply</button>
+                            <button type="submit" class="pi-btn pi-btn-primary inventory-filter-apply-btn">Apply Filter</button>
                             <% if (invFilters.search || invFilters.category) { %>
                             <a href="/Employee/InventoryManager/ProductInventory?tab=ProductInventory" class="pi-btn pi-btn-secondary">Clear</a>
                             <% } %>
                         </div>
                     </form>
                     <% if (invPag.totalCount > 0) { %>
-                    <p class="inventory-list-summary">Showing <%= invRangeStart %>–<%= invRangeEnd %> of <%= invPag.totalCount %> products</p>
+                    <p class="inventory-list-summary">Showing <%= invRangeStart %>&ndash;<%= invRangeEnd %> of <%= invPag.totalCount %> products</p>
                     <% } %>
                 </div>
 
@@ -1513,181 +1998,42 @@
                     <div class="success-message<%= hideRawMaterialFlashOnProducts ? ' success-message--raw-material' : '' %>"><%= success %></div>
                 <% } %>
 
-                <% if (allProductsList && allProductsList.length > 0) { %>
-                    <div class="stock-legend">
-                        <span><i style="background:#DC3545;"></i> Out of stock (0)</span>
-                        <span><i style="background:#FF9800;"></i> Critical (1–10)</span>
-                        <span><i style="background:#d4af37;"></i> Low (11–20)</span>
-                    </div>
-                    <table class="inventory-listing-table">
-                        <thead>
-                            <tr>
-                                <th>Product Name</th>
-                                <th>Category</th>
-                                <th class="qty-col" title="Sum of quantity across all product variations">Total Qty</th>
-                                <th class="qty-col return-qty-th return-qty-th-returned">Returned</th>
-                                <th class="qty-col return-qty-th return-qty-th-damaged">Damaged</th>
-                                <th class="qty-col return-qty-th return-qty-th-repaired">Repaired</th>
-                                <th>Last Added</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <% allProductsList.forEach(item => { 
-                                const productName = item.InventoryProductName || 'N/A';
-                                const productCategory = item.InventoryProductCategory || 'N/A';
-                                const productImageRaw = item.InventoryProductImageURL || null;
-                                const productImageNormalized = productImageRaw ? String(productImageRaw).trim().replace(/\\/g, '/') : '';
-                                const ensureLeadingSlash = (value) => {
-                                    const v = String(value || '').trim();
-                                    if (!v) return '';
-                                    if (v.startsWith('http://') || v.startsWith('https://') || v.startsWith('data:')) return v;
-                                    return v.startsWith('/') ? v : `/${v}`;
-                                };
-                                const looksLikeFilename = (value) => /\.(png|jpe?g|gif|webp|svg)$/i.test(String(value || ''));
+                <%- include('partials/create-inventory-product-modal', {
+                    categories: invCategories,
+                    bomBundles: typeof bomBundles !== 'undefined' ? bomBundles : [],
+                    buildFromInventoryProductId: buildFromInventoryProductId
+                }) %>
 
-                                // If DB stores only a filename (no path), assume uploads path.
-                                const normalizedForFilenameCheck = productImageNormalized.replace(/^\/+/, '');
-                                let productImage = ensureLeadingSlash(productImageNormalized);
-                                if (normalizedForFilenameCheck && looksLikeFilename(normalizedForFilenameCheck) && !normalizedForFilenameCheck.includes('/')) {
-                                    productImage = `/uploads/Inventory/Main/Product Parent/${normalizedForFilenameCheck}`;
-                                }
-
-                                const invImagePrefixes = [
-                                    'Inventory/Main/Product Parent',
-                                    'Inventory/thumbnails/Product Parent',
-                                    'products/inventory',
-                                    'products/images',
-                                    'products'
-                                ];
-                                const imgFilename = productImage ? productImage.split('/').pop() : '';
-                                let productImagePrimary = productImage || '';
-                                let productImageFallback = '';
-                                let productImageFallback2 = '';
-                                if (imgFilename) {
-                                    const candidates = [productImage];
-                                    invImagePrefixes.forEach((prefix) => {
-                                        const c = `/uploads/${prefix}/${imgFilename}`;
-                                        if (candidates.indexOf(c) === -1) candidates.push(c);
-                                    });
-                                    productImagePrimary = candidates[0] || '';
-                                    productImageFallback = candidates[1] || '';
-                                    productImageFallback2 = candidates[2] || '';
-                                }
-                                const availableQty = item.AvailableQuantity || 0;
-                                const totalQty = item.TotalQuantity || 0;
-                                const damagedQty = item.DamagedQuantity || 0;
-                                const returnedQty = item.ReturnedQuantity || 0;
-                                const repairedQty = item.RepairedQuantity || 0;
-                                const disposedQty = item.DisposedQuantity || 0;
-                                const productId = item.InventoryProductID;
-                                const hasInventory = item.hasInventory !== false;
-                            %>
-                                <tr data-inventory-product-id="<%= productId %>" data-product-name="<%= productName.replace(/"/g, '&quot;') %>">
-                                    <td class="pi-product-name-col">
-                                        <div class="pi-name-with-image-cell">
-                                            <% if (productImagePrimary) {
-                                                const encodeInvImgPath = (p) => String(p || '').split('/').map((seg, i) => {
-                                                    if (!seg || i === 0) return seg;
-                                                    try { return encodeURIComponent(decodeURIComponent(seg)); } catch (e) { return encodeURIComponent(seg); }
-                                                }).join('/');
-                                                const imgSrc = encodeInvImgPath(productImagePrimary);
-                                                const imgFb1 = encodeInvImgPath(productImageFallback);
-                                                const imgFb2 = encodeInvImgPath(productImageFallback2);
-                                            %>
-                                                <img
-                                                    src="<%= imgSrc %>"
-                                                    alt="Product Image"
-                                                    class="image-preview"
-                                                    data-fallback-src="<%= imgFb1 %>"
-                                                    data-fallback-src2="<%= imgFb2 %>"
-                                                    onerror="if(this.dataset.fallbackSrc && this.src.indexOf(this.dataset.fallbackSrc) === -1){this.src=this.dataset.fallbackSrc;}else if(this.dataset.fallbackSrc2 && this.src.indexOf(this.dataset.fallbackSrc2) === -1){this.src=this.dataset.fallbackSrc2;}else{this.onerror=null;this.src='/images/placeholder-no-image.svg';}"
-                                                >
-                                            <% } else { %>
-                                                <span class="pi-name-image-placeholder">—</span>
-                                            <% } %>
-                                            <div class="pi-name-with-image-label">
-                                                <button type="button" class="toggle-variations-btn" data-inventory-product-id="<%= productId %>" style="background: none; border: none; cursor: pointer; padding: 4px; color: #666;" title="Show variations">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="toggle-icon">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                                                    </svg>
-                                                </button>
-                                                <strong><%= productName %></strong>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td><%= productCategory %></td>
-                                    <td class="qty-col"><span class="stock-qty <%= stockQtyClass(totalQty) %>"><%= totalQty %></span></td>
-                                    <td class="qty-col return-qty-col-returned"><span class="return-qty return-qty-returned<%= returnedQty > 0 ? ' has-stock' : '' %>"><%= returnedQty %></span></td>
-                                    <td class="qty-col return-qty-col-damaged"><span class="return-qty return-qty-damaged<%= damagedQty > 0 ? ' has-stock' : '' %>"><%= damagedQty %></span></td>
-                                    <td class="qty-col return-qty-col-repaired"><span class="return-qty return-qty-repaired<%= repairedQty > 0 ? ' has-stock' : '' %>"><%= repairedQty %></span></td>
-                                    <td><%= item.LastDateAdded ? new Date(item.LastDateAdded).toLocaleDateString() : 'N/A' %></td>
-                                    <td class="pi-actions-col">
-                                        <div class="pi-actions-cell">
-                                            <% if (!hasInventory) { %>
-                                                <span style="color: #999; font-size: 0.85em;">No inventory yet</span>
-                                            <% } %>
-                                            <button type="button" class="edit-inventory-product-quick-btn pi-icon-edit-btn" data-product-id="<%= productId %>" title="Edit product" aria-label="Edit product">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                                            </button>
-                                            <button type="button" class="delete-inventory-btn pi-icon-archive-btn"
-                                                data-product-id="<%= (item.ProductID || item.InventoryProductID) %>"
-                                                data-product-name="<%= productName.replace(/'/g, "\\'").replace(/"/g, "&quot;") %>"
-                                                data-is-from-products="<%= item.ProductID ? 'true' : 'false' %>"
-                                                title="Archive Product"
-                                                aria-label="Archive Product">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr class="variations-row" data-inventory-product-id="<%= productId %>" style="display: none;">
-                                    <td colspan="8">
-                                        <div class="variations-container" data-inventory-product-id="<%= productId %>" data-show-return-columns="1" data-show-storefront="0" data-show-variation-actions="1">
-                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
-                                                <h4 style="margin: 0; color: #333;">Product Variations</h4>
-                                                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                                                    <button type="button" class="refresh-variations-btn" data-inventory-product-id="<%= productId %>" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9em;">Refresh</button>
-                                                </div>
-                                            </div>
-                                            <div class="variations-loading" style="text-align: center; padding: 20px; color: #666;">
-                                                <p>Expand to load variations, or click Refresh.</p>
-                                            </div>
-                                            <div class="variations-table-container" style="display: none;">
-                                                <table class="variations-nested-table inventory-listing-table">
-                                                    <thead>
-                                                        <tr>
-                                                            <th data-var-col="name" class="var-col-name">Variation</th>
-                                                            <th data-var-col="sku" class="var-col-sku">SKU</th>
-                                                            <th data-var-col="color" class="var-col-color">Color</th>
-                                                            <th data-var-col="qty" class="var-col-qty qty-col">Qty</th>
-                                                            <th data-var-col="returned" class="var-col-qty return-qty-th return-qty-th-returned">Returned</th>
-                                                            <th data-var-col="damaged" class="var-col-qty return-qty-th return-qty-th-damaged">Damaged</th>
-                                                            <th data-var-col="repaired" class="var-col-qty return-qty-th return-qty-th-repaired">Repaired</th>
-                                                            <th data-var-col="actions" class="var-col-action">Actions</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody class="variations-table-body"></tbody>
-                                                </table>
-                                            </div>
-                                            <div class="variations-empty" style="display: none; text-align: center; padding: 20px; color: #999;">
-                                                <p>No variations found. Use <strong>Add Variation</strong> to create one.</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                            <% }); %>
-                        </tbody>
-                    </table>
-                <% } else { %>
-                    <p class="inventory-list-empty">
-                        <% if (invFilters.search || invFilters.category) { %>
-                            No products match your filters.
-                        <% } else { %>
-                            No inventory items found. Add your first inventory item to get started.
-                        <% } %>
-                    </p>
-                <% } %>
+                <%- include('partials/product-listing-expandable', {
+                    allProductsList: allProductsList,
+                    invFilters: invFilters,
+                    stockQtyClass: stockQtyClass,
+                    formatListDate: formatListDate,
+                    showReturnColumns: false,
+                    showVariationReturnColumns: true,
+                    showParentQty: false,
+                    parentQtyField: 'total',
+                    showActions: true,
+                    showVariationActions: true,
+                    showStorefront: false,
+                    showDiscount: false,
+                    showListingStage: false,
+                    listingBuildUrlPrefix: '/Employee/InventoryManager/ProductInventory?tab=ProductInventory&buildFrom=',
+                    actionStyle: 'inventory',
+                    showParentPriceColumns: false,
+                    showParentDimensions: false,
+                    showParentDualQty: true,
+                    parentAvailableQtyLabel: 'Available',
+                    showVariationDimensions: false,
+                    showVariationQtyTotalColumn: true,
+                    variationQtyTotalLabel: 'Total Stock',
+                    showVariationSalePrice: false,
+                    formatDimensionsCompact: formatDimensionsCompact,
+                    qtyParentLabel: 'Total Qty',
+                    showSkuColumn: false,
+                    variationQtyLabel: 'Available Stock',
+                    showStockLegend: false
+                }) %>
 
                 <% if (invPag.totalPages > 1) { %>
                     <nav class="inventory-pagination" aria-label="Product inventory pages">
@@ -1713,33 +2059,23 @@
             </div>
             </div>
 
-            <%- include('../Admin/partials/raw-materials-tab', { materials: typeof materials !== 'undefined' ? materials : [], units: typeof units !== 'undefined' ? units : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
-            <%- include('../Admin/partials/bom-bundles-tab', { bomBundles: typeof bomBundles !== 'undefined' ? bomBundles : [], materials: typeof materials !== 'undefined' ? materials : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
-            <%- include('../Admin/partials/stock-movement-tab', { activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
+            <%- include('partials/raw-materials-tab', { materials: typeof materials !== 'undefined' ? materials : [], units: typeof units !== 'undefined' ? units : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
+            <%- include('partials/bom-bundles-tab', { bomBundles: typeof bomBundles !== 'undefined' ? bomBundles : [], materials: typeof materials !== 'undefined' ? materials : [], activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
+            <%- include('partials/stock-movement-tab', { activeTab: typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory' }) %>
 
         </div>
-        <script>
-        (function () {
-            var tab = <%- JSON.stringify(typeof activeTab !== 'undefined' ? activeTab : 'ProductInventory') %>;
-            if (tab === 'products') tab = 'ProductInventory';
-            var panels = { ProductInventory: 'productsTab', products: 'productsTab', 'raw-materials': 'rawMaterialsTab', 'bom-bundles': 'bomBundlesTab', 'stock-movement': 'stockMovementTab' };
-            var activeId = panels[tab] || 'productsTab';
-            ['productsTab', 'rawMaterialsTab', 'bomBundlesTab', 'stockMovementTab'].forEach(function (id) {
-                var el = document.getElementById(id);
-                if (el) el.classList.toggle('active', id === activeId);
-            });
-            document.querySelectorAll('.tab-navigation .tab-button').forEach(function (btn) {
-                btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
-            });
-        })();
-        </script>
-
-    <%- include('../Admin/partials/bom-bundle-modal') %>
+    <%- include('partials/bom-bundle-modal') %>
     </div>
 
-    <%- include('../Admin/partials/edit-inventory-product-quick-modal') %>
-    <%- include('../Admin/partials/edit-variation-status-modal') %>
-    <%- include('../Admin/partials/repair-variation-modal') %>
+    <script>
+        window.__adminProductCategories = <%- JSON.stringify(typeof categories !== 'undefined' ? categories : []) %>;
+    </script>
+    <%- include('partials/edit-inventory-product-modal') %>
+    <%- include('partials/edit-inventory-product-quick-modal') %>
+    <%- include('partials/edit-variation-status-modal') %>
+    <%- include('partials/inventory-details-modal') %>
+    <%- include('partials/admin-variations-modal') %>
+    <%- include('partials/repair-variation-modal') %>
 
     <!-- Restock Variation Modal -->
     <div id="variationRestockModal" class="modal pi-modal-compact">
@@ -1780,6 +2116,8 @@
         </div>
     </div>
 
+    <%- include('partials/archive-confirmation-modal') %>
+
     <!-- Restock Confirmation Modal -->
     <div id="restockConfirmModal" class="inventory-confirmation-modal">
         <div class="inventory-confirmation-content">
@@ -1793,11 +2131,25 @@
         </div>
     </div>
 
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260527c" defer></script>
-    <script src="/js/Employee/Admin/product-inventory-tabs.js?v=20260527a" defer></script>
-    <script src="/js/Employee/Admin/stock-movement-tab.js?v=20260529a" defer></script>
-    <script src="/js/Employee/Admin/raw-materials-tab.js?v=20260525c"></script>
-    <script src="/js/Employee/Admin/bom-bundles-tab.js?v=20260525c" defer></script>
+    <!-- Adjust Stock Confirmation Modal -->
+    <div id="adjustStockConfirmModal" class="inventory-confirmation-modal">
+        <div class="inventory-confirmation-content">
+            <h3>Confirm Stock Adjustment</h3>
+            <p id="adjustStockConfirmText" style="text-align:center;margin:12px 0 8px;font-size:1.05em;font-weight:600;color:#333;"></p>
+            <p style="text-align:center;margin:0 0 16px;color:#64748b;font-size:0.9em;">This is a manual correction and does not deduct raw materials.</p>
+            <div class="inventory-confirmation-buttons">
+                <button type="button" class="inventory-cancel-btn" id="cancelAdjustStockConfirm">Cancel</button>
+                <button type="button" class="inventory-confirm-btn" id="confirmAdjustStockConfirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/Employee/InventoryManager/admin-modals.js?v=20260541" defer></script>
+    <script src="/js/Employee/InventoryManager/product-inventory.js?v=20260577" defer></script>
+    <script src="/js/Employee/InventoryManager/product-inventory-tabs.js?v=20260541" defer></script>
+    <script src="/js/Employee/InventoryManager/stock-movement-tab.js?v=20260578" defer></script>
+    <script src="/js/Employee/InventoryManager/raw-materials-tab.js?v=20260573" defer></script>
+    <script src="/js/Employee/InventoryManager/bom-bundles-tab.js?v=20260570" defer></script>
 
     <% if (locals.error && locals.error.length > 0) { %>
     <script>

@@ -1,13 +1,27 @@
 #!/usr/bin/env node
 'use strict';
 
-const { runFullSync, ROLES } = require('../utils/employeeRoleViewSync');
+const { execSync } = require('child_process');
+const path = require('path');
+const { runFullSync } = require('../utils/employeeRoleViewSync');
+const { runFullJsSync } = require('../utils/employeeRoleJsSync');
 
-const summary = runFullSync();
-summary.forEach((s) => {
+const viewSummary = runFullSync();
+viewSummary.forEach((s) => {
     console.log(
         `${s.role}: ${s.pages} pages, ${s.partials} partials` +
         (s.dashboard ? ', dashboard URLs fixed' : '')
     );
 });
-console.log('Done. Dashboard templates (*Manager.ejs) were not overwritten.');
+
+const jsSummary = runFullJsSync();
+jsSummary.forEach((s) => {
+    console.log(`${s.role}: ${s.files} JS files synced`);
+});
+
+execSync('node backend/scripts/fix-role-css-paths.js', {
+    cwd: path.join(__dirname, '..', '..'),
+    stdio: 'inherit'
+});
+
+console.log('Done. Skipped: AdminManager, AdminManageUsers (views); AdminManageUsers.js, role-manager.js (JS).');

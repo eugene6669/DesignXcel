@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Product Returns - Design Excellence</title>
     <link rel="stylesheet" href="/css/Employee/Admin/AdminIndexStyles.css">
+    <%- include('partials/pi-row-actions-assets') %>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" referrerpolicy="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -788,7 +789,12 @@
         }
         .variations-container {
             max-height: 600px;
+            overflow-x: auto;
             overflow-y: auto;
+        }
+        body.pi-actions-menu-active .variations-container,
+        body.pi-actions-menu-active .variations-table-container {
+            overflow: visible !important;
         }
         .variations-table-container table {
             font-size: 0.9em;
@@ -1076,7 +1082,7 @@
                     <% } %>
                 </div>
 
-                <%- include('../Admin/partials/product-listing-expandable', {
+                <%- include('partials/product-listing-expandable', {
                     allProductsList: allProductsList,
                     invFilters: invFilters,
                     stockQtyClass: stockQtyClass,
@@ -1114,7 +1120,7 @@
             </div>
         </div>
     </div>
-    <%- include('../Admin/partials/repair-variation-modal') %>
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260525o" defer></script>
+    <%- include('partials/repair-variation-modal') %>
+    <script src="/js/Employee/UserManager/product-inventory.js?v=20260573" defer></script>
 </body>
 </html>

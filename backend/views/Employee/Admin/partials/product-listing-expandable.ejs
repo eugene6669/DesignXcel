@@ -84,6 +84,9 @@
         : function(v) { return v ? String(v) : 'N/A'; };
     const parentQtyLabel = typeof qtyParentLabel !== 'undefined' ? qtyParentLabel : 'Qty';
     const varQtyLabel = typeof variationQtyLabel !== 'undefined' ? variationQtyLabel : 'Qty';
+    const invFiltersSafe = (typeof locals.invFilters !== 'undefined' && locals.invFilters)
+        ? locals.invFilters
+        : { search: '', category: '' };
 %>
 <% if (allProductsList && allProductsList.length > 0) { %>
     <% if (!showReturnCols && showLegend) { %>
@@ -243,7 +246,7 @@
                             ? 'background:#fff8db;color:#8a6700;'
                             : 'background:#e8f5e9;color:#1e7e34;';
             %>
-            <tr class="product-listing-row product-listing-parent-row" data-inventory-product-id="<%= productId %>" data-product-name="<%= productName.replace(/"/g, '&quot;') %>" data-product-sku="<%= (item.InventoryProductSKU || '').replace(/"/g, '&quot;') %>" data-linked-product-id="<%= linkedProductId || '' %>" data-product-price="<%= productPrice %>"<% if (showSfStockSplit) { %> data-storefront-display-qty="<%= storefrontQtyDisplay %>"<% } %>>
+            <tr class="product-listing-row product-listing-parent-row" data-inventory-product-id="<%= productId %>" data-listing-stage="<%= listingStage %>" data-product-name="<%= productName.replace(/"/g, '&quot;') %>" data-product-sku="<%= (item.InventoryProductSKU || '').replace(/"/g, '&quot;') %>" data-linked-product-id="<%= linkedProductId || '' %>" data-product-price="<%= productPrice %>"<% if (showSfStockSplit) { %> data-storefront-display-qty="<%= storefrontQtyDisplay %>"<% } %>>
                 <td class="pi-product-name-col">
                     <div class="pi-name-with-image-cell">
                         <% if (productImagePrimary) { %>
@@ -457,7 +460,7 @@
     </table>
 <% } else { %>
     <p class="inventory-list-empty">
-        <% if (invFilters.search || invFilters.category) { %>
+        <% if (invFiltersSafe.search || invFiltersSafe.category) { %>
             No products match your filters.
         <% } else if (typeof emptyListMessage !== 'undefined' && emptyListMessage) { %>
             <%= emptyListMessage %>

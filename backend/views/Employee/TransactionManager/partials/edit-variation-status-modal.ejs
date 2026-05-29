@@ -7,8 +7,8 @@
                 <input type="hidden" id="editVariationStatusVariationID" name="variationID">
                 <input type="hidden" id="editVariationStatusInventoryProductID" name="inventoryProductID">
 
-                <div class="form-group">
-                    <label for="editVariationStatusName">Variation Name:</label>
+                <div class="form-group variation-edit-name-row">
+                    <label for="editVariationStatusName">Variation Name</label>
                     <input type="text" id="editVariationStatusName" name="variationName" readonly style="background-color: #f5f5f5;">
                 </div>
 
@@ -56,10 +56,6 @@
                                 <label for="editVariationStatusSku">SKU</label>
                                 <input type="text" id="editVariationStatusSku" name="sku" placeholder="SKU">
                             </div>
-                            <div>
-                                <label for="editVariationStatusColor">Color</label>
-                                <input type="text" id="editVariationStatusColor" name="color" placeholder="e.g. Red">
-                            </div>
                         </div>
                         <div class="variation-edit-main-image-wrap" style="margin-top:10px;">
                             <div id="editVariationStatusMainImagePreview" class="pi-media-preview-main" style="margin:6px 0;"></div>
@@ -70,40 +66,52 @@
                 </div>
 
                 <div class="variation-edit-inventory-restock">
-                    <div class="form-group pi-section" id="editVariationRestockSection">
-                        <strong>Restock</strong>
-                        <p style="font-size:0.9em;color:#666;margin:6px 0 10px;">Adds available quantity; deducts raw materials per item.</p>
-                        <div style="display:flex;gap:8px;align-items:center;">
-                            <input type="number" id="editVariationRestockQty" min="1" value="1" style="width:80px;padding:8px;border:1px solid #ced4da;border-radius:4px;text-align:center;">
-                            <button type="button" id="editVariationRestockBtn" class="pi-btn pi-btn-primary pi-btn-sm">Add Stock</button>
+                    <div class="form-group pi-section" id="editVariationAdjustSection">
+                        <strong>Adjust Stock</strong>
+                        <p style="font-size:0.9em;color:#666;margin:6px 0 10px;">Deducts stock only. Does not deduct raw materials.</p>
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <input type="number" id="editVariationAdjustQty" value="1" min="1" step="1" style="width:120px;padding:8px;border:1px solid #ced4da;border-radius:4px;text-align:center;">
+                            <input type="text" id="editVariationAdjustNotes" placeholder="Reason (optional)" style="flex:1;min-width:180px;padding:8px;border:1px solid #ced4da;border-radius:4px;">
+                            <button type="button" id="editVariationAdjustBtn" class="pi-btn pi-btn-info pi-btn-sm">Deduct Stock</button>
                         </div>
                     </div>
                 </div>
 
                 <div class="variation-edit-products-catalog">
-                    <div class="form-group pi-section">
-                        <strong>Variation Media</strong>
-                        <p style="font-size:0.85em;color:#666;margin:4px 0 8px;">Main image, thumbnails, and 3D model.</p>
-                        <div id="editVariationCatalogMainImagePreview" class="pi-media-preview-main" style="margin:6px 0;"></div>
+                    <div class="form-group pi-section variation-edit-storefront-stock" style="display:none;">
+                        <h4 style="margin:0 0 8px;font-size:0.95em;">Storefront Stock</h4>
+                        <div class="form-group">
+                            <label for="editVariationStorefrontStock">Available Stock (storefront)</label>
+                            <input type="number" id="editVariationStorefrontStock" name="storefrontStockQuantity" min="0" step="1" style="max-width:120px;text-align:center;">
+                            <small style="display:block;margin-top:4px;color:#666;">Quantity customers see on the storefront.</small>
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label>Actual Stock (inventory)</label>
+                            <p id="editVariationActualStock" style="margin:4px 0 0;font-size:1.1em;font-weight:600;color:#333;">—</p>
+                            <small style="display:block;margin-top:4px;color:#666;">Sellable units in inventory (read-only).</small>
+                        </div>
+                    </div>
+                    <div class="form-group pi-section variation-edit-catalog-panel">
+                        <div class="form-group variation-edit-sale-price-row">
+                            <label for="editVariationStatusSalePrice">Sale Price (₱) <span style="color:#dc3545;">*</span></label>
+                            <input type="text" id="editVariationStatusSalePrice" name="price" inputmode="decimal" autocomplete="off" placeholder="0.00" style="max-width:160px;text-align:right;">
+                        </div>
+                        <p class="pi-media-preview-label" style="margin:8px 0 4px;">Preview</p>
+                        <div id="editVariationCatalogMainImagePreview" class="pi-media-preview-main" style="margin:0 0 8px;"></div>
                         <label for="editVariationCatalogMainImage">Variation Main Image</label>
                         <input type="file" id="editVariationCatalogMainImage" accept="image/*">
-                        <div id="editVariationStatusMediaPreview" style="margin: 8px 0;"></div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px;">
-                            <div style="grid-column: span 2;">
-                                <label for="editVariationStatusThumbnails">Thumbnails (up to 4)</label>
-                                <input type="file" id="editVariationStatusThumbnails" accept="image/*" multiple>
-                            </div>
-                            <div style="grid-column: span 2;">
-                                <label for="editVariationStatusModel3d">3D Model (GLB/GLTF)</label>
-                                <input type="file" id="editVariationStatusModel3d" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
-                            </div>
-                        </div>
+                        <div id="editVariationStatusMediaPreview" class="variation-catalog-media-preview" style="margin:12px 0;"></div>
+                        <label for="editVariationStatusThumbnails">Thumbnails (up to 4)</label>
+                        <input type="file" id="editVariationStatusThumbnails" accept="image/*" multiple>
+                        <div id="editVariationStatusModel3dPreview" class="variation-catalog-model-preview" style="margin:12px 0 6px;"></div>
+                        <label for="editVariationStatusModel3d">3D Model (GLB/GLTF)</label>
+                        <input type="file" id="editVariationStatusModel3d" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
                     </div>
                 </div>
 
                 <div class="variation-edit-recipe-view" style="display:none;">
                     <div class="form-group pi-section">
-                        <h4>Manufacturing recipe</h4>
+                        <h4>Raw Materials</h4>
                         <div id="editVariationBomBundleDisplay" class="pi-recipe-bom-label" style="font-size:0.9em;margin-bottom:8px;color:#444;"></div>
                         <div id="editVariationRecipeReadonlyList" class="pi-recipe-materials-list" style="font-size:0.9em;color:#333;"></div>
                     </div>
@@ -112,11 +120,11 @@
                 <div class="variation-edit-raw-materials" style="display:none;">
                     <div class="form-group pi-section">
                         <h4>Raw Materials</h4>
-                        <p>Qty per item stocked or restocked.</p>
+                        <p>Qty per unit when stocked or restocked.</p>
                         <div id="editVariationRecipeStatus" style="font-size: 0.9em; margin-bottom: 10px; color: #666;"></div>
                         <div class="materials-section">
                             <div id="editVariationMaterialsContainer"></div>
-                            <button type="button" id="addEditVariationMaterialBtn" class="add-material-btn">+ Add Material</button>
+                            <button type="button" id="addEditVariationMaterialBtn" class="add-material-btn">+ Add Raw Material</button>
                             <div id="editVariationMaterialsSummary" style="margin-top: 10px; padding: 8px; background: #fff; border-radius: 4px; font-size: 0.9em;">
                                 <strong>Raw Materials:</strong>
                                 <div id="editVariationMaterialsSummaryList" style="margin-top: 4px; color: #666;"><em>None</em></div>

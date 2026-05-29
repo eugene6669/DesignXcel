@@ -19,6 +19,9 @@ import {
 } from '../../../shared/components/ui/SvgIcons';
 // LoadingSpinner and InlineLoader removed as requested
 import { getImageUrl } from '../../../shared/utils/imageUtils';
+import { canShowDeliveryTracking } from '../../../shared/utils/deliveryTracking';
+import DeliveryTrackingPanel from '../../orders/components/DeliveryTrackingPanel';
+import '../../orders/components/delivery-tracking.css';
 import './account.css';
 
 const statusBadgeClass = (status) => {
@@ -224,6 +227,12 @@ const DetailsModal = ({ open, onClose, order }) => {
               </div>
             </div>
           </div>
+          {canShowDeliveryTracking(order) && (
+            <div className="detail-section detail-section--tracking">
+              <DeliveryTrackingPanel order={order} />
+            </div>
+          )}
+
           <div className="detail-section">
             <div className="detail-section-header">
               <ArrowRightIcon size={16} color="#6b7280" />

@@ -12,7 +12,6 @@
     var expandedRawMaterials = new Set();
 
     var CHEVRON_SVG = '<svg class="stock-movement-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>';
-    var ARCHIVE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>';
 
     function escapeHtml(text) {
         if (text == null) return '';
@@ -134,7 +133,7 @@
             return '<p class="stock-mv-no-movements">No movements for this group.</p>';
         }
         var html = '<table class="stock-mv-nested-table"><thead><tr>' +
-            '<th>Date</th><th>Movement</th><th>From</th><th>To</th><th class="qty-col">Qty</th><th>Notes</th><th></th>' +
+            '<th>Date</th><th>Movement</th><th>From</th><th>To</th><th class="qty-col">Qty</th><th>Notes</th>' +
             '</tr></thead><tbody>';
         movements.forEach(function (mv) {
             var badgeClass = movementTypeBadgeClass(mv.movementType);
@@ -145,9 +144,6 @@
                 '<td>' + escapeHtml(formatStatusLabel(mv.toStatus)) + '</td>' +
                 '<td class="qty-col"><span class="stock-qty">' + (mv.quantity || 0) + '</span></td>' +
                 '<td class="stock-mv-notes-cell">' + escapeHtml(mv.notes || '—') + '</td>' +
-                '<td class="stock-mv-action-col"><button type="button" class="stock-mv-archive-btn" data-movement-id="' +
-                escapeHtml(String(mv.movementId || '')) + '" title="Archive movement" aria-label="Archive movement">' +
-                ARCHIVE_SVG + '</button></td>' +
                 '</tr>';
         });
         html += '</tbody></table>';
@@ -203,7 +199,6 @@
                 toggleRawMaterial(mid);
             });
             mHeaderRow.appendChild(mHeader);
-            appendArchiveGroupButton(mHeaderRow, 'Archive all', 'rawMaterial', { rawMaterialId: mid });
             mBlock.appendChild(mHeaderRow);
 
             var mBody = document.createElement('div');
@@ -214,77 +209,6 @@
 
             el.rawList.appendChild(mBlock);
         });
-    }
-
-    function appendArchiveGroupButton(headerRow, label, scope, ids) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'stock-mv-archive-btn';
-        btn.innerHTML = ARCHIVE_SVG;
-        btn.title = label || 'Archive all';
-        btn.setAttribute('aria-label', label || 'Archive all');
-        btn.setAttribute('data-archive-scope', scope);
-        if (ids.inventoryProductId != null) {
-            btn.setAttribute('data-inventory-product-id', String(ids.inventoryProductId));
-        }
-        if (ids.rawMaterialId != null) {
-            btn.setAttribute('data-raw-material-id', String(ids.rawMaterialId));
-        }
-        btn.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-            archiveBulk(scope, ids);
-        });
-        headerRow.appendChild(btn);
-    }
-
-    async function archiveMovement(movementId) {
-        if (!movementId) return;
-        if (!window.confirm('Archive this stock movement? You can restore it from Archived.')) return;
-        try {
-            var response = await fetch('/api/admin/inventory-stock-movements/' + movementId + '/archive', {
-                method: 'POST',
-                credentials: 'include'
-            });
-            var result = await response.json();
-            if (result.success) {
-                loadStockMovements();
-            } else {
-                alert(result.message || 'Failed to archive movement.');
-            }
-        } catch (err) {
-            console.error('archive movement:', err);
-            alert('Failed to archive movement.');
-        }
-    }
-
-    async function archiveBulk(scope, ids) {
-        var msg = 'Archive all movements in this group? You can restore them from Archived.';
-        if (scope === 'allProducts') msg = 'Archive ALL product inventory movements on this page?';
-        if (scope === 'allRawMaterials') msg = 'Archive ALL raw material movements?';
-        if (!window.confirm(msg)) return;
-
-        var body = { scope: scope };
-        if (scope === 'product') body.inventoryProductId = ids.inventoryProductId;
-        if (scope === 'rawMaterial') body.rawMaterialId = ids.rawMaterialId;
-
-        try {
-            var response = await fetch('/api/admin/inventory-stock-movements/archive-bulk', {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            var result = await response.json();
-            if (result.success) {
-                loadStockMovements();
-            } else {
-                alert(result.message || 'Failed to archive movements.');
-            }
-        } catch (err) {
-            console.error('archive bulk:', err);
-            alert('Failed to archive movements.');
-        }
     }
 
     function renderGroupedList(products) {
@@ -334,7 +258,6 @@
                 toggleProduct(pid);
             });
             pHeaderRow.appendChild(pHeader);
-            appendArchiveGroupButton(pHeaderRow, 'Archive all', 'product', { inventoryProductId: pid });
             pBlock.appendChild(pHeaderRow);
 
             var pBody = document.createElement('div');
@@ -551,17 +474,6 @@
     function init() {
         readStateFromUrl();
         bindFilters();
-
-        var tabRoot = document.getElementById('stockMovementTab');
-        if (tabRoot && !tabRoot.getAttribute('data-archive-delegation')) {
-            tabRoot.setAttribute('data-archive-delegation', '1');
-            tabRoot.addEventListener('click', function (e) {
-                var archiveBtn = e.target.closest('.stock-mv-archive-btn');
-                if (!archiveBtn) return;
-                e.preventDefault();
-                archiveMovement(archiveBtn.getAttribute('data-movement-id'));
-            });
-        }
 
         document.addEventListener('rawMaterialRestocked', function () {
             if (isStockMovementTabActive()) loadStockMovements();

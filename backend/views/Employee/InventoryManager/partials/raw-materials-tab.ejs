@@ -201,7 +201,18 @@
         </div>
         <div class="pi-form-actions">
             <button type="button" id="rmCancelRestock" class="pi-btn pi-btn-secondary">Cancel</button>
-            <button type="button" id="rmConfirmRestock" class="pi-btn pi-btn-primary" style="background:#198754;color:#fff;border:none;">Restock</button>
+            <button type="button" id="rmConfirmRestock" class="pi-btn pi-btn-primary" style="background:#198754;color:#fff;border:none;">Continue</button>
+        </div>
+    </div>
+</div>
+
+<div id="rawMaterialRestockConfirmModal" class="inventory-confirmation-modal">
+    <div class="inventory-confirmation-content">
+        <h3>Confirm Restock</h3>
+        <p id="rawMaterialRestockConfirmText" style="text-align:center;margin:12px 0 16px;font-size:1.05em;font-weight:600;color:#333;"></p>
+        <div class="inventory-confirmation-buttons">
+            <button type="button" class="inventory-cancel-btn" id="rmCancelRestockConfirm">Cancel</button>
+            <button type="button" class="inventory-confirm-btn" id="rmConfirmRestockFinal">Restock</button>
         </div>
     </div>
 </div>

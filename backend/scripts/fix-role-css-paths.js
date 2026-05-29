@@ -4,7 +4,8 @@ const path = require('path');
 
 const root = path.join(__dirname, '..', 'views', 'Employee');
 const roles = ['InventoryManager', 'OrderSupport', 'TransactionManager', 'UserManager'];
-const badCss = /\/css\/Employee\/(InventoryManager|OrderSupport|TransactionManager|UserManager)\/AdminIndexStyles\.css/g;
+const rolePat = '(InventoryManager|OrderSupport|TransactionManager|UserManager)';
+const badCss = new RegExp(`/css/Employee/${rolePat}/`, 'g');
 let count = 0;
 
 function walk(dir) {
@@ -15,7 +16,7 @@ function walk(dir) {
             let s = fs.readFileSync(p, 'utf8');
             if (!badCss.test(s)) continue;
             badCss.lastIndex = 0;
-            const next = s.replace(badCss, '/css/Employee/Admin/AdminIndexStyles.css');
+            const next = s.replace(badCss, '/css/Employee/Admin/');
             if (next !== s) {
                 fs.writeFileSync(p, next, 'utf8');
                 count++;

@@ -1,8 +1,7 @@
 <% const active=typeof activePage !=='undefined' ? activePage : '' ; const
-    inventoryPages=['products', 'product-inventory' , 'raw-materials' , 'alerts' , 'archived' ]; const
+    inventoryPages=['inventory' , 'product-inventory' , 'products' , 'storefront' , 'product-returns' , 'raw-materials' , 'archived' ]; const
     transactionsPages=['bulk-orders', 'delivery-rates' , 'walk-in' ]; const
-    ordersPages=['orders-pending', 'orders-processing' , 'orders-shipping' , 'orders-delivery' , 'orders-receive'
-    , 'orders-cancelled' , 'orders-returned' , 'orders-completed' , 'orders-completed-returned' ]; const
+    ordersPages=['orders', 'orders-returned']; const
     userPages=['manage-users']; const reviewPages=['reviews']; const supportPages=['chat-support', 'messages' ]; const
     contentPages=['cms', 'logs' ]; %>
     <div class="sidebar-header">
@@ -30,44 +29,43 @@
                 </svg>
                 Reports
             </a></li>
-        <li class="sidebar-section-label <%= inventoryPages.includes(active) ? 'active' : '' %>">Inventory</li>
+        <li><a href="/Employee/UserManager/UserAlerts" <%=active==='alerts' ? 'class="active"' : '' %>>
+                <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                        d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                Alerts
+            </a></li>
+        <li class="sidebar-section-label <%= inventoryPages.includes(active) ? 'active' : '' %>">PRODUCTS</li>
         <ul class="sidebar-submenu">
             <li><a href="/Employee/UserManager/UserProducts" <%=active==='products' ? 'class="active"' : '' %>>
                     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
                         <line x1="3" y1="6" x2="21" y2="6" />
-                        <path d="M16 10a4 4 0 0 1-8 0" />
+                        <path d="M16 10a4 4 0 01-8 0" />
                     </svg>
-                    Products
+                    Products Listings
                 </a></li>
-            <li><a href="/Employee/UserManager/ProductInventory" <%=active==='product-inventory' ? 'class="active"' : '' %>>
+            <li><a href="/Employee/UserManager/ProductInventory" <%=active==='inventory' || active==='product-inventory' ? 'class="active"' : '' %>>
                     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
                         <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
                         <line x1="3" y1="9" x2="21" y2="9" />
                         <line x1="9" y1="21" x2="9" y2="9" />
                     </svg>
-                    Product Inventory
+                    Inventory
                 </a></li>
-            <li><a href="/Employee/UserManager/UserMaterials" <%=active==='raw-materials' ? 'class="active"' : '' %>>
+            <li><a href="/Employee/UserManager/Storefront" <%=active==='storefront' ? 'class="active"' : '' %>>
                     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
-                        <path
-                            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                        <polyline points="3.27,6.96 12,12.01 20.73,6.96" />
+                        <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                        <polyline points="9,22 9,12 15,12 15,22" />
                     </svg>
-                    Raw Materials
-                </a></li>
-            <li><a href="/Employee/UserManager/UserAlerts" <%=active==='alerts' ? 'class="active"' : '' %>>
-                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path
-                            d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                        <line x1="12" y1="9" x2="12" y2="13" />
-                        <line x1="12" y1="17" x2="12.01" y2="17" />
-                    </svg>
-                    Alerts
+                    Storefront
                 </a></li>
             <li><a href="/Employee/UserManager/UserArchived" <%=active==='archived' ? 'class="active"' : '' %>>
                     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -110,58 +108,14 @@
         </ul>
         <li class="sidebar-section-label <%= ordersPages.includes(active) ? 'active' : '' %>">Orders Section</li>
         <ul class="sidebar-submenu">
-            <li><a href="/Employee/UserManager/UserOrdersPending" <%=active==='orders-pending' ? 'class="active"' : '' %>>
-                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12,6 12,12 16,14" />
-                    </svg>
-                    Orders Pending
-                </a></li>
-            <li><a href="/Employee/UserManager/UserOrdersProcessing" <%=active==='orders-processing' ? 'class="active"' : '' %>>
+            <li><a href="/Employee/UserManager/UserOrdersPending" <%=active==='orders' ? 'class="active"' : '' %>>
                     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
                         <path
                             d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                         <polyline points="3.27,6.96 12,12.01 20.73,6.96" />
                     </svg>
-                    Orders Processing
-                </a></li>
-            <li><a href="/Employee/UserManager/UserOrdersShipping" <%=active==='orders-shipping' ? 'class="active"' : '' %>>
-                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="1" y="3" width="15" height="13" />
-                        <polygon points="16,8 20,8 23,11 23,16 16,16" />
-                        <circle cx="5.5" cy="18.5" r="2.5" />
-                        <circle cx="18.5" cy="18.5" r="2.5" />
-                    </svg>
-                    Orders Shipping
-                </a></li>
-            <li><a href="/Employee/UserManager/UserOrdersDelivery" <%=active==='orders-delivery' ? 'class="active"' : '' %>>
-                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="1" y="3" width="15" height="13" />
-                        <polygon points="16,8 20,8 23,11 23,16 16,16" />
-                        <circle cx="5.5" cy="18.5" r="2.5" />
-                        <circle cx="18.5" cy="18.5" r="2.5" />
-                    </svg>
-                    Orders Delivery
-                </a></li>
-            <li><a href="/Employee/UserManager/UserOrdersReceive" <%=active==='orders-receive' ? 'class="active"' : '' %>>
-                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                        <polyline points="22,4 12,14.01 9,11.01" />
-                    </svg>
-                    Orders Receive
-                </a></li>
-            <li><a href="/Employee/UserManager/UserCancelledOrders" <%=active==='orders-cancelled' ? 'class="active"' : '' %>>
-                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                    Cancelled Orders
+                    Orders
                 </a></li>
             <li><a href="/Employee/UserManager/UserReturnedOrders" <%=active==='orders-returned' ? 'class="active"' : '' %>>
                     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -170,23 +124,6 @@
                         <polyline points="9 22 9 12 15 12 15 22" />
                     </svg>
                     Returned Orders
-                </a></li>
-            <li><a href="/Employee/UserManager/UserCompletedReturned" <%=active==='orders-completed-returned' ? 'class="active"'
-                    : '' %>>
-                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                        <polyline points="22,4 12,14.01 9,11.01" />
-                    </svg>
-                    Completed Returned
-                </a></li>
-            <li><a href="/Employee/UserManager/UserCompletedOrders" <%=active==='orders-completed' ? 'class="active"' : '' %>>
-                    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                        <polyline points="22,4 12,14.01 9,11.01" />
-                    </svg>
-                    Completed Orders
                 </a></li>
         </ul>
         <li class="sidebar-section-label <%= userPages.includes(active) ? 'active' : '' %>">User Management</li>
@@ -281,9 +218,20 @@
                     var href = link.getAttribute('href');
                     if (!href) return;
 
-                    var normalizedHref = href.replace(/\/+$/, '') || '/';
+                    var linkPath = (href.split('?')[0] || '/').replace(/\/+$/, '') || '/';
+                    var isActive = false;
 
-                    if (currentPath === normalizedHref || (normalizedHref !== '/' && currentPath.startsWith(normalizedHref + '/'))) {
+                    if (linkPath === '/Employee/UserManager/UserOrdersPending') {
+                        isActive = currentPath === '/Employee/UserManager/UserOrdersPending';
+                    } else if (linkPath === '/Employee/UserManager/UserReturnedOrders') {
+                        isActive = currentPath === '/Employee/UserManager/UserReturnedOrders';
+                    } else if (currentPath === linkPath) {
+                        isActive = true;
+                    } else if (linkPath !== '/' && currentPath.startsWith(linkPath + '/')) {
+                        isActive = true;
+                    }
+
+                    if (isActive) {
                         link.classList.add('active');
 
                         var sectionLabel = link.closest('.sidebar-submenu');

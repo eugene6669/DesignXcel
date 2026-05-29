@@ -1384,6 +1384,7 @@
                             InventoryProductSKU: product.InventoryProductSKU,
                             InventoryProductCategory: product.InventoryProductCategory,
                             InventoryProductDescription: product.InventoryProductDescription || product.Description || product.Notes || '',
+                            Dimensions: product.Dimensions || null,
                             InventoryProductPrice: product.InventoryProductPrice,
                             InventoryItemCostTotal: product.InventoryItemCostTotal || 0,
                             InventoryItemSalePriceTotal: product.InventoryItemSalePriceTotal || 0,
@@ -1456,11 +1457,6 @@
                     }
                 %>
 
-                <div class="stock-legend">
-                    <span><i style="background:#DC3545;"></i> Out of stock (0)</span>
-                    <span><i style="background:#FF9800;"></i> Critical (1–10)</span>
-                    <span><i style="background:#d4af37;"></i> Low (11–20)</span>
-                </div>
                 <div class="inventory-filter-card" data-inventory-search="<%= (invFilters.search || '').replace(/"/g, '&quot;') %>">
                     <form method="get" action="/Employee/Admin/ProductsListing" class="inventory-filter-form">
                         <input type="hidden" name="page" value="1">
