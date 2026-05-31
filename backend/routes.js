@@ -17541,7 +17541,7 @@ module.exports = function (sql, pool, getStripe = null) {
             }
 
             const revenueComposition = {
-                grossRevenue: reportMetrics.grossProductSales + reportMetrics.deliveryRevenueGross,
+                grossRevenue: reportMetrics.grossRevenue,
                 merchandise: reportMetrics.grossProductSales,
                 delivery: reportMetrics.deliveryRevenueGross,
                 byCategory: revenueCompositionByCategory
@@ -18050,7 +18050,7 @@ module.exports = function (sql, pool, getStripe = null) {
             };
 
             const ORDER_COL_COUNT = 15;
-            const SUMMARY_COL_COUNT = 3;
+            const SUMMARY_COL_COUNT = 2;
             const ExcelJS = getExcelJS();
             const workbook = new ExcelJS.Workbook();
             workbook.creator = 'Design Excellence';
@@ -18081,11 +18081,11 @@ module.exports = function (sql, pool, getStripe = null) {
             currentRow++;
 
             createExcelSectionHeader(worksheet, currentRow++, 'Summary', SUMMARY_COL_COUNT);
-            createExcelHeaderRow(worksheet, currentRow++, ['Metric', 'Amount (PHP)', 'Description'], 1);
+            createExcelHeaderRow(worksheet, currentRow++, ['Metric', 'Amount (PHP)'], 1);
 
             const summaryRows = buildSalesReportSummaryRows(exportSummaryStats);
 
-            summaryRows.forEach(({ label, value, currency, percent, note }) => {
+            summaryRows.forEach(({ label, value, currency, percent }) => {
                 const dataRow = worksheet.getRow(currentRow++);
                 dataRow.getCell(1).value = label;
                 dataRow.getCell(1).font = { bold: true };
@@ -18098,8 +18098,6 @@ module.exports = function (sql, pool, getStripe = null) {
                     dataRow.getCell(2).numFmt = '#,##0';
                 }
                 dataRow.getCell(2).alignment = { horizontal: 'right' };
-                dataRow.getCell(3).value = note || '';
-                dataRow.getCell(3).alignment = { wrapText: true, vertical: 'top' };
                 for (let c = 1; c <= SUMMARY_COL_COUNT; c++) {
                     applyThinBorder(dataRow.getCell(c));
                 }
@@ -18107,7 +18105,6 @@ module.exports = function (sql, pool, getStripe = null) {
 
             worksheet.getColumn(1).width = 28;
             worksheet.getColumn(2).width = 18;
-            worksheet.getColumn(3).width = 52;
             currentRow += 2;
 
             createExcelSectionHeader(worksheet, currentRow++, 'Orders', ORDER_COL_COUNT);
@@ -18225,13 +18222,13 @@ module.exports = function (sql, pool, getStripe = null) {
             csvSections.push([filterSummary]);
             csvSections.push([]);
             csvSections.push(['Summary']);
-            csvSections.push(['Metric', 'Amount (PHP)', 'Description']);
-            summaryRows.forEach(({ label, value, currency, percent, note }) => {
+            csvSections.push(['Metric', 'Amount (PHP)']);
+            summaryRows.forEach(({ label, value, currency, percent }) => {
                 let display = value;
                 if (percent) display = fmtPct(value);
                 else if (currency) display = fmtMoney(value);
                 else display = String(value ?? '');
-                csvSections.push([label, display, note || '']);
+                csvSections.push([label, display]);
             });
             csvSections.push([]);
             csvSections.push(['Orders']);
@@ -18829,28 +18826,25 @@ module.exports = function (sql, pool, getStripe = null) {
     router.get('/api/cms/content-types', isAuthenticated, async (req, res) => {
         try {
             await pool.connect();
-            const result = await pool.request().query(`
-                SELECT 
-                    'page' as id,
-                    'Pages' as name,
-                    'Website pages and content' as description,
-                    COUNT(*) as count
-                FROM Pages
-                UNION ALL
-                SELECT 
-                    'post' as id,
-                    'Posts' as name,
-                    'Blog posts and articles' as description,
-                    COUNT(*) as count
-                FROM Posts
-                UNION ALL
-                SELECT 
-                    'product' as id,
-                    'Products' as name,
-                    'Product listings' as description,
-                    COUNT(*) as count
-                FROM Products
+            const tablesResult = await pool.request().query(`
+                SELECT name FROM sys.tables
+                WHERE name IN (N'Pages', N'Posts', N'Products')
             `);
+            const existingTables = new Set(
+                (tablesResult.recordset || []).map((row) => row.name)
+            );
+            const segments = [
+                { id: 'page', name: 'Pages', description: 'Website pages and content', table: 'Pages' },
+                { id: 'post', name: 'Posts', description: 'Blog posts and articles', table: 'Posts' },
+                { id: 'product', name: 'Products', description: 'Product listings', table: 'Products' }
+            ];
+            const selects = segments.map((seg) => {
+                if (existingTables.has(seg.table)) {
+                    return `SELECT N'${seg.id}' AS id, N'${seg.name}' AS name, N'${seg.description}' AS description, COUNT(*) AS count FROM [${seg.table}]`;
+                }
+                return `SELECT N'${seg.id}' AS id, N'${seg.name}' AS name, N'${seg.description}' AS description, 0 AS count`;
+            });
+            const result = await pool.request().query(selects.join(' UNION ALL '));
             res.json({ success: true, contentTypes: result.recordset });
         } catch (err) {
             console.error('Error fetching content types:', err);

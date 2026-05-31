@@ -147,6 +147,41 @@ function countRefundMerchandiseOrders(recordset) {
     return recordset.filter(isRefundMerchandiseOrder).length;
 }
 
+/** Seller delivery costs for reporting. */
+function computeDeliveryExpenseBreakdown(recordset) {
+    let originalDeliveryCost = 0;
+    let returnPickupCost = 0;
+    let replacementDeliveryCost = 0;
+
+    recordset.forEach(order => {
+        if (normalizeStatus(order.Status) === 'cancelled') return;
+
+        const delivery = orderDelivery(order);
+        if (delivery <= 0) return;
+
+        if (countsTowardGrossSales(order)) {
+            originalDeliveryCost += delivery;
+        }
+
+        if (isRefundOrReplacementOrder(order) && isReturnWorkflowStatus(order)) {
+            returnPickupCost += delivery;
+            if (normalizeAction(order.ActionType) === 'replacement') {
+                replacementDeliveryCost += delivery;
+            }
+        }
+    });
+
+    const totalDeliveryExpense = originalDeliveryCost + returnPickupCost + replacementDeliveryCost;
+
+    return {
+        originalDeliveryCost,
+        returnPickupCost,
+        replacementDeliveryCost,
+        totalDeliveryExpense,
+        deliveryExpense: totalDeliveryExpense
+    };
+}
+
 /** Return shipping (pickup + lost outbound) and replacement reship — seller-paid. */
 function computeReturnLogisticsCosts(recordset) {
     let returnShipping = 0;
@@ -353,8 +388,8 @@ function aggregateSalesReportFromOrders(recordset, options = {}) {
         }
     });
 
-    // Pipeline product value (gross − discounts) across gross-eligible statuses
     const netProductSales = Math.max(0, grossProductSales - totalDiscounts);
+    const grossRevenue = grossProductSales + deliveryRevenueGross;
 
     // Accounting net revenue: only Received + Completed, after refund reversals
     const recognizedProductRevenue = Math.max(0, netRecognizedMerchandise - productRefunds);
@@ -362,6 +397,7 @@ function aggregateSalesReportFromOrders(recordset, options = {}) {
     const netRevenue = recognizedProductRevenue + netDeliveryRevenue;
 
     const returnLogistics = computeReturnLogisticsCosts(recordset);
+    const deliveryExpenseBreakdown = computeDeliveryExpenseBreakdown(recordset);
     const returnShippingPickup = returnLogistics.returnShipping;
     const replacementReshipExpense = returnLogistics.replacementShipping;
     const returnShippingExpense = returnShippingPickup + replacementReshipExpense;
@@ -386,10 +422,12 @@ function aggregateSalesReportFromOrders(recordset, options = {}) {
     return {
         grossSales: grossProductSales,
         grossProductSales,
+        grossRevenue,
         netProductSales,
+        netSales: netProductSales,
         netProductSalesBeforeRefunds: netProductSales,
         recognizedProductRevenue,
-        netSales: recognizedProductRevenue,
+        netSalesRecognized: recognizedProductRevenue,
         totalDiscounts,
         productRefunds,
         deliveryRefunds,
@@ -398,6 +436,11 @@ function aggregateSalesReportFromOrders(recordset, options = {}) {
         deliveryRevenueGross,
         netDeliveryRevenue,
         netRevenue,
+        originalDeliveryCost: deliveryExpenseBreakdown.originalDeliveryCost,
+        returnPickupCost: deliveryExpenseBreakdown.returnPickupCost,
+        replacementDeliveryCost: deliveryExpenseBreakdown.replacementDeliveryCost,
+        totalDeliveryExpense: deliveryExpenseBreakdown.totalDeliveryExpense,
+        deliveryExpense: deliveryExpenseBreakdown.deliveryExpense,
         returnShippingExpense,
         returnShipping: returnShippingPickup,
         replacementShipping: replacementReshipExpense,
@@ -461,17 +504,49 @@ function applySalesReportOrderRowDisplay(order, items) {
     return order;
 }
 
-/** Flat summary rows for UI table and Excel export (matches aggregateSalesReportFromOrders). */
+/** Flat summary rows for UI table and Excel/CSV export. */
 function buildSalesReportSummaryRows(stats) {
     const n = (v) => parseFloat(v || 0);
     const i = (v) => parseInt(v || 0, 10);
+    const hasErpMetrics = stats.netRevenue != null
+        || stats.grossProductSales != null
+        || stats.grossSales != null;
+
+    if (hasErpMetrics) {
+        const grossSales = n(stats.grossProductSales ?? stats.grossSales);
+        const deliveryRevenue = n(stats.deliveryRevenueGross ?? stats.deliveryRevenue ?? stats.deliveryTotal);
+        const grossRevenue = n(stats.grossRevenue ?? (grossSales + deliveryRevenue));
+        const totalDeliveryExpense = n(
+            stats.totalDeliveryExpense ?? stats.deliveryExpense
+            ?? (n(stats.originalDeliveryCost) + n(stats.returnPickupCost) + n(stats.replacementDeliveryCost))
+        );
+        return [
+            { label: 'Gross Sales', value: grossSales, currency: true },
+            { label: 'Discounts', value: n(stats.totalDiscounts), currency: true },
+            { label: 'Net Sales', value: n(stats.netSales ?? stats.netProductSales), currency: true },
+            { label: 'Gross Revenue', value: grossRevenue, currency: true },
+            { label: 'Delivery Revenue', value: deliveryRevenue, currency: true },
+            { label: 'Original Delivery Cost', value: n(stats.originalDeliveryCost), currency: true },
+            { label: 'Return Pick-Up Cost', value: n(stats.returnPickupCost), currency: true },
+            { label: 'Replacement Delivery Cost', value: n(stats.replacementDeliveryCost), currency: true },
+            { label: 'Total Delivery Expense', value: totalDeliveryExpense, currency: true },
+            { label: 'Refunds', value: n(stats.productRefunds) + n(stats.deliveryRefunds), currency: true },
+            { label: 'Net Revenue', value: n(stats.netRevenue), currency: true },
+            { label: 'COGS', value: n(stats.cogs), currency: true },
+            { label: 'Gross Profit', value: n(stats.grossProfit), currency: true },
+            { label: 'Total Orders', value: i(stats.totalOrders), currency: false },
+            { label: 'Total Customers', value: i(stats.totalCustomers), currency: false },
+            { label: 'Average Order Value', value: n(stats.averageOrderValue), currency: true }
+        ];
+    }
+
     return [
-        { label: 'Total Orders', value: i(stats.totalOrders), currency: false, note: 'Orders matching filters' },
-        { label: 'Total Customers', value: i(stats.totalCustomers), currency: false, note: 'Unique customer emails' },
-        { label: 'Total Discounts', value: n(stats.totalDiscounts), currency: true, note: 'Sum of order discounts' },
-        { label: 'Delivery Total', value: n(stats.deliveryTotal), currency: true, note: 'Sum of delivery fees (display amounts)' },
-        { label: 'Sales Total', value: n(stats.salesTotal), currency: true, note: 'Sum of order totals (display amounts)' },
-        { label: 'Average Order Value', value: n(stats.averageOrderValue), currency: true, note: 'Sales total ÷ total orders' }
+        { label: 'Total Orders', value: i(stats.totalOrders), currency: false },
+        { label: 'Total Customers', value: i(stats.totalCustomers), currency: false },
+        { label: 'Discounts', value: n(stats.totalDiscounts), currency: true },
+        { label: 'Delivery Fees', value: n(stats.deliveryTotal), currency: true },
+        { label: 'Sales Total', value: n(stats.salesTotal), currency: true },
+        { label: 'Average Order Value', value: n(stats.averageOrderValue), currency: true }
     ];
 }
 
@@ -482,6 +557,7 @@ module.exports = {
     isReplacementFulfillmentOrder,
     isRefundOrReplacementOrder,
     computeReturnLogisticsCosts,
+    computeDeliveryExpenseBreakdown,
     sumRefundMerchandise,
     sumRefundDelivery,
     getRefundReversalAmounts,

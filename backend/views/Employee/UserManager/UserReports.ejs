@@ -1067,17 +1067,16 @@
                         <div style="padding: 0 1.5rem 1.5rem;">
                             <div class="reports-stats" id="sales-stats"></div>
                             <div id="stats-table-container" style="width: 100%; overflow-x: auto; margin-top: 1rem;">
-                                <table id="stats-table" class="sales-summary-stats-table" style="width: 100%; border-collapse: collapse; min-width: 720px;">
+                                <table id="stats-table" class="sales-summary-stats-table" style="width: 100%; border-collapse: collapse; min-width: 360px;">
                                     <thead id="stats-thead">
                                         <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
                                             <th style="padding: 0.75rem; text-align: left;">Metric</th>
                                             <th style="padding: 0.75rem; text-align: right;">Value</th>
-                                            <th style="padding: 0.75rem; text-align: left;">Description</th>
                                         </tr>
                                     </thead>
                                     <tbody id="stats-tbody">
                                         <tr>
-                                            <td colspan="3" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics…</td>
+                                            <td colspan="2" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics…</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -1874,35 +1873,49 @@
         }
 
         const SALES_SUMMARY_ROWS = [
-            { key: 'grossProductSales', alt: 'grossSales', currency: true, label: 'Gross Product Sales', note: 'Paid orders: Pending Verification through Completed (excl. returns)' },
-            { key: 'totalDiscounts', currency: true, label: 'Discounts', note: 'Promotions on gross-eligible orders' },
-            { key: 'netProductSales', currency: true, label: 'Net Product Sales', note: 'Gross product − discounts (collected, pre-recognition)' },
-            { key: 'deliveryRevenueGross', alt: 'deliveryRevenue', currency: true, label: 'Delivery Revenue', note: 'Delivery fees charged (gross-eligible orders)' },
-            { key: 'deliveryRefunds', currency: true, label: 'Delivery Refunds', note: 'Revenue reversal — not a loss' },
-            { key: 'netDeliveryRevenue', currency: true, label: 'Net Delivery Revenue', note: 'Delivery after refunds' },
-            { key: 'productRefunds', currency: true, label: 'Product Refunds', note: 'Revenue reversal — not a loss' },
-            { key: 'netRevenue', currency: true, label: 'Net Revenue', note: 'Recognized: Received & Completed only, after refunds' },
-            { key: 'recognizedProductRevenue', alt: 'netSales', currency: true, label: 'Recognized Product Revenue', note: 'Product revenue after refunds (recognized statuses)' },
-            { key: 'returnShippingExpense', alt: 'returnShipping', currency: true, label: 'Return Shipping Expense', note: 'Direct cash expense (seller-paid)' },
-            { key: 'damageInventoryCost', currency: true, label: 'Damage Cost', note: 'Inventory write-off at item cost' },
-            { key: 'cogs', currency: true, label: 'COGS', note: 'Item cost for Received & Completed orders' },
-            { key: 'replacementCost', currency: true, label: 'Replacement Cost', note: 'Replacement units at item cost' },
-            { key: 'grossProfit', currency: true, label: 'Gross Profit', note: 'Net revenue − COGS − return shipping − damage − replacement' },
-            { key: 'grossMargin', percent: true, label: 'Gross Margin', note: 'Gross profit ÷ net revenue' },
-            { key: 'refundRate', percent: true, label: 'Refund Rate', note: 'Product refunds ÷ gross product sales' },
-            { key: 'returnRate', percent: true, label: 'Return Rate', note: 'Returned orders ÷ total orders' },
-            { key: 'totalOrders', label: 'Total Orders', note: 'Orders matching filters' },
-            { key: 'totalCustomers', label: 'Total Customers', note: 'Unique customer emails' },
-            { key: 'averageOrderValue', currency: true, label: 'Average Order Value', note: 'Mean total amount (excl. cancelled/returns)' }
+            { key: 'grossProductSales', alt: 'grossSales', currency: true, label: 'Gross Sales' },
+            { key: 'totalDiscounts', currency: true, label: 'Discounts' },
+            { key: 'netSales', alt: 'netProductSales', currency: true, label: 'Net Sales' },
+            { label: 'Gross Revenue', currency: true, compute: function(stats) {
+                if (stats.grossRevenue != null) return Number(stats.grossRevenue);
+                return Number(stats.grossProductSales || stats.grossSales || 0)
+                    + Number(stats.deliveryRevenueGross || stats.deliveryRevenue || 0);
+            }},
+            { key: 'deliveryRevenueGross', alt: 'deliveryRevenue', currency: true, label: 'Delivery Revenue' },
+            { key: 'originalDeliveryCost', currency: true, label: 'Original Delivery Cost' },
+            { key: 'returnPickupCost', currency: true, label: 'Return Pick-Up Cost' },
+            { key: 'replacementDeliveryCost', currency: true, label: 'Replacement Delivery Cost' },
+            { label: 'Total Delivery Expense', currency: true, compute: function(stats) {
+                if (stats.totalDeliveryExpense != null) return Number(stats.totalDeliveryExpense);
+                if (stats.deliveryExpense != null) return Number(stats.deliveryExpense);
+                return Number(stats.originalDeliveryCost || 0)
+                    + Number(stats.returnPickupCost || 0)
+                    + Number(stats.replacementDeliveryCost || 0);
+            }},
+            { label: 'Refunds', currency: true, compute: function(stats) {
+                return Number(stats.productRefunds || 0) + Number(stats.deliveryRefunds || 0);
+            }},
+            { key: 'netRevenue', currency: true, label: 'Net Revenue' },
+            { key: 'cogs', currency: true, label: 'COGS' },
+            { key: 'grossProfit', currency: true, label: 'Gross Profit' },
+            { key: 'totalOrders', label: 'Total Orders' },
+            { key: 'totalCustomers', label: 'Total Customers' },
+            { key: 'averageOrderValue', currency: true, label: 'Average Order Value' }
         ];
+
+        function resolveSalesSummaryValue(stats, row) {
+            if (typeof row.compute === 'function') return row.compute(stats);
+            if (stats[row.key] != null) return stats[row.key];
+            if (row.alt && stats[row.alt] != null) return stats[row.alt];
+            return 0;
+        }
 
         function buildSalesSummaryTableRows(stats) {
             return SALES_SUMMARY_ROWS.map(function(row) {
-                const val = stats[row.key] != null ? stats[row.key] : (row.alt ? stats[row.alt] : 0);
+                const val = resolveSalesSummaryValue(stats, row);
                 return [
                     row.label,
-                    formatSalesSummaryRowValue(val, { currency: row.currency, percent: row.percent }),
-                    row.note
+                    formatSalesSummaryRowValue(val, { currency: row.currency, percent: row.percent })
                 ];
             });
         }
@@ -1972,17 +1985,19 @@
             const salesCards = document.getElementById('sales-stats');
             if (salesCards) {
                 const cardDefs = [
-                    { label: 'Gross Product Sales', key: 'grossProductSales', alt: 'grossSales', currency: true },
-                    { label: 'Net Revenue', key: 'netRevenue', currency: true },
-                    { label: 'Gross Profit', key: 'grossProfit', currency: true },
-                    { label: 'Gross Margin', key: 'grossMargin', percent: true },
-                    { label: 'Total Orders', key: 'totalOrders' },
-                    { label: 'Total Customers', key: 'totalCustomers' },
-                    { label: 'Average Order Value', key: 'averageOrderValue', currency: true },
-                    { label: 'Product Refunds', key: 'productRefunds', currency: true }
+                    { label: 'Gross Sales', key: 'grossProductSales', alt: 'grossSales', currency: true },
+                    { label: 'Net Sales', key: 'netSales', alt: 'netProductSales', currency: true },
+                    { label: 'Gross Revenue', key: 'grossRevenue', currency: true, compute: function(s) {
+                        if (s.grossRevenue != null) return s.grossRevenue;
+                        return Number(s.grossProductSales || s.grossSales || 0)
+                            + Number(s.deliveryRevenueGross || s.deliveryRevenue || 0);
+                    }},
+                    { label: 'Net Revenue', key: 'netRevenue', currency: true }
                 ];
                 salesCards.innerHTML = cardDefs.map(function(def) {
-                    const raw = stats[def.key] != null ? stats[def.key] : (def.alt ? stats[def.alt] : 0);
+                    const raw = typeof def.compute === 'function'
+                        ? def.compute(stats)
+                        : (stats[def.key] != null ? stats[def.key] : (def.alt ? stats[def.alt] : 0));
                     const value = formatSalesSummaryRowValue(raw, { currency: def.currency, percent: def.percent });
                     return '<div class="stat-card">' +
                         '<div class="stat-label">' + def.label + '</div>' +
@@ -1999,7 +2014,6 @@
                 return '<tr>' +
                     '<td style="padding:0.75rem;font-weight:600;color:#374151;">' + cells[0] + '</td>' +
                     '<td style="padding:0.75rem;text-align:right;font-weight:600;white-space:nowrap;">' + cells[1] + '</td>' +
-                    '<td style="padding:0.75rem;color:#6b7280;font-size:0.85rem;">' + cells[2] + '</td>' +
                     '</tr>';
             }).join('');
 
@@ -2342,14 +2356,14 @@
                 const stats = csvPreviewData.stats;
                 const summaryRowsHtml = buildSalesSummaryTableRows(stats)
                     .map(function(cells) {
-                        return '<tr><td>' + cells[0] + '</td><td style="text-align:right">' + cells[1] + '</td><td style="color:#64748b;font-size:0.85em">' + cells[2] + '</td></tr>';
+                        return '<tr><td>' + cells[0] + '</td><td style="text-align:right">' + cells[1] + '</td></tr>';
                     })
                     .join('');
                 previewBody.innerHTML = `
                     <div class="csv-preview-section">
                         <h3>Summary (included in file)</h3>
                         <table class="csv-preview-table">
-                            <thead><tr><th>Metric</th><th style="text-align:right">Value</th><th>Description</th></tr></thead>
+                            <thead><tr><th>Metric</th><th style="text-align:right">Value</th></tr></thead>
                             <tbody>${summaryRowsHtml}</tbody>
                         </table>
                     </div>

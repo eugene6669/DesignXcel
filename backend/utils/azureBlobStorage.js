@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { BlobServiceClient } = require('@azure/storage-blob');
 
 const AZURE_ACCOUNT_NAME = process.env.AZURE_STORAGE_ACCOUNT_NAME;
@@ -6,8 +8,24 @@ const AZURE_CONTAINER_NAME = process.env.AZURE_STORAGE_CONTAINER_NAME;
 const AZURE_PUBLIC_BASE_URL = process.env.AZURE_BLOB_PUBLIC_BASE_URL;
 
 let containerClient = null;
+/** Set after Azure returns account disabled / auth errors so uploads skip blob API. */
+let azureUnavailable = false;
+
+const isAzureExplicitlyDisabled = () => {
+    const off = process.env.USE_AZURE_BLOB === 'false' || process.env.USE_AZURE_BLOB === '0';
+    const local = process.env.USE_LOCAL_STORAGE === 'true' || process.env.USE_LOCAL_STORAGE === '1';
+    return off || local;
+};
+
+const isAzureUnavailableError = (err) => {
+    const msg = String((err && (err.message || err.code)) || '');
+    return /account is disabled|AccountIsDisabled|InvalidAuthenticationInfo|AuthenticationFailed|AuthorizationFailure/i.test(msg);
+};
 
 const isAzureBlobConfigured = () => {
+    if (isAzureExplicitlyDisabled() || azureUnavailable) {
+        return false;
+    }
     return Boolean(AZURE_ACCOUNT_NAME && AZURE_ACCOUNT_KEY && AZURE_CONTAINER_NAME);
 };
 
@@ -64,6 +82,15 @@ const blobPathFromAssetUrl = (url) => {
     return null;
 };
 
+const saveBufferToLocalUpload = (blobPath, buffer) => {
+    const uploadsRoot = path.join(__dirname, '..', 'public', 'uploads');
+    const normalized = String(blobPath).replace(/^\/+/, '').replace(/\\/g, '/');
+    const fullPath = path.join(uploadsRoot, ...normalized.split('/'));
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+    fs.writeFileSync(fullPath, buffer);
+    return `/uploads/${normalized}`;
+};
+
 const deleteBlobFromAzure = async (blobPath) => {
     const client = getContainerClient();
     if (!client || !blobPath) return false;
@@ -78,21 +105,35 @@ const deleteBlobFromAzure = async (blobPath) => {
 };
 
 const uploadBufferToAzureBlob = async (blobPath, buffer, mimetype) => {
-    const client = getContainerClient();
-    if (!client) {
-        throw new Error('Azure Blob Storage is not configured');
+    if (!isAzureBlobConfigured()) {
+        return saveBufferToLocalUpload(blobPath, buffer);
     }
 
-    await client.createIfNotExists({ access: 'blob' });
+    const client = getContainerClient();
+    if (!client) {
+        return saveBufferToLocalUpload(blobPath, buffer);
+    }
 
-    const blockBlobClient = client.getBlockBlobClient(blobPath);
-    await blockBlobClient.uploadData(buffer, {
-        blobHTTPHeaders: {
-            blobContentType: mimetype || 'application/octet-stream'
+    try {
+        await client.createIfNotExists({ access: 'blob' });
+
+        const blockBlobClient = client.getBlockBlobClient(blobPath);
+        await blockBlobClient.uploadData(buffer, {
+            blobHTTPHeaders: {
+                blobContentType: mimetype || 'application/octet-stream'
+            }
+        });
+
+        return getBlobPublicUrl(blobPath) || blockBlobClient.url;
+    } catch (err) {
+        if (isAzureUnavailableError(err)) {
+            azureUnavailable = true;
+            containerClient = null;
+            console.warn('[storage] Azure Blob unavailable (%s); saving to local uploads.', err.message);
+            return saveBufferToLocalUpload(blobPath, buffer);
         }
-    });
-
-    return getBlobPublicUrl(blobPath) || blockBlobClient.url;
+        throw err;
+    }
 };
 
 module.exports = {
@@ -100,5 +141,6 @@ module.exports = {
     uploadBufferToAzureBlob,
     getBlobPublicUrl,
     blobPathFromAssetUrl,
-    deleteBlobFromAzure
+    deleteBlobFromAzure,
+    saveBufferToLocalUpload
 };
