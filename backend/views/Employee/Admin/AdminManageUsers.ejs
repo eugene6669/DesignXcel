@@ -422,8 +422,6 @@
                         id="tab-employee-accounts">Employee Accounts</button>
                     <button class="cms-tab-btn" onclick="showTab('customer-accounts')"
                         id="tab-customer-accounts">Customer Accounts</button>
-                    <button class="cms-tab-btn" onclick="showTab('role-manager')"
-                        id="tab-role-manager">Role Manager</button>
                 </div>
 
                 <div class="content-area">
@@ -438,6 +436,7 @@
                                         <th>Username</th>
                                         <th>Full Name</th>
                                         <th>Email</th>
+                                        <th>Account</th>
                                         <th>Role</th>
                                         <th>Status</th>
                                         <th>Created At</th>
@@ -459,6 +458,9 @@
                                                 </td>
                                                 <td>
                                                     <%= user.Email %>
+                                                </td>
+                                                <td>
+                                                    Employee
                                                 </td>
                                                 <td>
                                                     <%= user.RoleName %>
@@ -497,7 +499,12 @@
                             </table>
                         </div>
                         <div class="manage-users-section">
-                            <h3>Employee Accounts</h3>
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+                                <h3 style="margin:0;">Employee Accounts</h3>
+                                <button type="button" id="openAddUserModalBtn" style="background:#F0B21B;color:#111827;border:none;border-radius:8px;padding:0.55rem 0.9rem;font-weight:700;cursor:pointer;">
+                                    Add User Account
+                                </button>
+                            </div>
                             <table id="employeeAccountsTable">
                                 <thead>
                                     <tr>
@@ -573,7 +580,7 @@
                                             <% }); %>
                                                 <% } else { %>
                                                     <tr>
-                                                        <td colspan="8">No employee accounts found.</td>
+                                                        <td colspan="9">No employee accounts found.</td>
                                                     </tr>
                                                     <% } %>
                                 </tbody>
@@ -583,22 +590,7 @@
                     </div>
 
                     <!-- Role Manager Tab -->
-                    <div class="cms-tab-content" id="tab-content-role-manager" style="display:none;">
-                        <div class="role-manager-toolbar">
-                            <button type="button" class="btn-add-role" id="btnAddRole">ADD ROLE</button>
-                            <div class="role-search-wrap">
-                                <input type="search" id="roleSearchInput" placeholder="Search Roles" aria-label="Search roles">
-                            </div>
-                        </div>
-                        <div class="role-matrix-wrap">
-                            <table class="role-matrix-table" id="roleMatrixTable">
-                                <thead id="roleMatrixHead">
-                                    <tr><th colspan="2">Loading roles…</th></tr>
-                                </thead>
-                                <tbody id="roleMatrixBody"></tbody>
-                            </table>
-                        </div>
-                    </div>
+                    
 
                     <!-- Customer Accounts Tab Content -->
                     <div class="cms-tab-content" id="tab-content-customer-accounts" style="display:none;">
@@ -739,6 +731,56 @@
                             <div class="form-actions">
                                 <button type="button" id="cancelEditUser" class="btn btn-secondary">Cancel</button>
                                 <button type="submit" class="btn btn-primary">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Add User Modal -->
+                <div id="addUserModal" class="modal" style="display:none;">
+                    <div class="modal-content edit-user-modal" style="max-width: 520px; width: 90%;">
+                        <div class="modal-header">
+                            <h3 id="addUserModalTitle">Add User Account</h3>
+                            <span class="close-button" id="closeAddUserModal">&times;</span>
+                        </div>
+                        <form id="addUserForm" class="edit-user-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="addUsername">Username</label>
+                                    <input type="text" id="addUsername" name="username" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="addFullName">Full Name</label>
+                                    <input type="text" id="addFullName" name="fullName" required>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="addEmail">Email</label>
+                                    <input type="email" id="addEmail" name="email" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="addPassword">Password</label>
+                                    <input type="password" id="addPassword" name="password" minlength="6" required>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="addRoleId">Role</label>
+                                    <select id="addRoleId" name="roleId" required>
+                                        <option value="3">InventoryManager</option>
+                                        <option value="2">TransactionManager</option>
+                                        <option value="4">UserManager</option>
+                                        <option value="5">OrderSupport</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <!-- spacer -->
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" id="cancelAddUser" class="btn btn-secondary">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Create User</button>
                             </div>
                         </form>
                     </div>
@@ -1375,7 +1417,7 @@
 
                     // Tab functionality
                     window.showTab = function (tab) {
-                        const tabs = ['employee-accounts', 'customer-accounts', 'role-manager'];
+                        const tabs = ['employee-accounts', 'customer-accounts'];
                         tabs.forEach(t => {
                             const tabContent = document.getElementById('tab-content-' + t);
                             const tabBtn = document.getElementById('tab-' + t);
@@ -1388,9 +1430,6 @@
 
                         if (tab === 'customer-accounts') {
                             loadCustomerAccounts();
-                        }
-                        if (tab === 'role-manager' && window.RoleManager) {
-                            window.RoleManager.load();
                         }
                     };
 
@@ -2055,7 +2094,7 @@ Consider archiving instead if you want to preserve the data.`;
 
                 // Global showTab function for tab navigation
                 window.showTab = function (tab) {
-                        const tabs = ['employee-accounts', 'customer-accounts', 'role-manager'];
+                        const tabs = ['employee-accounts', 'customer-accounts'];
                         tabs.forEach(t => {
                             const tabContent = document.getElementById('tab-content-' + t);
                             const tabBtn = document.getElementById('tab-' + t);
@@ -2069,12 +2108,64 @@ Consider archiving instead if you want to preserve the data.`;
                     if (tab === 'customer-accounts') {
                         loadCustomerAccounts();
                     }
-                    if (tab === 'role-manager' && window.RoleManager) {
-                        window.RoleManager.load();
-                    }
                 };
+
+                // Add user modal handlers
+                (function setupAddUserModal() {
+                    const addUserModal = document.getElementById('addUserModal');
+                    const addUserForm = document.getElementById('addUserForm');
+                    const addRoleIdInput = document.getElementById('addRoleId');
+                    const openAddUserModalBtn = document.getElementById('openAddUserModalBtn');
+                    const closeAddUserModal = document.getElementById('closeAddUserModal');
+                    const cancelAddUser = document.getElementById('cancelAddUser');
+
+                    const openAddModal = () => {
+                        addUserForm.reset();
+                        addRoleIdInput.value = '3';
+                        addUserModal.style.display = 'flex';
+                    };
+
+                    const closeModal = () => {
+                        addUserModal.style.display = 'none';
+                    };
+
+                    openAddUserModalBtn.addEventListener('click', openAddModal);
+
+                    closeAddUserModal.addEventListener('click', closeModal);
+                    cancelAddUser.addEventListener('click', closeModal);
+
+                    addUserForm.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        const payload = {
+                            username: document.getElementById('addUsername').value.trim(),
+                            fullName: document.getElementById('addFullName').value.trim(),
+                            email: document.getElementById('addEmail').value.trim(),
+                            password: document.getElementById('addPassword').value,
+                            roleId: addRoleIdInput.value
+                        };
+
+                        try {
+                            const resp = await fetch('/Employee/Admin/Users/Add', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload)
+                            });
+                            const result = await resp.json();
+                            if (!resp.ok || !result.success) {
+                                alert(result.message || 'Failed to create user account.');
+                                return;
+                            }
+                            closeModal();
+                            alert('User account created successfully.');
+                            refreshEmployeeAccountsTable();
+                        } catch (err) {
+                            console.error('Error creating user account:', err);
+                            alert('Failed to create user account.');
+                        }
+                    });
+                })();
             </script>
-            <script src="/js/Employee/Admin/role-manager.js?v=<%= Date.now() %>"></script>
+            
 
 </body>
 

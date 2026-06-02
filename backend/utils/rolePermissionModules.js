@@ -5,13 +5,12 @@
  * Permission keys match RolePermissions / UserPermissions and checkPermission().
  */
 const ROLE_MANAGER_MODULES = [
-    { key: 'dashboard', label: 'Dashboard', permissions: ['dashboard_access'] },
     { key: 'reports', label: 'Reports', permissions: ['inventory_reports'] },
     { key: 'alerts', label: 'Alerts', permissions: ['inventory_alerts'] },
     {
         key: 'products',
-        label: 'Products (Listing, Materials, Variations)',
-        permissions: ['inventory_product_listing', 'inventory_materials', 'inventory_variations']
+        label: 'Products Listing',
+        permissions: ['inventory_product_listing']
     },
     { key: 'product_inventory', label: 'Product Inventory', permissions: ['inventory_product_inventory'] },
     { key: 'storefront', label: 'Storefront', permissions: ['inventory_storefront'] },
@@ -21,16 +20,13 @@ const ROLE_MANAGER_MODULES = [
     { key: 'delivery_rates', label: 'Delivery Rates', permissions: ['transactions_delivery_rates'] },
     {
         key: 'orders',
-        label: 'Orders (all stages)',
-        permissions: [
-            'orders_pending', 'orders_processing', 'orders_shipping', 'orders_delivery',
-            'orders_receive', 'orders_cancelled', 'orders_completed'
-        ]
+        label: 'Orders',
+        permissions: ['orders_pending']
     },
     {
-        key: 'product_returns',
-        label: 'Returned / Refunded Orders',
-        permissions: ['orders_returned', 'orders_completed_returned']
+        key: 'orders_returned',
+        label: 'Returned Orders',
+        permissions: ['orders_returned']
     },
     { key: 'manage_users', label: 'Manage Users', permissions: ['users_manage_users'] },
     { key: 'reviews', label: 'Reviews', permissions: ['reviews_reviews'] },
@@ -49,7 +45,6 @@ const USER_PERMISSION_SECTIONS = [
     {
         name: 'General',
         permissions: [
-            { key: 'dashboard_access', name: 'Dashboard' },
             { key: 'inventory_reports', name: 'Reports' },
             { key: 'inventory_alerts', name: 'Alerts' }
         ]
@@ -60,8 +55,6 @@ const USER_PERMISSION_SECTIONS = [
             { key: 'inventory_product_listing', name: 'Products Listing' },
             { key: 'inventory_product_inventory', name: 'Product Inventory' },
             { key: 'inventory_storefront', name: 'Storefront' },
-            { key: 'inventory_materials', name: 'Raw Materials' },
-            { key: 'inventory_variations', name: 'Variations' },
             { key: 'inventory_archived', name: 'Archived Items' }
         ]
     },
@@ -76,15 +69,8 @@ const USER_PERMISSION_SECTIONS = [
     {
         name: 'Orders',
         permissions: [
-            { key: 'orders_pending', name: 'Orders Pending' },
-            { key: 'orders_processing', name: 'Orders Processing' },
-            { key: 'orders_shipping', name: 'Orders Shipping' },
-            { key: 'orders_delivery', name: 'Orders Delivery' },
-            { key: 'orders_receive', name: 'Orders Receive' },
-            { key: 'orders_cancelled', name: 'Cancelled Orders' },
-            { key: 'orders_completed', name: 'Completed Orders' },
-            { key: 'orders_returned', name: 'Returned Orders' },
-            { key: 'orders_completed_returned', name: 'Completed Refunded / Replacement' }
+            { key: 'orders_pending', name: 'Orders' },
+            { key: 'orders_returned', name: 'Returned Orders' }
         ]
     },
     {
@@ -127,6 +113,14 @@ const USER_PERMISSION_LEGACY_KEYS = {
     transactions_delivery_rates: ['delivery_rates'],
     transactions_walk_in: ['walk_in'],
     transactions_bulk_orders: ['bulk_orders'],
+    orders_pending: [
+        'orders_processing', 'orders_shipping', 'orders_delivery', 'orders_receive',
+        'orders_cancelled', 'orders_completed',
+        'orders_orders_pending', 'orders_orders_processing', 'orders_orders_shipping',
+        'orders_orders_delivery', 'orders_orders_receive', 'orders_orders_cancelled',
+        'orders_orders_completed'
+    ],
+    orders_returned: ['orders_completed_returned', 'orders_orders_returned', 'orders_orders_completed_returned'],
     users_manage_users: ['manage_users'],
     reviews_reviews: ['reviews'],
     chat_chat_support: ['chat_support'],
@@ -137,26 +131,20 @@ const USER_PERMISSION_LEGACY_KEYS = {
 const DEFAULT_ROLE_PERMISSIONS = {
     Admin: ALL_ROLE_PERMISSION_KEYS,
     InventoryManager: [
-        'dashboard_access', 'inventory_reports', 'inventory_alerts',
+        'inventory_reports', 'inventory_alerts',
         'inventory_product_listing', 'inventory_product_inventory', 'inventory_storefront',
-        'inventory_materials', 'inventory_variations', 'inventory_archived'
+        'inventory_archived'
     ],
     TransactionManager: [
-        'dashboard_access',
         'transactions_bulk_orders', 'transactions_walk_in', 'transactions_delivery_rates',
-        'orders_returned', 'orders_completed_returned',
-        'orders_pending', 'orders_processing', 'orders_shipping', 'orders_delivery',
-        'orders_receive', 'orders_cancelled', 'orders_completed'
+        'orders_pending', 'orders_returned'
     ],
     OrderSupport: [
-        'dashboard_access',
-        'orders_returned', 'orders_completed_returned',
+        'orders_pending', 'orders_returned',
         'transactions_bulk_orders',
-        'orders_pending', 'orders_processing', 'orders_shipping', 'orders_delivery',
-        'orders_receive', 'orders_cancelled', 'orders_completed',
         'chat_chat_support', 'chat_messages'
     ],
-    UserManager: ['dashboard_access', 'users_manage_users', 'reviews_reviews']
+    UserManager: ['users_manage_users', 'reviews_reviews']
 };
 
 function getPermissionSection(permissionName) {

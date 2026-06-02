@@ -201,8 +201,31 @@ async function getUserPermissions(userId, session) {
     return perms;
 }
 
+const ORDERS_UNIFIED_STAGE_PERMISSIONS = new Set([
+    'orders_processing', 'orders_shipping', 'orders_delivery', 'orders_receive',
+    'orders_cancelled', 'orders_completed',
+    'orders_orders_pending', 'orders_orders_processing', 'orders_orders_shipping',
+    'orders_orders_delivery', 'orders_orders_receive', 'orders_orders_cancelled',
+    'orders_orders_completed'
+]);
+
 function hasPermission(perms, requiredPermission) {
     if (!requiredPermission) return true;
+
+    if (
+        perms.orders_pending === true
+        && ORDERS_UNIFIED_STAGE_PERMISSIONS.has(requiredPermission)
+    ) {
+        return true;
+    }
+
+    if (
+        perms.orders_returned === true
+        && (requiredPermission === 'orders_completed_returned'
+            || requiredPermission === 'orders_orders_completed_returned')
+    ) {
+        return true;
+    }
     
     // First check direct match
     if (perms[requiredPermission] === true) {

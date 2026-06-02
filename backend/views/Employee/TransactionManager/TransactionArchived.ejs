@@ -276,8 +276,9 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <% if (archivedBomBundles && archivedBomBundles.length > 0) { %>
-                                <% archivedBomBundles.forEach(function(bundle) { %>
+                            <% const _archivedBomBundles = (typeof archivedBomBundles !== 'undefined' && Array.isArray(archivedBomBundles)) ? archivedBomBundles : []; %>
+                            <% if (_archivedBomBundles.length > 0) { %>
+                                <% _archivedBomBundles.forEach(function(bundle) { %>
                                     <tr>
                                         <td><code style="font-size:0.85em;"><%= bundle.BundleCode || '—' %></code></td>
                                         <td><%= bundle.Name %></td>
@@ -315,8 +316,9 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <% if (archivedInventoryProducts && archivedInventoryProducts.length > 0) { %>
-                                <% archivedInventoryProducts.forEach(product => {
+                            <% const _archivedInventoryProducts = (typeof archivedInventoryProducts !== 'undefined' && Array.isArray(archivedInventoryProducts)) ? archivedInventoryProducts : []; %>
+                            <% if (_archivedInventoryProducts.length > 0) { %>
+                                <% _archivedInventoryProducts.forEach(product => {
                                     const totalQ = product.TotalQuantity || 0;
                                     const availQ = product.AvailableQuantity || 0;
                                     const invStatus = product.InventoryStatus || 'no_stock';
@@ -380,8 +382,9 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <% if (archivedVariations && archivedVariations.length > 0) { %>
-                                <% archivedVariations.forEach(variation => { %>
+                            <% const _archivedVariations = (typeof archivedVariations !== 'undefined' && Array.isArray(archivedVariations)) ? archivedVariations : []; %>
+                            <% if (_archivedVariations.length > 0) { %>
+                                <% _archivedVariations.forEach(variation => { %>
                                     <% 
                                       const availQ = Number(variation.AvailableQuantity) || 0;
                                       const dmgQ = Number(variation.DamagedQuantity) || 0;

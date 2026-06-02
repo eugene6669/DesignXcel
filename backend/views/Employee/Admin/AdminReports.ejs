@@ -370,6 +370,19 @@
             background: var(--primary-dark);
         }
 
+        .sales-summary-stats-table .metric-formula {
+            font-size: 0.8125rem;
+            color: #6b7280;
+            line-height: 1.45;
+            font-weight: 400;
+            max-width: 28rem;
+        }
+
+        .sales-summary-stats-table th.metric-formula-col,
+        .sales-summary-stats-table td.metric-formula-col {
+            min-width: 220px;
+        }
+
         /* Sales Table Container - Horizontal Scroll */
         #sales-table-container {
             width: 100%;
@@ -924,7 +937,6 @@
                             <table id="inventory-table">
                                 <thead>
                                     <tr>
-                                        <th>Type</th>
                                         <th>Product Name</th>
                                         <th>SKU</th>
                                         <th>Category</th>
@@ -937,7 +949,7 @@
                                 </thead>
                                 <tbody id="inventory-tbody">
                                     <tr>
-                                        <td colspan="9" class="loading">Loading inventory data...</td>
+                                        <td colspan="8" class="loading">Loading inventory data...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1067,16 +1079,17 @@
                         <div style="padding: 0 1.5rem 1.5rem;">
                             <div class="reports-stats" id="sales-stats"></div>
                             <div id="stats-table-container" style="width: 100%; overflow-x: auto; margin-top: 1rem;">
-                                <table id="stats-table" class="sales-summary-stats-table" style="width: 100%; border-collapse: collapse; min-width: 360px;">
+                                <table id="stats-table" class="sales-summary-stats-table" style="width: 100%; border-collapse: collapse; min-width: 640px;">
                                     <thead id="stats-thead">
                                         <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
                                             <th style="padding: 0.75rem; text-align: left;">Metric</th>
+                                            <th class="metric-formula-col" style="padding: 0.75rem; text-align: left;">Formula</th>
                                             <th style="padding: 0.75rem; text-align: right;">Value</th>
                                         </tr>
                                     </thead>
                                     <tbody id="stats-tbody">
                                         <tr>
-                                            <td colspan="2" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics…</td>
+                                            <td colspan="3" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics…</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -1341,6 +1354,20 @@
     </div>
 
     <script>
+        const SALES_METRIC_FORMULAS = <%- JSON.stringify(typeof salesReportMetricFormulas !== 'undefined' ? salesReportMetricFormulas : {}) %>;
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function metricFormulaForLabel(label) {
+            return SALES_METRIC_FORMULAS[label] || '';
+        }
+
         // Tab switching
         function switchTab(tabName) {
             // Update tab buttons
@@ -1390,12 +1417,12 @@
                     renderInventoryChart(data.stats);
                 } else {
                     document.getElementById('inventory-tbody').innerHTML = 
-                        `<tr><td colspan="9" class="empty-state">${data.error || 'Error loading inventory data'}</td></tr>`;
+                        `<tr><td colspan="8" class="empty-state">${data.error || 'Error loading inventory data'}</td></tr>`;
                 }
             } catch (error) {
                 console.error('Error loading inventory:', error);
                 document.getElementById('inventory-tbody').innerHTML = 
-                    `<tr><td colspan="9" class="empty-state">Error loading inventory data</td></tr>`;
+                    `<tr><td colspan="8" class="empty-state">Error loading inventory data</td></tr>`;
             }
         }
 
@@ -1426,7 +1453,7 @@
         function renderInventoryTable(data) {
             const tbody = document.getElementById('inventory-tbody');
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No inventory data found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No inventory data found</td></tr>';
                 return;
             }
 
@@ -1448,7 +1475,6 @@
                     : '<span style="display:inline-block;width:18px;"></span>';
                 rowsHtml.push(`
                     <tr class="inv-parent-row" data-parent-id="${pid}">
-                        <td><span class="badge badge-success">Parent</span></td>
                         <td>${toggleBtn}<strong>${parent.Name || 'N/A'}</strong>${hasChildren ? ` <span style="color:#6b7280;font-size:0.85em;">(${variations.length} variation${variations.length === 1 ? '' : 's'})</span>` : ''}</td>
                         <td>—</td>
                         <td>${parent.CategoryName || 'N/A'}</td>
@@ -1463,7 +1489,6 @@
                     variations.forEach(v => {
                         rowsHtml.push(`
                             <tr class="inv-var-row" data-parent-id="${pid}" style="display:none;">
-                                <td><span class="badge badge-info">Variation</span></td>
                                 <td><span style="padding-left:28px;color:#555;">↳ ${v.Name || 'N/A'}</span></td>
                                 <td>${v.SKU || '—'}</td>
                                 <td>${v.CategoryName || parent.CategoryName || 'N/A'}</td>
@@ -1913,8 +1938,10 @@
         function buildSalesSummaryTableRows(stats) {
             return SALES_SUMMARY_ROWS.map(function(row) {
                 const val = resolveSalesSummaryValue(stats, row);
+                const formula = row.formula || metricFormulaForLabel(row.label) || '';
                 return [
                     row.label,
+                    formula,
                     formatSalesSummaryRowValue(val, { currency: row.currency, percent: row.percent })
                 ];
             });
@@ -1999,9 +2026,12 @@
                         ? def.compute(stats)
                         : (stats[def.key] != null ? stats[def.key] : (def.alt ? stats[def.alt] : 0));
                     const value = formatSalesSummaryRowValue(raw, { currency: def.currency, percent: def.percent });
-                    return '<div class="stat-card">' +
+                    const formula = metricFormulaForLabel(def.label);
+                    const titleAttr = formula ? ' title="' + escapeHtml(formula) + '"' : '';
+                    return '<div class="stat-card"' + titleAttr + '>' +
                         '<div class="stat-label">' + def.label + '</div>' +
                         '<div class="stat-value">' + value + '</div>' +
+                        (formula ? '<div class="stat-formula-hint" style="font-size:0.7rem;color:#6b7280;margin-top:0.25rem;line-height:1.3;">' + escapeHtml(formula) + '</div>' : '') +
                         '</div>';
                 }).join('');
             }
@@ -2012,8 +2042,9 @@
             const rows = buildSalesSummaryTableRows(stats);
             statsTableBody.innerHTML = rows.map(function(cells) {
                 return '<tr>' +
-                    '<td style="padding:0.75rem;font-weight:600;color:#374151;">' + cells[0] + '</td>' +
-                    '<td style="padding:0.75rem;text-align:right;font-weight:600;white-space:nowrap;">' + cells[1] + '</td>' +
+                    '<td style="padding:0.75rem;font-weight:600;color:#374151;">' + escapeHtml(cells[0]) + '</td>' +
+                    '<td class="metric-formula-col metric-formula" style="padding:0.75rem;">' + escapeHtml(cells[1] || '—') + '</td>' +
+                    '<td style="padding:0.75rem;text-align:right;font-weight:600;white-space:nowrap;">' + cells[2] + '</td>' +
                     '</tr>';
             }).join('');
 
@@ -2356,14 +2387,14 @@
                 const stats = csvPreviewData.stats;
                 const summaryRowsHtml = buildSalesSummaryTableRows(stats)
                     .map(function(cells) {
-                        return '<tr><td>' + cells[0] + '</td><td style="text-align:right">' + cells[1] + '</td></tr>';
+                        return '<tr><td>' + escapeHtml(cells[0]) + '</td><td class="metric-formula">' + escapeHtml(cells[1] || '—') + '</td><td style="text-align:right">' + cells[2] + '</td></tr>';
                     })
                     .join('');
                 previewBody.innerHTML = `
                     <div class="csv-preview-section">
                         <h3>Summary (included in file)</h3>
                         <table class="csv-preview-table">
-                            <thead><tr><th>Metric</th><th style="text-align:right">Value</th></tr></thead>
+                            <thead><tr><th>Metric</th><th>Formula</th><th style="text-align:right">Value</th></tr></thead>
                             <tbody>${summaryRowsHtml}</tbody>
                         </table>
                     </div>

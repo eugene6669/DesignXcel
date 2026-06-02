@@ -1016,6 +1016,7 @@
                 </div>
 
                 <!-- View Toggle and Pagination Info -->
+                <% const _pagination = (typeof pagination !== 'undefined' && pagination) ? pagination : { totalOrders: 0, offset: 0, limit: 20, currentPage: 1, totalPages: 1 }; %>
                 <div class="orders-view-toggle-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
                         <span style="font-size: 0.875rem; color: #6b7280; font-weight: 500;">View:</span>
@@ -1028,9 +1029,9 @@
                             </button>
                         </div>
                     </div>
-                    <% if (pagination && pagination.totalOrders > 0) { %>
+                    <% if (_pagination && _pagination.totalOrders > 0) { %>
                         <div style="font-size: 0.875rem; color: #6b7280;">
-                            Showing <%= pagination.offset + 1 %>-<%= Math.min(pagination.offset + pagination.limit, pagination.totalOrders) %> of <%= pagination.totalOrders %> orders
+                            Showing <%= _pagination.offset + 1 %>-<%= Math.min(_pagination.offset + _pagination.limit, _pagination.totalOrders) %> of <%= _pagination.totalOrders %> orders
                         </div>
                     <% } %>
                 </div>
@@ -1597,28 +1598,28 @@
                     </div>
 
                     <!-- Pagination Controls -->
-                    <% if (pagination && pagination.totalPages > 1) { %>
+                    <% if (_pagination && _pagination.totalPages > 1) { %>
                         <div style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; margin-top: 2rem; flex-wrap: wrap;">
-                            <button onclick="goToPage(<%= pagination.currentPage - 1 %>)" 
-                                    <%= pagination.currentPage === 1 ? 'disabled' : '' %>
-                                    style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= pagination.currentPage === 1 ? '#f3f4f6' : '#ffffff' %>; color: <%= pagination.currentPage === 1 ? '#9ca3af' : '#374151' %>; border-radius: 6px; cursor: <%= pagination.currentPage === 1 ? 'not-allowed' : 'pointer' %>; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;"
-                                    <%= pagination.currentPage === 1 ? 'onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'#f3f4f6\'"' : 'onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'#ffffff\'"' %>>
+                            <button onclick="goToPage(<%= _pagination.currentPage - 1 %>)" 
+                                    <%= _pagination.currentPage === 1 ? 'disabled' : '' %>
+                                    style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= _pagination.currentPage === 1 ? '#f3f4f6' : '#ffffff' %>; color: <%= _pagination.currentPage === 1 ? '#9ca3af' : '#374151' %>; border-radius: 6px; cursor: <%= _pagination.currentPage === 1 ? 'not-allowed' : 'pointer' %>; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;"
+                                    <%= _pagination.currentPage === 1 ? 'onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'#f3f4f6\'"' : 'onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'#ffffff\'"' %>>
                                 Previous
                             </button>
                             
-                            <% for (let i = Math.max(1, pagination.currentPage - 2); i <= Math.min(pagination.totalPages, pagination.currentPage + 2); i++) { %>
+                            <% for (let i = Math.max(1, _pagination.currentPage - 2); i <= Math.min(_pagination.totalPages, _pagination.currentPage + 2); i++) { %>
                                 <button onclick="goToPage(<%= i %>)" 
-                                        style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= i === pagination.currentPage ? '#F0B21B' : '#ffffff' %>; color: <%= i === pagination.currentPage ? '#ffffff' : '#374151' %>; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: all 0.2s; min-width: 40px;"
-                                        onmouseover="<%= i === pagination.currentPage ? '' : 'this.style.background=\'#f9fafb\'' %>"
-                                        onmouseout="<%= i === pagination.currentPage ? '' : 'this.style.background=\'#ffffff\'' %>">
+                                        style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= i === _pagination.currentPage ? '#F0B21B' : '#ffffff' %>; color: <%= i === _pagination.currentPage ? '#ffffff' : '#374151' %>; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.875rem; transition: all 0.2s; min-width: 40px;"
+                                        onmouseover="<%= i === _pagination.currentPage ? '' : 'this.style.background=\'#f9fafb\'' %>"
+                                        onmouseout="<%= i === _pagination.currentPage ? '' : 'this.style.background=\'#ffffff\'' %>">
                                     <%= i %>
                                 </button>
                             <% } %>
                             
-                            <button onclick="goToPage(<%= pagination.currentPage + 1 %>)" 
-                                    <%= pagination.currentPage === pagination.totalPages ? 'disabled' : '' %>
-                                    style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= pagination.currentPage === pagination.totalPages ? '#f3f4f6' : '#ffffff' %>; color: <%= pagination.currentPage === pagination.totalPages ? '#9ca3af' : '#374151' %>; border-radius: 6px; cursor: <%= pagination.currentPage === pagination.totalPages ? 'not-allowed' : 'pointer' %>; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;"
-                                    <%= pagination.currentPage === pagination.totalPages ? 'onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'#f3f4f6\'"' : 'onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'#ffffff\'"' %>>
+                            <button onclick="goToPage(<%= _pagination.currentPage + 1 %>)" 
+                                    <%= _pagination.currentPage === _pagination.totalPages ? 'disabled' : '' %>
+                                    style="padding: 0.625rem 1rem; border: 1px solid #e5e7eb; background: <%= _pagination.currentPage === _pagination.totalPages ? '#f3f4f6' : '#ffffff' %>; color: <%= _pagination.currentPage === _pagination.totalPages ? '#9ca3af' : '#374151' %>; border-radius: 6px; cursor: <%= _pagination.currentPage === _pagination.totalPages ? 'not-allowed' : 'pointer' %>; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;"
+                                    <%= _pagination.currentPage === _pagination.totalPages ? 'onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'#f3f4f6\'"' : 'onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'#ffffff\'"' %>>
                                 Next
                             </button>
                         </div>

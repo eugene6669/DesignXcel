@@ -4491,6 +4491,182 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
+    // Order Support - Bulk Orders
+    router.get('/Employee/OrderSupport/OrderBulkOrders', isAuthenticated, checkPermission('transactions_bulk_orders'), async (req, res) => {
+        try {
+            await pool.connect();
+
+            // Ensure BulkOrders table exists
+            await pool.request().query(`
+                IF OBJECT_ID('dbo.BulkOrders','U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.BulkOrders (
+                        BulkOrderID INT IDENTITY(1,1) PRIMARY KEY,
+                        CustomerID INT NULL,
+                        CustomerEmail NVARCHAR(255) NULL,
+                        TotalQuantity INT NOT NULL,
+                        Subtotal DECIMAL(10,2) NOT NULL,
+                        DiscountAmount DECIMAL(10,2) NOT NULL DEFAULT 0,
+                        GrandTotal DECIMAL(10,2) NOT NULL,
+                        Status NVARCHAR(50) NOT NULL DEFAULT 'Pending',
+                        Notes NVARCHAR(1000) NULL,
+                        CreatedAt DATETIME2(0) NOT NULL DEFAULT GETDATE(),
+                        UpdatedAt DATETIME2(0) NULL
+                    );
+                END
+            `);
+
+            // Fetch bulk orders
+            const result = await pool.request().query(`
+                SELECT
+                    bo.BulkOrderID,
+                    bo.CustomerID,
+                    bo.CustomerEmail,
+                    bo.TotalQuantity,
+                    bo.Subtotal,
+                    bo.DiscountAmount,
+                    bo.GrandTotal,
+                    bo.Status,
+                    bo.Notes,
+                    bo.CreatedAt,
+                    bo.UpdatedAt,
+                    c.FullName AS CustomerFullName,
+                    c.PhoneNumber AS CustomerPhone
+                FROM BulkOrders bo
+                LEFT JOIN Customers c ON bo.CustomerID = c.CustomerID
+                ORDER BY bo.CreatedAt DESC
+            `);
+
+            res.render('Employee/OrderSupport/OrderBulkOrders', {
+                user: req.session.user,
+                bulkOrders: result.recordset
+            });
+        } catch (err) {
+            console.error('Error fetching order support bulk orders:', err);
+            res.render('Employee/OrderSupport/OrderBulkOrders', {
+                user: req.session.user,
+                bulkOrders: [],
+                error: 'Failed to load bulk orders.'
+            });
+        }
+    });
+
+    // Transaction Manager - Bulk Orders
+    router.get('/Employee/TransactionManager/TransactionBulkOrders', isAuthenticated, checkPermission('transactions_bulk_orders'), async (req, res) => {
+        try {
+            await pool.connect();
+
+            await pool.request().query(`
+                IF OBJECT_ID('dbo.BulkOrders','U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.BulkOrders (
+                        BulkOrderID INT IDENTITY(1,1) PRIMARY KEY,
+                        CustomerID INT NULL,
+                        CustomerEmail NVARCHAR(255) NULL,
+                        TotalQuantity INT NOT NULL,
+                        Subtotal DECIMAL(10,2) NOT NULL,
+                        DiscountAmount DECIMAL(10,2) NOT NULL DEFAULT 0,
+                        GrandTotal DECIMAL(10,2) NOT NULL,
+                        Status NVARCHAR(50) NOT NULL DEFAULT 'Pending',
+                        Notes NVARCHAR(1000) NULL,
+                        CreatedAt DATETIME2(0) NOT NULL DEFAULT GETDATE(),
+                        UpdatedAt DATETIME2(0) NULL
+                    );
+                END
+            `);
+
+            const result = await pool.request().query(`
+                SELECT
+                    bo.BulkOrderID,
+                    bo.CustomerID,
+                    bo.CustomerEmail,
+                    bo.TotalQuantity,
+                    bo.Subtotal,
+                    bo.DiscountAmount,
+                    bo.GrandTotal,
+                    bo.Status,
+                    bo.Notes,
+                    bo.CreatedAt,
+                    bo.UpdatedAt,
+                    c.FullName AS CustomerFullName,
+                    c.PhoneNumber AS CustomerPhone
+                FROM BulkOrders bo
+                LEFT JOIN Customers c ON bo.CustomerID = c.CustomerID
+                ORDER BY bo.CreatedAt DESC
+            `);
+
+            res.render('Employee/TransactionManager/TransactionBulkOrders', {
+                user: req.session.user,
+                bulkOrders: result.recordset
+            });
+        } catch (err) {
+            console.error('Error fetching transaction manager bulk orders:', err);
+            res.render('Employee/TransactionManager/TransactionBulkOrders', {
+                user: req.session.user,
+                bulkOrders: [],
+                error: 'Failed to load bulk orders.'
+            });
+        }
+    });
+
+    // User Manager - Bulk Orders
+    router.get('/Employee/UserManager/UserBulkOrders', isAuthenticated, checkPermission('transactions_bulk_orders'), async (req, res) => {
+        try {
+            await pool.connect();
+
+            await pool.request().query(`
+                IF OBJECT_ID('dbo.BulkOrders','U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.BulkOrders (
+                        BulkOrderID INT IDENTITY(1,1) PRIMARY KEY,
+                        CustomerID INT NULL,
+                        CustomerEmail NVARCHAR(255) NULL,
+                        TotalQuantity INT NOT NULL,
+                        Subtotal DECIMAL(10,2) NOT NULL,
+                        DiscountAmount DECIMAL(10,2) NOT NULL DEFAULT 0,
+                        GrandTotal DECIMAL(10,2) NOT NULL,
+                        Status NVARCHAR(50) NOT NULL DEFAULT 'Pending',
+                        Notes NVARCHAR(1000) NULL,
+                        CreatedAt DATETIME2(0) NOT NULL DEFAULT GETDATE(),
+                        UpdatedAt DATETIME2(0) NULL
+                    );
+                END
+            `);
+
+            const result = await pool.request().query(`
+                SELECT
+                    bo.BulkOrderID,
+                    bo.CustomerID,
+                    bo.CustomerEmail,
+                    bo.TotalQuantity,
+                    bo.Subtotal,
+                    bo.DiscountAmount,
+                    bo.GrandTotal,
+                    bo.Status,
+                    bo.Notes,
+                    bo.CreatedAt,
+                    bo.UpdatedAt,
+                    c.FullName AS CustomerFullName,
+                    c.PhoneNumber AS CustomerPhone
+                FROM BulkOrders bo
+                LEFT JOIN Customers c ON bo.CustomerID = c.CustomerID
+                ORDER BY bo.CreatedAt DESC
+            `);
+
+            res.render('Employee/UserManager/UserBulkOrders', {
+                user: req.session.user,
+                bulkOrders: result.recordset
+            });
+        } catch (err) {
+            console.error('Error fetching user manager bulk orders:', err);
+            res.render('Employee/UserManager/UserBulkOrders', {
+                user: req.session.user,
+                bulkOrders: [],
+                error: 'Failed to load bulk orders.'
+            });
+        }
+    });
+
     // Inventory Manager - Manage Users
     router.get('/Employee/InventoryManager/InventoryManageUsers', isAuthenticated, checkPermission('users_manage_users'), async (req, res) => {
         try {
@@ -4655,16 +4831,9 @@ module.exports = function (sql, pool, getStripe = null) {
     ];
 
     invManagerOrderRoutes.forEach(({ route, status }) => {
-        // Map route to permission
-        let permission = 'orders_pending'; // default
-        if (route.includes('Processing')) permission = 'orders_processing';
-        else if (route.includes('Shipping')) permission = 'orders_shipping';
-        else if (route.includes('Delivery')) permission = 'orders_delivery';
-        else if (route.includes('Receive')) permission = 'orders_receive';
-        else if (route.includes('Cancelled')) permission = 'orders_cancelled';
-        else if (route.includes('Completed') && route.includes('Returned')) permission = 'orders_completed_returned';
-        else if (route.includes('Completed')) permission = 'orders_completed';
-        else if (route.includes('Returned')) permission = 'orders_returned';
+        const permission = route.includes('Returned')
+            ? 'orders_returned'
+            : 'orders_pending';
 
         router.get(`/Employee/InventoryManager/${route}`, isAuthenticated, checkPermission(permission), async (req, res) => {
             try {
@@ -5319,14 +5488,7 @@ module.exports = function (sql, pool, getStripe = null) {
     ];
 
     transManagerOrderRoutes.forEach(({ route, status }) => {
-        // Map route to permission
-        let permission = 'orders_orders_pending'; // default
-        if (route.includes('Processing')) permission = 'orders_orders_processing';
-        else if (route.includes('Shipping')) permission = 'orders_orders_shipping';
-        else if (route.includes('Delivery')) permission = 'orders_orders_delivery';
-        else if (route.includes('Receive')) permission = 'orders_orders_receive';
-        else if (route.includes('Cancelled')) permission = 'orders_orders_cancelled';
-        else if (route.includes('Completed')) permission = 'orders_orders_completed';
+        const permission = 'orders_pending';
 
         router.get(`/Employee/TransactionManager/${route}`, isAuthenticated, checkPermission(permission), async (req, res) => {
             try {
@@ -5353,6 +5515,41 @@ module.exports = function (sql, pool, getStripe = null) {
                 });
             }
         });
+    });
+
+    const employeeReturnedOrderStatuses = [
+        'Return', 'Returned', 'Processing (Pickup)', 'Awaiting Inspection', 'Inspection Complete',
+        'Pickup Received', 'Declined', 'Completed Returned', 'Refunded'
+    ];
+
+    router.get('/Employee/TransactionManager/TransactionReturnedOrders', isAuthenticated, checkPermission('orders_returned'), async (req, res) => {
+        try {
+            await pool.connect();
+            const returnedStatuses = employeeReturnedOrderStatuses;
+            const statusParams = returnedStatuses.map((s, idx) => `@status${idx}`).join(', ');
+            const request = pool.request();
+            returnedStatuses.forEach((s, idx) => request.input(`status${idx}`, sql.NVarChar, s));
+            const result = await request.query(`
+                SELECT o.*, c.FullName as CustomerName, c.Email as CustomerEmail
+                FROM Orders o
+                LEFT JOIN Customers c ON o.CustomerID = c.CustomerID
+                WHERE o.Status IN (${statusParams})
+                ORDER BY o.OrderDate DESC
+            `);
+            res.render('Employee/TransactionManager/TransactionReturnedOrders', {
+                user: req.session.user,
+                orders: result.recordset,
+                activePage: 'orders-returned'
+            });
+        } catch (err) {
+            console.error('Error fetching returned orders:', err);
+            res.render('Employee/TransactionManager/TransactionReturnedOrders', {
+                user: req.session.user,
+                orders: [],
+                activePage: 'orders-returned',
+                error: 'Failed to load returned orders.'
+            });
+        }
     });
 
     // Transaction Manager - Alerts Data API
@@ -8668,14 +8865,7 @@ module.exports = function (sql, pool, getStripe = null) {
     ];
 
     orderSupportOrderRoutes.forEach(({ route, status }) => {
-        // Map route to permission
-        let permission = 'orders_orders_pending'; // default
-        if (route.includes('Processing')) permission = 'orders_orders_processing';
-        else if (route.includes('Shipping')) permission = 'orders_orders_shipping';
-        else if (route.includes('Delivery')) permission = 'orders_orders_delivery';
-        else if (route.includes('Receive')) permission = 'orders_orders_receive';
-        else if (route.includes('Cancelled')) permission = 'orders_orders_cancelled';
-        else if (route.includes('Completed')) permission = 'orders_orders_completed';
+        const permission = 'orders_pending';
 
         router.get(`/Employee/OrderSupport/${route}`, isAuthenticated, checkPermission(permission), async (req, res) => {
             try {
@@ -8702,6 +8892,36 @@ module.exports = function (sql, pool, getStripe = null) {
                 });
             }
         });
+    });
+
+    router.get('/Employee/OrderSupport/OrderReturnedOrders', isAuthenticated, checkPermission('orders_returned'), async (req, res) => {
+        try {
+            await pool.connect();
+            const returnedStatuses = employeeReturnedOrderStatuses;
+            const statusParams = returnedStatuses.map((s, idx) => `@status${idx}`).join(', ');
+            const request = pool.request();
+            returnedStatuses.forEach((s, idx) => request.input(`status${idx}`, sql.NVarChar, s));
+            const result = await request.query(`
+                SELECT o.*, c.FullName as CustomerName, c.Email as CustomerEmail
+                FROM Orders o
+                LEFT JOIN Customers c ON o.CustomerID = c.CustomerID
+                WHERE o.Status IN (${statusParams})
+                ORDER BY o.OrderDate DESC
+            `);
+            res.render('Employee/OrderSupport/OrderReturnedOrders', {
+                user: req.session.user,
+                orders: result.recordset,
+                activePage: 'orders-returned'
+            });
+        } catch (err) {
+            console.error('Error fetching returned orders:', err);
+            res.render('Employee/OrderSupport/OrderReturnedOrders', {
+                user: req.session.user,
+                orders: [],
+                activePage: 'orders-returned',
+                error: 'Failed to load returned orders.'
+            });
+        }
     });
 
     // Order Support - Alerts Data API
@@ -12109,6 +12329,80 @@ module.exports = function (sql, pool, getStripe = null) {
             modules: ROLE_MANAGER_MODULES.map(m => ({ key: m.key, label: m.label }))
         });
     });
+
+    // Add User route (Admin manage users)
+    router.post('/Employee/Admin/Users/Add', isAuthenticated, checkPermission('users_manage_users'), async (req, res) => {
+        try {
+            const { username, fullName, email, password, roleId } = req.body;
+            const normalizedUsername = String(username || '').trim();
+            const normalizedFullName = String(fullName || '').trim();
+            const normalizedEmail = String(email || '').trim();
+            const normalizedPassword = String(password || '');
+            const parsedRoleId = parseInt(roleId, 10);
+            const allowedRoleIds = new Set([2, 3, 4, 5]); // 4 employee roles
+
+            if (!normalizedUsername || !normalizedFullName || !normalizedEmail || !normalizedPassword) {
+                return res.status(400).json({ success: false, message: 'Username, full name, email, and password are required.' });
+            }
+            if (!allowedRoleIds.has(parsedRoleId)) {
+                return res.status(400).json({ success: false, message: 'Please select a valid employee role.' });
+            }
+            if (normalizedPassword.length < 6) {
+                return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
+            }
+
+            await pool.connect();
+
+            const duplicateCheck = await pool.request()
+                .input('username', sql.NVarChar, normalizedUsername)
+                .input('email', sql.NVarChar, normalizedEmail)
+                .query(`
+                    SELECT TOP 1 UserID
+                    FROM Users
+                    WHERE Username = @username OR Email = @email
+                `);
+
+            if (duplicateCheck.recordset.length > 0) {
+                return res.status(400).json({ success: false, message: 'Username or email already exists.' });
+            }
+
+            const hashedPassword = await bcrypt.hash(normalizedPassword, 10);
+            const insertResult = await pool.request()
+                .input('username', sql.NVarChar, normalizedUsername)
+                .input('fullName', sql.NVarChar, normalizedFullName)
+                .input('email', sql.NVarChar, normalizedEmail)
+                .input('passwordHash', sql.NVarChar, hashedPassword)
+                .input('roleId', sql.Int, parsedRoleId)
+                .input('isActive', sql.Bit, 1)
+                .query(`
+                    INSERT INTO Users (Username, FullName, Email, PasswordHash, RoleID, IsActive, CreatedAt)
+                    OUTPUT INSERTED.UserID
+                    VALUES (@username, @fullName, @email, @passwordHash, @roleId, @isActive, GETDATE())
+                `);
+
+            const newUserId = insertResult.recordset[0]?.UserID;
+            await logActivity(
+                req.session.user.id,
+                'CREATE',
+                'Users',
+                String(newUserId || ''),
+                `Admin created user account ${normalizedUsername} with role ${parsedRoleId}`,
+                JSON.stringify({
+                    Username: normalizedUsername,
+                    FullName: normalizedFullName,
+                    Email: normalizedEmail,
+                    RoleID: parsedRoleId,
+                    IsActive: 1
+                })
+            );
+
+            res.json({ success: true, message: 'User account created successfully.' });
+        } catch (error) {
+            console.error('Error creating user:', error);
+            res.status(500).json({ success: false, message: 'Failed to create user account.' });
+        }
+    });
+
     // Edit User route
     router.post('/Employee/Admin/Users/Edit', isAuthenticated, checkPermission('users_manage_users'), async (req, res) => {
         try {
@@ -15417,13 +15711,16 @@ module.exports = function (sql, pool, getStripe = null) {
     // Admin Reports Page
     router.get('/Employee/Admin/Reports', isAuthenticated, async (req, res) => {
         try {
+            const { SALES_REPORT_METRIC_FORMULAS } = require('./utils/salesReportMetrics');
             res.render('Employee/Admin/AdminReports', {
-                user: req.session.user
+                user: req.session.user,
+                salesReportMetricFormulas: SALES_REPORT_METRIC_FORMULAS
             });
         } catch (err) {
             console.error('Error rendering reports page:', err);
             res.render('Employee/Admin/AdminReports', {
-                user: req.session.user
+                user: req.session.user,
+                salesReportMetricFormulas: {}
             });
         }
     });

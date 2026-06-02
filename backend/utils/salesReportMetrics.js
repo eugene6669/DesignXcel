@@ -504,6 +504,50 @@ function applySalesReportOrderRowDisplay(order, items) {
     return order;
 }
 
+/** Human-readable formulas shown on Admin Reports (aligned with aggregateSalesReportFromOrders). */
+const SALES_REPORT_METRIC_FORMULAS = {
+    'Gross Sales':
+        'Σ (Subtotal + TotalDiscounts) per non-cancelled order in gross-sales statuses (Pending → Completed).',
+    Discounts:
+        'Σ TotalDiscounts on the same gross-sales orders.',
+    'Net Sales':
+        'Gross Sales − Discounts (= Σ Subtotal on gross-sales orders).',
+    'Gross Revenue':
+        'Gross Sales + Delivery Revenue.',
+    'Delivery Revenue':
+        'Σ (DeliveryCost + ExtraDeliveryFee) on gross-sales orders.',
+    'Original Delivery Cost':
+        'Σ delivery fees on orders that count toward gross sales.',
+    'Return Pick-Up Cost':
+        'Σ delivery on return/refund workflow orders (seller pickup leg).',
+    'Replacement Delivery Cost':
+        'Σ delivery on replacement return workflow orders.',
+    'Total Delivery Expense':
+        'Original Delivery Cost + Return Pick-Up Cost + Replacement Delivery Cost.',
+    Refunds:
+        'Product refunds + delivery refunds (reversed amounts from refund/return orders).',
+    'Net Revenue':
+        '(Σ Subtotal on Received + Completed) − product refunds + (Σ delivery on Received + Completed) − delivery refunds.',
+    COGS:
+        'Σ (Quantity × unit CostPrice) for lines on Received or Completed orders.',
+    'Gross Profit':
+        'Net Revenue − COGS − return shipping expense − damage inventory cost − replacement unit cost.',
+    'Total Orders':
+        'Count of orders matching the current filters.',
+    'Total Customers':
+        'Count of distinct customer emails in the filtered orders.',
+    'Average Order Value':
+        'Σ TotalAmount ÷ Total Orders (all orders in the filtered set).',
+    'Delivery Fees':
+        'Σ DeliveryCost across filtered orders.',
+    'Sales Total':
+        'Σ TotalAmount across filtered orders.'
+};
+
+function formulaForMetricLabel(label) {
+    return SALES_REPORT_METRIC_FORMULAS[label] || '';
+}
+
 /** Flat summary rows for UI table and Excel/CSV export. */
 function buildSalesReportSummaryRows(stats) {
     const n = (v) => parseFloat(v || 0);
@@ -537,7 +581,7 @@ function buildSalesReportSummaryRows(stats) {
             { label: 'Total Orders', value: i(stats.totalOrders), currency: false },
             { label: 'Total Customers', value: i(stats.totalCustomers), currency: false },
             { label: 'Average Order Value', value: n(stats.averageOrderValue), currency: true }
-        ];
+        ].map((row) => ({ ...row, formula: formulaForMetricLabel(row.label) }));
     }
 
     return [
@@ -547,10 +591,12 @@ function buildSalesReportSummaryRows(stats) {
         { label: 'Delivery Fees', value: n(stats.deliveryTotal), currency: true },
         { label: 'Sales Total', value: n(stats.salesTotal), currency: true },
         { label: 'Average Order Value', value: n(stats.averageOrderValue), currency: true }
-    ];
+    ].map((row) => ({ ...row, formula: formulaForMetricLabel(row.label) }));
 }
 
 module.exports = {
+    SALES_REPORT_METRIC_FORMULAS,
+    formulaForMetricLabel,
     buildSalesReportSummaryRows,
     detectSalesReportSchema,
     isRefundMerchandiseOrder,
