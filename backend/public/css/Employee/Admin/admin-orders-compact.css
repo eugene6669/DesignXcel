@@ -1,5 +1,46 @@
 @import url('/css/Employee/employee-tokens.css');
 
+/* Filters — compact for laptop viewport */
+body.orders-page .filters-section {
+    padding: 0.65rem 0.85rem;
+    margin-bottom: 0.85rem;
+    border-radius: 8px;
+}
+
+body.orders-page .filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.5rem 0.65rem;
+    margin-bottom: 0.5rem;
+}
+
+body.orders-page .filter-group {
+    gap: 0.25rem;
+}
+
+body.orders-page .filter-group label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6b7280;
+}
+
+body.orders-page .filter-group input,
+body.orders-page .filter-group select {
+    padding: 0.4rem 0.55rem;
+    font-size: 0.8125rem;
+    border-radius: 6px;
+}
+
+body.orders-page .filter-actions {
+    gap: 0.5rem;
+    margin-top: 0.15rem;
+}
+
+body.orders-page .btn-filter {
+    padding: 0.4rem 0.85rem;
+    font-size: 0.8125rem;
+}
+
 /* Orders hub tabs */
 .main-content > .admin-orders-tabs {
     margin: 0 0 1rem 0;

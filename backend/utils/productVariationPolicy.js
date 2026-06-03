@@ -66,6 +66,21 @@ async function getStorefrontDisplayQuantityForCatalogProduct(pool, productId, tr
     return Number.isNaN(n) ? null : Math.max(0, n);
 }
 
+/** True when admin has set a storefront display stock cap (InventoryProducts.StorefrontDisplayQuantity). */
+async function usesStorefrontDisplayStock(pool, productId, transaction = null) {
+    if (!productId) return false;
+    const request = transaction ? transaction.request() : pool.request();
+    const result = await request
+        .input('productId', sql.Int, productId)
+        .query(`
+            SELECT TOP 1 1 AS HasDisplay
+            FROM InventoryProducts
+            WHERE ProductID = @productId AND IsActive = 1
+              AND StorefrontDisplayQuantity IS NOT NULL
+        `);
+    return (result.recordset || []).length > 0;
+}
+
 async function getInventoryVariationStockSum(pool, productId, transaction = null) {
     if (!productId) return 0;
     const request = transaction ? transaction.request() : pool.request();
@@ -103,6 +118,20 @@ async function getProductVariationStockSum(pool, productId, transaction = null) 
 
 async function getProductVariationQuantity(pool, productId, variationId, transaction = null) {
     if (!productId || !variationId) return 0;
+
+    if (await usesStorefrontDisplayStock(pool, productId, transaction)) {
+        const pvRequest = transaction ? transaction.request() : pool.request();
+        const pvResult = await pvRequest
+            .input('productId', sql.Int, productId)
+            .input('variationId', sql.Int, variationId)
+            .query(`
+                SELECT COALESCE(Quantity, 0) as Quantity
+                FROM ProductVariations
+                WHERE ProductID = @productId AND VariationID = @variationId AND IsActive = 1
+            `);
+        return pvResult.recordset[0]?.Quantity || 0;
+    }
+
     const request = transaction ? transaction.request() : pool.request();
     const invResult = await request
         .input('productId', sql.Int, productId)
@@ -116,12 +145,7 @@ async function getProductVariationQuantity(pool, productId, variationId, transac
             WHERE ip.ProductID = @productId AND ipv.VariationID = @variationId AND ipv.IsActive = 1
         `);
     if (invResult.recordset.length) {
-        const invQty = invResult.recordset[0].Quantity || 0;
-        const displayOverride = await getStorefrontDisplayQuantityForCatalogProduct(pool, productId, transaction);
-        if (displayOverride == null) return invQty;
-        const sumActual = await getInventoryVariationStockSum(pool, productId, transaction);
-        if (sumActual <= 0) return Math.min(invQty, displayOverride);
-        return Math.min(invQty, Math.max(0, Math.round(displayOverride * (invQty / sumActual))));
+        return invResult.recordset[0].Quantity || 0;
     }
 
     const pvRequest = transaction ? transaction.request() : pool.request();
@@ -246,7 +270,7 @@ async function enrichProductWithVariationPolicy(pool, product) {
     const hasActiveVariations = productId
         ? await productHasActiveProductVariations(pool, productId)
         : false;
-    const variationStockSum = hasAnyVariations
+    const variationStockSum = hasAnyVariations && productId
         ? await getProductVariationStockSum(pool, productId)
         : 0;
 
@@ -267,7 +291,18 @@ async function enrichProductWithVariationPolicy(pool, product) {
 
     if (hasAnyVariations) {
         enriched.stockQuantity = 0;
-        enriched.availableStock = Math.max(0, variationStockSum - pendingFromProduct);
+        const usesDisplay = productId ? await usesStorefrontDisplayStock(pool, productId) : false;
+        let pendingQty = 0;
+        if (!usesDisplay) {
+            pendingQty = pendingFromProduct;
+            try {
+                const { getCatalogPendingQuantity } = require('./availableStockCalculator');
+                if (productId) pendingQty = await getCatalogPendingQuantity(pool, productId);
+            } catch {
+                /* use pendingFromProduct */
+            }
+        }
+        enriched.availableStock = Math.max(0, variationStockSum - pendingQty);
     }
 
     return enriched;
@@ -302,16 +337,23 @@ async function enrichProductsWithVariationPolicy(pool, products) {
 
             if (hasAnyVariations) {
                 enriched.stockQuantity = 0;
+                const variationStockSum = productId
+                    ? await getProductVariationStockSum(pool, productId)
+                    : 0;
+                enriched.variationStockSum = variationStockSum;
+                const usesDisplay = productId ? await usesStorefrontDisplayStock(pool, productId) : false;
                 let pendingQty = 0;
-                if (productId && getCatalogPendingQuantity) {
-                    pendingQty = await getCatalogPendingQuantity(pool, productId);
-                } else {
-                    const listedAvailable = Number(product.availableStock);
-                    const listedStock = Number(product.stockQuantity) || 0;
-                    pendingQty = Math.max(
-                        0,
-                        listedStock - (Number.isFinite(listedAvailable) ? listedAvailable : listedStock)
-                    );
+                if (!usesDisplay) {
+                    if (productId && getCatalogPendingQuantity) {
+                        pendingQty = await getCatalogPendingQuantity(pool, productId);
+                    } else {
+                        const listedAvailable = Number(product.availableStock);
+                        const listedStock = Number(product.stockQuantity) || 0;
+                        pendingQty = Math.max(
+                            0,
+                            listedStock - (Number.isFinite(listedAvailable) ? listedAvailable : listedStock)
+                        );
+                    }
                 }
                 enriched.availableStock = Math.max(0, variationStockSum - pendingQty);
             }
@@ -816,6 +858,8 @@ async function enrichProductDetailFromInventory(pool, product) {
 module.exports = {
     productHasAnyCatalogVariations,
     productHasActiveProductVariations,
+    getStorefrontDisplayQuantityForCatalogProduct,
+    usesStorefrontDisplayStock,
     getInventoryVariationStockSum,
     getProductVariationStockSum,
     getProductVariationQuantity,

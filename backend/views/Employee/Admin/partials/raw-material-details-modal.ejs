@@ -1,0 +1,49 @@
+<div id="rawMaterialDetailsModal" class="modal pi-modal-compact inventory-details-modal rm-details-modal" style="display:none;" aria-hidden="true">
+    <div class="modal-content inventory-details-modal-content rm-details-modal-content">
+        <span class="close-button" id="rmCloseDetailsModal" aria-label="Close">&times;</span>
+        <h3>Raw Material Details</h3>
+        <div class="inventory-details-hero rm-details-po-layout">
+            <div class="inventory-details-image-wrap rm-details-po-image-wrap">
+                <img id="rmDetailsPoImage" class="rm-details-po-thumb" src="/images/placeholder-no-image.svg" alt="" role="button" tabindex="0" title="Click to view full size">
+                <p id="rmDetailsPoImageHint" class="rm-po-image-hint">Select a purchase order to preview</p>
+            </div>
+            <div class="inventory-details-meta">
+                <div class="inventory-details-meta-row">
+                    <span class="inventory-details-label">SKU</span>
+                    <span id="rmDetailsSku" class="inventory-details-value inventory-code-text">—</span>
+                </div>
+                <div class="inventory-details-meta-row">
+                    <span class="inventory-details-label">Name</span>
+                    <strong id="rmDetailsName" class="inventory-details-value">—</strong>
+                </div>
+                <div class="inventory-details-meta-row">
+                    <span class="inventory-details-label">Supplier</span>
+                    <span id="rmDetailsSupplier" class="inventory-details-value">—</span>
+                </div>
+                <div class="inventory-details-meta-row">
+                    <span class="inventory-details-label">Unit</span>
+                    <span id="rmDetailsUnit" class="inventory-details-value">—</span>
+                </div>
+                <div class="inventory-details-meta-row rm-details-po-select-row">
+                    <label class="inventory-details-label" for="rmDetailsPoSelect">Purchase orders</label>
+                    <select id="rmDetailsPoSelect" class="rm-details-po-select">
+                        <option value="">— No purchase orders —</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <h4 class="inventory-details-section-title">Stock Summary</h4>
+        <div class="inventory-stock-summary-grid">
+            <div class="inventory-stock-card stock-available">
+                <span class="inventory-stock-card-label">Total Stock</span>
+                <span class="inventory-stock-card-value" id="rmDetailsStockQty">0</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="rmPoImageLightbox" class="rm-po-lightbox" style="display:none;" aria-hidden="true">
+    <div class="rm-po-lightbox-backdrop" id="rmPoLightboxBackdrop"></div>
+    <button type="button" class="rm-po-lightbox-close" id="rmPoLightboxClose" aria-label="Close">&times;</button>
+    <img id="rmPoImageLightboxImg" src="" alt="Purchase order">
+</div>

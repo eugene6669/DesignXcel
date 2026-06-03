@@ -92,6 +92,7 @@ function getUploadContext(req) {
     }
 
     if (
+        p.includes('/inventory/add') ||
         p.includes('/productinventory') ||
         p.includes('/inventory-products') ||
         p.includes('/inventoryproducts') ||
@@ -103,6 +104,7 @@ function getUploadContext(req) {
     }
 
     if (
+        p.includes('/productslisting') ||
         p.includes('/employee/admin/products') ||
         p.includes('/employee/admin/variations') ||
         p.includes('/transactionproducts') ||

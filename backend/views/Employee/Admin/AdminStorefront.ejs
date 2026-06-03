@@ -1061,9 +1061,12 @@
         .products-listing-table thead th { background: #f2f2f2; font-weight: 600; }
         .page-storefront .variations-nested-table .var-col-sku .variation-sku-value,
         .page-storefront .variation-flat-row .variation-sku-value {
-            font-size: 1.3em !important;
-            line-height: 1.3;
-            font-weight: 800;
+            font-size: inherit;
+            line-height: inherit;
+            font-weight: inherit;
+        }
+        .page-storefront .products-listing-table .variations-nested-table {
+            font-size: 0.85em;
         }
         .last-added-cell { white-space: nowrap; font-size: 0.9em; color: #444; }
         .page-storefront .pi-actions-cell .pi-icon-storefront-btn,
@@ -1176,6 +1179,7 @@
             stroke: #111 !important;
         }
     </style>
+    <link rel="stylesheet" href="/css/Employee/Admin/admin-pi-modals-compact.css?v=20260603a">
 </head>
 <body class="page-storefront">
     <div id="customPopup" class="custom-popup">

@@ -47,7 +47,6 @@ async function ensureVariationSkuSchema(pool) {
 }
 
 async function ensureVariationMediaColumns(pool) {
-    if (variationSchemaReady) return;
     const checks = [
         { table: 'InventoryProductVariations', column: 'Model3D', ddl: 'ALTER TABLE InventoryProductVariations ADD Model3D NVARCHAR(500) NULL' },
         { table: 'InventoryProductVariations', column: 'ThumbnailURLs', ddl: 'ALTER TABLE InventoryProductVariations ADD ThumbnailURLs NVARCHAR(MAX) NULL' },
@@ -60,7 +59,10 @@ async function ensureVariationMediaColumns(pool) {
         { table: 'InventoryProducts', column: 'CostPrice', ddl: 'ALTER TABLE InventoryProducts ADD CostPrice DECIMAL(10, 2) NULL' },
         { table: 'InventoryProducts', column: 'ReorderPoint', ddl: 'ALTER TABLE InventoryProducts ADD ReorderPoint INT NOT NULL DEFAULT 10' },
         { table: 'InventoryProductVariations', column: 'CostPrice', ddl: 'ALTER TABLE InventoryProductVariations ADD CostPrice DECIMAL(10, 2) NULL' },
-        { table: 'InventoryProductVariations', column: 'Dimensions', ddl: 'ALTER TABLE InventoryProductVariations ADD Dimensions NVARCHAR(MAX) NULL' }
+        { table: 'InventoryProductVariations', column: 'Dimensions', ddl: 'ALTER TABLE InventoryProductVariations ADD Dimensions NVARCHAR(MAX) NULL' },
+        { table: 'InventoryProductVariations', column: 'Color', ddl: 'ALTER TABLE InventoryProductVariations ADD Color NVARCHAR(100) NULL' },
+        { table: 'InventoryProductVariations', column: 'Shape', ddl: 'ALTER TABLE InventoryProductVariations ADD Shape NVARCHAR(100) NULL' },
+        { table: 'InventoryProductVariations', column: 'VariationType', ddl: 'ALTER TABLE InventoryProductVariations ADD VariationType NVARCHAR(100) NULL' }
     ];
     for (const { table, column, ddl } of checks) {
         const exists = await pool.request()
@@ -81,6 +83,20 @@ async function ensureVariationMediaColumns(pool) {
 /**
  * Map multer file arrays to per-variation media (files appended in row order).
  */
+function resolvePlanVariationDisplayName(v) {
+    const src = v || {};
+    const explicit = String(src.variationName || '').trim();
+    if (explicit) return explicit;
+    const color = String(src.color || '').trim();
+    const shape = String(src.shape || '').trim();
+    const type = String(src.variationType || src.type || '').trim();
+    const parts = [];
+    if (color) parts.push(color);
+    if (shape) parts.push(shape);
+    if (type) parts.push(type);
+    return parts.join(' / ');
+}
+
 function buildVariationDimensionsJson(v) {
     const src = v || {};
     const length = src.length != null && src.length !== '' ? parseFloat(src.length) : null;
@@ -100,6 +116,22 @@ function buildVariationDimensionsJson(v) {
     });
 }
 
+function variationExpectsNewMainUpload(v) {
+    const src = v || {};
+    if (src.hasNewMainImage != null && src.hasNewMainImage !== '') {
+        return src.hasNewMainImage === true || src.hasNewMainImage === 'true' || src.hasNewMainImage === 1;
+    }
+    return src.hasMainImage === true || src.hasMainImage === 'true' || src.hasMainImage === 1;
+}
+
+function variationExpectsNewModelUpload(v) {
+    const src = v || {};
+    if (src.hasNewModel3d != null && src.hasNewModel3d !== '') {
+        return src.hasNewModel3d === true || src.hasNewModel3d === 'true' || src.hasNewModel3d === 1;
+    }
+    return src.hasModel3d === true || src.hasModel3d === 'true' || src.hasModel3d === 1;
+}
+
 function mapVariationMediaFiles(files, variationsList) {
     const mainFiles = (files && files.variationMainImage) ? files.variationMainImage : [];
     const modelFiles = (files && files.variationModel3d) ? files.variationModel3d : [];
@@ -114,8 +146,12 @@ function mapVariationMediaFiles(files, variationsList) {
         const thumbCount = Math.min(4, parseInt(v.thumbCount, 10) || 0);
         const thumbs = thumbFiles.slice(thumbIndex, thumbIndex + thumbCount);
         thumbIndex += thumbCount;
-        const mainFile = v.hasMainImage && mainFiles[mainIndex] ? mainFiles[mainIndex++] : null;
-        const modelFile = v.hasModel3d && modelFiles[modelIndex] ? modelFiles[modelIndex++] : null;
+        const mainFile = variationExpectsNewMainUpload(v) && mainFiles[mainIndex]
+            ? mainFiles[mainIndex++]
+            : null;
+        const modelFile = variationExpectsNewModelUpload(v) && modelFiles[modelIndex]
+            ? modelFiles[modelIndex++]
+            : null;
         return { mainFile, thumbFiles: thumbs, modelFile };
     });
 }
@@ -322,6 +358,7 @@ async function createStorefrontProductFromInventory(transaction, inventoryProduc
 
 module.exports = {
     ensureVariationMediaColumns,
+    resolvePlanVariationDisplayName,
     buildVariationDimensionsJson,
     mapVariationMediaFiles,
     parseSingleVariationMediaFiles,

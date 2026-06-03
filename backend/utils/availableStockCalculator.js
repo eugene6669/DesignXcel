@@ -6,7 +6,8 @@ const {
     productHasAnyCatalogVariations,
     productHasActiveProductVariations,
     getProductVariationStockSum,
-    getProductVariationQuantity
+    getProductVariationQuantity,
+    usesStorefrontDisplayStock
 } = require('./productVariationPolicy');
 
 let hasBulkOrdersOrderIdColumn = null;
@@ -100,10 +101,14 @@ async function computeAvailableStock(pool, catalogProductId, options = {}) {
         }
     }
 
-    const totalPending = await getPendingQuantity(pool, catalogProductId, {
-        hasVariations: usesVariationStock,
-        variationId: parsedVariationId
-    });
+    const usesDisplay = await usesStorefrontDisplayStock(pool, catalogProductId);
+    let totalPending = 0;
+    if (!usesDisplay) {
+        totalPending = await getPendingQuantity(pool, catalogProductId, {
+            hasVariations: usesVariationStock,
+            variationId: parsedVariationId
+        });
+    }
     const availableStock = Math.max(0, actualStock - totalPending);
 
     const variationStockSum = usesVariationStock

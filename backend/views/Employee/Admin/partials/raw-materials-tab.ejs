@@ -6,12 +6,6 @@
             <button type="button" id="rmQuickAddBtn" class="add-material-btn" style="background:#28a745;color:#fff;">Quick Add Common</button>
             <button type="button" id="rmManageUnitsBtn" class="add-material-btn" style="background:#17a2b8;color:#fff;">Manage Units</button>
         </div>
-        <div class="stock-legend rm-legend">
-            <span><i style="background:#DC3545;"></i> Out of stock (0)</span>
-            <span><i style="background:#FF9800;"></i> Critical (1–10)</span>
-            <span><i style="background:#d4af37;"></i> Low (11–20)</span>
-        </div>
-
         <% if (materials && materials.length > 0) { %>
             <table id="rawMaterialsTable">
                 <thead>
@@ -19,6 +13,7 @@
                         <th>SKU</th>
                         <th>Name</th>
                         <th class="qty-col">Qty</th>
+                        <th>Stock Status</th>
                         <th>Unit</th>
                         <th>Supplier</th>
                         <th>Updated</th>
@@ -30,25 +25,56 @@
                         const qty = material.QuantityAvailable;
                         const n = Number(qty) || 0;
                         let qtyClass = 'stock-qty-normal';
-                        if (n < 0) qtyClass = 'stock-qty-negative';
-                        else if (n === 0) qtyClass = 'stock-qty-out';
-                        else if (n <= 10) qtyClass = 'stock-qty-critical';
-                        else if (n <= 20) qtyClass = 'stock-qty-low';
+                        let statusLabel = 'In stock';
+                        let statusClass = 'rm-stock-status-ok';
+                        if (n < 0) {
+                            qtyClass = 'stock-qty-negative';
+                            statusLabel = 'Negative';
+                            statusClass = 'rm-stock-status-negative';
+                        } else if (n === 0) {
+                            qtyClass = 'stock-qty-out';
+                            statusLabel = 'Out of stock';
+                            statusClass = 'rm-stock-status-out';
+                        } else if (n <= 10) {
+                            qtyClass = 'stock-qty-critical';
+                            statusLabel = 'Critical';
+                            statusClass = 'rm-stock-status-critical';
+                        } else if (n <= 20) {
+                            qtyClass = 'stock-qty-low';
+                            statusLabel = 'Low';
+                            statusClass = 'rm-stock-status-low';
+                        }
+                        const poImg = material.PurchaseOrderImageURL || '';
+                        const poNum = material.PurchaseOrderNumber || '';
                     %>
                         <tr data-material-id="<%= material.MaterialID %>">
-                            <td><code style="font-size:0.85em;"><%= material.SKU || '—' %></code></td>
+                            <td><code class="inventory-code-text"><%= material.SKU || '—' %></code></td>
                             <td><%= material.Name %></td>
                             <td class="qty-col"><span class="stock-qty rm-qty-display <%= qtyClass %>" data-material-id="<%= material.MaterialID %>"><%= qty %></span></td>
+                            <td><span class="rm-stock-status <%= statusClass %>"><%= statusLabel %></span></td>
                             <td><%= material.Unit %></td>
                             <td><%= material.Supplier || '—' %></td>
                             <td class="rm-updated-cell"><%= material.LastUpdated ? new Date(material.LastUpdated).toLocaleDateString() : '—' %></td>
                             <td class="pi-actions-col">
                                 <div class="pi-actions-cell">
+                                <button type="button" class="raw-material-details-btn pi-icon-details-btn"
+                                    data-material-id="<%= material.MaterialID %>"
+                                    data-sku="<%= (material.SKU || '').replace(/"/g, '&quot;') %>"
+                                    data-name="<%= material.Name.replace(/'/g, "\\'").replace(/"/g, "&quot;") %>"
+                                    data-quantity="<%= material.QuantityAvailable %>"
+                                    data-unit="<%= material.Unit %>"
+                                    data-supplier="<%= (material.Supplier || '').replace(/"/g, '&quot;') %>"
+                                    data-purchase-order-number="<%= poNum.replace(/"/g, '&quot;') %>"
+                                    data-purchase-order-image="<%= poImg.replace(/"/g, '&quot;') %>"
+                                    title="View details" aria-label="View details" data-pi-menu-label="View details">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 4.5V3a3 3 0 016 0v1.5M9 10h6M9 14h6M9 18h6"/></svg>
+                                </button>
                                 <button type="button" class="restock-raw-material-btn pi-icon-restock-btn"
                                     data-material-id="<%= material.MaterialID %>"
                                     data-material-name="<%= material.Name.replace(/'/g, "\\'").replace(/"/g, "&quot;") %>"
                                     data-quantity="<%= material.QuantityAvailable %>"
                                     data-unit="<%= material.Unit %>"
+                                    data-supplier="<%= (material.Supplier || '').replace(/"/g, '&quot;') %>"
                                     title="Restock" aria-label="Restock">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                                 </button>
@@ -83,9 +109,21 @@
         <span class="close-button" id="rmCloseAddMaterial">&times;</span>
         <h3>Add Raw Material</h3>
         <p style="font-size:0.82em;color:#666;margin:0 0 10px;">SKU is auto-generated (RM-000001 format).</p>
-        <form action="/Employee/Admin/RawMaterials/Add" method="POST">
+        <form action="/Employee/Admin/RawMaterials/Add" method="POST" enctype="multipart/form-data">
             <input type="hidden" name="redirectTab" value="raw-materials">
             <div class="rm-form-grid">
+                <div class="rm-full">
+                    <label for="rmAddSupplier">Supplier</label>
+                    <input type="text" id="rmAddSupplier" name="supplier" placeholder="Supplier name">
+                </div>
+                <div class="rm-full">
+                    <label for="rmAddPurchaseOrderNumber">Purchase order number</label>
+                    <input type="text" id="rmAddPurchaseOrderNumber" name="purchaseOrderNumber" placeholder="e.g. PO-2026-001">
+                </div>
+                <div class="rm-full">
+                    <label for="rmAddPurchaseOrderImage">Upload image (Purchase order)</label>
+                    <input type="file" id="rmAddPurchaseOrderImage" name="purchaseOrderImage" accept="image/*">
+                </div>
                 <div class="rm-full">
                     <label for="rmAddName">Name</label>
                     <input type="text" id="rmAddName" name="name" required placeholder="e.g. Wood Plank Oak">
@@ -109,10 +147,6 @@
                         <% } %>
                     </select>
                 </div>
-                <div class="rm-full">
-                    <label for="rmAddSupplier">Supplier</label>
-                    <input type="text" id="rmAddSupplier" name="supplier" placeholder="Optional supplier name">
-                </div>
             </div>
             <div class="rm-form-actions">
                 <button type="button" class="rm-btn rm-btn-secondary" id="rmCancelAddMaterial">Cancel</button>
@@ -131,18 +165,10 @@
             <input type="hidden" id="rmEditMaterialID" name="materialid">
             <div class="rm-form-grid">
                 <div class="rm-full">
-                    <label>SKU</label>
-                    <input type="text" id="rmEditSku" readonly style="background:#f5f5f5;color:#555;">
-                </div>
-                <div class="rm-full">
                     <label for="rmEditMaterialName">Name</label>
                     <input type="text" id="rmEditMaterialName" name="name" required>
                 </div>
-                <div>
-                    <label for="rmEditQuantity">Quantity</label>
-                    <input type="number" id="rmEditQuantity" name="quantity" min="0" required>
-                </div>
-                <div>
+                <div class="rm-full">
                     <label for="rmEditUnit">Unit</label>
                     <select id="rmEditUnit" name="unit" required>
                         <% if (units && units.length > 0) { %>
@@ -155,9 +181,15 @@
                         <% } %>
                     </select>
                 </div>
-                <div class="rm-full">
-                    <label for="rmEditSupplier">Supplier</label>
-                    <input type="text" id="rmEditSupplier" name="supplier" placeholder="Optional">
+            </div>
+            <div class="rm-edit-adjust-section">
+                <strong>Adjust Stock</strong>
+                <p class="rm-edit-adjust-hint">Manual correction only — does not require a purchase order. Logged in stock movement.</p>
+                <p class="rm-edit-current-qty">Current: <span id="rmEditCurrentQty">0</span> <span id="rmEditCurrentUnit"></span></p>
+                <div class="rm-edit-adjust-row">
+                    <input type="number" id="rmEditAdjustQty" value="1" min="1" step="1" title="Quantity to deduct">
+                    <input type="text" id="rmEditAdjustNotes" placeholder="Reason (optional)">
+                    <button type="button" id="rmEditAdjustBtn" class="rm-btn rm-btn-info rm-btn-sm">Deduct Stock</button>
                 </div>
             </div>
             <div class="rm-form-actions">
@@ -182,7 +214,7 @@
 </div>
 
 <div id="rawMaterialRestockModal" class="modal pi-modal-compact">
-    <div class="modal-content" style="max-width:420px;">
+    <div class="modal-content" style="max-width:480px;">
         <span class="close-button" id="rmCloseRestockModal">&times;</span>
         <h3>Restock Raw Material</h3>
         <input type="hidden" id="rawMaterialRestockId" value="">
@@ -198,6 +230,18 @@
             <label for="rawMaterialRestockQty">Quantity to add</label>
             <input type="number" id="rawMaterialRestockQty" min="1" value="1" style="width:100%;max-width:120px;padding:8px;border:1px solid #ced4da;border-radius:4px;text-align:center;">
             <p style="font-size:0.85em;color:#666;margin:8px 0 0;">Adds to available stock for this material.</p>
+        </div>
+        <div class="form-group">
+            <label for="rawMaterialRestockSupplier">Supplier</label>
+            <input type="text" id="rawMaterialRestockSupplier" style="width:100%;padding:8px;border:1px solid #ced4da;border-radius:4px;">
+        </div>
+        <div class="form-group">
+            <label for="rawMaterialRestockPoNumber">Purchase order number <span style="color:#dc3545;">*</span></label>
+            <input type="text" id="rawMaterialRestockPoNumber" required style="width:100%;padding:8px;border:1px solid #ced4da;border-radius:4px;">
+        </div>
+        <div class="form-group">
+            <label for="rawMaterialRestockPoImage">Purchase Order Image <span style="color:#dc3545;">*</span></label>
+            <input type="file" id="rawMaterialRestockPoImage" accept="image/*" required>
         </div>
         <div class="pi-form-actions">
             <button type="button" id="rmCancelRestock" class="pi-btn pi-btn-secondary">Cancel</button>

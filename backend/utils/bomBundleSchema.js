@@ -43,10 +43,12 @@ async function runDdl(pool, label, sqlText) {
 async function ensureBomBundleSchema(pool) {
     const hasRmSku = await columnExists(pool, 'RawMaterials', 'SKU');
     const hasRmSupplier = await columnExists(pool, 'RawMaterials', 'Supplier');
+    const hasRmPoNumber = await columnExists(pool, 'RawMaterials', 'PurchaseOrderNumber');
+    const hasRmPoImage = await columnExists(pool, 'RawMaterials', 'PurchaseOrderImageURL');
     const hasBundles = await tableExists(pool, 'BomBundles');
     const hasIpBomBundle = await columnExists(pool, 'InventoryProducts', 'BomBundleID');
 
-    if (schemaReady && hasRmSku && hasRmSupplier && hasBundles && hasIpBomBundle) {
+    if (schemaReady && hasRmSku && hasRmSupplier && hasRmPoNumber && hasRmPoImage && hasBundles && hasIpBomBundle) {
         return;
     }
 
@@ -61,6 +63,18 @@ async function ensureBomBundleSchema(pool) {
     if (!hasRmSupplier) {
         await runDdl(pool, 'RawMaterials.Supplier', `
             ALTER TABLE dbo.RawMaterials ADD Supplier NVARCHAR(255) NULL;
+        `);
+    }
+
+    if (!hasRmPoNumber) {
+        await runDdl(pool, 'RawMaterials.PurchaseOrderNumber', `
+            ALTER TABLE dbo.RawMaterials ADD PurchaseOrderNumber NVARCHAR(100) NULL;
+        `);
+    }
+
+    if (!hasRmPoImage) {
+        await runDdl(pool, 'RawMaterials.PurchaseOrderImageURL', `
+            ALTER TABLE dbo.RawMaterials ADD PurchaseOrderImageURL NVARCHAR(500) NULL;
         `);
     }
 

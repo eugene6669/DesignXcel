@@ -10,9 +10,11 @@ const MOVEMENT_LABELS = {
     restock_variation: 'Restock variation',
     restock_product: 'Restock product',
     restock_raw_material: 'Restock raw material',
+    add_raw_material: 'Add raw material',
     return_received: 'Return received',
     status_adjustment: 'Status adjustment',
-    adjust_variation_stock: 'Adjust variation stock'
+    adjust_variation_stock: 'Adjust variation stock',
+    adjust_raw_material: 'Adjust raw material'
 };
 
 async function ensureInventoryStockMovementSchema(pool) {
@@ -53,6 +55,20 @@ async function ensureInventoryStockMovementSchema(pool) {
         BEGIN
             ALTER TABLE dbo.InventoryStockMovements ADD IsArchived BIT NOT NULL CONSTRAINT DF_InventoryStockMovements_IsArchived DEFAULT (0);
         END
+        IF NOT EXISTS (
+            SELECT 1 FROM sys.columns
+            WHERE object_id = OBJECT_ID('dbo.InventoryStockMovements') AND name = 'PurchaseOrderNumber'
+        )
+        BEGIN
+            ALTER TABLE dbo.InventoryStockMovements ADD PurchaseOrderNumber NVARCHAR(100) NULL;
+        END
+        IF NOT EXISTS (
+            SELECT 1 FROM sys.columns
+            WHERE object_id = OBJECT_ID('dbo.InventoryStockMovements') AND name = 'PurchaseOrderImageURL'
+        )
+        BEGIN
+            ALTER TABLE dbo.InventoryStockMovements ADD PurchaseOrderImageURL NVARCHAR(500) NULL;
+        END
     `);
 }
 
@@ -74,13 +90,17 @@ async function insertStockMovement(pool, row) {
         .input('toStatus', sql.NVarChar(32), row.toStatus || null)
         .input('quantity', sql.Int, qty)
         .input('notes', sql.NVarChar(500), row.notes || null)
+        .input('purchaseOrderNumber', sql.NVarChar(100), row.purchaseOrderNumber || null)
+        .input('purchaseOrderImageUrl', sql.NVarChar(500), row.purchaseOrderImageUrl || null)
         .input('createdBy', sql.Int, row.createdBy || null)
         .query(`
             INSERT INTO InventoryStockMovements (
-                InventoryProductID, VariationID, RawMaterialID, MovementType, FromStatus, ToStatus, Quantity, Notes, CreatedBy
+                InventoryProductID, VariationID, RawMaterialID, MovementType, FromStatus, ToStatus,
+                Quantity, Notes, PurchaseOrderNumber, PurchaseOrderImageURL, CreatedBy
             )
             VALUES (
-                @inventoryProductId, @variationId, @rawMaterialId, @movementType, @fromStatus, @toStatus, @quantity, @notes, @createdBy
+                @inventoryProductId, @variationId, @rawMaterialId, @movementType, @fromStatus, @toStatus,
+                @quantity, @notes, @purchaseOrderNumber, @purchaseOrderImageUrl, @createdBy
             )
         `);
 }
@@ -177,17 +197,28 @@ async function logRestockVariationMovement(pool, payload) {
 }
 
 /** Log manual restock for products without variations. */
+function formatRawMaterialMovementNotes(payload, actionLabel) {
+    const materialName = payload.materialName ? String(payload.materialName).trim() : '';
+    const unit = payload.unit ? String(payload.unit).trim() : '';
+    const supplier = payload.supplier ? String(payload.supplier).trim() : '';
+    const poNumber = payload.purchaseOrderNumber ? String(payload.purchaseOrderNumber).trim() : '';
+    const parts = [];
+    if (materialName) {
+        parts.push(actionLabel + ': ' + materialName + (unit ? ' (' + unit + ')' : ''));
+    } else {
+        parts.push(actionLabel + ' #' + (payload.rawMaterialId || ''));
+    }
+    if (supplier) parts.push('Supplier: ' + supplier);
+    if (poNumber) parts.push('PO: ' + poNumber);
+    if (payload.quantity) parts.push('(+' + payload.quantity + ')');
+    return parts.join(' · ');
+}
+
 /** Log manual restock from Raw Materials tab. */
 async function logRestockRawMaterialMovement(pool, payload) {
     const rawMaterialId = parseInt(payload.rawMaterialId, 10);
     const quantity = parseInt(payload.quantity, 10);
     if (!rawMaterialId || !quantity || quantity <= 0) return;
-
-    const materialName = payload.materialName ? String(payload.materialName).trim() : '';
-    const unit = payload.unit ? String(payload.unit).trim() : '';
-    const noteBase = materialName
-        ? ('Restock raw material: ' + materialName + (unit ? ' (' + unit + ')' : ''))
-        : ('Restock raw material #' + rawMaterialId);
 
     await insertStockMovement(pool, {
         rawMaterialId,
@@ -195,7 +226,51 @@ async function logRestockRawMaterialMovement(pool, payload) {
         fromStatus: null,
         toStatus: 'available',
         quantity,
-        notes: payload.notes || (noteBase + ' (+' + quantity + ')'),
+        notes: payload.notes || formatRawMaterialMovementNotes({ ...payload, rawMaterialId, quantity }, 'Restock'),
+        purchaseOrderNumber: payload.purchaseOrderNumber || null,
+        purchaseOrderImageUrl: payload.purchaseOrderImageUrl || null,
+        createdBy: payload.userId || null
+    });
+}
+
+/** Log initial stock when a raw material is added. */
+/** Manual qty correction from Raw Materials edit modal (deduction or addition). */
+async function logAdjustRawMaterialMovement(pool, payload) {
+    const rawMaterialId = parseInt(payload.rawMaterialId, 10);
+    const delta = parseInt(payload.delta, 10);
+    if (!rawMaterialId || !delta) return;
+
+    const materialName = payload.materialName ? String(payload.materialName).trim() : '';
+    const unit = payload.unit ? String(payload.unit).trim() : '';
+    const notes = payload.notes
+        ? String(payload.notes).trim()
+        : ('Adjust raw material' + (materialName ? ': ' + materialName : '') + (unit ? ' (' + unit + ')' : '') + ' (' + (delta > 0 ? '+' : '') + delta + ')');
+
+    await insertStockMovement(pool, {
+        rawMaterialId,
+        movementType: 'adjust_raw_material',
+        fromStatus: 'available',
+        toStatus: 'available',
+        quantity: delta,
+        notes,
+        createdBy: payload.userId || null
+    });
+}
+
+async function logAddRawMaterialMovement(pool, payload) {
+    const rawMaterialId = parseInt(payload.rawMaterialId, 10);
+    const quantity = parseInt(payload.quantity, 10);
+    if (!rawMaterialId || !quantity || quantity <= 0) return;
+
+    await insertStockMovement(pool, {
+        rawMaterialId,
+        movementType: 'add_raw_material',
+        fromStatus: null,
+        toStatus: 'available',
+        quantity,
+        notes: payload.notes || formatRawMaterialMovementNotes({ ...payload, rawMaterialId, quantity }, 'Add'),
+        purchaseOrderNumber: payload.purchaseOrderNumber || null,
+        purchaseOrderImageUrl: payload.purchaseOrderImageUrl || null,
         createdBy: payload.userId || null
     });
 }
@@ -831,6 +906,8 @@ module.exports = {
     logRestockVariationMovement,
     logRestockProductMovement,
     logRestockRawMaterialMovement,
+    logAddRawMaterialMovement,
+    logAdjustRawMaterialMovement,
     logReturnOrderReceivedMovements,
     movementLabel,
     MOVEMENT_LABELS

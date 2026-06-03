@@ -17,6 +17,7 @@ const {
 } = require('./utils/productVariationPolicy');
 const { computeDiscountedPrice } = require('./utils/productDiscountHelpers');
 const { ORDER_ITEMS_CATALOG_CROSS_APPLY } = require('./utils/orderItemCatalogResolveSql');
+const { computeAvailableStock } = require('./utils/availableStockCalculator');
 
 const UUID_IDENTIFIER_RE =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -4016,7 +4017,13 @@ module.exports = function(sql, pool) {
             
             
             // Process variations data (keep imageUrl relative so frontend/proxy can resolve)
-            const variations = result.recordset.map((variation) => {
+            const variations = await Promise.all(result.recordset.map(async (variation) => {
+                const stockRow = await computeAvailableStock(pool, actualProductID, {
+                    variationId: variation.id
+                });
+                const sellableQty = stockRow.success
+                    ? (stockRow.availableStock ?? 0)
+                    : (parseInt(variation.quantity, 10) || 0);
                 const imageUrl = variation.imageUrl
                     ? normalizeProductAssetUrl(variation.imageUrl)
                     : null;
@@ -4040,6 +4047,7 @@ module.exports = function(sql, pool) {
                 }
                 return {
                     ...variation,
+                    quantity: sellableQty,
                     price,
                     originalPrice,
                     hasDiscount,
@@ -4049,7 +4057,7 @@ module.exports = function(sql, pool) {
                         ? normalizeProductAssetUrl(variation.model3d)
                         : null
                 };
-            });
+            }));
             
             res.json({
                 success: true,

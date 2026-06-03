@@ -1302,9 +1302,16 @@ app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), as
                 console.error('[STRIPE WEBHOOK] WARNING: No order items were inserted for OrderID:', orderId);
             }
 
-            // NOTE: Stock is NOT decreased when order is created with "Pending" status
-            // Stock will be decreased when order status changes to "Processing" by Admin/Manager
-            console.log('[STRIPE WEBHOOK] Order created with Pending status. Stock will be decreased when status changes to Processing.');
+            try {
+                const { reserveStorefrontDisplayStockForOrder } = require('./utils/storefrontStockReserve');
+                const reserveResult = await reserveStorefrontDisplayStockForOrder(pool, orderId);
+                console.log('[STRIPE WEBHOOK] Storefront display stock reserved:', reserveResult);
+            } catch (reserveErr) {
+                console.error('[STRIPE WEBHOOK] Failed to reserve storefront display stock:', reserveErr.message);
+            }
+
+            // Physical inventory stock is still decreased when order status changes to Processing
+            console.log('[STRIPE WEBHOOK] Order created with Pending status. Inventory stock decreases when status changes to Processing.');
 
             // Send order receipt email to customer
             console.log('[STRIPE WEBHOOK] ===== STARTING EMAIL SENDING PROCESS =====');
@@ -4185,10 +4192,7 @@ async function validateCheckoutItemsStock(items) {
         return ['No items provided'];
     }
 
-    const {
-        getProductVariationQuantity,
-        productHasActiveProductVariations
-    } = require('./utils/productVariationPolicy');
+    const { productHasActiveProductVariations } = require('./utils/productVariationPolicy');
 
     await pool.connect();
 
@@ -4213,55 +4217,28 @@ async function validateCheckoutItemsStock(items) {
         }
 
         const productName = productResult.recordset[0].Name || 'Unknown Product';
-        const cmsProductStock = productResult.recordset[0].StockQuantity || 0;
         const variationId = getCheckoutItemVariationId(item);
         const hasVariations = await productHasActiveProductVariations(pool, productId);
 
-        let actualStock;
-        let pendingQuantity;
-
-        if (hasVariations) {
-            if (!variationId) {
-                stockIssues.push(
-                    `${productName}: Select a variation before checkout (variation stock is tracked per option).`
-                );
-                continue;
-            }
-            actualStock = await getProductVariationQuantity(pool, productId, variationId);
-            const pendingResult = await pool.request()
-                .input('productId', sql.Int, productId)
-                .input('variationId', sql.Int, variationId)
-                .query(`
-                    SELECT ISNULL(SUM(oi.Quantity), 0) as PendingQuantity
-                    FROM OrderItems oi
-                    INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                    ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
-                    WHERE cat.CatalogProductID = @productId
-                    AND oi.VariationID = @variationId
-                    AND o.Status = N'Pending'
-                `);
-            pendingQuantity = pendingResult.recordset[0].PendingQuantity || 0;
-        } else {
-            actualStock = cmsProductStock;
-            const pendingResult = await pool.request()
-                .input('productId', sql.Int, productId)
-                .query(`
-                    SELECT ISNULL(SUM(oi.Quantity), 0) as PendingQuantity
-                    FROM OrderItems oi
-                    INNER JOIN Orders o ON oi.OrderID = o.OrderID
-                    ${ORDER_ITEMS_CATALOG_CROSS_APPLY}
-                    WHERE cat.CatalogProductID = @productId
-                    AND o.Status = N'Pending'
-                `);
-            pendingQuantity = pendingResult.recordset[0].PendingQuantity || 0;
+        if (hasVariations && !variationId) {
+            stockIssues.push(
+                `${productName}: Select a variation before checkout (variation stock is tracked per option).`
+            );
+            continue;
         }
 
-        const availableStock = Math.max(0, actualStock - pendingQuantity);
+        const stockRow = await computeAvailableStock(pool, productId, {
+            variationId: variationId || undefined
+        });
+        if (!stockRow.success) {
+            stockIssues.push(`Product ID ${productId} not found`);
+            continue;
+        }
 
-        if (requestedQuantity > availableStock) {
+        if (requestedQuantity > stockRow.availableStock) {
             const scope = hasVariations && variationId ? `variation #${variationId}` : 'product';
             stockIssues.push(
-                `${productName}: Requested ${requestedQuantity}, but only ${availableStock} available for this ${scope} (${actualStock} in stock, ${pendingQuantity} in pending orders)`
+                `${productName}: Requested ${requestedQuantity}, but only ${stockRow.availableStock} available for this ${scope} (${stockRow.actualStock} in stock${stockRow.pendingQuantity ? `, ${stockRow.pendingQuantity} in pending orders` : ''})`
             );
         }
     }
@@ -6954,9 +6931,15 @@ app.post('/api/test-webhook', async (req, res) => {
                     console.error('[TEST WEBHOOK] WARNING: No order items were inserted for OrderID:', orderId);
                 }
 
-                // NOTE: Stock is NOT decreased when order is created with "Pending" status
-                // Stock will be decreased when order status changes to "Processing" by Admin/Manager
-                console.log('[TEST WEBHOOK] Order created with Pending status. Stock will be decreased when status changes to Processing.');
+                try {
+                    const { reserveStorefrontDisplayStockForOrder } = require('./utils/storefrontStockReserve');
+                    const reserveResult = await reserveStorefrontDisplayStockForOrder(pool, orderId);
+                    console.log('[TEST WEBHOOK] Storefront display stock reserved:', reserveResult);
+                } catch (reserveErr) {
+                    console.error('[TEST WEBHOOK] Failed to reserve storefront display stock:', reserveErr.message);
+                }
+
+                console.log('[TEST WEBHOOK] Order created with Pending status. Inventory stock decreases when status changes to Processing.');
 
                 // Send order receipt email to customer
                 console.log('[TEST WEBHOOK] ===== STARTING EMAIL SENDING PROCESS =====');

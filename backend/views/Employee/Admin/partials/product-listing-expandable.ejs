@@ -351,7 +351,7 @@
                     <div class="pi-actions-cell">
                         <% if (actionStyleMode === 'inventory' && !showReturnCols) { %>
                         <div class="pi-actions-extra-triggers" hidden aria-hidden="true">
-                            <% if (showAddVarBtn) { %>
+                            <% if (showAddVarBtn && !isPlanned) { %>
                             <button type="button" class="add-variation-row-btn pi-menu-extra-action" data-id="<%= productId %>" data-name="<%= productName.replace(/'/g, "\\'").replace(/"/g, "&quot;") %>" data-is-from-products="false" data-pi-menu-label="Add variation" aria-label="Add variation"></button>
                             <% } %>
                             <a href="/Employee/Admin/Inventory?tab=stock-movement&amp;inventoryProductId=<%= productId %>" class="pi-menu-extra-link" data-pi-menu-label="Stock movement" aria-label="Stock movement"></a>

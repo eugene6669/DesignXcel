@@ -1,0 +1,165 @@
+/* Compact admin modals — laptop 16:10 @ 100% zoom */
+.modal.pi-modal-compact {
+    padding: 8px 0;
+    overflow-y: auto;
+    align-items: flex-start;
+}
+
+.pi-modal-compact .modal-content {
+    max-width: 520px;
+    padding: 12px 14px;
+    margin: 1vh auto 2vh;
+    max-height: min(88vh, calc(100vh - 56px));
+    overflow-y: auto;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+.pi-modal-compact.pi-modal-wide .modal-content {
+    max-width: min(720px, calc(100vw - 32px));
+}
+
+.pi-modal-compact.pi-modal-xl .modal-content {
+    max-width: min(860px, calc(100vw - 32px));
+}
+
+.pi-modal-compact.pi-create-product-modal .modal-content {
+    max-width: min(680px, calc(100vw - 32px));
+}
+
+.pi-modal-compact h3 {
+    margin: 0 0 10px;
+    font-size: 1.05em;
+    color: #212529;
+    padding-right: 28px;
+}
+
+.pi-modal-compact h4 {
+    margin: 0 0 6px;
+    font-size: 0.9em;
+    color: #333;
+}
+
+.pi-modal-compact .form-group {
+    margin-bottom: 8px;
+}
+
+.pi-modal-compact .form-group > label {
+    display: block;
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #444;
+    margin-bottom: 3px;
+}
+
+.pi-modal-compact input[type="text"],
+.pi-modal-compact input[type="number"],
+.pi-modal-compact input[type="file"],
+.pi-modal-compact select,
+.pi-modal-compact textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    font-size: 0.875em;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+}
+
+.pi-modal-compact textarea {
+    min-height: 56px;
+    resize: vertical;
+}
+
+.pi-modal-compact small {
+    font-size: 0.75em;
+    color: #666;
+}
+
+.pi-modal-compact .pi-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 10px;
+}
+
+.pi-modal-compact .pi-form-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 560px) {
+    .pi-modal-compact .pi-form-grid-3 {
+        grid-template-columns: 1fr;
+    }
+}
+
+.pi-modal-compact .pi-span-2 {
+    grid-column: 1 / -1;
+}
+
+.pi-modal-compact .pi-section {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+}
+
+.pi-modal-compact .pi-section p {
+    margin: 0 0 6px;
+    font-size: 0.78em;
+    color: #666;
+}
+
+.pi-modal-compact .materials-section {
+    padding: 8px;
+    border-radius: 4px;
+}
+
+.pi-modal-compact .material-row {
+    margin-bottom: 4px;
+}
+
+.pi-modal-compact .pi-form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid #e9ecef;
+}
+
+.pi-modal-compact .pi-btn {
+    padding: 6px 12px;
+    font-size: 0.85em;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+}
+
+.pi-modal-compact .pi-btn-secondary {
+    background: #6c757d;
+    color: #fff;
+}
+
+.pi-modal-compact .pi-btn-info {
+    background: #007bff;
+    color: #fff;
+}
+
+.pi-modal-compact .pi-btn-sm {
+    padding: 4px 9px;
+    font-size: 0.78em;
+}
+
+.pi-modal-compact .close-button {
+    margin-top: -4px;
+    font-size: 1.35em;
+}
+
+#variationsModal.pi-modal-compact .pi-section--raw-materials {
+    margin-top: 8px;
+}
+
+#variationsModal .add-variation-submit-row {
+    margin-top: 8px;
+}

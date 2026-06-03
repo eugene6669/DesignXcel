@@ -30,6 +30,7 @@ const {
 } = require('./utils/productAssetUrls');
 const {
     ensureVariationMediaColumns,
+    resolvePlanVariationDisplayName,
     mapVariationMediaFiles,
     buildVariationDimensionsJson,
     parseSingleVariationMediaFiles,
@@ -66,6 +67,8 @@ const {
     logRestockVariationMovement,
     logRestockProductMovement,
     logRestockRawMaterialMovement,
+    logAdjustRawMaterialMovement,
+    logAddRawMaterialMovement,
     logReturnOrderReceivedMovements,
     fetchInventoryStockMovements,
     fetchInventoryStockMovementsGrouped,
@@ -309,7 +312,17 @@ module.exports = function (sql, pool, getStripe = null) {
                 const inventoryVariation = inventoryResult.recordset[0];
                 const inventoryQuantity = inventoryVariation.InventoryQuantity || 0;
 
-                console.log(`[VARIATION SYNC] Found InventoryProductVariation for VariationID ${variationId}, AvailableQuantity: ${inventoryQuantity}`);
+                const pvProductResult = await (transaction ? transaction.request() : pool.request())
+                    .input('variationId', sql.Int, variationId)
+                    .query(`
+                        SELECT ProductID FROM ProductVariations WHERE VariationID = @variationId
+                    `);
+                const linkedProductId = pvProductResult.recordset[0]?.ProductID;
+                const { usesStorefrontDisplayStock } = require('./utils/productVariationPolicy');
+                const skipQtySync = linkedProductId
+                    && await usesStorefrontDisplayStock(pool, linkedProductId, transaction);
+
+                console.log(`[VARIATION SYNC] Found InventoryProductVariation for VariationID ${variationId}, AvailableQuantity: ${inventoryQuantity}, skipQtySync: ${!!skipQtySync}`);
 
                 // Get current ProductVariations.Quantity before update - create new request
                 const currentRequest = transaction ? transaction.request() : pool.request();
@@ -325,50 +338,51 @@ module.exports = function (sql, pool, getStripe = null) {
                     ? (currentVariationResult.recordset[0].Quantity || 0)
                     : 0;
 
-                console.log(`[VARIATION SYNC] Current ProductVariations.Quantity: ${oldVariationQty}, Updating to: ${inventoryQuantity} (from InventoryProductVariations.AvailableQuantity)`);
-
-                // Update ProductVariations.Quantity to match InventoryProductVariations.Quantity - create new request
-                const updateRequest = transaction ? transaction.request() : pool.request();
                 const invRow = inventoryResult.recordset[0];
                 let variationSku = invRow.SKU;
                 if ((!variationSku || !String(variationSku).trim()) && Number(inventoryQuantity) > 0) {
                     variationSku = await assignVariationSku(transaction || pool, variationId, invRow.VariationName);
                 }
-                const updateResult = await updateRequest
-                    .input('variationId', sql.Int, variationId)
-                    .input('inventoryQuantity', sql.Int, inventoryQuantity)
-                    .input('imageUrl', sql.NVarChar, invRow.VariationImageURL || null)
-                    .input('thumbJson', sql.NVarChar, invRow.ThumbnailURLs || null)
-                    .input('model3d', sql.NVarChar, invRow.Model3D || null)
-                    .input('sku', sql.NVarChar, variationSku)
-                    .query(`
-                        UPDATE ProductVariations 
-                        SET Quantity = @inventoryQuantity,
-                            SKU = COALESCE(@sku, SKU),
-                            VariationImageURL = COALESCE(@imageUrl, VariationImageURL),
-                            ThumbnailURLs = COALESCE(@thumbJson, ThumbnailURLs),
-                            Model3D = COALESCE(@model3d, Model3D),
-                            UpdatedAt = GETDATE()
-                        WHERE VariationID = @variationId
-                    `);
 
-                console.log(`[VARIATION SYNC] ✅ Updated ProductVariations for VariationID ${variationId} qty ${oldVariationQty} -> ${inventoryQuantity}, rows affected: ${updateResult.rowsAffected[0] || 0}`);
-
-                // Verify the update - create new request
-                const verifyRequest = transaction ? transaction.request() : pool.request();
-                const verifyResult = await verifyRequest
-                    .input('variationId', sql.Int, variationId)
-                    .query(`
-                        SELECT Quantity
-                        FROM ProductVariations
-                        WHERE VariationID = @variationId
-                    `);
-
-                const newVariationQty = verifyResult.recordset.length > 0
-                    ? (verifyResult.recordset[0].Quantity || 0)
-                    : 0;
-
-                console.log(`[VARIATION SYNC] ✅ Verified ProductVariations.Quantity for VariationID ${variationId}: ${newVariationQty}`);
+                const updateRequest = transaction ? transaction.request() : pool.request();
+                if (skipQtySync) {
+                    console.log(`[VARIATION SYNC] Storefront display stock active — keeping ProductVariations.Quantity=${oldVariationQty} for VariationID ${variationId}`);
+                    await updateRequest
+                        .input('variationId', sql.Int, variationId)
+                        .input('imageUrl', sql.NVarChar, invRow.VariationImageURL || null)
+                        .input('thumbJson', sql.NVarChar, invRow.ThumbnailURLs || null)
+                        .input('model3d', sql.NVarChar, invRow.Model3D || null)
+                        .input('sku', sql.NVarChar, variationSku)
+                        .query(`
+                            UPDATE ProductVariations 
+                            SET SKU = COALESCE(@sku, SKU),
+                                VariationImageURL = COALESCE(@imageUrl, VariationImageURL),
+                                ThumbnailURLs = COALESCE(@thumbJson, ThumbnailURLs),
+                                Model3D = COALESCE(@model3d, Model3D),
+                                UpdatedAt = GETDATE()
+                            WHERE VariationID = @variationId
+                        `);
+                } else {
+                    console.log(`[VARIATION SYNC] Current ProductVariations.Quantity: ${oldVariationQty}, Updating to: ${inventoryQuantity} (from InventoryProductVariations.AvailableQuantity)`);
+                    await updateRequest
+                        .input('variationId', sql.Int, variationId)
+                        .input('inventoryQuantity', sql.Int, inventoryQuantity)
+                        .input('imageUrl', sql.NVarChar, invRow.VariationImageURL || null)
+                        .input('thumbJson', sql.NVarChar, invRow.ThumbnailURLs || null)
+                        .input('model3d', sql.NVarChar, invRow.Model3D || null)
+                        .input('sku', sql.NVarChar, variationSku)
+                        .query(`
+                            UPDATE ProductVariations 
+                            SET Quantity = @inventoryQuantity,
+                                SKU = COALESCE(@sku, SKU),
+                                VariationImageURL = COALESCE(@imageUrl, VariationImageURL),
+                                ThumbnailURLs = COALESCE(@thumbJson, ThumbnailURLs),
+                                Model3D = COALESCE(@model3d, Model3D),
+                                UpdatedAt = GETDATE()
+                            WHERE VariationID = @variationId
+                        `);
+                    console.log(`[VARIATION SYNC] ✅ Updated ProductVariations for VariationID ${variationId} qty ${oldVariationQty} -> ${inventoryQuantity}`);
+                }
 
                 return true;
             } else {
@@ -2310,6 +2324,41 @@ module.exports = function (sql, pool, getStripe = null) {
             }
         }
     });
+
+    const rawMaterialPoUploadDir = path.join(__dirname, 'public', 'uploads', 'Inventory', 'RawMaterials', 'PurchaseOrders');
+    const rawMaterialPoStorage = multer.diskStorage({
+        destination: function (req, file, cb) {
+            if (!fs.existsSync(rawMaterialPoUploadDir)) {
+                fs.mkdirSync(rawMaterialPoUploadDir, { recursive: true });
+            }
+            cb(null, rawMaterialPoUploadDir);
+        },
+        filename: function (req, file, cb) {
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+            const safe = sanitizeFileName(file.originalname || 'po-image.bin');
+            cb(null, uniqueSuffix + '-' + safe);
+        }
+    });
+
+    const rawMaterialPoUpload = multer({
+        storage: rawMaterialPoStorage,
+        limits: { fileSize: 10 * 1024 * 1024 },
+        fileFilter: function (req, file, cb) {
+            if (file.mimetype.startsWith('image/')) {
+                cb(null, true);
+            } else {
+                cb(new Error('Only image files are allowed for purchase orders!'), false);
+            }
+        }
+    });
+
+    function publicUrlFromRawMaterialPoFile(file) {
+        if (!file) return null;
+        if (file.azureUrl) return file.azureUrl;
+        const filename = file.filename || (file.path ? path.basename(file.path) : '');
+        if (!filename) return null;
+        return '/uploads/Inventory/RawMaterials/PurchaseOrders/' + filename;
+    }
 
     // =============================================================================
     // ACTIVITY LOGGING FUNCTION
@@ -6678,6 +6727,14 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
+            try {
+                const { finalizeStorefrontDisplayForProcessingOrder } = require('./utils/storefrontStockReserve');
+                const displayResult = await finalizeStorefrontDisplayForProcessingOrder(pool, orderId);
+                console.log(`[TRANSACTION MANAGER ORDER PROCESSING] Storefront display stock:`, displayResult);
+            } catch (displayErr) {
+                console.error(`[TRANSACTION MANAGER ORDER PROCESSING] Storefront display finalize error:`, displayErr.message);
+            }
+
             // Update order status to Processing
             await pool.request()
                 .input('orderId', sql.Int, orderId)
@@ -6715,6 +6772,13 @@ module.exports = function (sql, pool, getStripe = null) {
                     success: false,
                     message: `Refund failed: ${refundErr.message}. Order was not cancelled.`
                 });
+            }
+
+            try {
+                const { restoreStorefrontDisplayStockForOrder } = require('./utils/storefrontStockReserve');
+                await restoreStorefrontDisplayStockForOrder(pool, orderId);
+            } catch (restoreDisplayErr) {
+                console.error('[TRANSACTION MANAGER ORDER CANCELLATION] Restore display stock:', restoreDisplayErr.message);
             }
 
             const cancelResult = await pool.request()
@@ -8100,6 +8164,14 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
+            try {
+                const { finalizeStorefrontDisplayForProcessingOrder } = require('./utils/storefrontStockReserve');
+                const displayResult = await finalizeStorefrontDisplayForProcessingOrder(pool, orderId);
+                console.log(`[USER MANAGER ORDER PROCESSING] Storefront display stock:`, displayResult);
+            } catch (displayErr) {
+                console.error(`[USER MANAGER ORDER PROCESSING] Storefront display finalize error:`, displayErr.message);
+            }
+
             // Update order status to Processing
             await pool.request()
                 .input('orderId', sql.Int, orderId)
@@ -8137,6 +8209,13 @@ module.exports = function (sql, pool, getStripe = null) {
                     success: false,
                     message: `Refund failed: ${refundErr.message}. Order was not cancelled.`
                 });
+            }
+
+            try {
+                const { restoreStorefrontDisplayStockForOrder } = require('./utils/storefrontStockReserve');
+                await restoreStorefrontDisplayStockForOrder(pool, orderId);
+            } catch (restoreDisplayErr) {
+                console.error('[USER MANAGER ORDER CANCELLATION] Restore display stock:', restoreDisplayErr.message);
             }
 
             const cancelResult = await pool.request()
@@ -9684,9 +9763,36 @@ module.exports = function (sql, pool, getStripe = null) {
         try {
             await pool.connect();
             const orderId = parseInt(req.params.orderId);
+
+            const orderItemsResult = await pool.request()
+                .input('orderId', sql.Int, orderId)
+                .query(`
+                    SELECT oi.ProductID, oi.Quantity, oi.VariationID
+                    FROM OrderItems oi
+                    WHERE oi.OrderID = @orderId
+                `);
+
+            for (const item of orderItemsResult.recordset) {
+                try {
+                    const variationId = item.VariationID ? parseInt(item.VariationID, 10) : null;
+                    await decrementStockFromInventory(item.ProductID, item.Quantity, variationId, null);
+                } catch (stockErr) {
+                    console.error(`[ORDER SUPPORT ORDER PROCESSING] Stock decrement error:`, stockErr.message);
+                }
+            }
+
+            try {
+                const { finalizeStorefrontDisplayForProcessingOrder } = require('./utils/storefrontStockReserve');
+                await finalizeStorefrontDisplayForProcessingOrder(pool, orderId);
+            } catch (displayErr) {
+                console.error(`[ORDER SUPPORT ORDER PROCESSING] Storefront display finalize:`, displayErr.message);
+            }
+
             await pool.request()
                 .input('orderId', sql.Int, orderId)
                 .query(`UPDATE Orders SET Status = 'Processing' WHERE OrderID = @orderId`);
+
+            await updateBulkOrderStatus(orderId, 'Processing').catch((e) => console.error('[BULK ORDER UPDATE]', e));
 
             // Log the activity
             await logActivity(
@@ -9718,6 +9824,13 @@ module.exports = function (sql, pool, getStripe = null) {
                     success: false,
                     message: `Refund failed: ${refundErr.message}. Order was not cancelled.`
                 });
+            }
+
+            try {
+                const { restoreStorefrontDisplayStockForOrder } = require('./utils/storefrontStockReserve');
+                await restoreStorefrontDisplayStockForOrder(pool, orderId);
+            } catch (restoreDisplayErr) {
+                console.error('[ORDER SUPPORT ORDER CANCELLATION] Restore display stock:', restoreDisplayErr.message);
             }
 
             const cancelResult = await pool.request()
@@ -21429,6 +21542,8 @@ module.exports = function (sql, pool, getStripe = null) {
                     QuantityAvailable as stockQuantity,
                     Unit as unit,
                     Supplier as supplier,
+                    PurchaseOrderNumber as purchaseOrderNumber,
+                    PurchaseOrderImageURL as purchaseOrderImageUrl,
                     LastUpdated as createdAt,
                     IsActive as active
                 FROM RawMaterials
@@ -21439,6 +21554,122 @@ module.exports = function (sql, pool, getStripe = null) {
         } catch (err) {
             console.error('Error fetching raw materials:', err);
             res.json({ success: false, message: 'Failed to retrieve raw materials.' });
+        }
+    });
+
+    router.get('/api/admin/raw-materials/:id', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            await ensureBomBundleSchema(pool);
+            const materialId = parseInt(req.params.id, 10);
+            if (!materialId || Number.isNaN(materialId)) {
+                return res.status(400).json({ success: false, message: 'Invalid material ID.' });
+            }
+            const result = await pool.request()
+                .input('materialId', sql.Int, materialId)
+                .query(`
+                    SELECT
+                        MaterialID as id,
+                        SKU as sku,
+                        Name as name,
+                        QuantityAvailable as stockQuantity,
+                        Unit as unit,
+                        Supplier as supplier,
+                        PurchaseOrderNumber as purchaseOrderNumber,
+                        PurchaseOrderImageURL as purchaseOrderImageUrl,
+                        LastUpdated as createdAt
+                    FROM RawMaterials
+                    WHERE MaterialID = @materialId AND IsActive = 1
+                `);
+            if (!result.recordset.length) {
+                return res.status(404).json({ success: false, message: 'Raw material not found.' });
+            }
+            const material = result.recordset[0];
+            let purchaseOrders = [];
+            try {
+                await ensureInventoryStockMovementSchema(pool);
+                const mvResult = await pool.request()
+                    .input('materialId', sql.Int, materialId)
+                    .query(`
+                        SELECT
+                            MovementID AS movementId,
+                            MovementType AS movementType,
+                            Quantity AS quantity,
+                            Notes AS notes,
+                            PurchaseOrderNumber AS purchaseOrderNumber,
+                            PurchaseOrderImageURL AS purchaseOrderImageUrl,
+                            CreatedAt AS createdAt
+                        FROM InventoryStockMovements
+                        WHERE RawMaterialID = @materialId
+                          AND MovementType IN ('add_raw_material', 'restock_raw_material')
+                          AND (IsArchived = 0 OR IsArchived IS NULL)
+                        ORDER BY CreatedAt DESC
+                    `);
+                const movements = mvResult.recordset || [];
+                const poFromNotes = (notes) => {
+                    const m = String(notes || '').match(/\bPO:\s*([^·]+)/i);
+                    return m ? m[1].trim() : '';
+                };
+                const labelFor = (mv) => {
+                    const type = String(mv.movementType || '');
+                    const base = type === 'add_raw_material' ? 'Initial receipt' : 'Restock';
+                    const po = (mv.purchaseOrderNumber || poFromNotes(mv.notes) || '').trim();
+                    const when = mv.createdAt ? new Date(mv.createdAt).toLocaleDateString() : '';
+                    const qty = mv.quantity != null ? (' +' + mv.quantity) : '';
+                    return po ? (base + ' — ' + po + qty + (when ? ' (' + when + ')' : ''))
+                        : (base + qty + (when ? ' (' + when + ')' : ''));
+                };
+                purchaseOrders = movements.map((mv) => ({
+                    id: mv.movementId,
+                    movementType: mv.movementType,
+                    label: labelFor(mv),
+                    purchaseOrderNumber: (mv.purchaseOrderNumber || poFromNotes(mv.notes) || '').trim() || null,
+                    purchaseOrderImageUrl: mv.purchaseOrderImageUrl || null,
+                    quantity: mv.quantity,
+                    createdAt: mv.createdAt
+                }));
+                const hasAddReceipt = purchaseOrders.some((p) => p.movementType === 'add_raw_material');
+                const matPo = (material.purchaseOrderNumber || '').trim();
+                const matImg = material.purchaseOrderImageUrl || null;
+                if (!hasAddReceipt && (matPo || matImg)) {
+                    purchaseOrders.push({
+                        id: 'material-initial',
+                        movementType: 'add_raw_material',
+                        label: matPo ? ('Initial receipt — ' + matPo) : 'Initial receipt',
+                        purchaseOrderNumber: matPo || null,
+                        purchaseOrderImageUrl: matImg,
+                        quantity: material.stockQuantity,
+                        createdAt: material.createdAt
+                    });
+                } else if (hasAddReceipt && matImg) {
+                    const addEntry = purchaseOrders.find((p) => p.movementType === 'add_raw_material');
+                    if (addEntry && !addEntry.purchaseOrderImageUrl) {
+                        addEntry.purchaseOrderImageUrl = matImg;
+                    }
+                    if (addEntry && !addEntry.purchaseOrderNumber && matPo) {
+                        addEntry.purchaseOrderNumber = matPo;
+                    }
+                }
+            } catch (mvErr) {
+                console.warn('raw material purchase orders:', mvErr.message);
+            }
+            if (!purchaseOrders.length && (material.purchaseOrderNumber || material.purchaseOrderImageUrl)) {
+                purchaseOrders.push({
+                    id: 'material-initial',
+                    movementType: 'add_raw_material',
+                    label: material.purchaseOrderNumber
+                        ? ('Initial receipt — ' + material.purchaseOrderNumber)
+                        : 'Initial receipt',
+                    purchaseOrderNumber: material.purchaseOrderNumber || null,
+                    purchaseOrderImageUrl: material.purchaseOrderImageUrl || null,
+                    quantity: material.stockQuantity,
+                    createdAt: material.createdAt
+                });
+            }
+            res.json({ success: true, material, purchaseOrders, recentReceipts: purchaseOrders });
+        } catch (err) {
+            console.error('Error fetching raw material:', err);
+            res.status(500).json({ success: false, message: 'Failed to retrieve raw material.' });
         }
     });
 
@@ -21531,16 +21762,110 @@ module.exports = function (sql, pool, getStripe = null) {
         }
     });
 
-    router.post('/api/admin/raw-materials/:id/restock', isAuthenticated, async (req, res) => {
+    router.post('/api/admin/raw-materials/:id/restock', isAuthenticated, rawMaterialPoUpload.single('purchaseOrderImage'), async (req, res) => {
         try {
             await pool.connect();
+            await ensureBomBundleSchema(pool);
             const materialId = parseInt(req.params.id, 10);
             const quantityToAdd = parseInt(req.body.quantityToAdd, 10);
+            const supplier = (req.body.supplier || '').trim() || null;
+            const purchaseOrderNumber = (req.body.purchaseOrderNumber || '').trim() || null;
+            let purchaseOrderImageUrl = null;
+            if (req.file) {
+                purchaseOrderImageUrl = publicUrlFromRawMaterialPoFile(req.file);
+            }
             if (!materialId || Number.isNaN(materialId)) {
                 return res.status(400).json({ success: false, message: 'Invalid material ID.' });
             }
             if (!quantityToAdd || quantityToAdd < 1) {
                 return res.status(400).json({ success: false, message: 'Quantity must be at least 1.' });
+            }
+            if (!purchaseOrderNumber) {
+                return res.status(400).json({ success: false, message: 'Purchase order number is required.' });
+            }
+            if (!req.file) {
+                return res.status(400).json({ success: false, message: 'Purchase order image is required.' });
+            }
+
+            const current = await pool.request()
+                .input('materialId', sql.Int, materialId)
+                .query(`
+                    SELECT MaterialID, Name, QuantityAvailable, Unit, PurchaseOrderImageURL
+                    FROM RawMaterials
+                    WHERE MaterialID = @materialId AND IsActive = 1
+                `);
+            if (!current.recordset.length) {
+                return res.status(404).json({ success: false, message: 'Raw material not found.' });
+            }
+
+            const row = current.recordset[0];
+            const newQty = (row.QuantityAvailable || 0) + quantityToAdd;
+
+            await pool.request()
+                .input('materialId', sql.Int, materialId)
+                .input('newQty', sql.Int, newQty)
+                .input('supplier', sql.NVarChar, supplier)
+                .query(`
+                    UPDATE RawMaterials
+                    SET QuantityAvailable = @newQty,
+                        Supplier = COALESCE(@supplier, Supplier),
+                        LastUpdated = GETDATE()
+                    WHERE MaterialID = @materialId
+                `);
+
+            await ensureInventoryStockMovementSchema(pool);
+            await logRestockRawMaterialMovement(pool, {
+                rawMaterialId: materialId,
+                quantity: quantityToAdd,
+                materialName: row.Name,
+                unit: row.Unit,
+                supplier,
+                purchaseOrderNumber,
+                purchaseOrderImageUrl,
+                userId: req.session.user && req.session.user.id
+            });
+
+            invalidateAdminPageCache('admin:');
+
+            const updatedRow = await pool.request()
+                .input('materialId', sql.Int, materialId)
+                .query(`
+                    SELECT LastUpdated, Supplier, PurchaseOrderNumber, PurchaseOrderImageURL
+                    FROM RawMaterials
+                    WHERE MaterialID = @materialId
+                `);
+
+            const updated = updatedRow.recordset[0] || {};
+            res.json({
+                success: true,
+                message: `Added ${quantityToAdd} to stock.`,
+                quantityAvailable: newQty,
+                materialName: row.Name,
+                unit: row.Unit,
+                lastUpdated: updated.LastUpdated,
+                supplier: updated.Supplier,
+                purchaseOrderNumber: updated.PurchaseOrderNumber,
+                purchaseOrderImageUrl: updated.PurchaseOrderImageURL
+            });
+        } catch (err) {
+            console.error('Error restocking raw material:', err);
+            res.status(500).json({ success: false, message: 'Failed to restock raw material.' });
+        }
+    });
+
+    router.post('/api/admin/raw-materials/:id/adjust', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            await ensureBomBundleSchema(pool);
+            await ensureInventoryStockMovementSchema(pool);
+            const materialId = parseInt(req.params.id, 10);
+            const delta = parseInt(req.body.delta, 10);
+            const notes = (req.body.notes || '').toString().trim();
+            if (!materialId || Number.isNaN(materialId)) {
+                return res.status(400).json({ success: false, message: 'Invalid material ID.' });
+            }
+            if (!delta) {
+                return res.status(400).json({ success: false, message: 'Enter a non-zero adjustment.' });
             }
 
             const current = await pool.request()
@@ -21555,7 +21880,11 @@ module.exports = function (sql, pool, getStripe = null) {
             }
 
             const row = current.recordset[0];
-            const newQty = (row.QuantityAvailable || 0) + quantityToAdd;
+            const beforeQty = Number(row.QuantityAvailable) || 0;
+            const newQty = beforeQty + delta;
+            if (newQty < 0) {
+                return res.status(400).json({ success: false, message: 'Cannot deduct more than current stock.' });
+            }
 
             await pool.request()
                 .input('materialId', sql.Int, materialId)
@@ -21566,36 +21895,27 @@ module.exports = function (sql, pool, getStripe = null) {
                     WHERE MaterialID = @materialId
                 `);
 
-            await ensureInventoryStockMovementSchema(pool);
-            await logRestockRawMaterialMovement(pool, {
+            await logAdjustRawMaterialMovement(pool, {
                 rawMaterialId: materialId,
-                quantity: quantityToAdd,
+                delta,
                 materialName: row.Name,
                 unit: row.Unit,
+                notes,
                 userId: req.session.user && req.session.user.id
             });
 
             invalidateAdminPageCache('admin:');
 
-            const updatedRow = await pool.request()
-                .input('materialId', sql.Int, materialId)
-                .query(`
-                    SELECT LastUpdated
-                    FROM RawMaterials
-                    WHERE MaterialID = @materialId
-                `);
-
             res.json({
                 success: true,
-                message: `Added ${quantityToAdd} to stock.`,
+                message: 'Stock adjusted (' + (delta > 0 ? '+' : '') + delta + ').',
                 quantityAvailable: newQty,
                 materialName: row.Name,
-                unit: row.Unit,
-                lastUpdated: updatedRow.recordset[0] && updatedRow.recordset[0].LastUpdated
+                unit: row.Unit
             });
         } catch (err) {
-            console.error('Error restocking raw material:', err);
-            res.status(500).json({ success: false, message: 'Failed to restock raw material.' });
+            console.error('Error adjusting raw material stock:', err);
+            res.status(500).json({ success: false, message: 'Failed to adjust stock.' });
         }
     });
 
@@ -22401,6 +22721,14 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             }
 
+            try {
+                const { finalizeStorefrontDisplayForProcessingOrder } = require('./utils/storefrontStockReserve');
+                const displayResult = await finalizeStorefrontDisplayForProcessingOrder(pool, orderId);
+                console.log(`[ADMIN ORDER PROCESSING] Storefront display stock:`, displayResult);
+            } catch (displayErr) {
+                console.error(`[ADMIN ORDER PROCESSING] Storefront display finalize error:`, displayErr.message);
+            }
+
             // Update order status to Processing
             await pool.request()
                 .input('orderId', sql.Int, orderId)
@@ -22434,9 +22762,7 @@ module.exports = function (sql, pool, getStripe = null) {
             await pool.connect();
             const orderId = parseInt(req.params.orderId);
 
-            // NOTE: Pending orders never had stock decreased, so no need to restore stock when cancelling
-            // Stock is only decreased when order status changes to "Processing"
-            console.log(`[ADMIN ORDER CANCELLATION] Cancelling Pending order ${orderId} - no stock restoration needed (stock was never decreased)`);
+            console.log(`[ADMIN ORDER CANCELLATION] Cancelling Pending order ${orderId}`);
 
             try {
                 await refundGatewayForPendingCancel(orderId, '[ADMIN-PENDING-CANCEL-REFUND]');
@@ -22446,6 +22772,13 @@ module.exports = function (sql, pool, getStripe = null) {
                     success: false,
                     message: `Refund failed: ${refundErr.message}. Order was not cancelled.`
                 });
+            }
+
+            try {
+                const { restoreStorefrontDisplayStockForOrder } = require('./utils/storefrontStockReserve');
+                await restoreStorefrontDisplayStockForOrder(pool, orderId);
+            } catch (restoreDisplayErr) {
+                console.error('[ADMIN ORDER CANCELLATION] Restore display stock:', restoreDisplayErr.message);
             }
 
             const cancelResult = await pool.request()
@@ -24008,21 +24341,32 @@ module.exports = function (sql, pool, getStripe = null) {
             };
 
             // Admin - Add Raw Material
-            router.post('/Employee/Admin/RawMaterials/Add', isAuthenticated, async (req, res) => {
+            router.post('/Employee/Admin/RawMaterials/Add', isAuthenticated, rawMaterialPoUpload.single('purchaseOrderImage'), async (req, res) => {
                 try {
                     await pool.connect();
                     await ensureBomBundleSchema(pool);
-                    const { name, quantity, unit, supplier } = req.body;
+                    const { name, quantity, unit, supplier, purchaseOrderNumber } = req.body;
+                    const purchaseOrderImageUrl = req.file ? publicUrlFromRawMaterialPoFile(req.file) : null;
 
                     const insertResult = await pool.request()
                         .input('name', sql.NVarChar, name)
                         .input('quantity', sql.Int, quantity)
                         .input('unit', sql.NVarChar, unit)
                         .input('supplier', sql.NVarChar, (supplier || '').trim() || null)
+                        .input('purchaseOrderNumber', sql.NVarChar, (purchaseOrderNumber || '').trim() || null)
+                        .input('purchaseOrderImageUrl', sql.NVarChar, purchaseOrderImageUrl)
                         .query(`
-                            INSERT INTO RawMaterials (Name, QuantityAvailable, Unit, Supplier, LastUpdated, IsActive)
+                            INSERT INTO RawMaterials (
+                                Name, QuantityAvailable, Unit, Supplier,
+                                PurchaseOrderNumber, PurchaseOrderImageURL,
+                                LastUpdated, IsActive
+                            )
                             OUTPUT INSERTED.MaterialID
-                            VALUES (@name, @quantity, @unit, @supplier, GETDATE(), 1)
+                            VALUES (
+                                @name, @quantity, @unit, @supplier,
+                                @purchaseOrderNumber, @purchaseOrderImageUrl,
+                                GETDATE(), 1
+                            )
                         `);
 
                     const materialId = insertResult.recordset[0].MaterialID;
@@ -24031,6 +24375,21 @@ module.exports = function (sql, pool, getStripe = null) {
                         .input('materialId', sql.Int, materialId)
                         .input('sku', sql.NVarChar, sku)
                         .query('UPDATE RawMaterials SET SKU = @sku WHERE MaterialID = @materialId');
+
+                    const addQty = parseInt(quantity, 10) || 0;
+                    if (addQty > 0) {
+                        await ensureInventoryStockMovementSchema(pool);
+                        await logAddRawMaterialMovement(pool, {
+                            rawMaterialId: materialId,
+                            quantity: addQty,
+                            materialName: name,
+                            unit: unit,
+                            supplier: (supplier || '').trim() || null,
+                            purchaseOrderNumber: (purchaseOrderNumber || '').trim() || null,
+                            purchaseOrderImageUrl: purchaseOrderImageUrl,
+                            userId: req.session.user && req.session.user.id
+                        });
+                    }
 
                     invalidateAdminPageCache('admin:');
                     return redirectProductInventoryTab(req, res, 'success', `Raw material added (${sku}).`);
@@ -24045,18 +24404,15 @@ module.exports = function (sql, pool, getStripe = null) {
                 try {
                     await pool.connect();
                     await ensureBomBundleSchema(pool);
-                    const { materialid, name, quantity, unit, supplier } = req.body;
+                    const { materialid, name, unit } = req.body;
 
                     await pool.request()
                         .input('materialId', sql.Int, materialid)
                         .input('name', sql.NVarChar, name)
-                        .input('quantity', sql.Int, quantity)
                         .input('unit', sql.NVarChar, unit)
-                        .input('supplier', sql.NVarChar, (supplier || '').trim() || null)
                         .query(`
                             UPDATE RawMaterials 
-                            SET Name = @name, QuantityAvailable = @quantity, Unit = @unit,
-                                Supplier = @supplier, LastUpdated = GETDATE()
+                            SET Name = @name, Unit = @unit, LastUpdated = GETDATE()
                             WHERE MaterialID = @materialId
                         `);
 
@@ -24534,7 +24890,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     await pool.connect();
                     await ensureListingStageColumn(pool);
                     await ensureVariationMediaColumns(pool);
-                    const { name, description, price, costPrice, category, variationsJson, length, width, height, reorderPoint } = req.body;
+                    const { name, description, price, costPrice, category, variationsJson, length, width, height } = req.body;
                     const parentDimensionsJson = buildVariationDimensionsJson({ length, width, height });
                     if (!name || !category) {
                         return respondPlanError('Product name and category are required.');
@@ -24548,7 +24904,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         }
                     }
                     if (!Array.isArray(variationsList) || variationsList.length === 0) {
-                        return respondPlanError('Add at least one variation with name and main image.');
+                        return respondPlanError('Add at least one variation with color/type and main image.');
                     }
                     const parentPrice = parseFloat(price);
                     if (Number.isNaN(parentPrice) || parentPrice <= 0) {
@@ -24562,18 +24918,18 @@ module.exports = function (sql, pool, getStripe = null) {
                         return respondPlanError('Item cost price cannot be higher than the sale price.');
                     }
                     const validVariations = variationsList.filter((v) => {
-                        const vName = (v.variationName || '').trim();
+                        const vName = resolvePlanVariationDisplayName(v);
                         return vName && (v.hasMainImage === true || v.hasMainImage === 'true' || v.hasMainImage === 1);
                     });
                     if (validVariations.length === 0) {
-                        return respondPlanError('Each variation needs a name and main image.');
+                        return respondPlanError('Each variation needs color or type, and a main image.');
                     }
                     const mediaByVariation = mapVariationMediaFiles(req.files, validVariations);
                     const transaction = new sql.Transaction(pool);
                     await transaction.begin();
                     try {
                         const tempSlug = `plan-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-                        const parsedReorderPoint = Math.max(0, parseInt(reorderPoint, 10) || 0);
+                        const defaultReorderPoint = 10;
                         const insert = await transaction.request()
                             .input('name', sql.NVarChar, name)
                             .input('description', sql.NVarChar, description || '')
@@ -24582,7 +24938,7 @@ module.exports = function (sql, pool, getStripe = null) {
                             .input('category', sql.NVarChar, category)
                             .input('dimensions', sql.NVarChar, parentDimensionsJson)
                             .input('tempSlug', sql.NVarChar, tempSlug)
-                            .input('reorderPoint', sql.Int, parsedReorderPoint)
+                            .input('reorderPoint', sql.Int, defaultReorderPoint)
                             .input('createdBy', sql.Int, req.session.user.id)
                             .query(`
                                 INSERT INTO InventoryProducts (
@@ -24620,13 +24976,18 @@ module.exports = function (sql, pool, getStripe = null) {
 
                         for (let vi = 0; vi < validVariations.length; vi++) {
                             const v = validVariations[vi];
-                            const variationName = (v.variationName || '').trim();
+                            const variationName = resolvePlanVariationDisplayName(v);
                             const media = mediaByVariation[vi] || { mainFile: null, modelFile: null, thumbFiles: [] };
                             const mediaUrls = resolveVariationMediaUrls(media, publicUrlFromMulterVariationFile);
+                            if (!mediaUrls.imageUrl) {
+                                throw new Error('Each variation needs a main image.');
+                            }
                             const insertVar = await transaction.request()
                                 .input('inventoryProductID', sql.Int, inventoryProductId)
                                 .input('variationName', sql.NVarChar, variationName)
                                 .input('color', sql.NVarChar, (v.color || '').trim() || null)
+                                .input('shape', sql.NVarChar, (v.shape || '').trim() || null)
+                                .input('variationType', sql.NVarChar, (v.variationType || v.type || '').trim() || null)
                                 .input('price', sql.Decimal(10, 2), parentPrice)
                                 .input('costPrice', sql.Decimal(10, 2), parentCost)
                                 .input('variationImageUrl', sql.NVarChar, mediaUrls.imageUrl)
@@ -24634,12 +24995,14 @@ module.exports = function (sql, pool, getStripe = null) {
                                 .input('createdBy', sql.Int, req.session.user.id)
                                 .query(`
                                     INSERT INTO InventoryProductVariations (
-                                        ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity,
+                                        ProductID, InventoryProductID, VariationName, Color, Shape, VariationType,
+                                        Quantity, AvailableQuantity,
                                         Price, CostPrice, VariationImageURL, Dimensions, IsActive, CreatedBy
                                     )
                                     OUTPUT INSERTED.VariationID
                                     VALUES (
-                                        NULL, @inventoryProductID, @variationName, @color, 0, 0,
+                                        NULL, @inventoryProductID, @variationName, @color, @shape, @variationType,
+                                        0, 0,
                                         @price, @costPrice, @variationImageUrl, @dimensions, 1, @createdBy
                                     )
                                 `);
@@ -24691,7 +25054,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         return respondError('Invalid planned product id.');
                     }
 
-                    const { name, description, price, costPrice, category, variationsJson, length, width, height, reorderPoint } = req.body;
+                    const { name, description, price, costPrice, category, variationsJson, length, width, height } = req.body;
                     const parentDimensionsJson = buildVariationDimensionsJson({ length, width, height });
                     if (!name || !category) {
                         return respondError('Product name and category are required.');
@@ -24733,7 +25096,6 @@ module.exports = function (sql, pool, getStripe = null) {
                             throw new Error('Only planned products can be edited on Products Listing.');
                         }
 
-                        const parsedReorderPoint = Math.max(0, parseInt(reorderPoint, 10) || 0);
                         await transaction.request()
                             .input('id', sql.Int, inventoryProductId)
                             .input('name', sql.NVarChar, name)
@@ -24742,7 +25104,6 @@ module.exports = function (sql, pool, getStripe = null) {
                             .input('costPrice', sql.Decimal(10, 2), parentCost)
                             .input('category', sql.NVarChar, category)
                             .input('dimensions', sql.NVarChar, parentDimensionsJson)
-                            .input('reorderPoint', sql.Int, parsedReorderPoint)
                             .query(`
                                 UPDATE InventoryProducts
                                 SET Name = @name,
@@ -24751,7 +25112,6 @@ module.exports = function (sql, pool, getStripe = null) {
                                     CostPrice = @costPrice,
                                     Category = @category,
                                     Dimensions = @dimensions,
-                                    ReorderPoint = COALESCE(@reorderPoint, ReorderPoint),
                                     InventoryNotes = @description,
                                     DateUpdated = GETDATE()
                                 WHERE InventoryProductID = @id AND IsActive = 1
@@ -24766,11 +25126,11 @@ module.exports = function (sql, pool, getStripe = null) {
                         }
 
                         const validVariations = variationsList.filter((v) => {
-                            const vName = (v.variationName || '').trim();
+                            const vName = resolvePlanVariationDisplayName(v);
                             return !!vName;
                         });
                         if (!validVariations.length) {
-                            throw new Error('Add at least one variation.');
+                            throw new Error('Add at least one variation with color or type.');
                         }
 
                         const mediaByVariation = mapVariationMediaFiles(req.files, validVariations);
@@ -24784,24 +25144,61 @@ module.exports = function (sql, pool, getStripe = null) {
                             `);
                         const existingById = new Map((existingResult.recordset || []).map((r) => [r.VariationID, r]));
 
+                        let deletedVariationIds = [];
+                        if (req.body.deletedVariationIds) {
+                            try {
+                                const parsed = typeof req.body.deletedVariationIds === 'string'
+                                    ? JSON.parse(req.body.deletedVariationIds)
+                                    : req.body.deletedVariationIds;
+                                if (Array.isArray(parsed)) {
+                                    deletedVariationIds = parsed
+                                        .map((id) => parseInt(id, 10))
+                                        .filter((id) => id > 0);
+                                }
+                            } catch (delParseErr) {
+                                deletedVariationIds = [];
+                            }
+                        }
+                        for (const delId of deletedVariationIds) {
+                            await transaction.request()
+                                .input('variationId', sql.Int, delId)
+                                .input('inventoryProductId', sql.Int, inventoryProductId)
+                                .query(`
+                                    UPDATE InventoryProductVariations
+                                    SET IsActive = 0, UpdatedAt = GETDATE()
+                                    WHERE VariationID = @variationId
+                                      AND InventoryProductID = @inventoryProductId
+                                `);
+                        }
+
                         for (let vi = 0; vi < validVariations.length; vi++) {
                             const v = validVariations[vi];
-                            const variationName = (v.variationName || '').trim();
+                            const variationName = resolvePlanVariationDisplayName(v);
                             const variationId = parseInt(v.variationId, 10) || 0;
                             const media = mediaByVariation[vi] || { mainFile: null, modelFile: null, thumbFiles: [] };
                             const mediaUrls = resolveVariationMediaUrls(media, publicUrlFromMulterVariationFile);
                             let variationImageUrl = mediaUrls.imageUrl;
 
                             if (variationId && existingById.has(variationId)) {
+                                if (!variationImageUrl) {
+                                    const existingRow = existingById.get(variationId);
+                                    variationImageUrl = existingRow?.VariationImageURL || null;
+                                }
                                 await transaction.request()
                                     .input('variationId', sql.Int, variationId)
                                     .input('variationName', sql.NVarChar, variationName)
+                                    .input('color', sql.NVarChar, (v.color || '').trim() || null)
+                                    .input('shape', sql.NVarChar, (v.shape || '').trim() || null)
+                                    .input('variationType', sql.NVarChar, (v.variationType || v.type || '').trim() || null)
                                     .input('price', sql.Decimal(10, 2), parentPrice)
                                     .input('costPrice', sql.Decimal(10, 2), parentCost)
                                     .input('variationImageUrl', sql.NVarChar, variationImageUrl)
                                     .query(`
                                         UPDATE InventoryProductVariations
                                         SET VariationName = @variationName,
+                                            Color = @color,
+                                            Shape = @shape,
+                                            VariationType = @variationType,
                                             Price = @price,
                                             CostPrice = @costPrice,
                                             VariationImageURL = COALESCE(NULLIF(@variationImageUrl, ''), VariationImageURL),
@@ -24817,6 +25214,9 @@ module.exports = function (sql, pool, getStripe = null) {
                             const insertVar = await transaction.request()
                                 .input('inventoryProductID', sql.Int, inventoryProductId)
                                 .input('variationName', sql.NVarChar, variationName)
+                                .input('color', sql.NVarChar, (v.color || '').trim() || null)
+                                .input('shape', sql.NVarChar, (v.shape || '').trim() || null)
+                                .input('variationType', sql.NVarChar, (v.variationType || v.type || '').trim() || null)
                                 .input('price', sql.Decimal(10, 2), parentPrice)
                                 .input('costPrice', sql.Decimal(10, 2), parentCost)
                                 .input('variationImageUrl', sql.NVarChar, variationImageUrl)
@@ -24824,12 +25224,14 @@ module.exports = function (sql, pool, getStripe = null) {
                                 .input('createdBy', sql.Int, req.session.user.id)
                                 .query(`
                                     INSERT INTO InventoryProductVariations (
-                                        ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity,
+                                        ProductID, InventoryProductID, VariationName, Color, Shape, VariationType,
+                                        Quantity, AvailableQuantity,
                                         Price, CostPrice, VariationImageURL, Dimensions, IsActive, CreatedBy
                                     )
                                     OUTPUT INSERTED.VariationID
                                     VALUES (
-                                        NULL, @inventoryProductID, @variationName, NULL, 0, 0,
+                                        NULL, @inventoryProductID, @variationName, @color, @shape, @variationType,
+                                        0, 0,
                                         @price, @costPrice, @variationImageUrl, @dimensions, 1, @createdBy
                                     )
                                 `);
@@ -24924,10 +25326,13 @@ module.exports = function (sql, pool, getStripe = null) {
                     }
 
                     const validVariations = variationsList.filter((v) => {
-                        const vName = (v.variationName || '').trim();
+                        const vName = resolvePlanVariationDisplayName(v) || (v.variationName || '').trim();
                         const vQty = parseInt(v.quantity, 10);
                         const planVarId = parseInt(v.variationId, 10) || 0;
-                        const hasImage = v.hasMainImage === true || v.hasMainImage === 'true' || v.hasMainImage === 1 || planVarId > 0;
+                        const hasNewImage = v.hasNewMainImage === true || v.hasNewMainImage === 'true' || v.hasNewMainImage === 1;
+                        const hasImage = v.hasMainImage === true || v.hasMainImage === 'true' || v.hasMainImage === 1
+                            || hasNewImage || planVarId > 0;
+                        v.variationName = vName;
                         return vName && vQty > 0 && hasImage;
                     });
                     if (validVariations.length === 0) {
@@ -25104,9 +25509,29 @@ module.exports = function (sql, pool, getStripe = null) {
                             existingPlannedVariations.map((row) => [row.VariationID, row])
                         );
 
+                        if (buildFromId && existingVarById.size) {
+                            const keptVariationIds = new Set(
+                                validVariations
+                                    .map((v) => parseInt(v.variationId, 10) || 0)
+                                    .filter((id) => id > 0)
+                            );
+                            for (const existingId of existingVarById.keys()) {
+                                if (keptVariationIds.has(existingId)) continue;
+                                await transaction.request()
+                                    .input('variationId', sql.Int, existingId)
+                                    .input('inventoryProductId', sql.Int, inventoryProductId)
+                                    .query(`
+                                        UPDATE InventoryProductVariations
+                                        SET IsActive = 0, UpdatedAt = GETDATE()
+                                        WHERE VariationID = @variationId
+                                          AND InventoryProductID = @inventoryProductId
+                                    `);
+                            }
+                        }
+
                         for (let vi = 0; vi < validVariations.length; vi++) {
                             const v = validVariations[vi];
-                            const variationName = (v.variationName || '').trim();
+                            const variationName = resolvePlanVariationDisplayName(v) || (v.variationName || '').trim();
                             const variationQuantity = parseInt(v.quantity, 10) || 0;
                             if (!variationName || variationQuantity <= 0) continue;
 
@@ -25134,6 +25559,8 @@ module.exports = function (sql, pool, getStripe = null) {
                                     .input('variationId', sql.Int, plannedVariationId)
                                     .input('variationName', sql.NVarChar, variationName)
                                     .input('color', sql.NVarChar, (v.color || '').trim() || null)
+                                    .input('shape', sql.NVarChar, (v.shape || '').trim() || null)
+                                    .input('variationType', sql.NVarChar, (v.variationType || v.type || '').trim() || null)
                                     .input('quantity', sql.Int, variationQuantity)
                                     .input('price', sql.Decimal(10, 2), variationPrice)
                                     .input('costPrice', sql.Decimal(10, 2), variationCostPrice)
@@ -25144,6 +25571,7 @@ module.exports = function (sql, pool, getStripe = null) {
                                     .query(`
                                         UPDATE InventoryProductVariations
                                         SET VariationName = @variationName, Color = @color,
+                                            Shape = @shape, VariationType = @variationType,
                                             Quantity = @quantity, AvailableQuantity = @quantity,
                                             Price = @price, CostPrice = @costPrice,
                                             VariationImageURL = COALESCE(@variationImageUrl, VariationImageURL),
@@ -25167,10 +25595,16 @@ module.exports = function (sql, pool, getStripe = null) {
                                 continue;
                             }
 
+                            if (!variationImageUrl) {
+                                throw new Error('Each variation needs a main image. Upload an image for "' + variationName + '".');
+                            }
+
                             const insertVar = await transaction.request()
                                 .input('inventoryProductID', sql.Int, inventoryProductId)
                                 .input('variationName', sql.NVarChar, variationName)
                                 .input('color', sql.NVarChar, (v.color || '').trim() || null)
+                                .input('shape', sql.NVarChar, (v.shape || '').trim() || null)
+                                .input('variationType', sql.NVarChar, (v.variationType || v.type || '').trim() || null)
                                 .input('quantity', sql.Int, variationQuantity)
                                 .input('price', sql.Decimal(10, 2), variationPrice)
                                 .input('costPrice', sql.Decimal(10, 2), variationCostPrice)
@@ -25180,9 +25614,17 @@ module.exports = function (sql, pool, getStripe = null) {
                                 .input('dimensions', sql.NVarChar, variationDimensionsJson)
                                 .input('createdBy', sql.Int, req.session.user.id)
                                 .query(`
-                                    INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity, Price, CostPrice, VariationImageURL, ThumbnailURLs, Model3D, Dimensions, IsActive, CreatedBy)
+                                    INSERT INTO InventoryProductVariations (
+                                        ProductID, InventoryProductID, VariationName, Color, Shape, VariationType,
+                                        Quantity, AvailableQuantity, Price, CostPrice,
+                                        VariationImageURL, ThumbnailURLs, Model3D, Dimensions, IsActive, CreatedBy
+                                    )
                                     OUTPUT INSERTED.VariationID
-                                    VALUES (NULL, @inventoryProductID, @variationName, @color, @quantity, @quantity, @price, @costPrice, @variationImageUrl, @thumbJson, @model3d, @dimensions, 1, @createdBy)
+                                    VALUES (
+                                        NULL, @inventoryProductID, @variationName, @color, @shape, @variationType,
+                                        @quantity, @quantity, @price, @costPrice,
+                                        @variationImageUrl, @thumbJson, @model3d, @dimensions, 1, @createdBy
+                                    )
                                 `);
 
                             const variationId = insertVar.recordset[0].VariationID;
@@ -25722,6 +26164,52 @@ module.exports = function (sql, pool, getStripe = null) {
                                 SET StockQuantity = @stockQty, UpdatedAt = GETDATE()
                                 WHERE ProductID = @productId AND IsActive = 1
                             `);
+                        const varsForDisplay = await pool.request()
+                            .input('productId', sql.Int, linkedProductId)
+                            .query(`
+                                SELECT pv.VariationID,
+                                    CASE
+                                        WHEN ipv.AvailableQuantity IS NULL OR ipv.AvailableQuantity = 0
+                                        THEN COALESCE(ipv.Quantity, 0)
+                                        ELSE COALESCE(ipv.AvailableQuantity, 0)
+                                    END AS InvQty
+                                FROM ProductVariations pv
+                                LEFT JOIN InventoryProductVariations ipv
+                                    ON ipv.VariationID = pv.VariationID AND ipv.IsActive = 1
+                                WHERE pv.ProductID = @productId AND pv.IsActive = 1
+                            `);
+                        const activeVars = varsForDisplay.recordset || [];
+                        if (activeVars.length === 1) {
+                            await pool.request()
+                                .input('variationId', sql.Int, activeVars[0].VariationID)
+                                .input('displayStock', sql.Int, displayStock)
+                                .query(`
+                                    UPDATE ProductVariations
+                                    SET Quantity = @displayStock, UpdatedAt = GETDATE()
+                                    WHERE VariationID = @variationId AND IsActive = 1
+                                `);
+                        } else if (activeVars.length > 1) {
+                            const totalInv = activeVars.reduce((s, v) => s + (parseInt(v.InvQty, 10) || 0), 0);
+                            let remaining = displayStock;
+                            for (let i = 0; i < activeVars.length; i++) {
+                                const invQty = parseInt(activeVars[i].InvQty, 10) || 0;
+                                let alloc = i === activeVars.length - 1
+                                    ? remaining
+                                    : (totalInv > 0
+                                        ? Math.floor(displayStock * invQty / totalInv)
+                                        : Math.floor(displayStock / activeVars.length));
+                                alloc = Math.max(0, Math.min(alloc, remaining));
+                                remaining -= alloc;
+                                await pool.request()
+                                    .input('variationId', sql.Int, activeVars[i].VariationID)
+                                    .input('alloc', sql.Int, alloc)
+                                    .query(`
+                                        UPDATE ProductVariations
+                                        SET Quantity = @alloc, UpdatedAt = GETDATE()
+                                        WHERE VariationID = @variationId AND IsActive = 1
+                                    `);
+                            }
+                        }
                     }
 
                     invalidateAdminPageCache('admin:');
@@ -26197,6 +26685,183 @@ module.exports = function (sql, pool, getStripe = null) {
                 }
             });
 
+            // Save variation details on a planned product (catalog/image only — no stock qty, does not build product)
+            router.post('/api/admin/inventory-product-variations/save-build-panel', isAuthenticated, productUpload.fields([
+                { name: 'variationMainImage', maxCount: 1 }
+            ]), async (req, res) => {
+                try {
+                    await pool.connect();
+                    await ensureVariationMediaColumns(pool);
+                    const inventoryProductId = parseInt(req.body.inventoryProductID || req.body.inventoryProductId, 10);
+                    const variationId = parseInt(req.body.variationId, 10) || 0;
+                    const color = (req.body.color || '').trim() || null;
+                    const shape = (req.body.shape || '').trim() || null;
+                    const variationType = (req.body.variationType || '').trim() || null;
+                    const variationName = resolvePlanVariationDisplayName({
+                        variationName: req.body.variationName,
+                        color,
+                        shape,
+                        variationType,
+                        type: variationType
+                    });
+
+                    if (!inventoryProductId) {
+                        return res.json({ success: false, message: 'Product ID is required.' });
+                    }
+                    if (!variationName) {
+                        return res.json({ success: false, message: 'Variation name or color/type is required.' });
+                    }
+
+                    const plannedCheck = await pool.request()
+                        .input('id', sql.Int, inventoryProductId)
+                        .query(`
+                            SELECT ListingStage, Price, CostPrice
+                            FROM InventoryProducts
+                            WHERE InventoryProductID = @id AND IsActive = 1
+                        `);
+                    if (!plannedCheck.recordset.length) {
+                        return res.json({ success: false, message: 'Product not found.' });
+                    }
+                    const stage = String(plannedCheck.recordset[0].ListingStage || '').toLowerCase();
+                    if (stage !== 'planned') {
+                        return res.json({
+                            success: false,
+                            message: 'This product is already built. Edit variations from Inventory.'
+                        });
+                    }
+                    const parentPrice = parseFloat(plannedCheck.recordset[0].Price) || 0;
+                    const parentCost = parseFloat(plannedCheck.recordset[0].CostPrice) || 0;
+
+                    const mediaUrls = resolveVariationMediaUrls(
+                        parseSingleVariationMediaFiles(req.files),
+                        publicUrlFromMulterVariationFile
+                    );
+                    let imageUrl = mediaUrls.imageUrl;
+
+                    if (variationId > 0) {
+                        const existing = await pool.request()
+                            .input('variationId', sql.Int, variationId)
+                            .input('inventoryProductId', sql.Int, inventoryProductId)
+                            .query(`
+                                SELECT VariationImageURL
+                                FROM InventoryProductVariations
+                                WHERE VariationID = @variationId
+                                  AND InventoryProductID = @inventoryProductId
+                                  AND IsActive = 1
+                            `);
+                        if (!existing.recordset.length) {
+                            return res.json({ success: false, message: 'Variation not found.' });
+                        }
+                        if (!imageUrl) {
+                            imageUrl = existing.recordset[0].VariationImageURL;
+                        }
+                        if (!imageUrl) {
+                            return res.json({ success: false, message: 'Upload a main image for this variation.' });
+                        }
+                        await pool.request()
+                            .input('variationId', sql.Int, variationId)
+                            .input('variationName', sql.NVarChar, variationName)
+                            .input('color', sql.NVarChar, color)
+                            .input('shape', sql.NVarChar, shape)
+                            .input('variationType', sql.NVarChar, variationType)
+                            .input('price', sql.Decimal(10, 2), parentPrice)
+                            .input('costPrice', sql.Decimal(10, 2), parentCost)
+                            .input('variationImageUrl', sql.NVarChar, imageUrl)
+                            .query(`
+                                UPDATE InventoryProductVariations
+                                SET VariationName = @variationName,
+                                    Color = @color,
+                                    Shape = @shape,
+                                    VariationType = @variationType,
+                                    Price = @price,
+                                    CostPrice = @costPrice,
+                                    VariationImageURL = @variationImageUrl,
+                                    UpdatedAt = GETDATE()
+                                WHERE VariationID = @variationId
+                            `);
+                        const savedRow = await pool.request()
+                            .input('variationId', sql.Int, variationId)
+                            .query(`
+                                SELECT VariationID, VariationName, Color, Shape, VariationType,
+                                       Quantity, AvailableQuantity, Price, CostPrice, VariationImageURL, SKU
+                                FROM InventoryProductVariations
+                                WHERE VariationID = @variationId
+                            `);
+                        const row = savedRow.recordset[0] || {};
+                        invalidateAdminPageCache('admin:');
+                        return res.json({
+                            success: true,
+                            message: 'Variation details saved. Use Save Build when ready to add stock.',
+                            variation: {
+                                VariationID: variationId,
+                                VariationName: variationName,
+                                Color: color,
+                                Shape: shape,
+                                VariationType: variationType,
+                                Quantity: row.Quantity || 0,
+                                AvailableQuantity: row.AvailableQuantity || 0,
+                                Price: parentPrice,
+                                CostPrice: parentCost,
+                                VariationImageURL: normalizeProductAssetUrl(imageUrl) || imageUrl,
+                                SKU: row.SKU || null
+                            }
+                        });
+                    }
+
+                    if (!imageUrl) {
+                        return res.json({ success: false, message: 'Upload a main image for this variation.' });
+                    }
+                    const insertVar = await pool.request()
+                        .input('inventoryProductID', sql.Int, inventoryProductId)
+                        .input('variationName', sql.NVarChar, variationName)
+                        .input('color', sql.NVarChar, color)
+                        .input('shape', sql.NVarChar, shape)
+                        .input('variationType', sql.NVarChar, variationType)
+                        .input('price', sql.Decimal(10, 2), parentPrice)
+                        .input('costPrice', sql.Decimal(10, 2), parentCost)
+                        .input('variationImageUrl', sql.NVarChar, imageUrl)
+                        .input('createdBy', sql.Int, req.session.user.id)
+                        .query(`
+                            INSERT INTO InventoryProductVariations (
+                                ProductID, InventoryProductID, VariationName, Color, Shape, VariationType,
+                                Quantity, AvailableQuantity, Price, CostPrice,
+                                VariationImageURL, Dimensions, IsActive, CreatedBy
+                            )
+                            OUTPUT INSERTED.VariationID
+                            VALUES (
+                                NULL, @inventoryProductID, @variationName, @color, @shape, @variationType,
+                                0, 0, @price, @costPrice,
+                                @variationImageUrl, '{}', 1, @createdBy
+                            )
+                        `);
+                    const newVariationId = insertVar.recordset[0].VariationID;
+                    invalidateAdminPageCache('admin:');
+                    return res.json({
+                        success: true,
+                        message: 'Variation details saved. Use Save Build when ready to add stock.',
+                        variation: {
+                            VariationID: newVariationId,
+                            VariationName: variationName,
+                            Color: color,
+                            Shape: shape,
+                            VariationType: variationType,
+                            Quantity: 0,
+                            AvailableQuantity: 0,
+                            Price: parentPrice,
+                            CostPrice: parentCost,
+                            VariationImageURL: normalizeProductAssetUrl(imageUrl) || imageUrl,
+                            SKU: null
+                        }
+                    });
+                } catch (err) {
+                    console.error('save-build-panel error:', err);
+                    return res.json({
+                        success: false,
+                        message: 'Failed to save variation: ' + (err.message || 'unknown error')
+                    });
+                }
+            });
+
             // Add new inventory product variation (supports both ProductID and InventoryProductID)
             router.post('/api/admin/inventory-product-variations/add', isAuthenticated, productUpload.fields([
                 { name: 'variationMainImage', maxCount: 1 },
@@ -26208,7 +26873,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     await pool.connect();
                     await ensureVariationMediaColumns(pool);
                     console.log('Add inventory variation - body:', req.body);
-                    const { variationName, color, quantity, inventoryProductID, productID, price, isActive } = req.body;
+                    const { variationName, color, shape, variationType, quantity, inventoryProductID, productID, price, isActive } = req.body;
 
                     // Support both productID and inventoryProductID
                     // Handle case where productID might be an array (from form data)
@@ -26378,6 +27043,8 @@ module.exports = function (sql, pool, getStripe = null) {
                             .input('inventoryProductID', sql.Int, actualInventoryProductID)
                             .input('variationName', sql.NVarChar, variationName)
                             .input('color', sql.NVarChar, color || null)
+                            .input('shape', sql.NVarChar, (shape || '').trim() || null)
+                            .input('variationType', sql.NVarChar, (variationType || '').trim() || null)
                             .input('quantity', sql.Int, variationQuantity)
                             .input('price', sql.Decimal(10, 2), resolvedVariationPrice)
                             .input('costPrice', sql.Decimal(10, 2), resolvedVariationCost)
@@ -26387,9 +27054,9 @@ module.exports = function (sql, pool, getStripe = null) {
                             .input('isActive', sql.Bit, isActive === '1' ? 1 : 0)
                             .input('createdBy', sql.Int, req.session.user ? req.session.user.id : null)
                             .query(`
-                                INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Quantity, AvailableQuantity, Price, CostPrice, VariationImageURL, ThumbnailURLs, Model3D, IsActive, CreatedBy)
+                                INSERT INTO InventoryProductVariations (ProductID, InventoryProductID, VariationName, Color, Shape, VariationType, Quantity, AvailableQuantity, Price, CostPrice, VariationImageURL, ThumbnailURLs, Model3D, IsActive, CreatedBy)
                                     OUTPUT INSERTED.VariationID
-                                VALUES (@productID, @inventoryProductID, @variationName, @color, @quantity, @quantity, @price, @costPrice, @imageUrl, @thumbJson, @model3d, @isActive, @createdBy)
+                                VALUES (@productID, @inventoryProductID, @variationName, @color, @shape, @variationType, @quantity, @quantity, @price, @costPrice, @imageUrl, @thumbJson, @model3d, @isActive, @createdBy)
                             `);
 
                         variationID = result.recordset[0].VariationID;
@@ -26413,6 +27080,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         await upsertProductVariationWithId(pool, variationID, linkedProductId, {
                             variationName,
                             color: color || null,
+                            shape: (shape || '').trim() || null,
+                            variationType: (variationType || '').trim() || null,
                             quantity: variationQuantity,
                             price: resolvedVariationPrice,
                             imageUrl: mediaUrls.imageUrl,
@@ -26822,6 +27491,8 @@ module.exports = function (sql, pool, getStripe = null) {
                                 COALESCE(ipv.Notes, '') as Notes,
                                 COALESCE(ipv.SKU, '') as SKU,
                                 COALESCE(ipv.Color, '') as Color,
+                                COALESCE(ipv.Shape, '') as Shape,
+                                COALESCE(ipv.VariationType, '') as VariationType,
                                 COALESCE(ipv.VariationImageURL, '') as VariationImageURL,
                                 ipv.ThumbnailURLs,
                                 ipv.Model3D,
@@ -26882,6 +27553,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         : null;
                     const colorUpdate = req.body.color != null ? String(req.body.color).trim() : null;
                     const skuUpdate = req.body.sku != null ? String(req.body.sku).trim() : null;
+                    const shapeUpdate = req.body.shape != null ? String(req.body.shape).trim() : null;
+                    const variationTypeUpdate = req.body.variationType != null ? String(req.body.variationType).trim() : null;
                     let catalogPriceUpdate = null;
                     if (req.body.price != null && String(req.body.price).trim() !== '') {
                         catalogPriceUpdate = parseFloat(req.body.price);
@@ -26980,7 +27653,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         });
                     }
 
-                    if (inventoryEdit && !hasNewMain && req.body.sku == null && req.body.color == null) {
+                    if (inventoryEdit && !hasNewMain && !variationNameUpdate && req.body.sku == null
+                        && req.body.color == null && req.body.shape == null && req.body.variationType == null) {
                         return res.json({
                             success: false,
                             message: 'No variation changes to save.'
@@ -27017,6 +27691,8 @@ module.exports = function (sql, pool, getStripe = null) {
                                 Notes = @notes,
                                 VariationName = COALESCE(@variationName, VariationName),
                                 Color = COALESCE(@color, Color),
+                                Shape = COALESCE(@shape, Shape),
+                                VariationType = COALESCE(@variationType, VariationType),
                                 SKU = COALESCE(@sku, SKU),
                                 VariationImageURL = @variationImageUrl,
                                 ThumbnailURLs = @thumbJson,
@@ -27056,6 +27732,8 @@ module.exports = function (sql, pool, getStripe = null) {
                             .input('notes', sql.NVarChar, notes || null)
                             .input('variationName', sql.NVarChar, variationNameUpdate || null)
                             .input('color', sql.NVarChar, colorUpdate)
+                            .input('shape', sql.NVarChar, shapeUpdate)
+                            .input('variationType', sql.NVarChar, variationTypeUpdate)
                             .input('sku', sql.NVarChar, skuUpdate)
                             .input('variationImageUrl', sql.NVarChar, finalVariationImageUrl)
                             .input('thumbJson', sql.NVarChar, finalThumbJson)
@@ -27215,6 +27893,17 @@ module.exports = function (sql, pool, getStripe = null) {
 
                             console.log(`[VARIATION UPDATE] Found InventoryProductVariation with Quantity: ${inventoryQuantity}`);
 
+                            const pvLink = await pool.request()
+                                .input('variationID', sql.Int, parsedVariationID)
+                                .query(`SELECT ProductID FROM ProductVariations WHERE VariationID = @variationID`);
+                            const linkedCatalogId = pvLink.recordset[0]?.ProductID;
+                            const { usesStorefrontDisplayStock } = require('./utils/productVariationPolicy');
+                            const skipQtySync = linkedCatalogId
+                                && await usesStorefrontDisplayStock(pool, linkedCatalogId);
+
+                            if (skipQtySync) {
+                                console.log(`[VARIATION UPDATE] Storefront display stock active — skipping inventory qty sync for VariationID ${parsedVariationID}`);
+                            } else {
                             // Directly update ProductVariations.Quantity with Quantity from InventoryProductVariations
                             await pool.request()
                                 .input('variationId', sql.Int, parsedVariationID)
@@ -27226,8 +27915,9 @@ module.exports = function (sql, pool, getStripe = null) {
                                 `);
 
                             console.log(`[VARIATION UPDATE] ✅ Directly synced variation stock: ProductVariations.Quantity = ${inventoryQuantity} for VariationID ${parsedVariationID}`);
+                            }
 
-                            // Also call sync function for double-check
+                            // Also call sync function for media/sku (quantity skipped when display stock active)
                             await syncInventoryVariationToProductsVariation(parsedVariationID, null);
                             console.log(`[VARIATION UPDATE] ✅ Also called syncInventoryVariationToProductsVariation for VariationID ${parsedVariationID}`);
                         } else {
@@ -28135,7 +28825,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         const variationsResult = await pool.request()
                             .input('id', sql.Int, productId)
                             .query(`
-                                SELECT VariationID, VariationName, Color, Quantity, AvailableQuantity,
+                                SELECT VariationID, VariationName, Color, Shape, VariationType,
+                                       Quantity, AvailableQuantity,
                                        Price, CostPrice, VariationImageURL, ThumbnailURLs, Model3D, Dimensions
                                 FROM InventoryProductVariations
                                 WHERE InventoryProductID = @id AND IsActive = 1
