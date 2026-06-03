@@ -142,7 +142,14 @@ export const AuthProvider = ({ children }) => {
         setToken(null);
         setSessionId(null);
         localStorage.removeItem('authToken');
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
         localStorage.removeItem('userData');
+        localStorage.removeItem('user');
+        localStorage.removeItem('lastValidation');
+        localStorage.removeItem('rememberMe');
+        localStorage.removeItem('loginTime');
+        localStorage.removeItem('persistentAccount');
     }, []);
 
     /**
@@ -278,27 +285,13 @@ export const AuthProvider = ({ children }) => {
             const savedToken = localStorage.getItem('authToken') || localStorage.getItem('accessToken');
             const savedUser = localStorage.getItem('userData');
             
-            // If we have user data in localStorage, set it immediately for better UX
-            // This prevents the "flash" of logged out state while checking with server
-            if (savedUser) {
-                try {
-                    const userData = JSON.parse(savedUser);
-                    if (userData && userData.email) {
-                        setUser(userData);
-                        if (savedToken) {
-                            setToken(savedToken);
-                        }
-                    }
-                } catch (e) {
-                    console.error('Error parsing saved user data:', e);
-                }
-            }
-            
-            // Now verify with server (but don't clear on network errors)
+            // Verify with server first so logout cannot be overridden by stale localStorage
             if (savedToken && savedUser) {
+                if (savedToken) {
+                    setToken(savedToken);
+                }
                 await checkAuthStatus();
             } else {
-                // Check session-based auth
                 await checkAuthStatus();
             }
         } catch (error) {
@@ -428,8 +421,7 @@ export const AuthProvider = ({ children }) => {
      */
     const logout = useCallback(async () => {
         try {
-            // Call logout endpoint
-            await apiClient.post('/auth/logout');
+            await apiClient.post('/api/auth/customer/logout', {});
         } catch (error) {
             console.error('Logout error:', error);
             // Continue with local logout even if server call fails

@@ -1,0 +1,116 @@
+/* Compact modern layout — applies to all Employee dashboard pages */
+
+body {
+    font-size: 0.875rem;
+    line-height: 1.45;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Sidebar: see employee-sidebar.css */
+
+.main-content {
+    padding: var(--dx-space-4) !important;
+}
+
+.header {
+    padding: var(--dx-space-3) var(--dx-space-4) !important;
+    margin-bottom: var(--dx-space-4) !important;
+    border-radius: var(--dx-radius) !important;
+}
+
+.header h2 {
+    font-size: 1.125rem !important;
+}
+
+.content-area {
+    padding: var(--dx-space-4) !important;
+    border-radius: var(--dx-radius) !important;
+}
+
+.content-area th,
+.content-area td {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.8125rem !important;
+}
+
+.content-area th {
+    font-size: 0.6875rem !important;
+    letter-spacing: 0.04em !important;
+}
+
+.btn-primary {
+    padding: 0.45rem 0.9rem !important;
+    font-size: 0.8125rem !important;
+    border-radius: var(--dx-radius-sm) !important;
+    background: linear-gradient(135deg, var(--dx-primary) 0%, var(--dx-primary-hover) 100%) !important;
+    color: #fff !important;
+    box-shadow: 0 2px 6px var(--dx-primary-ring) !important;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, var(--dx-primary-hover) 0%, var(--dx-primary-dark) 100%) !important;
+}
+
+.btn-secondary,
+.btn-danger {
+    padding: 0.45rem 0.9rem !important;
+    font-size: 0.8125rem !important;
+    border-radius: var(--dx-radius-sm) !important;
+}
+
+.modal-overlay .modal-content,
+.modal-content {
+    padding: var(--dx-space-5) !important;
+    border-radius: var(--dx-radius) !important;
+}
+
+.modal-overlay .modal-content h3,
+.modal-content h3 {
+    font-size: 1.125rem !important;
+    padding-bottom: var(--dx-space-3) !important;
+    border-bottom-width: 2px !important;
+}
+
+.modal-content form input,
+.modal-content form select,
+.modal-content form textarea {
+    padding: 0.5rem 0.75rem !important;
+    margin-bottom: var(--dx-space-3) !important;
+    border-radius: var(--dx-radius-sm) !important;
+    font-size: 0.8125rem !important;
+}
+
+.global-confirm-modal {
+    padding: var(--dx-space-5) var(--dx-space-4) !important;
+    border-radius: var(--dx-radius-lg) !important;
+}
+
+.global-confirm-modal h4 {
+    font-size: 1.0625rem !important;
+}
+
+.global-confirm-btn {
+    padding: 0.5rem 1.25rem !important;
+    min-width: 7rem !important;
+    font-size: 0.8125rem !important;
+    border-radius: var(--dx-radius-sm) !important;
+}
+
+.global-confirm-btn.confirm {
+    background: linear-gradient(135deg, var(--dx-primary) 0%, var(--dx-primary-hover) 100%) !important;
+    color: #fff !important;
+}
+
+.order-card {
+    padding: var(--dx-space-4) !important;
+    border-radius: var(--dx-radius) !important;
+}
+
+.custom-popup {
+    top: var(--dx-space-4) !important;
+    right: var(--dx-space-4) !important;
+    padding: var(--dx-space-3) var(--dx-space-4) !important;
+    border-radius: var(--dx-radius) !important;
+    max-width: 20rem !important;
+}

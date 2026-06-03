@@ -39,7 +39,7 @@ export const authService = {
 
     async logout() {
         try {
-            await apiClient.post('/logout');
+            await apiClient.post('/api/auth/customer/logout', {});
             return { success: true };
         } catch (error) {
             console.error('Backend logout failed:', error);

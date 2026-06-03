@@ -230,44 +230,7 @@
         #confirmDearchiveBtn:hover {
             background-color: #218838 !important;
         }
-
-        .sidebar {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-        }
-
-        .sidebar-menu {
-            flex-grow: 1;
-        }
-
-        .logout-section {
-            padding: 40px;
-            border-top: 1px solid #ddd;
-            margin-top: auto;
-            text-align: center;
-        }
-
-        .logout-button {
-            display: inline-block;
-            width: auto;
-            padding: 12px 25px;
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            text-align: center;
-            text-decoration: none;
-            font-weight: bold;
-            transition: background-color 0.3s;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-
-        .logout-button:hover {
-            background-color: #c82333;
-        }
-
+        /* sidebar layout: /css/Employee/employee-sidebar.css */
         /* Clean Edit User Form Styles */
         .edit-user-modal {
             border-radius: 12px;
@@ -432,7 +395,6 @@
                             <table id="adminAccountsTable">
                                 <thead>
                                     <tr>
-                                        <th>User ID</th>
                                         <th>Username</th>
                                         <th>Full Name</th>
                                         <th>Email</th>
@@ -447,9 +409,6 @@
                                     <% if (users && users.length> 0 && users.some(u => u.RoleName === 'Admin')) { %>
                                         <% users.filter(user=> user.RoleName === 'Admin').forEach(function(user) { %>
                                             <tr>
-                                                <td>
-                                                    <%= user.UserID %>
-                                                </td>
                                                 <td>
                                                     <%= user.Username %>
                                                 </td>
@@ -508,7 +467,6 @@
                             <table id="employeeAccountsTable">
                                 <thead>
                                     <tr>
-                                        <th>User ID</th>
                                         <th>Username</th>
                                         <th>Full Name</th>
                                         <th>Email</th>
@@ -522,9 +480,6 @@
                                     <% if (users && users.length> 0 && users.some(u => u.RoleName !== 'Admin')) { %>
                                         <% users.filter(user=> user.RoleName !== 'Admin').forEach(function(user) { %>
                                             <tr>
-                                                <td>
-                                                    <%= user.UserID %>
-                                                </td>
                                                 <td>
                                                     <%= user.Username %>
                                                 </td>
@@ -580,7 +535,7 @@
                                             <% }); %>
                                                 <% } else { %>
                                                     <tr>
-                                                        <td colspan="9">No employee accounts found.</td>
+                                                        <td colspan="7">No employee accounts found.</td>
                                                     </tr>
                                                     <% } %>
                                 </tbody>
@@ -599,7 +554,6 @@
                             <table id="customerAccountsTable">
                                 <thead>
                                     <tr>
-                                        <th>Customer ID</th>
                                         <th>Full Name</th>
                                         <th>Email</th>
                                         <th>Phone</th>
@@ -610,7 +564,7 @@
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td colspan="7">Loading customer accounts...</td>
+                                        <td colspan="6">Loading customer accounts...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1447,7 +1401,6 @@
                                 data.customers.forEach(customer => {
                                     const row = document.createElement('tr');
                                     row.innerHTML =
-                                        '<td>' + customer.CustomerID + '</td>' +
                                         '<td>' + (customer.FullName || 'N/A') + '</td>' +
                                         '<td>' + (customer.Email || 'N/A') + '</td>' +
                                         '<td>' + (customer.PhoneNumber || 'N/A') + '</td>' +
@@ -1495,16 +1448,16 @@
                             } else {
                                 // Show appropriate message based on whether feature is implemented
                                 if (data.message && data.message.includes('not yet implemented')) {
-                                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #666;"><i>Customer accounts feature is not yet implemented.<br>This tab will be available when customer registration is added to the system.</i></td></tr>';
+                                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: #666;"><i>Customer accounts feature is not yet implemented.<br>This tab will be available when customer registration is added to the system.</i></td></tr>';
                                 } else {
-                                    tbody.innerHTML = '<tr><td colspan="7">No customer accounts found.</td></tr>';
+                                    tbody.innerHTML = '<tr><td colspan="6">No customer accounts found.</td></tr>';
                                 }
                                 noCustomersMsg.style.display = 'block';
                             }
                         } catch (error) {
                             console.error('Error loading customer accounts:', error);
                             const tbody = document.querySelector('#customerAccountsTable tbody');
-                            tbody.innerHTML = '<tr><td colspan="7">Error loading customer accounts.</td></tr>';
+                            tbody.innerHTML = '<tr><td colspan="6">Error loading customer accounts.</td></tr>';
                         }
                     }
 

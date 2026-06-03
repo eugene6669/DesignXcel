@@ -1,3 +1,5 @@
+<link rel="stylesheet" href="/css/Employee/employee-sidebar.css?v=20260603e">
+<script src="/js/Employee/employee-sidebar.js?v=20260603e" defer></script>
 <% const active=typeof activePage !=='undefined' ? activePage : '' ; const
     inventoryPages=['inventory' , 'product-inventory' , 'products' , 'storefront' , 'product-returns' , 'raw-materials' , 'archived' ]; const
     transactionsPages=['bulk-orders', 'delivery-rates' , 'walk-in' ]; const
@@ -5,6 +7,7 @@
     userPages=[]; const reviewPages=['reviews']; const supportPages=['chat-support', 'messages' ]; const
     contentPages=['cms', 'logs' ]; %>
     <div class="sidebar-header">
+        <%- include('../../partials/sidebar-collapse-btn') %>
         <h3>Order Support Panel</h3>
     </div>
     <ul class="sidebar-menu">

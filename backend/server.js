@@ -2316,7 +2316,9 @@ app.use((req, res, next) => {
         req.path.startsWith('/api/order/') ||
         req.path.startsWith('/api/confirm-payment') ||
         req.path.startsWith('/api/check-bulk-order-stock') ||
-        req.path.startsWith('/api/checkout-session')) {
+        req.path.startsWith('/api/checkout-session') ||
+        req.path.startsWith('/api/chat/') ||
+        req.path.startsWith('/api/auto-messages')) {
         return customerSession(req, res, next);
     }
     // Default to employee session for other routes

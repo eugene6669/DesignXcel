@@ -1,0 +1,55 @@
+/* Design Excellence — shared tokens (customer frontend parity) */
+:root {
+    --dx-primary: #F0B21B;
+    --dx-primary-hover: #e6a632;
+    --dx-primary-dark: #d69e16;
+    --dx-primary-muted: rgba(240, 178, 27, 0.12);
+    --dx-primary-ring: rgba(240, 178, 27, 0.28);
+
+    --dx-secondary: #2c3e50;
+    --dx-danger: #ef4444;
+    --dx-danger-hover: #dc2626;
+    --dx-success: #10b981;
+
+    --dx-text: #111827;
+    --dx-text-muted: #6b7280;
+    --dx-text-subtle: #9ca3af;
+
+    --dx-bg: #f3f4f6;
+    --dx-surface: #ffffff;
+    --dx-border: #e5e7eb;
+    --dx-border-strong: #d1d5db;
+
+    --dx-radius-sm: 6px;
+    --dx-radius: 10px;
+    --dx-radius-lg: 12px;
+
+    --dx-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --dx-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+    --dx-shadow-lg: 0 10px 24px -8px rgba(15, 23, 42, 0.12);
+
+    --dx-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    --dx-font-display: 'Poppins', var(--dx-font);
+
+    --dx-sidebar-w: 280px;
+    --dx-space-1: 0.25rem;
+    --dx-space-2: 0.5rem;
+    --dx-space-3: 0.75rem;
+    --dx-space-4: 1rem;
+    --dx-space-5: 1.25rem;
+
+    /* Legacy aliases used in AdminIndexStyles */
+    --primary-color: var(--dx-primary);
+    --primary-dark: var(--dx-primary-hover);
+    --secondary-color: var(--dx-secondary);
+    --accent-color: var(--dx-danger);
+    --text-dark: var(--dx-text);
+    --text-light: var(--dx-text-muted);
+    --background-light: var(--dx-bg);
+    --white: var(--dx-surface);
+    --border-color: var(--dx-border);
+    --shadow: var(--dx-shadow);
+    --shadow-lg: var(--dx-shadow-lg);
+    --font-primary: var(--dx-font);
+    --font-display: var(--dx-font-display);
+}

@@ -26,11 +26,18 @@ const MessageFloatingIcon = () => {
           const profileData = await profileRes.json();
           
           if (profileData.success && profileData.customer) {
-            setIsLoggedIn(true);
-            // Fetch chat history
+            // Fetch chat history (must use same customer session cookie as profile)
             try {
               const chatRes = await fetch(`${apiBase}/api/chat/messages`, { credentials: 'include' });
               const chatData = await chatRes.json();
+
+              if (chatRes.status === 401) {
+                setIsLoggedIn(false);
+                setMessages([]);
+                return;
+              }
+
+              setIsLoggedIn(true);
               
               if (chatData.success && Array.isArray(chatData.messages)) {
                 const chatMessages = chatData.messages.map(msg => ({

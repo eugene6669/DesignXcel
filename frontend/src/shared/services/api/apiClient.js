@@ -25,6 +25,7 @@ class ApiClient {
         const isCustomerEndpoint = config.url && (
           config.url.includes('/api/customer/') || 
           config.url.includes('/api/auth/customer/') ||
+          config.url.includes('/api/chat/') ||
           config.url.includes('/api/auth/validate-session') ||
           config.url.includes('/api/create-checkout-session') ||
           config.url.includes('/api/create-paymongo-checkout-session') ||

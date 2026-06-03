@@ -1,3 +1,5 @@
+@import url('/css/Employee/employee-tokens.css');
+
 /* Orders hub tabs */
 .main-content > .admin-orders-tabs {
     margin: 0 0 1rem 0;
@@ -29,8 +31,9 @@
 }
 
 .admin-orders-tabs a.active {
-    background: #F0B21B;
+    background: linear-gradient(135deg, var(--dx-primary) 0%, var(--dx-primary-hover) 100%);
     color: #fff;
+    box-shadow: 0 1px 4px var(--dx-primary-ring);
 }
 
 .orders-view-toggle-row {

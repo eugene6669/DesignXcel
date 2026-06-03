@@ -1,0 +1,116 @@
+@import url('/css/Employee/employee-tokens.css');
+
+body {
+    background: var(--dx-bg);
+    color: var(--dx-text);
+    font-family: var(--dx-font);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: var(--dx-space-4);
+    box-sizing: border-box;
+}
+
+.forbidden-container {
+    background: var(--dx-surface);
+    border: 1px solid var(--dx-border);
+    border-radius: var(--dx-radius-lg);
+    box-shadow: var(--dx-shadow-lg);
+    padding: var(--dx-space-5);
+    text-align: center;
+    max-width: 22rem;
+    width: 100%;
+}
+
+.forbidden-icon {
+    font-size: 2.5rem;
+    color: var(--dx-primary);
+    margin-bottom: var(--dx-space-3);
+}
+
+.forbidden-container h1 {
+    font-family: var(--dx-font-display);
+    font-size: 1.25rem;
+    margin: 0 0 var(--dx-space-2);
+    color: var(--dx-text);
+}
+
+.forbidden-container p {
+    font-size: 0.875rem;
+    color: var(--dx-text-muted);
+    margin: 0 0 var(--dx-space-4);
+    line-height: 1.5;
+}
+
+.forbidden-container a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, var(--dx-primary) 0%, var(--dx-primary-hover) 100%);
+    color: #fff;
+    text-decoration: none;
+    border-radius: var(--dx-radius-sm);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    box-shadow: 0 2px 6px var(--dx-primary-ring);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.forbidden-container a:hover,
+.forbidden-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px var(--dx-primary-ring);
+}
+
+.forbidden-title {
+    font-family: var(--dx-font-display);
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0 0 var(--dx-space-2);
+    color: var(--dx-text);
+}
+
+.forbidden-message {
+    font-size: 0.875rem;
+    color: var(--dx-text-muted);
+    margin-bottom: var(--dx-space-4);
+    line-height: 1.5;
+}
+
+.forbidden-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--dx-space-2);
+    justify-content: center;
+}
+
+.forbidden-btn {
+    border: none;
+    border-radius: var(--dx-radius-sm);
+    padding: 0.5rem 1rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-family: var(--dx-font);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+    background: linear-gradient(135deg, var(--dx-primary) 0%, var(--dx-primary-hover) 100%);
+    color: #fff;
+    box-shadow: 0 2px 6px var(--dx-primary-ring);
+}
+
+.forbidden-btn.secondary {
+    background: var(--dx-bg);
+    color: var(--dx-text-muted);
+    border: 1px solid var(--dx-border);
+    box-shadow: none;
+}
+
+.forbidden-btn.secondary:hover {
+    background: var(--dx-border);
+    color: var(--dx-text);
+    box-shadow: none;
+    transform: none;
+}

@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Employee Login - Design Excellence</title>
-    <link rel="stylesheet" href="/css/EmpLogin/EmpLogin.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/EmpLogin/EmpLogin.css?v=20260603c">
 
 </head>
 <body>
@@ -45,16 +48,28 @@
                             autocomplete="current-password"
                             id="password"
                         >
-                        <span 
+                        <button
+                            type="button"
                             class="password-toggle"
+                            aria-label="Show password"
+                            aria-pressed="false"
                             onclick="togglePasswordVisibility()"
                         >
-                            👁️‍🗨️
-                        </span>
+                            <svg class="password-toggle__icon password-toggle__icon--show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                            <svg class="password-toggle__icon password-toggle__icon--hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                                <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+                                <line x1="1" y1="1" x2="23" y2="23"/>
+                            </svg>
+                        </button>
                     </div>
                     
-                    <div style="text-align: right; margin-bottom: 20px;">
-                        <a href="#" onclick="showForgotPasswordModal(); return false;" style="color: #F0B21B; text-decoration: none; font-size: 14px;">Forgot Password?</a>
+                    <div class="forgot-password-row">
+                        <a href="#" class="forgot-password-link" onclick="showForgotPasswordModal(); return false;">Forgot Password?</a>
                     </div>
                     
                     <button type="submit" class="sign-in-btn">
@@ -71,12 +86,12 @@
 
     <!-- Forgot Password Modal -->
     <div id="forgotPasswordModal" class="modal-overlay" style="display: none;">
-        <div class="modal-content" style="max-width: 500px;">
-            <h3 style="margin-top: 0; color: #1f2937;">Forgot Password</h3>
-            <p style="color: #6b7280; margin-bottom: 20px;">Enter your email address and we'll send you a link to reset your password.</p>
+        <div class="modal-content">
+            <h3>Forgot Password</h3>
+            <p>Enter your email address and we'll send you a link to reset your password.</p>
             
-            <div id="forgotPasswordError" class="error-message" style="display: none; margin-bottom: 15px;"></div>
-            <div id="forgotPasswordSuccess" class="success-message" style="display: none; margin-bottom: 15px;"></div>
+            <div id="forgotPasswordError" class="error-message" style="display: none;"></div>
+            <div id="forgotPasswordSuccess" class="success-message" style="display: none;"></div>
             
             <form id="forgotPasswordForm" onsubmit="handleForgotPassword(event); return false;">
                 <div class="input-field">
@@ -104,12 +119,12 @@
 
     <!-- Reset Password Modal -->
     <div id="resetPasswordModal" class="modal-overlay" style="display: none;">
-        <div class="modal-content" style="max-width: 500px;">
-            <h3 style="margin-top: 0; color: #1f2937;">Reset Password</h3>
-            <p style="color: #6b7280; margin-bottom: 20px;">Enter your new password below.</p>
+        <div class="modal-content">
+            <h3>Reset Password</h3>
+            <p>Enter your new password below.</p>
             
-            <div id="resetPasswordError" class="error-message" style="display: none; margin-bottom: 15px;"></div>
-            <div id="resetPasswordSuccess" class="success-message" style="display: none; margin-bottom: 15px;"></div>
+            <div id="resetPasswordError" class="error-message" style="display: none;"></div>
+            <div id="resetPasswordSuccess" class="success-message" style="display: none;"></div>
             
             <form id="resetPasswordForm" onsubmit="handleResetPassword(event); return false;">
                 <input type="hidden" id="resetToken" value="">
@@ -123,12 +138,24 @@
                         autocomplete="new-password"
                         minlength="8"
                     >
-                    <span 
+                    <button
+                        type="button"
                         class="password-toggle"
+                        aria-label="Show password"
+                        aria-pressed="false"
                         onclick="togglePasswordVisibility('newPassword')"
                     >
-                        👁️‍🗨️
-                    </span>
+                        <svg class="password-toggle__icon password-toggle__icon--show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        <svg class="password-toggle__icon password-toggle__icon--hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                            <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                        </svg>
+                    </button>
                 </div>
                 
                 <div class="input-field">
@@ -140,12 +167,24 @@
                         autocomplete="new-password"
                         minlength="8"
                     >
-                    <span 
+                    <button
+                        type="button"
                         class="password-toggle"
+                        aria-label="Show password"
+                        aria-pressed="false"
                         onclick="togglePasswordVisibility('confirmPassword')"
                     >
-                        👁️‍🗨️
-                    </span>
+                        <svg class="password-toggle__icon password-toggle__icon--show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        <svg class="password-toggle__icon password-toggle__icon--hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+                            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+                            <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                        </svg>
+                    </button>
                 </div>
                 
                 <div class="button-group">
@@ -160,192 +199,19 @@
         </div>
     </div>
 
-    <style>
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.6);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 10000;
-            backdrop-filter: blur(4px);
-        }
-        
-        .modal-content {
-            background: white;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-            width: 90%;
-            max-width: 500px;
-            max-height: 90vh;
-            overflow-y: auto;
-            position: relative;
-            box-sizing: border-box;
-        }
-        
-        .modal-content h3 {
-            margin: 0 0 10px 0;
-            color: #1f2937;
-            font-size: 24px;
-            font-weight: 600;
-        }
-        
-        .modal-content p {
-            margin: 0 0 25px 0;
-            color: #6b7280;
-            font-size: 14px;
-            line-height: 1.5;
-        }
-        
-        .modal-content .input-field {
-            margin-bottom: 20px;
-            position: relative;
-            width: 100%;
-        }
-        
-        .modal-content .input-field input {
-            width: 100%;
-            padding: 14px 45px 14px 16px;
-            border: 2px solid #e5e7eb;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: border-color 0.3s ease;
-            box-sizing: border-box;
-            outline: none;
-        }
-        
-        .modal-content .input-field input:focus {
-            border-color: #F0B21B;
-        }
-        
-        .modal-content .input-field .password-toggle {
-            position: absolute;
-            right: 14px;
-            top: 50%;
-            transform: translateY(-50%);
-            cursor: pointer;
-            background: none;
-            border: none;
-            font-size: 18px;
-            padding: 5px;
-            z-index: 10;
-            user-select: none;
-        }
-        
-        .modal-content .input-field .password-toggle:hover {
-            opacity: 0.7;
-        }
-        
-        .modal-content form {
-            margin: 0;
-            width: 100%;
-        }
-        
-        .modal-content .button-group {
-            display: flex;
-            gap: 12px;
-            margin-top: 25px;
-            width: 100%;
-        }
-        
-        .modal-content .button-group button {
-            flex: 1;
-            padding: 14px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-sizing: border-box;
-        }
-        
-        .modal-content .button-group button[type="submit"] {
-            background: linear-gradient(135deg, #F0B21B 0%, #e0a10b 100%);
-            color: #1f2937;
-        }
-        
-        .modal-content .button-group button[type="submit"]:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(240, 178, 27, 0.4);
-        }
-        
-        .modal-content .button-group button[type="submit"]:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-        
-        .modal-content .button-group button[type="button"] {
-            background-color: #6b7280;
-            color: white;
-        }
-        
-        .modal-content .button-group button[type="button"]:hover {
-            background-color: #4b5563;
-        }
-        
-        .error-message {
-            background-color: #fee2e2;
-            color: #dc2626;
-            padding: 12px 16px;
-            border-radius: 8px;
-            font-size: 14px;
-            margin-bottom: 20px;
-            border-left: 4px solid #dc2626;
-            word-wrap: break-word;
-            box-sizing: border-box;
-        }
-        
-        .success-message {
-            background-color: #d1fae5;
-            color: #059669;
-            padding: 12px 16px;
-            border-radius: 8px;
-            font-size: 14px;
-            margin-bottom: 20px;
-            border-left: 4px solid #059669;
-            word-wrap: break-word;
-            box-sizing: border-box;
-        }
-        
-        @media (max-width: 600px) {
-            .modal-content {
-                padding: 30px 20px;
-                margin: 20px;
-                max-width: calc(100% - 40px);
-            }
-            
-            .modal-content h3 {
-                font-size: 20px;
-            }
-            
-            .modal-content .button-group {
-                flex-direction: column;
-            }
-            
-            .modal-content .button-group button {
-                width: 100%;
-            }
-        }
-    </style>
-
     <script>
         function togglePasswordVisibility(inputId) {
             const passwordInput = document.getElementById(inputId || 'password');
-            const toggleButton = passwordInput.nextElementSibling;
-            
-            if (passwordInput.type === 'password') {
-                passwordInput.type = 'text';
-                toggleButton.textContent = '👁️';
-            } else {
-                passwordInput.type = 'password';
-                toggleButton.textContent = '👁️‍🗨️';
+            const toggleButton = passwordInput && passwordInput.nextElementSibling;
+            if (!passwordInput || !toggleButton || !toggleButton.classList.contains('password-toggle')) {
+                return;
             }
+
+            const showPassword = passwordInput.type === 'password';
+            passwordInput.type = showPassword ? 'text' : 'password';
+            toggleButton.classList.toggle('is-visible', showPassword);
+            toggleButton.setAttribute('aria-pressed', String(showPassword));
+            toggleButton.setAttribute('aria-label', showPassword ? 'Hide password' : 'Show password');
         }
 
         function showForgotPasswordModal() {

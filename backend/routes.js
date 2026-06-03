@@ -15050,6 +15050,9 @@ module.exports = function (sql, pool, getStripe = null) {
         if (!sessionUser) return false;
         const normalizedRole = typeof sessionUser.role === 'string' ? sessionUser.role.toLowerCase() : '';
         const normalizedType = typeof sessionUser.type === 'string' ? sessionUser.type.toLowerCase() : '';
+        if (normalizedType === 'employee' || normalizedRole === 'employee' || normalizedRole === 'admin') {
+            return false;
+        }
         return normalizedType === 'customer' || normalizedRole === 'customer';
     }
 
@@ -30249,6 +30252,7 @@ module.exports = function (sql, pool, getStripe = null) {
                         message: 'Logout failed'
                     });
                 }
+                res.clearCookie('customer.sid', { path: '/' });
                 res.json({
                     success: true,
                     message: 'Logged out successfully'
