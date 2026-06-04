@@ -504,14 +504,14 @@
         imgEl.classList.toggle('rm-po-no-image', !hasImage);
         imgEl.setAttribute('aria-disabled', hasImage ? 'false' : 'true');
         if (hintEl) {
-            hintEl.textContent = hasImage ? 'Click image to view full size' : 'No image for this purchase order';
+            hintEl.textContent = hasImage ? 'Click image to view full size' : 'No image for this receipt order';
         }
         imgEl.onerror = function () {
             imgEl.onerror = null;
             imgEl.src = '/images/placeholder-no-image.svg';
             imgEl.dataset.fullSrc = '';
             imgEl.classList.add('rm-po-no-image');
-            if (hintEl) hintEl.textContent = 'No image for this purchase order';
+            if (hintEl) hintEl.textContent = 'No image for this receipt order';
         };
     }
 
@@ -557,7 +557,7 @@
     function formatRmSupplierOptionLabel(row) {
         return [
             row.supplierLabel,
-            'PO ' + row.poLabel,
+            'RO ' + row.poLabel,
             row.dateLabel,
             'Qty ' + row.qtyLabel
         ].join(' · ');
@@ -565,7 +565,7 @@
 
     function formatRmPoOptionLabel(row) {
         return [
-            'PO ' + row.poLabel,
+            'RO ' + row.poLabel,
             row.dateLabel,
             'Qty ' + row.qtyLabel,
             row.supplierLabel
@@ -627,7 +627,7 @@
         }
 
         fillSelect(supplierSelect, formatRmSupplierOptionLabel, (fallbackSupplier || '').trim() || '—');
-        fillSelect(poSelect, formatRmPoOptionLabel, '— No purchase orders —');
+        fillSelect(poSelect, formatRmPoOptionLabel, '— No receipt orders —');
 
         if (!rows.length) {
             applyPoPreviewImage(null);
@@ -993,12 +993,12 @@
             const poImgEl = document.getElementById('rawMaterialRestockPoImage');
             const poNum = poNumEl ? poNumEl.value.trim() : '';
             if (!poNum) {
-                popup('Purchase order number is required.', true);
+                popup('Receipt order number is required.', true);
                 if (poNumEl) poNumEl.focus();
                 return false;
             }
             if (!poImgEl || !poImgEl.files || !poImgEl.files[0]) {
-                popup('Purchase order image is required.', true);
+                popup('Receipt order image is required.', true);
                 if (poImgEl) poImgEl.focus();
                 return false;
             }

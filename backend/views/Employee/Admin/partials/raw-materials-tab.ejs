@@ -116,11 +116,11 @@
                     <input type="text" id="rmAddSupplier" name="supplier" placeholder="Supplier name">
                 </div>
                 <div class="rm-full">
-                    <label for="rmAddPurchaseOrderNumber">Purchase order number</label>
+                    <label for="rmAddPurchaseOrderNumber">Receipt order number</label>
                     <input type="text" id="rmAddPurchaseOrderNumber" name="purchaseOrderNumber" placeholder="e.g. PO-2026-001">
                 </div>
                 <div class="rm-full">
-                    <label for="rmAddPurchaseOrderImage">Upload image (Purchase order)</label>
+                    <label for="rmAddPurchaseOrderImage">Upload image (Receipt order)</label>
                     <input type="file" id="rmAddPurchaseOrderImage" name="purchaseOrderImage" accept="image/*">
                 </div>
                 <div class="rm-full">
@@ -183,7 +183,7 @@
             </div>
             <div class="rm-edit-adjust-section">
                 <strong>Adjust Stock</strong>
-                <p class="rm-edit-adjust-hint">Manual correction only — does not require a purchase order. Logged in stock movement.</p>
+                <p class="rm-edit-adjust-hint">Manual correction only — does not require a receipt order. Logged in stock movement.</p>
                 <p class="rm-edit-current-qty">Current: <span id="rmEditCurrentQty">0</span> <span id="rmEditCurrentUnit"></span></p>
                 <div class="rm-edit-adjust-row">
                     <input type="number" id="rmEditAdjustQty" value="1" min="1" step="1" title="Quantity to deduct">
@@ -235,11 +235,11 @@
             <input type="text" id="rawMaterialRestockSupplier" style="width:100%;padding:8px;border:1px solid #ced4da;border-radius:4px;">
         </div>
         <div class="form-group">
-            <label for="rawMaterialRestockPoNumber">Purchase order number <span style="color:#dc3545;">*</span></label>
+            <label for="rawMaterialRestockPoNumber">Receipt order number <span style="color:#dc3545;">*</span></label>
             <input type="text" id="rawMaterialRestockPoNumber" required style="width:100%;padding:8px;border:1px solid #ced4da;border-radius:4px;">
         </div>
         <div class="form-group">
-            <label for="rawMaterialRestockPoImage">Purchase Order Image <span style="color:#dc3545;">*</span></label>
+            <label for="rawMaterialRestockPoImage">Receipt order image <span style="color:#dc3545;">*</span></label>
             <input type="file" id="rawMaterialRestockPoImage" accept="image/*" required>
         </div>
         <div class="pi-form-actions">

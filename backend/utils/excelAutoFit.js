@@ -1,32 +1,44 @@
 'use strict';
 
+function cellTextLength(cell) {
+    const v = cell.value;
+    if (v == null) return 0;
+    if (v instanceof Date) return 20;
+    if (typeof v === 'object' && v.richText) {
+        return v.richText.map((t) => t.text || '').join('').length;
+    }
+    if (typeof v === 'number') return String(v).length + 4;
+    const text = String(v);
+    const lines = text.split(/\r?\n/);
+    return Math.max(...lines.map((line) => line.length), 0);
+}
+
 /** Auto-size column widths from cell content (ExcelJS worksheet). */
 function autoFitWorksheetColumns(worksheet, options = {}) {
     const minWidth = options.minWidth ?? 8;
     const maxWidth = options.maxWidth ?? 52;
     const padding = options.padding ?? 2;
+    const startCol = options.startColumn ?? 1;
+    const endCol = options.endColumn ?? (worksheet.columnCount || 26);
+    const startRow = options.startRow ?? 1;
+    const endRow = options.endRow ?? (worksheet.rowCount || 1);
 
-    worksheet.columns.forEach((column) => {
-        if (!column) return;
+    for (let colNum = startCol; colNum <= endCol; colNum++) {
+        const column = worksheet.getColumn(colNum);
+        if (!column) continue;
         let maxLen = minWidth;
-        column.eachCell({ includeEmpty: false }, (cell) => {
-            let cellLen = 10;
-            const v = cell.value;
-            if (v == null) return;
-            if (v instanceof Date) {
-                cellLen = 20;
-            } else if (typeof v === 'object' && v.richText) {
-                cellLen = v.richText.map(t => t.text || '').join('').length;
-            } else if (typeof v === 'number') {
-                cellLen = String(v).length + 4;
-            } else {
-                cellLen = String(v).length;
-            }
+        for (let rowNum = startRow; rowNum <= endRow; rowNum++) {
+            const cell = worksheet.getRow(rowNum).getCell(colNum);
+            if (cell.value === null || cell.value === undefined) continue;
+            let cellLen = cellTextLength(cell);
             if (cell.font && cell.font.bold) cellLen += 1;
+            if (cell.alignment && cell.alignment.wrapText && cellLen > maxWidth) {
+                cellLen = Math.min(maxWidth, Math.ceil(cellLen / 2));
+            }
             maxLen = Math.max(maxLen, cellLen);
-        });
+        }
         column.width = Math.min(maxWidth, Math.max(minWidth, maxLen + padding));
-    });
+    }
 }
 
 /** Set row heights from wrapped text (approximate line count). */

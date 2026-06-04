@@ -504,48 +504,144 @@ function applySalesReportOrderRowDisplay(order, items) {
     return order;
 }
 
-/** Human-readable formulas shown on Admin Reports (aligned with aggregateSalesReportFromOrders). */
-const SALES_REPORT_METRIC_FORMULAS = {
-    'Gross Sales':
-        'Σ (Subtotal + TotalDiscounts) per non-cancelled order in gross-sales statuses (Pending → Completed).',
-    Discounts:
-        'Σ TotalDiscounts on the same gross-sales orders.',
-    'Net Sales':
-        'Gross Sales − Discounts (= Σ Subtotal on gross-sales orders).',
-    'Gross Revenue':
-        'Gross Sales + Delivery Revenue.',
-    'Delivery Revenue':
-        'Σ (DeliveryCost + ExtraDeliveryFee) on gross-sales orders.',
-    'Original Delivery Cost':
-        'Σ delivery fees on orders that count toward gross sales.',
-    'Return Pick-Up Cost':
-        'Σ delivery on return/refund workflow orders (seller pickup leg).',
-    'Replacement Delivery Cost':
-        'Σ delivery on replacement return workflow orders.',
-    'Total Delivery Expense':
-        'Original Delivery Cost + Return Pick-Up Cost + Replacement Delivery Cost.',
-    Refunds:
-        'Product refunds + delivery refunds (reversed amounts from refund/return orders).',
-    'Net Revenue':
-        '(Σ Subtotal on Received + Completed) − product refunds + (Σ delivery on Received + Completed) − delivery refunds.',
-    COGS:
-        'Σ (Quantity × unit CostPrice) for lines on Received or Completed orders.',
-    'Gross Profit':
-        'Net Revenue − COGS − return shipping expense − damage inventory cost − replacement unit cost.',
-    'Total Orders':
-        'Count of orders matching the current filters.',
-    'Total Customers':
-        'Count of distinct customer emails in the filtered orders.',
-    'Average Order Value':
-        'Σ TotalAmount ÷ Total Orders (all orders in the filtered set).',
-    'Delivery Fees':
-        'Σ DeliveryCost across filtered orders.',
-    'Sales Total':
-        'Σ TotalAmount across filtered orders.'
+/**
+ * Order status lists for formula text (DB Status values; aligned with orderStatusDisplay).
+ * @see ./orderStatusDisplay.js GROSS_SALES_STATUSES, NET_REVENUE_STATUSES
+ */
+const SALES_REPORT_FORMULA_STATUS_ORDERS = {
+    grossSales: 'Pending, Processing, Processing (Pickup), Shipping, Delivery, Received, Completed',
+    netRevenue: 'Received, Completed',
+    refunds: 'Refunded, Returned, Completed Returned',
+    allFiltered: 'all statuses in current filter'
 };
 
+/** Broad / breakdown metrics — never shown in UI summary or Excel export. */
+const SALES_REPORT_HIDDEN_METRICS = new Set([
+    'Original Delivery Cost',
+    'Return Pick-Up Cost',
+    'Replacement Delivery Cost',
+    'Total Delivery Expense',
+    'Product Refunds',
+    'Delivery Refunds',
+    'Net Delivery Revenue',
+    'Return Shipping Expense',
+    'Damage Inventory Cost',
+    'Replacement Cost',
+    'Gross Margin',
+    'Return Rate',
+    'Refund Rate'
+]);
+
+/** Shown in UI cards, detail table, and Excel summary. */
+const SALES_REPORT_VISIBLE_METRICS = new Set([
+    'Gross Sales',
+    'Discounts',
+    'Net Sales',
+    'Gross Revenue',
+    'Delivery Revenue',
+    'Refunds',
+    'Net Revenue',
+    'COGS',
+    'Gross Profit',
+    'Total Orders',
+    'Total Customers',
+    'Average Order Value'
+]);
+
+/** Per-metric formula text and applicable order statuses (separate columns in UI / Excel). */
+const SALES_REPORT_METRIC_DEFINITIONS = {
+    'Gross Sales': {
+        formula: 'Sum of merchandise before discounts',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.grossSales
+    },
+    Discounts: {
+        formula: 'Sum of order discounts',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.grossSales
+    },
+    'Net Sales': {
+        formula: 'Gross Sales − Discounts',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.grossSales
+    },
+    'Gross Revenue': {
+        formula: 'Net Sales + Delivery Revenue',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.grossSales
+    },
+    'Delivery Revenue': {
+        formula: 'Sum of delivery + extra delivery fees',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.grossSales
+    },
+    Refunds: {
+        formula: 'Product + delivery refunds reversed',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.refunds
+    },
+    'Net Revenue': {
+        formula: 'Recognized sales after refunds',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.netRevenue
+    },
+    COGS: {
+        formula: 'Quantity × unit cost',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.netRevenue
+    },
+    'Gross Profit': {
+        formula: 'Net Revenue − COGS',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.netRevenue
+    },
+    'Total Orders': {
+        formula: 'Count of orders',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.allFiltered
+    },
+    'Total Customers': {
+        formula: 'Distinct customer emails',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.allFiltered
+    },
+    'Average Order Value': {
+        formula: 'Sum of order totals ÷ Total Orders',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.allFiltered
+    },
+    'Delivery Fees': {
+        formula: 'Sum of delivery fees',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.grossSales
+    },
+    'Sales Total': {
+        formula: 'Sum of order totals',
+        statuses: SALES_REPORT_FORMULA_STATUS_ORDERS.allFiltered
+    }
+};
+
+/** @deprecated Combined formula+status string; prefer SALES_REPORT_METRIC_DEFINITIONS */
+const SALES_REPORT_METRIC_FORMULAS = Object.fromEntries(
+    Object.entries(SALES_REPORT_METRIC_DEFINITIONS).map(([label, def]) => [
+        label,
+        `${def.formula} — order status: ${def.statuses}`
+    ])
+);
+
 function formulaForMetricLabel(label) {
-    return SALES_REPORT_METRIC_FORMULAS[label] || '';
+    return SALES_REPORT_METRIC_DEFINITIONS[label]?.formula || '';
+}
+
+function statusesForMetricLabel(label) {
+    return SALES_REPORT_METRIC_DEFINITIONS[label]?.statuses || '';
+}
+
+function attachFormula(rows) {
+    return rows.map((row) => ({
+        ...row,
+        formula: formulaForMetricLabel(row.label),
+        statuses: statusesForMetricLabel(row.label)
+    }));
+}
+
+function filterVisibleSummaryRows(rows) {
+    return rows.filter((row) =>
+        SALES_REPORT_VISIBLE_METRICS.has(row.label)
+        && !SALES_REPORT_HIDDEN_METRICS.has(row.label)
+    );
+}
+
+/** Excel / CSV summary — visible metrics only (no broad breakdown rows). */
+function buildSalesReportExportSummaryRows(stats) {
+    return buildSalesReportSummaryRows(stats);
 }
 
 /** Flat summary rows for UI table and Excel/CSV export. */
@@ -560,44 +656,45 @@ function buildSalesReportSummaryRows(stats) {
         const grossSales = n(stats.grossProductSales ?? stats.grossSales);
         const deliveryRevenue = n(stats.deliveryRevenueGross ?? stats.deliveryRevenue ?? stats.deliveryTotal);
         const grossRevenue = n(stats.grossRevenue ?? (grossSales + deliveryRevenue));
-        const totalDeliveryExpense = n(
-            stats.totalDeliveryExpense ?? stats.deliveryExpense
-            ?? (n(stats.originalDeliveryCost) + n(stats.returnPickupCost) + n(stats.replacementDeliveryCost))
-        );
-        return [
+        const productRefunds = n(stats.productRefunds ?? stats.salesReturns);
+        const deliveryRefunds = n(stats.deliveryRefunds);
+
+        return filterVisibleSummaryRows(attachFormula([
             { label: 'Gross Sales', value: grossSales, currency: true },
             { label: 'Discounts', value: n(stats.totalDiscounts), currency: true },
             { label: 'Net Sales', value: n(stats.netSales ?? stats.netProductSales), currency: true },
             { label: 'Gross Revenue', value: grossRevenue, currency: true },
             { label: 'Delivery Revenue', value: deliveryRevenue, currency: true },
-            { label: 'Original Delivery Cost', value: n(stats.originalDeliveryCost), currency: true },
-            { label: 'Return Pick-Up Cost', value: n(stats.returnPickupCost), currency: true },
-            { label: 'Replacement Delivery Cost', value: n(stats.replacementDeliveryCost), currency: true },
-            { label: 'Total Delivery Expense', value: totalDeliveryExpense, currency: true },
-            { label: 'Refunds', value: n(stats.productRefunds) + n(stats.deliveryRefunds), currency: true },
+            { label: 'Refunds', value: productRefunds + deliveryRefunds, currency: true },
             { label: 'Net Revenue', value: n(stats.netRevenue), currency: true },
             { label: 'COGS', value: n(stats.cogs), currency: true },
             { label: 'Gross Profit', value: n(stats.grossProfit), currency: true },
             { label: 'Total Orders', value: i(stats.totalOrders), currency: false },
             { label: 'Total Customers', value: i(stats.totalCustomers), currency: false },
             { label: 'Average Order Value', value: n(stats.averageOrderValue), currency: true }
-        ].map((row) => ({ ...row, formula: formulaForMetricLabel(row.label) }));
+        ]));
     }
 
-    return [
+    return filterVisibleSummaryRows(attachFormula([
         { label: 'Total Orders', value: i(stats.totalOrders), currency: false },
         { label: 'Total Customers', value: i(stats.totalCustomers), currency: false },
         { label: 'Discounts', value: n(stats.totalDiscounts), currency: true },
         { label: 'Delivery Fees', value: n(stats.deliveryTotal), currency: true },
         { label: 'Sales Total', value: n(stats.salesTotal), currency: true },
         { label: 'Average Order Value', value: n(stats.averageOrderValue), currency: true }
-    ].map((row) => ({ ...row, formula: formulaForMetricLabel(row.label) }));
+    ]));
 }
 
 module.exports = {
+    SALES_REPORT_METRIC_DEFINITIONS,
     SALES_REPORT_METRIC_FORMULAS,
+    SALES_REPORT_FORMULA_STATUS_ORDERS,
+    SALES_REPORT_VISIBLE_METRICS,
+    SALES_REPORT_HIDDEN_METRICS,
     formulaForMetricLabel,
+    statusesForMetricLabel,
     buildSalesReportSummaryRows,
+    buildSalesReportExportSummaryRows,
     detectSalesReportSchema,
     isRefundMerchandiseOrder,
     isReplacementFulfillmentOrder,

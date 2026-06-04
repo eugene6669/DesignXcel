@@ -76,6 +76,14 @@ function movementLabel(type) {
     return MOVEMENT_LABELS[type] || type || 'Movement';
 }
 
+/** Display legacy stock-movement notes that used "PO:" / "Purchase order:" wording. */
+function formatMovementNotesForDisplay(notes) {
+    if (notes == null || notes === '') return notes;
+    return String(notes)
+        .replace(/\bPO:\s*/gi, 'Receipt order: ')
+        .replace(/\bPurchase order:\s*/gi, 'Receipt order: ');
+}
+
 async function insertStockMovement(pool, row) {
     await ensureInventoryStockMovementSchema(pool);
     const qty = parseInt(row.quantity, 10) || 0;
@@ -209,7 +217,7 @@ function formatRawMaterialMovementNotes(payload, actionLabel) {
         parts.push(actionLabel + ' #' + (payload.rawMaterialId || ''));
     }
     if (supplier) parts.push('Supplier: ' + supplier);
-    if (poNumber) parts.push('PO: ' + poNumber);
+    if (poNumber) parts.push('Receipt order: ' + poNumber);
     if (payload.quantity) parts.push('(+' + payload.quantity + ')');
     return parts.join(' · ');
 }
@@ -452,7 +460,7 @@ async function fetchInventoryStockMovements(pool, options = {}) {
         fromStatus: row.FromStatus,
         toStatus: row.ToStatus,
         quantity: row.Quantity,
-        notes: row.Notes,
+        notes: formatMovementNotesForDisplay(row.Notes),
         createdAt: row.CreatedAt,
         productName: row.ProductName,
         variationName: row.VariationName,
@@ -481,7 +489,7 @@ function mapMovementRow(row) {
         fromStatus: row.FromStatus,
         toStatus: row.ToStatus,
         quantity: row.Quantity,
-        notes: row.Notes,
+        notes: formatMovementNotesForDisplay(row.Notes),
         createdAt: row.CreatedAt,
         productName: row.ProductName,
         variationName: row.VariationName,
@@ -874,7 +882,7 @@ async function fetchArchivedStockMovements(pool, limit = 200) {
         fromStatus: row.FromStatus,
         toStatus: row.ToStatus,
         quantity: row.Quantity,
-        notes: row.Notes,
+        notes: formatMovementNotesForDisplay(row.Notes),
         createdAt: row.CreatedAt,
         productName: row.ProductName,
         variationName: row.VariationName,

@@ -101,7 +101,7 @@ const {
     computeInventoryLossAtCost,
     aggregateSalesReportFromOrders,
     applySalesReportOrderRowDisplay,
-    buildSalesReportSummaryRows
+    buildSalesReportExportSummaryRows
 } = require('./utils/salesReportMetrics');
 const { countsTowardGrossSales, countsTowardNetRevenue, getOrderStatusLabel } = require('./utils/orderStatusDisplay');
 const {
@@ -2347,7 +2347,7 @@ module.exports = function (sql, pool, getStripe = null) {
             if (file.mimetype.startsWith('image/')) {
                 cb(null, true);
             } else {
-                cb(new Error('Only image files are allowed for purchase orders!'), false);
+                cb(new Error('Only image files are allowed for receipt orders!'), false);
             }
         }
     });
@@ -15844,16 +15844,21 @@ module.exports = function (sql, pool, getStripe = null) {
     // Admin Reports Page
     router.get('/Employee/Admin/Reports', isAuthenticated, async (req, res) => {
         try {
-            const { SALES_REPORT_METRIC_FORMULAS } = require('./utils/salesReportMetrics');
+            const {
+                SALES_REPORT_METRIC_DEFINITIONS,
+                SALES_REPORT_METRIC_FORMULAS
+            } = require('./utils/salesReportMetrics');
             res.render('Employee/Admin/AdminReports', {
                 user: req.session.user,
-                salesReportMetricFormulas: SALES_REPORT_METRIC_FORMULAS
+                salesReportMetricFormulas: SALES_REPORT_METRIC_FORMULAS,
+                salesReportMetricDefinitions: SALES_REPORT_METRIC_DEFINITIONS
             });
         } catch (err) {
             console.error('Error rendering reports page:', err);
             res.render('Employee/Admin/AdminReports', {
                 user: req.session.user,
-                salesReportMetricFormulas: {}
+                salesReportMetricFormulas: {},
+                salesReportMetricDefinitions: {}
             });
         }
     });
@@ -17887,10 +17892,27 @@ module.exports = function (sql, pool, getStripe = null) {
             const salesTotal = result.recordset.reduce((sum, order) => sum + parseFloat(order.TotalAmount || 0), 0);
             const avgOrderValueSimple = totalOrders > 0 ? (salesTotal / totalOrders) : 0;
 
+            let cogs = 0;
+            let replacementCost = 0;
+            if (salesReportSchema.hasCostPrice && orderIds.length > 0) {
+                try {
+                    const costMetrics = await computeMerchandiseCostMetrics(
+                        pool,
+                        sql,
+                        orderIds,
+                        salesReportSchema.hasCostPrice
+                    );
+                    cogs = costMetrics.cogs;
+                    replacementCost = costMetrics.replacementCost;
+                } catch (cogsErr) {
+                    console.error('[SALES REPORT] COGS calculation failed:', cogsErr.message);
+                }
+            }
+
             const reportMetrics = aggregateSalesReportFromOrders(result.recordset, {
-                cogs: 0,
+                cogs,
                 damageInventoryCost: inventoryLoss || 0,
-                replacementCost: 0,
+                replacementCost,
                 totalOrders,
                 returnedOrdersCount
             });
@@ -18443,17 +18465,63 @@ module.exports = function (sql, pool, getStripe = null) {
 
             const totalOrders = result.recordset.length;
             const totalCustomers = new Set(result.recordset.map(o => o.CustomerEmail)).size;
-
-            // Simple export summary (remove broad accounting/COGS/return-cost calculations)
             const sumOrderDiscounts = result.recordset.reduce((sum, order) => sum + parseFloat(order.TotalDiscounts || 0), 0);
             const deliveryTotal = result.recordset.reduce((sum, order) => sum + parseFloat(order.DeliveryCost || 0), 0);
             const salesTotal = result.recordset.reduce((sum, order) => sum + parseFloat(order.TotalAmount || 0), 0);
             const averageOrderValue = totalOrders > 0 ? (salesTotal / totalOrders) : 0;
 
+            const returnedOrders = result.recordset.filter((o) => {
+                const s = o.Status ? o.Status.toLowerCase().trim() : '';
+                return s === 'refunded' || s === 'completed returned';
+            });
+
+            let inventoryLoss = 0;
+            if (returnedOrders.length > 0) {
+                try {
+                    const costLoss = await computeInventoryLossAtCost(
+                        pool,
+                        sql,
+                        returnedOrders,
+                        hasReturnItemsColumn,
+                        exportReportSchema.hasCostPrice
+                    );
+                    inventoryLoss = costLoss.damageInventoryCost;
+                } catch (exportLossErr) {
+                    console.error('[SALES EXPORT] Inventory loss calculation failed:', exportLossErr.message);
+                }
+            }
+
+            let cogs = 0;
+            let replacementCost = 0;
+            if (exportReportSchema.hasCostPrice && orderIds.length > 0) {
+                try {
+                    const costMetrics = await computeMerchandiseCostMetrics(
+                        pool,
+                        sql,
+                        orderIds,
+                        exportReportSchema.hasCostPrice
+                    );
+                    cogs = costMetrics.cogs;
+                    replacementCost = costMetrics.replacementCost;
+                } catch (exportCogsErr) {
+                    console.error('[SALES EXPORT] COGS calculation failed:', exportCogsErr.message);
+                }
+            }
+
+            const returnedOrdersCount = countReturnedOrders(result.recordset);
+            const reportMetrics = aggregateSalesReportFromOrders(result.recordset, {
+                cogs,
+                damageInventoryCost: inventoryLoss,
+                replacementCost,
+                totalOrders,
+                returnedOrdersCount
+            });
+
             const exportSummaryStats = {
+                ...reportMetrics,
                 totalOrders,
                 totalCustomers,
-                totalDiscounts: sumOrderDiscounts,
+                totalDiscounts: reportMetrics.totalDiscounts ?? sumOrderDiscounts,
                 deliveryTotal,
                 salesTotal,
                 averageOrderValue
@@ -18480,7 +18548,7 @@ module.exports = function (sql, pool, getStripe = null) {
             };
 
             const ORDER_COL_COUNT = 15;
-            const SUMMARY_COL_COUNT = 2;
+            const SUMMARY_COL_COUNT = 4;
             const ExcelJS = getExcelJS();
             const workbook = new ExcelJS.Workbook();
             workbook.creator = 'Design Excellence';
@@ -18511,30 +18579,70 @@ module.exports = function (sql, pool, getStripe = null) {
             currentRow++;
 
             createExcelSectionHeader(worksheet, currentRow++, 'Summary', SUMMARY_COL_COUNT);
-            createExcelHeaderRow(worksheet, currentRow++, ['Metric', 'Amount (PHP)'], 1);
+            const summaryHeaderRow = currentRow;
+            createExcelHeaderRow(worksheet, currentRow++, ['Metric', 'Formula', 'Order Status', 'Value'], 1);
 
-            const summaryRows = buildSalesReportSummaryRows(exportSummaryStats);
+            const summaryRows = buildSalesReportExportSummaryRows(exportSummaryStats);
+            const summaryDataStartRow = currentRow;
 
-            summaryRows.forEach(({ label, value, currency, percent }) => {
+            summaryRows.forEach(({ label, value, currency, percent, formula, statuses }) => {
                 const dataRow = worksheet.getRow(currentRow++);
                 dataRow.getCell(1).value = label;
                 dataRow.getCell(1).font = { bold: true };
-                dataRow.getCell(2).value = percent ? value / 100 : value;
+                dataRow.getCell(1).alignment = { vertical: 'top', wrapText: false };
+                dataRow.getCell(2).value = formula || '';
+                dataRow.getCell(2).alignment = { vertical: 'top', wrapText: true };
+                dataRow.getCell(2).font = { size: 9, color: { argb: 'FF6B7280' } };
+                dataRow.getCell(3).value = statuses || '';
+                dataRow.getCell(3).alignment = { vertical: 'top', wrapText: true };
+                dataRow.getCell(3).font = { size: 9, color: { argb: 'FF374151' } };
+                dataRow.getCell(4).value = percent ? value / 100 : value;
                 if (percent) {
-                    dataRow.getCell(2).numFmt = '0.0%';
+                    dataRow.getCell(4).numFmt = '0.0%';
                 } else if (currency) {
-                    dataRow.getCell(2).numFmt = '₱#,##0.00';
+                    dataRow.getCell(4).numFmt = '₱#,##0.00';
                 } else {
-                    dataRow.getCell(2).numFmt = '#,##0';
+                    dataRow.getCell(4).numFmt = '#,##0';
                 }
-                dataRow.getCell(2).alignment = { horizontal: 'right' };
+                dataRow.getCell(4).alignment = { horizontal: 'right', vertical: 'top' };
                 for (let c = 1; c <= SUMMARY_COL_COUNT; c++) {
                     applyThinBorder(dataRow.getCell(c));
                 }
             });
 
-            worksheet.getColumn(1).width = 28;
-            worksheet.getColumn(2).width = 18;
+            const summaryDataEndRow = currentRow - 1;
+            autoFitWorksheetColumns(worksheet, {
+                startColumn: 1,
+                endColumn: SUMMARY_COL_COUNT,
+                startRow: summaryHeaderRow,
+                endRow: summaryDataEndRow,
+                minWidth: 10,
+                maxWidth: 56,
+                padding: 2
+            });
+            autoFitWorksheetColumns(worksheet, {
+                startColumn: 2,
+                endColumn: 2,
+                startRow: summaryDataStartRow,
+                endRow: summaryDataEndRow,
+                minWidth: 20,
+                maxWidth: 48,
+                padding: 2
+            });
+            autoFitWorksheetColumns(worksheet, {
+                startColumn: 3,
+                endColumn: 3,
+                startRow: summaryDataStartRow,
+                endRow: summaryDataEndRow,
+                minWidth: 18,
+                maxWidth: 56,
+                padding: 2
+            });
+            autoFitWorksheetRows(worksheet, summaryDataStartRow, summaryDataEndRow, {
+                minHeight: 18,
+                maxHeight: 96,
+                lineHeight: 14
+            });
             currentRow += 2;
 
             createExcelSectionHeader(worksheet, currentRow++, 'Orders', ORDER_COL_COUNT);
@@ -18611,23 +18719,30 @@ module.exports = function (sql, pool, getStripe = null) {
                 dataRow.height = Math.min(60, Math.max(22, 18 + (productsList.length > 1 ? productsList.length * 4 : 0)));
             });
 
-            worksheet.getColumn(1).width = 10;
-            worksheet.getColumn(2).width = 16;
-            worksheet.getColumn(3).width = 18;
-            worksheet.getColumn(4).width = 22;
-            worksheet.getColumn(5).width = 26;
-            worksheet.getColumn(6).width = 20;
-            worksheet.getColumn(7).width = 36;
-            worksheet.getColumn(8).width = 12;
-            worksheet.getColumn(9).width = 12;
-            worksheet.getColumn(10).width = 12;
-            worksheet.getColumn(11).width = 12;
-            worksheet.getColumn(12).width = 12;
-            worksheet.getColumn(13).width = 14;
-            const summaryEndRow = currentRow - 1;
-            autoFitWorksheetColumns(worksheet, { minWidth: 10, maxWidth: 56 });
-            autoFitWorksheetRows(worksheet, 1, summaryEndRow, { minHeight: 16, maxHeight: 80 });
-            autoFitWorksheetRows(worksheet, ordersHeaderRow, currentRow - 1, { minHeight: 18, maxHeight: 80 });
+            const ordersDataEndRow = currentRow - 1;
+            autoFitWorksheetColumns(worksheet, {
+                startColumn: 1,
+                endColumn: ORDER_COL_COUNT,
+                startRow: ordersHeaderRow,
+                endRow: ordersDataEndRow,
+                minWidth: 8,
+                maxWidth: 48,
+                padding: 2
+            });
+            autoFitWorksheetColumns(worksheet, {
+                startColumn: 7,
+                endColumn: 7,
+                startRow: ordersHeaderRow,
+                endRow: ordersDataEndRow,
+                minWidth: 18,
+                maxWidth: 56,
+                padding: 2
+            });
+            autoFitWorksheetRows(worksheet, ordersHeaderRow, ordersDataEndRow, {
+                minHeight: 18,
+                maxHeight: 88,
+                lineHeight: 14
+            });
 
             worksheet.views = [{ state: 'frozen', ySplit: ordersHeaderRow, activeCell: 'A1' }];
 
@@ -18652,13 +18767,13 @@ module.exports = function (sql, pool, getStripe = null) {
             csvSections.push([filterSummary]);
             csvSections.push([]);
             csvSections.push(['Summary']);
-            csvSections.push(['Metric', 'Amount (PHP)']);
-            summaryRows.forEach(({ label, value, currency, percent }) => {
+            csvSections.push(['Metric', 'Formula', 'Order Status', 'Value']);
+            summaryRows.forEach(({ label, value, currency, percent, formula, statuses }) => {
                 let display = value;
                 if (percent) display = fmtPct(value);
                 else if (currency) display = fmtMoney(value);
                 else display = String(value ?? '');
-                csvSections.push([label, display]);
+                csvSections.push([label, formula || '', statuses || '', display]);
             });
             csvSections.push([]);
             csvSections.push(['Orders']);
@@ -21624,7 +21739,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     `);
                 const movements = mvResult.recordset || [];
                 const poFromNotes = (notes) => {
-                    const m = String(notes || '').match(/\bPO:\s*([^·]+)/i);
+                    const m = String(notes || '').match(/\b(?:PO|Receipt order|RO):\s*([^·]+)/i);
                     return m ? m[1].trim() : '';
                 };
                 const supplierFromNotes = (notes) => {
@@ -21674,7 +21789,7 @@ module.exports = function (sql, pool, getStripe = null) {
                     }
                 }
             } catch (mvErr) {
-                console.warn('raw material purchase orders:', mvErr.message);
+                console.warn('raw material receipt orders:', mvErr.message);
             }
             if (!purchaseOrders.length && (material.purchaseOrderNumber || material.purchaseOrderImageUrl)) {
                 purchaseOrders.push({
@@ -21825,10 +21940,10 @@ module.exports = function (sql, pool, getStripe = null) {
                 return res.status(400).json({ success: false, message: 'Quantity must be at least 1.' });
             }
             if (!purchaseOrderNumber) {
-                return res.status(400).json({ success: false, message: 'Purchase order number is required.' });
+                return res.status(400).json({ success: false, message: 'Receipt order number is required.' });
             }
             if (!req.file) {
-                return res.status(400).json({ success: false, message: 'Purchase order image is required.' });
+                return res.status(400).json({ success: false, message: 'Receipt order image is required.' });
             }
 
             const current = await pool.request()

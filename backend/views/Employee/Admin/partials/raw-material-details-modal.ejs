@@ -5,7 +5,7 @@
         <div class="inventory-details-hero rm-details-po-layout">
             <div class="inventory-details-image-wrap rm-details-po-image-wrap">
                 <img id="rmDetailsPoImage" class="rm-details-po-thumb" src="/images/placeholder-no-image.svg" alt="" role="button" tabindex="0" title="Click to view full size">
-                <p id="rmDetailsPoImageHint" class="rm-po-image-hint">Select a purchase order to preview</p>
+                <p id="rmDetailsPoImageHint" class="rm-po-image-hint">Select a receipt order to preview</p>
             </div>
             <div class="inventory-details-meta">
                 <div class="inventory-details-meta-row">
@@ -22,14 +22,14 @@
                 </div>
                 <div class="inventory-details-meta-row rm-details-po-select-row">
                     <label class="inventory-details-label" for="rmDetailsSupplier">Supplier</label>
-                    <select id="rmDetailsSupplier" class="rm-details-po-select" title="Supplier with PO number, date, and quantity">
+                    <select id="rmDetailsSupplier" class="rm-details-po-select" title="Supplier with receipt order number, date, and quantity">
                         <option value="">—</option>
                     </select>
                 </div>
                 <div class="inventory-details-meta-row rm-details-po-select-row">
-                    <label class="inventory-details-label" for="rmDetailsPoSelect">Purchase orders</label>
-                    <select id="rmDetailsPoSelect" class="rm-details-po-select" title="PO number, date, quantity, and supplier">
-                        <option value="">— No purchase orders —</option>
+                    <label class="inventory-details-label" for="rmDetailsPoSelect">Receipt orders</label>
+                    <select id="rmDetailsPoSelect" class="rm-details-po-select" title="Receipt order number, date, quantity, and supplier">
+                        <option value="">— No receipt orders —</option>
                     </select>
                 </div>
             </div>
@@ -47,5 +47,5 @@
 <div id="rmPoImageLightbox" class="rm-po-lightbox" style="display:none;" aria-hidden="true">
     <div class="rm-po-lightbox-backdrop" id="rmPoLightboxBackdrop"></div>
     <button type="button" class="rm-po-lightbox-close" id="rmPoLightboxClose" aria-label="Close">&times;</button>
-    <img id="rmPoImageLightboxImg" src="" alt="Purchase order">
+    <img id="rmPoImageLightboxImg" src="" alt="Receipt order">
 </div>
