@@ -515,44 +515,143 @@
         };
     }
 
-    function populatePoSelect(purchaseOrders) {
-        const select = document.getElementById('rmDetailsPoSelect');
-        if (!select) return;
+    function formatRmPoDate(createdAt) {
+        if (!createdAt) return '—';
+        const d = new Date(createdAt);
+        if (Number.isNaN(d.getTime())) return '—';
+        return d.toLocaleDateString();
+    }
+
+    function formatRmPoQty(quantity) {
+        const n = parseInt(quantity, 10);
+        if (!n || Number.isNaN(n)) return '—';
+        return String(n);
+    }
+
+    function rmPoRowId(item, idx) {
+        return String(item && item.id != null ? item.id : idx);
+    }
+
+    function buildRmReceiptRows(purchaseOrders, fallbackSupplier) {
         const items = Array.isArray(purchaseOrders) ? purchaseOrders : [];
-        window.__rmDetailsPoOptions = items;
-        select.innerHTML = '';
-        if (!items.length) {
-            const opt = document.createElement('option');
-            opt.value = '';
-            opt.textContent = '— No purchase orders —';
-            select.appendChild(opt);
-            select.disabled = true;
+        return items.map(function (item, idx) {
+            const supplier = (item.supplier || fallbackSupplier || '').trim();
+            const poNum = (item.purchaseOrderNumber || '').trim() || '—';
+            const date = formatRmPoDate(item.createdAt);
+            const qty = formatRmPoQty(item.quantity);
+            return {
+                id: rmPoRowId(item, idx),
+                supplier: supplier,
+                purchaseOrderNumber: poNum,
+                createdAt: item.createdAt,
+                quantity: item.quantity,
+                purchaseOrderImageUrl: item.purchaseOrderImageUrl || null,
+                supplierLabel: supplier || '—',
+                poLabel: poNum,
+                dateLabel: date,
+                qtyLabel: qty
+            };
+        });
+    }
+
+    function formatRmSupplierOptionLabel(row) {
+        return [
+            row.supplierLabel,
+            'PO ' + row.poLabel,
+            row.dateLabel,
+            'Qty ' + row.qtyLabel
+        ].join(' · ');
+    }
+
+    function formatRmPoOptionLabel(row) {
+        return [
+            'PO ' + row.poLabel,
+            row.dateLabel,
+            'Qty ' + row.qtyLabel,
+            row.supplierLabel
+        ].join(' · ');
+    }
+
+    function findRmReceiptRow(receiptId) {
+        const rows = window.__rmDetailsReceiptRows || [];
+        return rows.find(function (row) {
+            return String(row.id) === String(receiptId);
+        }) || null;
+    }
+
+    function syncRmDetailsSelectsFromReceiptId(receiptId, options) {
+        const opts = options || {};
+        const row = findRmReceiptRow(receiptId);
+        const supplierSelect = document.getElementById('rmDetailsSupplier');
+        const poSelect = document.getElementById('rmDetailsPoSelect');
+        if (!row) {
+            if (!opts.skipImage) applyPoPreviewImage(null);
+            return;
+        }
+        if (supplierSelect && !opts.skipSupplier) {
+            supplierSelect.value = row.id;
+        }
+        if (poSelect && !opts.skipPo) {
+            poSelect.value = row.id;
+        }
+        if (!opts.skipImage) {
+            applyPoPreviewImage(row.purchaseOrderImageUrl);
+        }
+    }
+
+    function populateRmReceiptSelects(purchaseOrders, fallbackSupplier, preferredReceiptId) {
+        const supplierSelect = document.getElementById('rmDetailsSupplier');
+        const poSelect = document.getElementById('rmDetailsPoSelect');
+        const rows = buildRmReceiptRows(purchaseOrders, fallbackSupplier);
+        window.__rmDetailsReceiptRows = rows;
+        window.__rmDetailsPoOptions = Array.isArray(purchaseOrders) ? purchaseOrders : [];
+
+        function fillSelect(select, formatter, emptyText) {
+            if (!select) return;
+            select.innerHTML = '';
+            if (!rows.length) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = emptyText || '—';
+                select.appendChild(opt);
+                select.disabled = true;
+                return;
+            }
+            select.disabled = false;
+            rows.forEach(function (row) {
+                const opt = document.createElement('option');
+                opt.value = row.id;
+                opt.textContent = formatter(row);
+                select.appendChild(opt);
+            });
+        }
+
+        fillSelect(supplierSelect, formatRmSupplierOptionLabel, (fallbackSupplier || '').trim() || '—');
+        fillSelect(poSelect, formatRmPoOptionLabel, '— No purchase orders —');
+
+        if (!rows.length) {
             applyPoPreviewImage(null);
             return;
         }
-        select.disabled = false;
-        items.forEach(function (item, idx) {
-            const opt = document.createElement('option');
-            opt.value = String(item.id != null ? item.id : idx);
-            opt.textContent = item.label || item.purchaseOrderNumber || ('Receipt ' + (idx + 1));
-            select.appendChild(opt);
-        });
-        select.selectedIndex = 0;
-        applyPoPreviewFromSelect();
+
+        let pickId = preferredReceiptId != null ? String(preferredReceiptId) : '';
+        if (!pickId && fallbackSupplier) {
+            const match = rows.find(function (row) {
+                return row.supplier && row.supplier.toLowerCase() === String(fallbackSupplier).toLowerCase();
+            });
+            if (match) pickId = match.id;
+        }
+        if (!pickId) pickId = rows[0].id;
+        syncRmDetailsSelectsFromReceiptId(pickId);
     }
 
     function applyPoPreviewFromSelect() {
         const select = document.getElementById('rmDetailsPoSelect');
-        const items = window.__rmDetailsPoOptions || [];
-        if (!select || !items.length) {
+        if (!select || !select.value) {
             applyPoPreviewImage(null);
             return;
         }
-        const selectedId = select.value;
-        const item = items.find(function (row, idx) {
-            return String(row.id != null ? row.id : idx) === String(selectedId);
-        }) || items[0];
-        applyPoPreviewImage(item && item.purchaseOrderImageUrl);
+        syncRmDetailsSelectsFromReceiptId(select.value, { skipPo: true });
     }
 
     function openPoLightbox(src) {
@@ -579,9 +678,18 @@
         if (document.body.getAttribute('data-rm-po-ui-init')) return;
         document.body.setAttribute('data-rm-po-ui-init', '1');
 
-        const select = document.getElementById('rmDetailsPoSelect');
-        if (select) {
-            select.addEventListener('change', applyPoPreviewFromSelect);
+        const poSelect = document.getElementById('rmDetailsPoSelect');
+        if (poSelect) {
+            poSelect.addEventListener('change', function () {
+                syncRmDetailsSelectsFromReceiptId(poSelect.value, { skipPo: true });
+            });
+        }
+
+        const supplierSelect = document.getElementById('rmDetailsSupplier');
+        if (supplierSelect) {
+            supplierSelect.addEventListener('change', function () {
+                syncRmDetailsSelectsFromReceiptId(supplierSelect.value, { skipSupplier: true });
+            });
         }
 
         const thumb = document.getElementById('rmDetailsPoImage');
@@ -617,30 +725,27 @@
         initPoDetailsUi();
         const skuEl = document.getElementById('rmDetailsSku');
         const nameEl = document.getElementById('rmDetailsName');
-        const supplierEl = document.getElementById('rmDetailsSupplier');
         const unitEl = document.getElementById('rmDetailsUnit');
         const qtyEl = document.getElementById('rmDetailsStockQty');
         if (skuEl) skuEl.textContent = data.sku || '—';
         if (nameEl) nameEl.textContent = data.name || '—';
-        if (supplierEl) supplierEl.textContent = data.supplier || '—';
         if (unitEl) unitEl.textContent = data.unit || '—';
         if (qtyEl) {
             qtyEl.textContent = String(data.stockQuantity != null ? data.stockQuantity : 0);
             qtyEl.className = 'inventory-stock-card-value ' + stockLevelClassForDetails(data.stockQuantity);
         }
-        const poList = purchaseOrders;
-        if (poList == null && (data.purchaseOrderNumber || data.purchaseOrderImageUrl)) {
-            populatePoSelect([{
+        let poList = purchaseOrders;
+        if (poList == null && (data.purchaseOrderNumber || data.purchaseOrderImageUrl || data.supplier)) {
+            poList = [{
                 id: 'material-initial',
-                label: data.purchaseOrderNumber
-                    ? ('Initial receipt — ' + data.purchaseOrderNumber)
-                    : 'Initial receipt',
                 purchaseOrderNumber: data.purchaseOrderNumber || null,
-                purchaseOrderImageUrl: data.purchaseOrderImageUrl || null
-            }]);
-        } else {
-            populatePoSelect(poList || []);
+                purchaseOrderImageUrl: data.purchaseOrderImageUrl || null,
+                quantity: data.stockQuantity,
+                createdAt: data.createdAt || null,
+                supplier: data.supplier || null
+            }];
         }
+        populateRmReceiptSelects(poList || [], data.supplier);
         modal.style.display = 'block';
         modal.setAttribute('aria-hidden', 'false');
     }

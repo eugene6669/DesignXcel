@@ -6714,10 +6714,15 @@ module.exports = function (sql, pool, getStripe = null) {
 
             console.log(`[TRANSACTION MANAGER ORDER PROCESSING] Found ${orderItemsResult.recordset.length} order items`);
 
-            // Decrease stock for each item when status changes to Processing
-            // Use inventory-aware stock decrement (decrements from InventoryProducts and syncs to Products)
+            let skipInventoryDecrementLegacy = false;
+            try {
+                const { orderHasInventoryStockReserved } = require('./utils/storefrontStockReserve');
+                skipInventoryDecrementLegacy = await orderHasInventoryStockReserved(pool, orderId);
+            } catch (e) { /* ignore */ }
+
             for (const item of orderItemsResult.recordset) {
                 try {
+                    if (skipInventoryDecrementLegacy) continue;
                     console.log(`[TRANSACTION MANAGER ORDER PROCESSING] Decrementing stock for ProductID: ${item.ProductID}, Quantity: ${item.Quantity}, VariationID: ${item.VariationID || 'none'}`);
                     await decrementStockFromInventory(item.ProductID, item.Quantity, item.VariationID || null, null);
                     console.log(`[TRANSACTION MANAGER ORDER PROCESSING] ✅ Successfully decremented stock for ProductID: ${item.ProductID}`);
@@ -8151,10 +8156,15 @@ module.exports = function (sql, pool, getStripe = null) {
 
             console.log(`[USER MANAGER ORDER PROCESSING] Found ${orderItemsResult.recordset.length} order items`);
 
-            // Decrease stock for each item when status changes to Processing
-            // Use inventory-aware stock decrement (decrements from InventoryProducts and syncs to Products)
+            let skipInventoryDecrementLegacy = false;
+            try {
+                const { orderHasInventoryStockReserved } = require('./utils/storefrontStockReserve');
+                skipInventoryDecrementLegacy = await orderHasInventoryStockReserved(pool, orderId);
+            } catch (e) { /* ignore */ }
+
             for (const item of orderItemsResult.recordset) {
                 try {
+                    if (skipInventoryDecrementLegacy) continue;
                     console.log(`[USER MANAGER ORDER PROCESSING] Decrementing stock for ProductID: ${item.ProductID}, Quantity: ${item.Quantity}, VariationID: ${item.VariationID || 'none'}`);
                     await decrementStockFromInventory(item.ProductID, item.Quantity, item.VariationID || null, null);
                     console.log(`[USER MANAGER ORDER PROCESSING] ✅ Successfully decremented stock for ProductID: ${item.ProductID}`);
@@ -9772,8 +9782,15 @@ module.exports = function (sql, pool, getStripe = null) {
                     WHERE oi.OrderID = @orderId
                 `);
 
+            let skipInventoryDecrementLegacy = false;
+            try {
+                const { orderHasInventoryStockReserved } = require('./utils/storefrontStockReserve');
+                skipInventoryDecrementLegacy = await orderHasInventoryStockReserved(pool, orderId);
+            } catch (e) { /* ignore */ }
+
             for (const item of orderItemsResult.recordset) {
                 try {
+                    if (skipInventoryDecrementLegacy) continue;
                     const variationId = item.VariationID ? parseInt(item.VariationID, 10) : null;
                     await decrementStockFromInventory(item.ProductID, item.Quantity, variationId, null);
                 } catch (stockErr) {
@@ -21610,6 +21627,10 @@ module.exports = function (sql, pool, getStripe = null) {
                     const m = String(notes || '').match(/\bPO:\s*([^·]+)/i);
                     return m ? m[1].trim() : '';
                 };
+                const supplierFromNotes = (notes) => {
+                    const m = String(notes || '').match(/\bSupplier:\s*([^·]+)/i);
+                    return m ? m[1].trim() : '';
+                };
                 const labelFor = (mv) => {
                     const type = String(mv.movementType || '');
                     const base = type === 'add_raw_material' ? 'Initial receipt' : 'Restock';
@@ -21626,7 +21647,8 @@ module.exports = function (sql, pool, getStripe = null) {
                     purchaseOrderNumber: (mv.purchaseOrderNumber || poFromNotes(mv.notes) || '').trim() || null,
                     purchaseOrderImageUrl: mv.purchaseOrderImageUrl || null,
                     quantity: mv.quantity,
-                    createdAt: mv.createdAt
+                    createdAt: mv.createdAt,
+                    supplier: supplierFromNotes(mv.notes) || null
                 }));
                 const hasAddReceipt = purchaseOrders.some((p) => p.movementType === 'add_raw_material');
                 const matPo = (material.purchaseOrderNumber || '').trim();
@@ -21639,7 +21661,8 @@ module.exports = function (sql, pool, getStripe = null) {
                         purchaseOrderNumber: matPo || null,
                         purchaseOrderImageUrl: matImg,
                         quantity: material.stockQuantity,
-                        createdAt: material.createdAt
+                        createdAt: material.createdAt,
+                        supplier: (material.supplier || '').trim() || null
                     });
                 } else if (hasAddReceipt && matImg) {
                     const addEntry = purchaseOrders.find((p) => p.movementType === 'add_raw_material');
@@ -21663,10 +21686,31 @@ module.exports = function (sql, pool, getStripe = null) {
                     purchaseOrderNumber: material.purchaseOrderNumber || null,
                     purchaseOrderImageUrl: material.purchaseOrderImageUrl || null,
                     quantity: material.stockQuantity,
-                    createdAt: material.createdAt
+                    createdAt: material.createdAt,
+                    supplier: (material.supplier || '').trim() || null
                 });
             }
-            res.json({ success: true, material, purchaseOrders, recentReceipts: purchaseOrders });
+            let suppliers = [];
+            try {
+                const suppliersResult = await pool.request().query(`
+                    SELECT DISTINCT LTRIM(RTRIM(Supplier)) AS supplier
+                    FROM RawMaterials
+                    WHERE IsActive = 1
+                      AND Supplier IS NOT NULL
+                      AND LTRIM(RTRIM(Supplier)) <> ''
+                    ORDER BY supplier ASC
+                `);
+                suppliers = (suppliersResult.recordset || [])
+                    .map((row) => row.supplier)
+                    .filter(Boolean);
+            } catch (supErr) {
+                console.warn('raw material suppliers list:', supErr.message);
+            }
+            const currentSupplier = (material.supplier || '').trim();
+            if (currentSupplier && !suppliers.some((s) => String(s).toLowerCase() === currentSupplier.toLowerCase())) {
+                suppliers.unshift(currentSupplier);
+            }
+            res.json({ success: true, material, purchaseOrders, recentReceipts: purchaseOrders, suppliers });
         } catch (err) {
             console.error('Error fetching raw material:', err);
             res.status(500).json({ success: false, message: 'Failed to retrieve raw material.' });
@@ -22699,10 +22743,16 @@ module.exports = function (sql, pool, getStripe = null) {
                 console.log(`[ADMIN ORDER PROCESSING] Skipping stock decrement for refund fulfillment order ${orderId}`);
             }
 
-            // Decrease stock for each item when status changes to Processing
-            // Use inventory-aware stock decrement (decrements from InventoryProducts and syncs to Products)
+            let skipInventoryDecrementLegacy = false;
+            if (!skipStockDecrement) {
+                try {
+                    const { orderHasInventoryStockReserved } = require('./utils/storefrontStockReserve');
+                    skipInventoryDecrementLegacy = await orderHasInventoryStockReserved(pool, orderId);
+                } catch (e) { /* ignore */ }
+            }
+
             for (const item of orderItemsResult.recordset) {
-                if (skipStockDecrement) {
+                if (skipStockDecrement || skipInventoryDecrementLegacy) {
                     continue;
                 }
                 try {

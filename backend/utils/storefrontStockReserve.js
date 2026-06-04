@@ -7,6 +7,7 @@ const {
 } = require('./productVariationPolicy');
 
 let ordersDisplayReservedColumnReady = false;
+let ordersInventoryReservedColumnReady = false;
 
 async function ensureOrdersStorefrontDisplayReservedColumn(pool) {
     if (ordersDisplayReservedColumnReady) return;
@@ -22,6 +23,22 @@ async function ensureOrdersStorefrontDisplayReservedColumn(pool) {
         `);
     }
     ordersDisplayReservedColumnReady = true;
+}
+
+async function ensureOrdersInventoryStockReservedColumn(pool) {
+    if (ordersInventoryReservedColumnReady) return;
+    const check = await pool.request().query(`
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = 'Orders' AND COLUMN_NAME = 'InventoryStockReserved'
+    `);
+    if (!check.recordset.length) {
+        await pool.request().query(`ALTER TABLE Orders ADD InventoryStockReserved BIT NULL`);
+        await pool.request().query(`
+            UPDATE Orders SET InventoryStockReserved = 0 WHERE InventoryStockReserved IS NULL
+        `);
+    }
+    ordersInventoryReservedColumnReady = true;
 }
 
 async function resolveCatalogProductIdForOrderLine(pool, rawProductId, transaction = null) {
@@ -79,6 +96,33 @@ async function orderHasStorefrontDisplayReserved(pool, orderId, transaction = nu
             FROM Orders WHERE OrderID = @orderId
         `);
     return (result.recordset[0]?.Reserved || 0) === 1;
+}
+
+async function orderHasInventoryStockReserved(pool, orderId, transaction = null) {
+    await ensureOrdersInventoryStockReservedColumn(pool);
+    const orderIdInt = parseInt(orderId, 10);
+    if (!orderIdInt) return false;
+    const req = transaction ? transaction.request() : pool.request();
+    const result = await req
+        .input('orderId', sql.Int, orderIdInt)
+        .query(`
+            SELECT CAST(ISNULL(InventoryStockReserved, 0) AS INT) AS Reserved
+            FROM Orders WHERE OrderID = @orderId
+        `);
+    return (result.recordset[0]?.Reserved || 0) === 1;
+}
+
+async function markOrderInventoryStockReserved(pool, orderId, reserved, transaction = null) {
+    await ensureOrdersInventoryStockReservedColumn(pool);
+    const orderIdInt = parseInt(orderId, 10);
+    if (!orderIdInt) return;
+    const req = transaction ? transaction.request() : pool.request();
+    await req
+        .input('orderId', sql.Int, orderIdInt)
+        .input('reserved', sql.Bit, reserved ? 1 : 0)
+        .query(`
+            UPDATE Orders SET InventoryStockReserved = @reserved WHERE OrderID = @orderId
+        `);
 }
 
 async function markOrderStorefrontDisplayReserved(pool, orderId, reserved, transaction = null) {
@@ -182,9 +226,6 @@ async function decrementStorefrontDisplayLines(pool, items, transaction = null) 
         const variationId = item.variationId;
         if (!qty || !catalogProductId) continue;
 
-        const usesDisplay = await usesStorefrontDisplayStock(pool, catalogProductId, transaction);
-        if (!usesDisplay) continue;
-
         productQtyMap.set(catalogProductId, (productQtyMap.get(catalogProductId) || 0) + qty);
 
         if (variationId) {
@@ -220,42 +261,196 @@ async function decrementStorefrontDisplayLines(pool, items, transaction = null) 
     }
 
     for (const [catalogProductId, orderQty] of productQtyMap) {
-        const decReq = transaction ? transaction.request() : pool.request();
-        await decReq
+        const usesDisplay = await usesStorefrontDisplayStock(pool, catalogProductId, transaction);
+        if (usesDisplay) {
+            const decReq = transaction ? transaction.request() : pool.request();
+            await decReq
+                .input('productId', sql.Int, catalogProductId)
+                .input('qty', sql.Int, orderQty)
+                .query(`
+                    UPDATE InventoryProducts
+                    SET StorefrontDisplayQuantity = CASE
+                            WHEN COALESCE(StorefrontDisplayQuantity, 0) >= @qty
+                            THEN COALESCE(StorefrontDisplayQuantity, 0) - @qty
+                            ELSE 0
+                        END,
+                        DateUpdated = GETDATE()
+                    WHERE ProductID = @productId AND IsActive = 1
+                `);
+            const readReq = transaction ? transaction.request() : pool.request();
+            const displayResult = await readReq
+                .input('productId', sql.Int, catalogProductId)
+                .query(`
+                    SELECT TOP 1 StorefrontDisplayQuantity
+                    FROM InventoryProducts
+                    WHERE ProductID = @productId AND IsActive = 1
+                    ORDER BY InventoryProductID DESC
+                `);
+            const newDisplay = parseInt(displayResult.recordset[0]?.StorefrontDisplayQuantity, 10) || 0;
+            const pReq = transaction ? transaction.request() : pool.request();
+            await pReq
+                .input('productId', sql.Int, catalogProductId)
+                .input('stockQty', sql.Int, newDisplay)
+                .query(`
+                    UPDATE Products
+                    SET StockQuantity = @stockQty, UpdatedAt = GETDATE()
+                    WHERE ProductID = @productId AND IsActive = 1
+                `);
+        }
+        await syncStorefrontDisplayAggregates(pool, catalogProductId, transaction);
+    }
+
+    return { displayDecremented, itemCount: items.length };
+}
+
+/**
+ * Decrease warehouse sellable stock (InventoryProducts / InventoryProductVariations) for Pending orders.
+ */
+async function decrementInventoryStockLines(pool, items, transaction = null) {
+    let inventoryDecremented = 0;
+    const catalogProductsTouched = new Set();
+
+    for (const item of items) {
+        const qty = item.quantity;
+        const catalogProductId = item.catalogProductId;
+        const variationId = item.variationId;
+        if (!qty || !catalogProductId) continue;
+
+        const invReq = transaction ? transaction.request() : pool.request();
+        const invResult = await invReq
             .input('productId', sql.Int, catalogProductId)
-            .input('qty', sql.Int, orderQty)
             .query(`
-                UPDATE InventoryProducts
-                SET StorefrontDisplayQuantity = CASE
-                        WHEN COALESCE(StorefrontDisplayQuantity, 0) >= @qty
-                        THEN COALESCE(StorefrontDisplayQuantity, 0) - @qty
-                        ELSE 0
-                    END,
-                    DateUpdated = GETDATE()
-                WHERE ProductID = @productId AND IsActive = 1
-            `);
-        const readReq = transaction ? transaction.request() : pool.request();
-        const displayResult = await readReq
-            .input('productId', sql.Int, catalogProductId)
-            .query(`
-                SELECT TOP 1 StorefrontDisplayQuantity
+                SELECT TOP 1 InventoryProductID, COALESCE(AvailableQuantity, 0) AS AvailableQuantity
                 FROM InventoryProducts
                 WHERE ProductID = @productId AND IsActive = 1
                 ORDER BY InventoryProductID DESC
             `);
-        const newDisplay = parseInt(displayResult.recordset[0]?.StorefrontDisplayQuantity, 10) || 0;
-        const pReq = transaction ? transaction.request() : pool.request();
-        await pReq
-            .input('productId', sql.Int, catalogProductId)
-            .input('stockQty', sql.Int, newDisplay)
-            .query(`
-                UPDATE Products
-                SET StockQuantity = @stockQty, UpdatedAt = GETDATE()
-                WHERE ProductID = @productId AND IsActive = 1
-            `);
+
+        if (!invResult.recordset.length) {
+            const fallbackReq = transaction ? transaction.request() : pool.request();
+            if (variationId) {
+                await fallbackReq
+                    .input('variationId', sql.Int, variationId)
+                    .input('qty', sql.Int, qty)
+                    .query(`
+                        UPDATE ProductVariations
+                        SET Quantity = CASE WHEN COALESCE(Quantity, 0) >= @qty
+                            THEN COALESCE(Quantity, 0) - @qty ELSE 0 END,
+                            UpdatedAt = GETDATE()
+                        WHERE VariationID = @variationId AND IsActive = 1
+                    `);
+            } else {
+                await fallbackReq
+                    .input('productId', sql.Int, catalogProductId)
+                    .input('qty', sql.Int, qty)
+                    .query(`
+                        UPDATE Products
+                        SET StockQuantity = CASE WHEN COALESCE(StockQuantity, 0) >= @qty
+                            THEN COALESCE(StockQuantity, 0) - @qty ELSE 0 END,
+                            UpdatedAt = GETDATE()
+                        WHERE ProductID = @productId AND IsActive = 1
+                    `);
+            }
+            inventoryDecremented += qty;
+            continue;
+        }
+
+        const inventoryProductId = invResult.recordset[0].InventoryProductID;
+        catalogProductsTouched.add(catalogProductId);
+
+        if (variationId) {
+            const varReq = transaction ? transaction.request() : pool.request();
+            const varUpdate = await varReq
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .input('variationId', sql.Int, variationId)
+                .input('qty', sql.Int, qty)
+                .query(`
+                    UPDATE InventoryProductVariations
+                    SET Quantity = CASE WHEN COALESCE(Quantity, 0) >= @qty THEN COALESCE(Quantity, 0) - @qty ELSE 0 END,
+                        AvailableQuantity = CASE WHEN COALESCE(AvailableQuantity, 0) >= @qty
+                            THEN COALESCE(AvailableQuantity, 0) - @qty ELSE 0 END,
+                        UpdatedAt = GETDATE()
+                    WHERE InventoryProductID = @inventoryProductId
+                      AND VariationID = @variationId
+                      AND IsActive = 1
+                `);
+            if ((varUpdate.rowsAffected[0] || 0) > 0) {
+                inventoryDecremented += qty;
+            }
+            const pvSyncReq = transaction ? transaction.request() : pool.request();
+            const invQtyResult = await pvSyncReq
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .input('variationId', sql.Int, variationId)
+                .query(`
+                    SELECT COALESCE(AvailableQuantity, Quantity, 0) AS Sellable
+                    FROM InventoryProductVariations
+                    WHERE InventoryProductID = @inventoryProductId AND VariationID = @variationId
+                `);
+            const sellable = parseInt(invQtyResult.recordset[0]?.Sellable, 10) || 0;
+            const skipPvQty = await usesStorefrontDisplayStock(pool, catalogProductId, transaction);
+            if (!skipPvQty) {
+                const pvReq = transaction ? transaction.request() : pool.request();
+                await pvReq
+                    .input('variationId', sql.Int, variationId)
+                    .input('sellable', sql.Int, sellable)
+                    .query(`
+                        UPDATE ProductVariations
+                        SET Quantity = @sellable, UpdatedAt = GETDATE()
+                        WHERE VariationID = @variationId AND IsActive = 1
+                    `);
+            }
+        } else {
+            const mainReq = transaction ? transaction.request() : pool.request();
+            await mainReq
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .input('qty', sql.Int, qty)
+                .query(`
+                    UPDATE InventoryProducts
+                    SET AvailableQuantity = CASE WHEN COALESCE(AvailableQuantity, 0) >= @qty
+                        THEN COALESCE(AvailableQuantity, 0) - @qty ELSE 0 END,
+                        DateUpdated = GETDATE()
+                    WHERE InventoryProductID = @inventoryProductId
+                `);
+            inventoryDecremented += qty;
+            const readReq = transaction ? transaction.request() : pool.request();
+            const availResult = await readReq
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .query(`SELECT COALESCE(AvailableQuantity, 0) AS Available FROM InventoryProducts WHERE InventoryProductID = @inventoryProductId`);
+            const available = parseInt(availResult.recordset[0]?.Available, 10) || 0;
+            const pReq = transaction ? transaction.request() : pool.request();
+            await pReq
+                .input('productId', sql.Int, catalogProductId)
+                .input('stockQty', sql.Int, available)
+                .query(`
+                    UPDATE Products SET StockQuantity = @stockQty, UpdatedAt = GETDATE()
+                    WHERE ProductID = @productId AND IsActive = 1
+                `);
+        }
     }
 
-    return { displayDecremented, itemCount: items.length };
+    for (const catalogProductId of catalogProductsTouched) {
+        await syncStorefrontDisplayAggregates(pool, catalogProductId, transaction);
+    }
+
+    return { inventoryDecremented, itemCount: items.length };
+}
+
+async function reserveInventoryStockForOrder(pool, orderId, transaction = null) {
+    const orderIdInt = parseInt(orderId, 10);
+    if (!orderIdInt) return { inventoryDecremented: 0 };
+
+    if (await orderHasInventoryStockReserved(pool, orderIdInt, transaction)) {
+        return { inventoryDecremented: 0, skipped: true };
+    }
+
+    const items = await getOrderItemsWithCatalogProductIds(pool, orderIdInt, transaction);
+    const result = await decrementInventoryStockLines(pool, items, transaction);
+
+    if (result.inventoryDecremented > 0) {
+        await markOrderInventoryStockReserved(pool, orderIdInt, true, transaction);
+    }
+
+    return result;
 }
 
 async function decrementStorefrontDisplayForOrder(pool, orderId, transaction = null) {
@@ -273,11 +468,15 @@ async function decrementStorefrontDisplayForOrder(pool, orderId, transaction = n
 }
 
 /**
- * Decrease storefront display stock when a paid order is created (Pending).
+ * Reserve storefront "Available Stock" when order is Pending (display qty only).
+ * Warehouse / Actual Stock is decremented when order moves to Processing.
  */
 async function reserveStorefrontDisplayStockForOrder(pool, orderId, transaction = null) {
-    const result = await decrementStorefrontDisplayForOrder(pool, orderId, transaction);
-    return { reserved: result.displayDecremented, itemCount: result.itemCount };
+    const displayResult = await decrementStorefrontDisplayForOrder(pool, orderId, transaction);
+    return {
+        reserved: displayResult.displayDecremented,
+        itemCount: displayResult.itemCount
+    };
 }
 
 /**
@@ -399,8 +598,6 @@ async function restoreStorefrontDisplayStockForOrder(pool, orderId, transaction 
         const catalogProductId = item.catalogProductId;
         const variationId = item.variationId;
         if (!qty || !catalogProductId) continue;
-        if (!(await usesStorefrontDisplayStock(pool, catalogProductId, transaction))) continue;
-
         productQtyMap.set(catalogProductId, (productQtyMap.get(catalogProductId) || 0) + qty);
 
         if (variationId) {
@@ -458,6 +655,131 @@ async function restoreStorefrontDisplayStockForOrder(pool, orderId, transaction 
     return { restored, itemCount: items.length };
 }
 
+/**
+ * Restore warehouse sellable stock when a Pending order is cancelled.
+ */
+async function restoreInventoryStockForOrder(pool, orderId, transaction = null) {
+    const orderIdInt = parseInt(orderId, 10);
+    if (!orderIdInt) return { restored: 0 };
+
+    if (!(await orderHasInventoryStockReserved(pool, orderIdInt, transaction))) {
+        return { restored: 0, skipped: true };
+    }
+
+    const items = await getOrderItemsWithCatalogProductIds(pool, orderIdInt, transaction);
+    let restored = 0;
+    const catalogProductsTouched = new Set();
+
+    for (const item of items) {
+        const qty = item.quantity;
+        const catalogProductId = item.catalogProductId;
+        const variationId = item.variationId;
+        if (!qty || !catalogProductId) continue;
+
+        const invReq = transaction ? transaction.request() : pool.request();
+        const invResult = await invReq
+            .input('productId', sql.Int, catalogProductId)
+            .query(`
+                SELECT TOP 1 InventoryProductID
+                FROM InventoryProducts
+                WHERE ProductID = @productId AND IsActive = 1
+                ORDER BY InventoryProductID DESC
+            `);
+
+        if (!invResult.recordset.length) {
+            const fallbackReq = transaction ? transaction.request() : pool.request();
+            if (variationId) {
+                await fallbackReq
+                    .input('variationId', sql.Int, variationId)
+                    .input('qty', sql.Int, qty)
+                    .query(`
+                        UPDATE ProductVariations
+                        SET Quantity = COALESCE(Quantity, 0) + @qty, UpdatedAt = GETDATE()
+                        WHERE VariationID = @variationId AND IsActive = 1
+                    `);
+            } else {
+                await fallbackReq
+                    .input('productId', sql.Int, catalogProductId)
+                    .input('qty', sql.Int, qty)
+                    .query(`
+                        UPDATE Products
+                        SET StockQuantity = COALESCE(StockQuantity, 0) + @qty, UpdatedAt = GETDATE()
+                        WHERE ProductID = @productId AND IsActive = 1
+                    `);
+            }
+            restored += qty;
+            continue;
+        }
+
+        const inventoryProductId = invResult.recordset[0].InventoryProductID;
+        catalogProductsTouched.add(catalogProductId);
+
+        if (variationId) {
+            const varReq = transaction ? transaction.request() : pool.request();
+            await varReq
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .input('variationId', sql.Int, variationId)
+                .input('qty', sql.Int, qty)
+                .query(`
+                    UPDATE InventoryProductVariations
+                    SET Quantity = COALESCE(Quantity, 0) + @qty,
+                        AvailableQuantity = COALESCE(AvailableQuantity, 0) + @qty,
+                        UpdatedAt = GETDATE()
+                    WHERE InventoryProductID = @inventoryProductId AND VariationID = @variationId
+                `);
+            restored += qty;
+            const skipPvQty = await usesStorefrontDisplayStock(pool, catalogProductId, transaction);
+            if (!skipPvQty) {
+                const invQtyResult = await (transaction ? transaction.request() : pool.request())
+                    .input('inventoryProductId', sql.Int, inventoryProductId)
+                    .input('variationId', sql.Int, variationId)
+                    .query(`
+                        SELECT COALESCE(AvailableQuantity, Quantity, 0) AS Sellable
+                        FROM InventoryProductVariations
+                        WHERE InventoryProductID = @inventoryProductId AND VariationID = @variationId
+                    `);
+                const sellable = parseInt(invQtyResult.recordset[0]?.Sellable, 10) || 0;
+                await (transaction ? transaction.request() : pool.request())
+                    .input('variationId', sql.Int, variationId)
+                    .input('sellable', sql.Int, sellable)
+                    .query(`
+                        UPDATE ProductVariations SET Quantity = @sellable, UpdatedAt = GETDATE()
+                        WHERE VariationID = @variationId AND IsActive = 1
+                    `);
+            }
+        } else {
+            const mainReq = transaction ? transaction.request() : pool.request();
+            await mainReq
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .input('qty', sql.Int, qty)
+                .query(`
+                    UPDATE InventoryProducts
+                    SET AvailableQuantity = COALESCE(AvailableQuantity, 0) + @qty, DateUpdated = GETDATE()
+                    WHERE InventoryProductID = @inventoryProductId
+                `);
+            restored += qty;
+            const availResult = await (transaction ? transaction.request() : pool.request())
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .query(`SELECT COALESCE(AvailableQuantity, 0) AS Available FROM InventoryProducts WHERE InventoryProductID = @inventoryProductId`);
+            const available = parseInt(availResult.recordset[0]?.Available, 10) || 0;
+            await (transaction ? transaction.request() : pool.request())
+                .input('productId', sql.Int, catalogProductId)
+                .input('stockQty', sql.Int, available)
+                .query(`
+                    UPDATE Products SET StockQuantity = @stockQty, UpdatedAt = GETDATE()
+                    WHERE ProductID = @productId AND IsActive = 1
+                `);
+        }
+    }
+
+    for (const catalogProductId of catalogProductsTouched) {
+        await syncStorefrontDisplayAggregates(pool, catalogProductId, transaction);
+    }
+
+    await markOrderInventoryStockReserved(pool, orderIdInt, false, transaction);
+    return { restored, itemCount: items.length };
+}
+
 async function syncStorefrontDisplayAggregates(pool, productId, transaction = null) {
     const pid = parseInt(productId, 10);
     if (!pid) return;
@@ -506,9 +828,13 @@ async function syncStorefrontDisplayAggregates(pool, productId, transaction = nu
 
 module.exports = {
     ensureOrdersStorefrontDisplayReservedColumn,
+    ensureOrdersInventoryStockReservedColumn,
     reserveStorefrontDisplayStockForOrder,
+    reserveInventoryStockForOrder,
     finalizeStorefrontDisplayForProcessingOrder,
     restoreStorefrontDisplayStockForOrder,
+    restoreInventoryStockForOrder,
+    orderHasInventoryStockReserved,
     syncStorefrontDisplayAggregates,
     resolveCatalogProductIdForOrderLine
 };

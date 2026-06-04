@@ -17,16 +17,18 @@
                     <strong id="rmDetailsName" class="inventory-details-value">—</strong>
                 </div>
                 <div class="inventory-details-meta-row">
-                    <span class="inventory-details-label">Supplier</span>
-                    <span id="rmDetailsSupplier" class="inventory-details-value">—</span>
-                </div>
-                <div class="inventory-details-meta-row">
                     <span class="inventory-details-label">Unit</span>
                     <span id="rmDetailsUnit" class="inventory-details-value">—</span>
                 </div>
                 <div class="inventory-details-meta-row rm-details-po-select-row">
+                    <label class="inventory-details-label" for="rmDetailsSupplier">Supplier</label>
+                    <select id="rmDetailsSupplier" class="rm-details-po-select" title="Supplier with PO number, date, and quantity">
+                        <option value="">—</option>
+                    </select>
+                </div>
+                <div class="inventory-details-meta-row rm-details-po-select-row">
                     <label class="inventory-details-label" for="rmDetailsPoSelect">Purchase orders</label>
-                    <select id="rmDetailsPoSelect" class="rm-details-po-select">
+                    <select id="rmDetailsPoSelect" class="rm-details-po-select" title="PO number, date, quantity, and supplier">
                         <option value="">— No purchase orders —</option>
                     </select>
                 </div>

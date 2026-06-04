@@ -887,18 +887,6 @@ const ProductDetail = () => {
                           <span className="attr-value">{variation.color}</span>
                         </div>
                       )}
-                      {variation.shape && (
-                        <div className="variation-attr-line">
-                          <span className="attr-label">Shape:</span>
-                          <span className="attr-value">{variation.shape}</span>
-                        </div>
-                      )}
-                      {variation.type && (
-                        <div className="variation-attr-line">
-                          <span className="attr-label">Type:</span>
-                          <span className="attr-value">{variation.type}</span>
-                        </div>
-                      )}
                       <div className="variation-quantity">
                         <span className="quantity-label">Available:</span>
                         <span className={`quantity-value ${sellableQty > 0 ? 'in-stock' : 'out-of-stock'}`}>

@@ -724,8 +724,13 @@ app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), as
                     await transaction.commit();
                     console.log('[STRIPE WEBHOOK] Bulk order transaction committed successfully. OrderID:', orderId);
 
-                    // NOTE: Stock is NOT decreased here - it will be decreased when Admin changes status to Processing
-                    console.log('[STRIPE WEBHOOK] ⚠️ Stock NOT decreased for bulk order. Stock will be decreased when Admin changes order status to Processing.');
+                    try {
+                        const { reserveStorefrontDisplayStockForOrder } = require('./utils/storefrontStockReserve');
+                        const reserveResult = await reserveStorefrontDisplayStockForOrder(pool, orderId);
+                        console.log('[STRIPE WEBHOOK] Bulk order storefront display reserved (Pending):', reserveResult);
+                    } catch (reserveErr) {
+                        console.error('[STRIPE WEBHOOK] Failed to reserve stock for bulk order:', reserveErr.message);
+                    }
 
                     // Send order receipt email to customer for bulk orders
                     try {
@@ -1310,8 +1315,7 @@ app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), as
                 console.error('[STRIPE WEBHOOK] Failed to reserve storefront display stock:', reserveErr.message);
             }
 
-            // Physical inventory stock is still decreased when order status changes to Processing
-            console.log('[STRIPE WEBHOOK] Order created with Pending status. Inventory stock decreases when status changes to Processing.');
+            console.log('[STRIPE WEBHOOK] Order created with Pending status. Storefront Available Stock reserved; warehouse stock decreases at Processing.');
 
             // Send order receipt email to customer
             console.log('[STRIPE WEBHOOK] ===== STARTING EMAIL SENDING PROCESS =====');
@@ -4130,23 +4134,12 @@ function stripePaymentIntentIdFromCheckoutSession(session) {
     return '';
 }
 
-function getPayMongoAuthHeader() {
-    const key = process.env.PAYMONGO_SECRET_KEY;
-    if (!key) return null;
-    return `Basic ${Buffer.from(`${key}:`).toString('base64')}`;
-}
-
-async function fetchPayMongoCheckoutSession(sessionId) {
-    const auth = getPayMongoAuthHeader();
-    if (!auth || !sessionId) return null;
-    const pmRes = await fetch(
-        `https://api.paymongo.com/v1/checkout_sessions/${encodeURIComponent(String(sessionId).trim())}`,
-        { headers: { accept: 'application/json', authorization: auth } }
-    );
-    if (!pmRes.ok) return null;
-    const pmJson = await pmRes.json().catch(() => ({}));
-    return pmJson?.data || null;
-}
+const {
+    getPayMongoAuthHeader,
+    fetchPayMongoCheckoutSession,
+    createPayMongoCheckoutSession,
+    paymongoNetworkHint
+} = require('./utils/paymongoClient');
 
 /** True when PayMongo reports the checkout session as paid (several attribute shapes). */
 function isPayMongoCheckoutSessionPaid(attrs) {
@@ -4768,50 +4761,37 @@ app.post('/api/create-paymongo-checkout-session', async (req, res) => {
         }
 
         const origin = req.headers.origin || `${req.protocol}://${req.get('host')}`;
-        const authHeader = getPayMongoAuthHeader();
 
-        const pmRes = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: authHeader
-            },
-            body: JSON.stringify({
-                data: {
-                    attributes: {
-                        send_email_receipt: false,
-                        show_description: true,
-                        show_line_items: true,
-                        description: `DesignXcel order — ${checkoutEmail || email || 'customer'}`,
-                        line_items,
-                        payment_method_types: ['card', 'gcash', 'paymaya', 'grab_pay'],
-                        success_url: `${origin}/order-success?provider=paymongo&paymongo_session_id={CHECKOUT_SESSION_ID}`,
-                        cancel_url: `${origin}/payment?cancelled=true`,
-                        billing: checkoutEmail && checkoutEmail.includes('@')
-                            ? { email: checkoutEmail }
-                            : (email && String(email).includes('@') ? { email: String(email).trim() } : undefined),
-                        metadata: {
-                            cart: JSON.stringify(cartForMetadata),
-                            paymentMethod: paymentMethod || 'E-Wallet',
-                            deliveryType: deliveryType || 'pickup',
-                            pickupDate: pickupDate ? String(pickupDate).trim() : '',
-                            shippingCost: String(typeof shippingCost === 'number' ? shippingCost : 0),
-                            extraDeliveryFee: String(typeof extraDeliveryFee === 'number' ? extraDeliveryFee : 0),
-                            subtotal: String(typeof subtotal === 'number' ? subtotal : 0),
-                            total: String(typeof total === 'number' ? total : 0),
-                            shippingAddressId: shippingAddressId ? String(shippingAddressId) : '',
-                            email: checkoutEmail || (email ? String(email).trim() : ''),
-                            customerId: String(checkoutCustomerId),
-                            customerEmail: checkoutEmail,
-                            orderType: 'regular'
-                        }
-                    }
-                }
-            })
+        const { ok: pmOk, json: pmJson } = await createPayMongoCheckoutSession({
+            send_email_receipt: false,
+            show_description: true,
+            show_line_items: true,
+            description: `DesignXcel order — ${checkoutEmail || email || 'customer'}`,
+            line_items,
+            payment_method_types: ['card', 'gcash', 'paymaya', 'grab_pay'],
+            success_url: `${origin}/order-success?provider=paymongo&paymongo_session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${origin}/payment?cancelled=true`,
+            billing: checkoutEmail && checkoutEmail.includes('@')
+                ? { email: checkoutEmail }
+                : (email && String(email).includes('@') ? { email: String(email).trim() } : undefined),
+            metadata: {
+                cart: JSON.stringify(cartForMetadata),
+                paymentMethod: paymentMethod || 'E-Wallet',
+                deliveryType: deliveryType || 'pickup',
+                pickupDate: pickupDate ? String(pickupDate).trim() : '',
+                shippingCost: String(typeof shippingCost === 'number' ? shippingCost : 0),
+                extraDeliveryFee: String(typeof extraDeliveryFee === 'number' ? extraDeliveryFee : 0),
+                subtotal: String(typeof subtotal === 'number' ? subtotal : 0),
+                total: String(typeof total === 'number' ? total : 0),
+                shippingAddressId: shippingAddressId ? String(shippingAddressId) : '',
+                email: checkoutEmail || (email ? String(email).trim() : ''),
+                customerId: String(checkoutCustomerId),
+                customerEmail: checkoutEmail,
+                orderType: 'regular'
+            }
         });
 
-        const pmJson = await pmRes.json().catch(() => ({}));
-        if (!pmRes.ok || !pmJson?.data?.id) {
+        if (!pmOk || !pmJson?.data?.id) {
             const errMsg =
                 pmJson?.errors?.[0]?.detail ||
                 pmJson?.errors?.[0]?.code ||
@@ -4835,10 +4815,11 @@ app.post('/api/create-paymongo-checkout-session', async (req, res) => {
         });
     } catch (error) {
         console.error('Error creating PayMongo checkout session:', error);
+        const hint = paymongoNetworkHint(error);
         res.status(500).json({
             success: false,
-            error: 'Failed to create PayMongo checkout session',
-            message: error.message
+            error: hint || 'Failed to create PayMongo checkout session',
+            message: hint || error.message
         });
     }
 });
@@ -6358,8 +6339,13 @@ app.post('/api/test-webhook', async (req, res) => {
                         await transaction.commit();
                         console.log('[TEST WEBHOOK] Bulk order transaction committed successfully. OrderID:', orderId);
 
-                        // NOTE: Stock is NOT decreased here - it will be decreased when Admin changes status to Processing
-                        console.log('[TEST WEBHOOK] ⚠️ Stock NOT decreased for bulk order. Stock will be decreased when Admin changes order status to Processing.');
+                        try {
+                            const { reserveStorefrontDisplayStockForOrder } = require('./utils/storefrontStockReserve');
+                            const reserveResult = await reserveStorefrontDisplayStockForOrder(pool, orderId);
+                            console.log('[TEST WEBHOOK] Bulk order storefront display reserved (Pending):', reserveResult);
+                        } catch (reserveErr) {
+                            console.error('[TEST WEBHOOK] Failed to reserve stock for bulk order:', reserveErr.message);
+                        }
 
                         // Send order receipt email to customer for bulk orders
                         console.log('[TEST WEBHOOK] ===== STARTING EMAIL SENDING PROCESS (BULK ORDER) =====');
@@ -6939,7 +6925,7 @@ app.post('/api/test-webhook', async (req, res) => {
                     console.error('[TEST WEBHOOK] Failed to reserve storefront display stock:', reserveErr.message);
                 }
 
-                console.log('[TEST WEBHOOK] Order created with Pending status. Inventory stock decreases when status changes to Processing.');
+                console.log('[TEST WEBHOOK] Order created with Pending status. Storefront Available Stock reserved; warehouse stock decreases at Processing.');
 
                 // Send order receipt email to customer
                 console.log('[TEST WEBHOOK] ===== STARTING EMAIL SENDING PROCESS =====');
