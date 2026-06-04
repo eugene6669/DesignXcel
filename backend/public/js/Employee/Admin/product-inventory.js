@@ -1850,7 +1850,7 @@ let currentSelectedProductId = null;
                     if (v.variationId) plannedVar.VariationID = parseInt(v.variationId, 10) || plannedVar.VariationID;
                     const row = buildCreateProductVariationRow(plannedVar, {
                         fromPlan: !!(v.variationId || meta),
-                        startCollapsed: !!v.committed
+                        startCollapsed: true
                     });
                     if (v.panelKey) row.dataset.panelKey = v.panelKey;
                     else ensureVariationPanelKey(row);
@@ -2655,6 +2655,7 @@ let currentSelectedProductId = null;
                 showVarSalePrice: container ? container.getAttribute('data-show-variation-sale-price') !== '0' : true,
                 showVarItemCost: container ? container.getAttribute('data-show-variation-item-cost') !== '0' : true,
                 variationItemCostMode: (container && container.getAttribute('data-variation-item-cost-mode')) || 'total',
+                showVarAttrs: !!(container && container.getAttribute('data-show-variation-attributes') === '1'),
                 showVarAct: !!(container && container.getAttribute('data-show-variation-actions') === '1'),
                 showDisc: !!(container && container.getAttribute('data-show-discount') === '1'),
                 discountMeta: getParentDiscountMetaFromContainer(container)
@@ -2721,6 +2722,21 @@ let currentSelectedProductId = null;
                     return {
                         className: 'var-col-sku',
                         html: '<code class="variation-sku-value">' + escapeHtml(ctx.variationSku) + '</code>'
+                    };
+                case 'color':
+                    return {
+                        className: 'var-col-attr',
+                        html: escapeHtml((variation.Color || '').trim() || '—')
+                    };
+                case 'shape':
+                    return {
+                        className: 'var-col-attr',
+                        html: escapeHtml((variation.Shape || '').trim() || '—')
+                    };
+                case 'type':
+                    return {
+                        className: 'var-col-attr',
+                        html: escapeHtml((variation.VariationType || '').trim() || '—')
                     };
                 case 'dimensions':
                     return {
@@ -3083,9 +3099,11 @@ let currentSelectedProductId = null;
             const fromPlan = opts.fromPlan || (plannedVar && plannedVar.VariationID);
             const listEl = document.getElementById(listId);
             const panelIndex = listEl ? listEl.querySelectorAll('.pi-plan-var-panel').length + 1 : 1;
+            const startCollapsed = opts.startCollapsed !== false
+                && (listId === 'planProductVariationsList' || listId === 'createProductVariationsList');
 
             const row = document.createElement('div');
-            row.className = 'create-product-variation-row pi-plan-var-panel' + (opts.startCollapsed ? ' is-collapsed' : '');
+            row.className = 'create-product-variation-row pi-plan-var-panel' + (startCollapsed ? ' is-collapsed' : '');
             ensureVariationPanelKey(row);
             if (fromPlan && plannedVar) {
                 row.dataset.variationId = String(plannedVar.VariationID);
@@ -3118,7 +3136,7 @@ let currentSelectedProductId = null;
                 : '';
 
             const imageRequired = mode === 'plan' ? '<span style="color:#dc3545;">*</span>' : '';
-            const panelSaveLabel = mode === 'build' ? 'Save' : 'Done';
+            const panelSaveLabel = 'Save';
 
             row.innerHTML = `
                 <button type="button" class="pi-plan-var-remove remove-create-variation-btn" title="Remove" aria-label="Remove variation">×</button>
@@ -3169,7 +3187,7 @@ let currentSelectedProductId = null;
                 doneBtn.addEventListener('click', async function(e) {
                     e.preventDefault();
                     e.stopPropagation();
-                    const label = mode === 'build' ? 'Save' : 'Done';
+                    const label = 'Save';
                     if (doneBtn.disabled) return;
                     doneBtn.disabled = true;
                     const prevText = doneBtn.textContent;

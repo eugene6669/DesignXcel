@@ -1354,6 +1354,11 @@
         .page-products-listing .variations-nested-table .var-col-sku .variation-sku-value {
             font-family: inherit;
         }
+        .page-products-listing .variations-nested-table .var-col-attr {
+            font-size: inherit;
+            color: #333;
+            white-space: nowrap;
+        }
         .last-added-cell { white-space: nowrap; font-size: 0.9em; color: #444; }
         .pi-icon-storefront-btn {
             display: inline-flex;
@@ -1638,6 +1643,7 @@
                     showStatusColumn: false,
                     formatDimensionsCompact: formatDimensionsCompact,
                     showVariationQtyColumn: false,
+                    showVariationAttributes: true,
                     variationItemCostMode: 'unit',
                     variationQtyLabel: 'Available Stock',
                     showStockLegend: false
@@ -1885,7 +1891,7 @@
     </script>
 
     <script src="/js/Employee/Admin/admin-modals.js?v=20260541" defer></script>
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260617" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260618" defer></script>
     <% if (locals.error && locals.error.length > 0) { %>
     <script>
         document.addEventListener('DOMContentLoaded', function() {

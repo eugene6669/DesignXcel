@@ -29,6 +29,7 @@
     showVariationSalePrice (boolean, default true)
     showVariationItemCost (boolean, default true)
     variationItemCostMode ('total' | 'unit', default 'total')
+    showVariationAttributes (boolean, default false) — Color, Shape, Type columns on variation rows
     emptyListMessage (optional string)
     showStockLegend (boolean, default true)
     showSkuColumn (boolean, default true)
@@ -61,6 +62,7 @@
     const showVarSalePrice = typeof showVariationSalePrice !== 'undefined' ? !!showVariationSalePrice : true;
     const showVarItemCost = typeof showVariationItemCost !== 'undefined' ? !!showVariationItemCost : true;
     const varItemCostMode = typeof variationItemCostMode !== 'undefined' ? variationItemCostMode : 'total';
+    const showVarAttrs = typeof showVariationAttributes !== 'undefined' ? !!showVariationAttributes : false;
     const showDisc = typeof showDiscount !== 'undefined' ? !!showDiscount : false;
     const showLegend = typeof showStockLegend !== 'undefined' ? !!showStockLegend : true;
     const showSkuCol = typeof showSkuColumn !== 'undefined' ? !!showSkuColumn : true;
@@ -402,7 +404,7 @@
             </tr>
             <tr class="variations-row product-listing-variations-row" data-inventory-product-id="<%= productId %>" style="display:none;">
                 <td colspan="<%= productColspan %>" class="variations-row-cell">
-                    <div class="variations-container" data-inventory-product-id="<%= productId %>" data-show-return-columns="<%= showVariationReturnCols ? '1' : '0' %>" data-show-storefront="<%= showSf ? '1' : '0' %>" data-show-storefront-in-actions="<%= showSfInActions ? '1' : '0' %>" data-show-storefront-stock-split="<%= showSfStockSplit ? '1' : '0' %>" data-show-variation-dimensions="<%= showVarDims ? '1' : '0' %>" data-show-parent-dimensions="<%= showParentDims ? '1' : '0' %>" data-show-variation-qty="<%= showVarQtyCol ? '1' : '0' %>" data-show-variation-qty-total="<%= showVarQtyTotalCol ? '1' : '0' %>" data-show-variation-sale-price="<%= showVarSalePrice ? '1' : '0' %>" data-show-variation-item-cost="<%= showVarItemCost ? '1' : '0' %>" data-variation-item-cost-mode="<%= varItemCostMode %>" data-show-variation-actions="<%= showVarAct ? '1' : '0' %>" data-show-discount="<%= showDisc ? '1' : '0' %>" data-discount-id="<%= item.DiscountID || '' %>" data-discount-type="<%= item.DiscountType || '' %>" data-discount-value="<%= item.DiscountValue != null ? item.DiscountValue : '' %>" data-discounted-price="<%= item.DiscountedPrice != null ? item.DiscountedPrice : '' %>">
+                    <div class="variations-container" data-inventory-product-id="<%= productId %>" data-show-return-columns="<%= showVariationReturnCols ? '1' : '0' %>" data-show-storefront="<%= showSf ? '1' : '0' %>" data-show-storefront-in-actions="<%= showSfInActions ? '1' : '0' %>" data-show-storefront-stock-split="<%= showSfStockSplit ? '1' : '0' %>" data-show-variation-dimensions="<%= showVarDims ? '1' : '0' %>" data-show-parent-dimensions="<%= showParentDims ? '1' : '0' %>" data-show-variation-qty="<%= showVarQtyCol ? '1' : '0' %>" data-show-variation-qty-total="<%= showVarQtyTotalCol ? '1' : '0' %>" data-show-variation-sale-price="<%= showVarSalePrice ? '1' : '0' %>" data-show-variation-item-cost="<%= showVarItemCost ? '1' : '0' %>" data-variation-item-cost-mode="<%= varItemCostMode %>" data-show-variation-attributes="<%= showVarAttrs ? '1' : '0' %>" data-show-variation-actions="<%= showVarAct ? '1' : '0' %>" data-show-discount="<%= showDisc ? '1' : '0' %>" data-discount-id="<%= item.DiscountID || '' %>" data-discount-type="<%= item.DiscountType || '' %>" data-discount-value="<%= item.DiscountValue != null ? item.DiscountValue : '' %>" data-discounted-price="<%= item.DiscountedPrice != null ? item.DiscountedPrice : '' %>">
                         <h4 style="margin:0 0 12px;color:#333;font-size:0.95em;">Product Variations</h4>
                         <div class="variations-loading" style="text-align:center;padding:16px;color:#666;">
                             <p>Expand to load variations.</p>
@@ -413,6 +415,11 @@
                                     <tr style="background:#e9ecef;">
                                         <th data-var-col="name" class="var-col-name">Variation</th>
                                         <th data-var-col="sku" class="var-col-sku">SKU</th>
+                                        <% if (showVarAttrs) { %>
+                                        <th data-var-col="color" class="var-col-attr">Color</th>
+                                        <th data-var-col="shape" class="var-col-attr">Shape</th>
+                                        <th data-var-col="type" class="var-col-attr">Type</th>
+                                        <% } %>
                                         <% if (showVarDims) { %>
                                         <th data-var-col="dimensions" class="var-col-dims" title="Length × Width × Height (cm)">Dims</th>
                                         <% } %>

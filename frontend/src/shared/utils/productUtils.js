@@ -63,6 +63,38 @@ export const extractProductIdFromPath = (path) => {
 };
 
 /** Sellable units for catalog/filter (variation sum when product has options). */
+/** Unique non-empty values for a variation field (color, shape, type). */
+export const uniqueVariationAttributeValues = (variations, key) => {
+  if (!Array.isArray(variations) || !variations.length) return '';
+  const seen = new Set();
+  const values = [];
+  variations.forEach((v) => {
+    const s = v?.[key] != null ? String(v[key]).trim() : '';
+    if (!s || seen.has(s.toLowerCase())) return;
+    seen.add(s.toLowerCase());
+    values.push(s);
+  });
+  return values.length ? values.join(', ') : '';
+};
+
+/** Storefront label for a variation option (prefers color / shape / type over full variation name). */
+export const getVariationOptionLabel = (variation) => {
+  if (!variation) return '';
+  const color = String(variation.color || '').trim();
+  const shape = String(variation.shape || '').trim();
+  const type = String(variation.type || variation.variationType || '').trim();
+  const parts = [color, shape, type].filter(Boolean);
+  if (parts.length) return parts.join(' · ');
+  return String(variation.name || '').trim();
+};
+
+/** Short title for variation picker cards (color first, then other attrs). */
+export const getVariationCardTitle = (variation) => {
+  const color = String(variation?.color || '').trim();
+  if (color) return color;
+  return getVariationOptionLabel(variation);
+};
+
 export const getSellableStock = (product) => {
   if (!product) return 0;
   if (product.hasVariations) {

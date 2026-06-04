@@ -26556,6 +26556,8 @@ module.exports = function (sql, pool, getStripe = null) {
                                 v.VariationName,
                                 v.SKU,
                                 v.Color,
+                                v.Shape,
+                                v.VariationType,
                                 v.Quantity,
                                 COALESCE(v.AvailableQuantity, 0) as AvailableQuantity,
                                 ISNULL(v.DamagedQuantity, 0) as DamagedQuantity,

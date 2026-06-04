@@ -3986,6 +3986,8 @@ module.exports = function(sql, pool) {
                         COALESCE(NULLIF(LTRIM(RTRIM(ipv.VariationName)), ''), pv.VariationName) as name,
                         COALESCE(ipv.SKU, pv.SKU) as sku,
                         COALESCE(NULLIF(LTRIM(RTRIM(ipv.Color)), ''), pv.Color) as color,
+                        COALESCE(NULLIF(LTRIM(RTRIM(ipv.Shape)), ''), ipv.Shape) as shape,
+                        COALESCE(NULLIF(LTRIM(RTRIM(ipv.VariationType)), ''), ipv.VariationType) as type,
                         COALESCE(
                             CASE
                                 WHEN ipv.AvailableQuantity IS NULL OR ipv.AvailableQuantity = 0

@@ -11,6 +11,10 @@ import { PageLoader } from '../../../shared/components/ui';
 import ReviewSection from '../../reviews/components/ReviewSection';
 import { getImageUrl } from '../../../shared/utils/imageUtils';
 import {
+  uniqueVariationAttributeValues,
+  getVariationOptionLabel
+} from '../../../shared/utils/productUtils';
+import {
   fetchVariationStockMap,
   fetchAvailableStock,
   subscribeStockRefresh
@@ -559,13 +563,29 @@ const ProductDetail = () => {
 
   const additionalInfoColors = (() => {
     if (hasVariations && variations.length > 0) {
-      const names = variations.map((v) => v.name).filter(Boolean);
-      return names.length ? names.join(', ') : 'N/A';
+      const colors = uniqueVariationAttributeValues(variations, 'color');
+      if (colors) return colors;
     }
     if (Array.isArray(product?.colors) && product.colors.length > 0) {
       return product.colors.join(', ');
     }
     return selectedVariation?.color || product?.color || 'N/A';
+  })();
+
+  const additionalInfoShapes = (() => {
+    if (hasVariations && variations.length > 0) {
+      const shapes = uniqueVariationAttributeValues(variations, 'shape');
+      if (shapes) return shapes;
+    }
+    return selectedVariation?.shape || 'N/A';
+  })();
+
+  const additionalInfoTypes = (() => {
+    if (hasVariations && variations.length > 0) {
+      const types = uniqueVariationAttributeValues(variations, 'type');
+      if (types) return types;
+    }
+    return selectedVariation?.type || 'N/A';
   })();
 
   const additionalInfoMaterial =
@@ -856,15 +876,27 @@ const ProductDetail = () => {
                   >
                     {variation.imageUrl && (
                       <div className="variation-image">
-                        <img src={getImageUrl(variation.imageUrl)} alt={variation.name} />
+                        <img src={getImageUrl(variation.imageUrl)} alt={getVariationOptionLabel(variation) || variation.name} />
                       </div>
                     )}
                     <div className="variation-info">
                       <h4>{variation.name}</h4>
                       {variation.color && (
-                        <div className="variation-color">
-                          <span className="color-label">Color:</span>
-                          <span className="color-value">{variation.color}</span>
+                        <div className="variation-attr-line">
+                          <span className="attr-label">Color:</span>
+                          <span className="attr-value">{variation.color}</span>
+                        </div>
+                      )}
+                      {variation.shape && (
+                        <div className="variation-attr-line">
+                          <span className="attr-label">Shape:</span>
+                          <span className="attr-value">{variation.shape}</span>
+                        </div>
+                      )}
+                      {variation.type && (
+                        <div className="variation-attr-line">
+                          <span className="attr-label">Type:</span>
+                          <span className="attr-value">{variation.type}</span>
                         </div>
                       )}
                       <div className="variation-quantity">
@@ -1145,8 +1177,16 @@ const ProductDetail = () => {
                     <td>{additionalInfoMaterial}</td>
                   </tr>
                   <tr>
-                    <td>Color Options</td>
+                    <td>Color</td>
                     <td>{additionalInfoColors}</td>
+                  </tr>
+                  <tr>
+                    <td>Shape</td>
+                    <td>{additionalInfoShapes}</td>
+                  </tr>
+                  <tr>
+                    <td>Type</td>
+                    <td>{additionalInfoTypes}</td>
                   </tr>
                   <tr>
                     <td>Stock Status</td>
