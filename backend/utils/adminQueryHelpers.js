@@ -455,9 +455,29 @@ function applyListingStageFilter(request, listingStage) {
     return ' AND COALESCE(NULLIF(LTRIM(RTRIM(ip.ListingStage)), \'\'), \'built\') = @listingStage ';
 }
 
+function applyListingStageInFilter(request, listingStages) {
+    const stages = (Array.isArray(listingStages) ? listingStages : [])
+        .map((s) => String(s || '').trim().toLowerCase())
+        .filter(Boolean);
+    if (!stages.length) return '';
+    const placeholders = stages.map((stage, index) => {
+        const param = `listingStageIn${index}`;
+        request.input(param, sql.NVarChar, stage);
+        return `@${param}`;
+    });
+    return ` AND COALESCE(NULLIF(LTRIM(RTRIM(ip.ListingStage)), ''), 'built') IN (${placeholders.join(', ')}) `;
+}
+
+function resolveListingStageClause(request, options = {}) {
+    if (options.listingStages && options.listingStages.length) {
+        return applyListingStageInFilter(request, options.listingStages);
+    }
+    return applyListingStageFilter(request, options.listingStage);
+}
+
 async function countInventoryProducts(pool, filters = {}, options = {}) {
     const request = pool.request();
-    const stageClause = applyListingStageFilter(request, options.listingStage);
+    const stageClause = resolveListingStageClause(request, options);
     const filterClause = (options.returnsOnly
         ? applyReturnsListFilters(request, filters)
         : applyInventoryListFilters(request, filters)) + stageClause;
@@ -476,7 +496,7 @@ async function fetchInventoryProductsPage(pool, filters = {}, options = {}) {
     const offset = (page - 1) * limit;
 
     const request = pool.request();
-    const stageClause = applyListingStageFilter(request, options.listingStage);
+    const stageClause = resolveListingStageClause(request, options);
     const filterClause = (options.returnsOnly
         ? applyReturnsListFilters(request, filters)
         : applyInventoryListFilters(request, filters)) + stageClause;
@@ -572,8 +592,14 @@ async function loadProductInventoryPageData(pool, options = {}) {
             `).then((r) => r.recordset || [])
         ),
         fetchProductCategoriesList(pool),
-        countInventoryProducts(pool, filters, { listingStage: options.listingStage }),
-        fetchInventoryProductsPage(pool, filters, { listingStage: options.listingStage }),
+        countInventoryProducts(pool, filters, {
+            listingStage: options.listingStage,
+            listingStages: options.listingStages
+        }),
+        fetchInventoryProductsPage(pool, filters, {
+            listingStage: options.listingStage,
+            listingStages: options.listingStages
+        }),
         loadActiveBomBundles(pool)
     ]);
 
@@ -636,7 +662,7 @@ async function ensureListingStageColumn(pool) {
 async function loadStorefrontPageData(pool, options = {}) {
     return loadProductInventoryPageData(pool, {
         ...options,
-        listingStage: 'built'
+        listingStages: ['built', 'retail']
     });
 }
 

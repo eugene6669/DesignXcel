@@ -15,7 +15,7 @@ import PageHeader from '../../../shared/components/layout/PageHeader';
 import AudioLoader from '../../../shared/components/ui/AudioLoader';
 import CartSuccessModal from '../../../shared/components/ui/CartSuccessModal';
 import ConfirmationModal from '../../../shared/components/ui/ConfirmationModal';
-import { getModel3dUrl } from '../../../shared/utils/imageUtils';
+import { getModel3dUrl, isLocalDevHost, resolveModelUrlForViewer } from '../../../shared/utils/imageUtils';
 import ARViewer from '../components/ARViewer';
 import QRCodeModal from '../components/QRCodeModal';
 import './3d-products.css';
@@ -845,12 +845,14 @@ const ThreeDProducts = () => {
     };
   }, [product, selectedVariation, variations]);
 
-  // Auto-open AR viewer if URL has ?ar=true and user is on mobile
+  const isLocalDev = isLocalDevHost();
+
+  // Auto-open AR viewer if URL has ?ar=true (mobile, or localhost dev bypass)
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const shouldOpenAR = urlParams.get('ar') === 'true';
     
-    if (shouldOpenAR && isMobile && product) {
+    if (shouldOpenAR && (isMobile || isLocalDev) && product) {
       // Small delay to ensure page is loaded
       setTimeout(() => {
         setShowARViewer(true);
@@ -859,7 +861,7 @@ const ThreeDProducts = () => {
         window.history.replaceState({}, '', newUrl);
       }, 500);
     }
-  }, [isMobile, product, slug]);
+  }, [isMobile, isLocalDev, product, slug]);
 
   const [cameraAngle, setCameraAngle] = useState('front');
   const [isRotating360, setIsRotating360] = useState(false);
@@ -869,25 +871,10 @@ const ThreeDProducts = () => {
   // Use the uploaded 3D model from the product, or show placeholder
   const modelPath = getModel3dUrl(displayProduct || product);
   const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-  const loadableModelPath = React.useMemo(() => {
-    if (!modelPath) return null;
-    try {
-      const parsed = new URL(modelPath);
-      const apiRoot = apiBaseUrl.replace(/\/+$/, '');
-      const apiOrigin = new URL(apiRoot).origin;
-      // CRA (:3000) + API (:5000): model URL points at API — treat as "ours", no /api/model-file proxy.
-      const isOurAsset =
-        parsed.origin === window.location.origin ||
-        parsed.origin === apiOrigin;
-      if (isOurAsset) {
-        return modelPath;
-      }
-      // External hosts (e.g. Azure blob): proxy through API to avoid CORS blocks in the browser.
-      return `${apiRoot}/api/model-file?url=${encodeURIComponent(modelPath)}`;
-    } catch {
-      return modelPath;
-    }
-  }, [modelPath, apiBaseUrl]);
+  const loadableModelPath = React.useMemo(
+    () => resolveModelUrlForViewer(modelPath, apiBaseUrl),
+    [modelPath, apiBaseUrl]
+  );
   
   // Debug model path
   useEffect(() => {
@@ -1165,14 +1152,18 @@ const ThreeDProducts = () => {
             <button 
               className="btn-ar"
               onClick={() => {
-                // Show QR code on desktop, AR viewer on mobile (like IKEA Place)
-                if (isMobile) {
+                // Localhost: open AR in-browser (WebXR / 3D preview). Production desktop: QR for phone.
+                if (isMobile || isLocalDev) {
                   setShowARViewer(true);
                 } else {
                   setShowQRCode(true);
                 }
               }}
-              title={isMobile ? "View in AR" : "View in AR (Scan QR code with phone)"}
+              title={
+                isMobile || isLocalDev
+                  ? 'View in AR'
+                  : 'View in AR (Scan QR code with phone)'
+              }
             >
               <svg className="icon-ar" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 2L2 7l10 5 10-5-10-5z"/>
@@ -1546,7 +1537,7 @@ const ThreeDProducts = () => {
         type="warning"
       />
 
-      {/* AR Viewer Modal - Only shown on mobile */}
+      {/* AR Viewer Modal */}
       <ARViewer
         isOpen={showARViewer}
         onClose={() => setShowARViewer(false)}

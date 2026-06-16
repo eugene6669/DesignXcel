@@ -2,6 +2,7 @@
     'use strict';
 
     var MENU_BUTTON_SELECTORS = [
+        '.raw-material-details-btn',
         '.pi-icon-details-btn',
         '.pi-icon-archive-btn',
         '.archive-material-btn',
@@ -31,7 +32,8 @@
     }
 
     function iconForButton(btn) {
-        if (btn.classList.contains('pi-icon-details-btn') ||
+        if (btn.classList.contains('raw-material-details-btn') ||
+            btn.classList.contains('pi-icon-details-btn') ||
             btn.classList.contains('inventory-product-details-btn') ||
             btn.classList.contains('inventory-variation-details-btn')) {
             return SVG_DETAILS;

@@ -1399,6 +1399,7 @@ let currentSelectedProductId = null;
             }
             const mainPreview = document.getElementById('createProductMainImagePreview');
             if (mainPreview) mainPreview.innerHTML = '';
+            toggleBuildPlannedParentRecipeBlock(true);
         }
 
         function parseProductDimensionsJson(dimStr) {
@@ -1499,11 +1500,11 @@ let currentSelectedProductId = null;
             if (descEl) descEl.value = product.Description || '';
             if (catEl && product.Category) fillCategorySelectElement(catEl, product.Category);
             if (saleEl && product.Price != null) {
-                saleEl.value = parseFloat(product.Price).toFixed(2);
+                saleEl.value = formatLocalePrice(parseFloat(product.Price));
                 bindProductPriceInput(saleEl);
             }
             if (costEl && product.CostPrice != null) {
-                costEl.value = parseFloat(product.CostPrice).toFixed(2);
+                costEl.value = formatLocalePrice(parseFloat(product.CostPrice));
                 bindProductPriceInput(costEl);
             }
             setProductDimensionsOnForm('create', product.Dimensions);
@@ -1539,14 +1540,7 @@ let currentSelectedProductId = null;
                 }
             }
             updateCreateVariationTotalSummary();
-            const bomId = product.BomBundleID || product.bomBundleId;
-            if (bomId) {
-                const bundleSel = document.getElementById('createBomBundleSelect');
-                if (bundleSel) {
-                    bundleSel.value = String(bomId);
-                    applyBomBundleToCreateForm(String(bomId));
-                }
-            }
+            toggleBuildPlannedParentRecipeBlock(false);
         }
 
         function resetAndOpenBuildProductModal() {
@@ -1565,7 +1559,7 @@ let currentSelectedProductId = null;
                 createVarList.innerHTML = '';
                 appendVariationToList('createProductVariationsList', null, { startCollapsed: true });
             }
-            updateCreateVariationTotalSummary();
+            bindCreateProductPriceInput();
             addProductModal.style.display = 'block';
         }
 
@@ -1812,11 +1806,17 @@ let currentSelectedProductId = null;
             }
             if (draft.price) {
                 const saleEl = document.getElementById('createProductPrice');
-                if (saleEl) saleEl.value = draft.price;
+                if (saleEl) {
+                    saleEl.value = draft.price;
+                    formatCreateProductPriceAuto(saleEl);
+                }
             }
             if (draft.costPrice) {
                 const costEl = document.getElementById('createProductCostPrice');
-                if (costEl) costEl.value = draft.costPrice;
+                if (costEl) {
+                    costEl.value = draft.costPrice;
+                    formatCreateProductPriceAuto(costEl);
+                }
             }
             if (draft.reorderPoint != null) {
                 const rp = document.getElementById('reorderPoint');
@@ -1980,8 +1980,7 @@ let currentSelectedProductId = null;
                 planList.innerHTML = '';
                 appendVariationToList('planProductVariationsList', null, { startCollapsed: true });
             }
-            bindProductPriceInput(document.getElementById('planProductPrice'));
-            bindProductPriceInput(document.getElementById('planProductCostPrice'));
+            bindCreateProductPriceInput();
             addPlanProductModal.style.display = 'block';
         }
 
@@ -2002,15 +2001,14 @@ let currentSelectedProductId = null;
                 e.preventDefault();
                 const saleEl = document.getElementById('planProductPrice');
                 const costEl = document.getElementById('planProductCostPrice');
+                normalizePriceFieldsBeforeSubmit(saleEl, costEl);
                 const priceValidation = validateSaleCostPair(saleEl, costEl);
                 if (priceValidation) {
                     showCustomPopup(priceValidation, true);
                     return;
                 }
-                const unitPrice = getProductUnitPriceFromEl(saleEl);
-                const unitCost = getProductUnitPriceFromEl(costEl, true);
-                if (saleEl) saleEl.value = unitPrice.toFixed(2);
-                if (costEl) costEl.value = unitCost.toFixed(2);
+                const unitPrice = readPriceFromInput(saleEl, false);
+                const unitCost = readPriceFromInput(costEl, true);
                 const planList = document.getElementById('planProductVariationsList');
                 if (planList) {
                     planList.querySelectorAll('.pi-plan-var-panel').forEach(function(row, idx) {
@@ -2063,6 +2061,194 @@ let currentSelectedProductId = null;
         if (closePlanModal) closePlanModal.addEventListener('click', closePlanProductModal);
         if (cancelPlanProduct) cancelPlanProduct.addEventListener('click', closePlanProductModal);
 
+        const addRetailProductBtn = document.getElementById('addRetailProductBtn');
+        const addRetailProductModal = document.getElementById('addRetailProductModal');
+        const closeRetailModal = document.getElementById('closeRetailModal');
+        const cancelRetailProduct = document.getElementById('cancelRetailProduct');
+
+        function resetRetailProductVariations() {
+            const list = document.getElementById('retailProductVariationsList');
+            if (list) list.innerHTML = '';
+            const jsonField = document.getElementById('retailVariationsJson');
+            if (jsonField) jsonField.value = '';
+            const delField = document.getElementById('retailDeletedVariationIds');
+            if (delField) delField.value = '[]';
+        }
+
+        function resetRetailProductModalForCreate() {
+            const form = document.getElementById('addRetailProductForm');
+            if (form) {
+                form.setAttribute('action', '/Employee/Admin/ProductsListing/RetailAdd');
+                form.removeAttribute('data-editing-product-id');
+            }
+            const title = addRetailProductModal?.querySelector('h3');
+            if (title) title.textContent = 'Retail Product';
+            const submitBtn = document.getElementById('submitRetailProductBtn');
+            if (submitBtn) submitBtn.textContent = 'Save Retail Product';
+        }
+
+        function openRetailProductModal() {
+            const modal = document.getElementById('addRetailProductModal');
+            if (!modal) {
+                showCustomPopup('Retail product form is not available. Refresh the page and try again.', true);
+                return;
+            }
+            document.getElementById('addRetailProductForm')?.reset();
+            resetRetailProductVariations();
+            resetRetailProductModalForCreate();
+            modal.style.display = 'block';
+            try {
+                const retailList = document.getElementById('retailProductVariationsList');
+                if (retailList) {
+                    retailList.innerHTML = '';
+                    appendVariationToList('retailProductVariationsList', null, { startCollapsed: true });
+                }
+                bindCreateProductPriceInput();
+            } catch (err) {
+                console.error('openRetailProductModal:', err);
+                showCustomPopup('Could not open retail product form. Refresh the page and try again.', true);
+            }
+        }
+
+        function closeRetailProductModalFn() {
+            const modal = document.getElementById('addRetailProductModal');
+            if (modal) modal.style.display = 'none';
+            resetRetailProductModalForCreate();
+        }
+
+        if (closeRetailModal) closeRetailModal.addEventListener('click', closeRetailProductModalFn);
+        if (cancelRetailProduct) cancelRetailProduct.addEventListener('click', closeRetailProductModalFn);
+
+        const addRetailProductVariationBtn = document.getElementById('addRetailProductVariationBtn');
+        if (addRetailProductVariationBtn) {
+            addRetailProductVariationBtn.addEventListener('click', function() {
+                appendVariationToList('retailProductVariationsList', null, { startCollapsed: true });
+            });
+        }
+
+        function appendRetailVariationMediaToFormData(formData) {
+            clearVariationMediaFromFormData(formData);
+            document.querySelectorAll('#retailProductVariationsList .pi-plan-var-panel').forEach(function(row) {
+                const name = resolvePlanVariationDisplayNameFromRow(row);
+                const qtyEl = row.querySelector('.create-variation-quantity');
+                const quantity = qtyEl ? parseInt(qtyEl.value, 10) : 0;
+                const mainInput = row.querySelector('.create-variation-main-image');
+                const hasExistingImage = row.dataset.hasExistingImage === '1';
+                const hasNewImage = !!getVariationMainImageFile('retailProductVariationsList', row, mainInput);
+                if (!name || !quantity || quantity <= 0 || !(hasExistingImage || hasNewImage)) return;
+                appendVariationMediaToFormData(formData, row, {
+                    includeMain: true,
+                    accumulate: true,
+                    listId: 'retailProductVariationsList'
+                });
+            });
+        }
+
+        const addRetailProductForm = document.getElementById('addRetailProductForm');
+        if (addRetailProductForm) {
+            addRetailProductForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const saleEl = document.getElementById('retailProductPrice');
+                const costEl = document.getElementById('retailProductCostPrice');
+                normalizePriceFieldsBeforeSubmit(saleEl, costEl);
+                const priceValidation = validateSaleCostPair(saleEl, costEl);
+                if (priceValidation) {
+                    showCustomPopup(priceValidation, true);
+                    return;
+                }
+                const unitPrice = readPriceFromInput(saleEl, false);
+                const unitCost = readPriceFromInput(costEl, true);
+                const variations = collectRetailProductVariations();
+                const rowCount = document.querySelectorAll('#retailProductVariationsList .pi-plan-var-panel').length;
+                if (!variations.length || variations.length < rowCount) {
+                    showCustomPopup('Each variation needs color or type, main image, and quantity of at least 1.', true);
+                    return;
+                }
+                const jsonField = document.getElementById('retailVariationsJson');
+                if (jsonField) jsonField.value = JSON.stringify(variations);
+                const formData = new FormData(this);
+                appendRetailVariationMediaToFormData(formData);
+                const actionPath = this.getAttribute('action') || '/Employee/Admin/ProductsListing/RetailAdd';
+                const isEditRetail = actionPath.indexOf('/ProductsListing/RetailUpdate/') !== -1;
+                const submitBtn = document.getElementById('submitRetailProductBtn');
+                if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving...'; }
+                try {
+                    const response = await postMultipartForm(actionPath, formData);
+                    const result = response.result;
+                    if (response.ok && result.success) {
+                        clearVariationMainImagePendingForList('retailProductVariationsList');
+                        closeRetailProductModalFn();
+                        showCustomPopup(result.message || (isEditRetail ? 'Retail product updated.' : 'Retail product saved.'));
+                        setTimeout(function() {
+                            window.location.href = '/Employee/Admin/ProductsListing';
+                        }, 500);
+                    } else {
+                        showCustomPopup(result.message || 'Failed to save retail product.', true);
+                    }
+                } catch (err) {
+                    showCustomPopup('Failed to save retail product: ' + err.message, true);
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = isEditRetail ? 'Save Changes' : 'Save Retail Product';
+                    }
+                }
+            });
+        }
+
+        async function openEditRetailProductModal(inventoryProductId) {
+            if (!inventoryProductId) return;
+            try {
+                const res = await fetch('/api/admin/inventory-product/' + inventoryProductId + '?source=InventoryProducts', { credentials: 'include' });
+                const data = await res.json();
+                if (!data.success || !data.product) {
+                    showCustomPopup(data.message || 'Could not load retail product.', true);
+                    return;
+                }
+                const p = data.product;
+                if (String(p.ListingStage || '').toLowerCase() !== 'retail') {
+                    showCustomPopup('Only retail products can be edited here.', true);
+                    return;
+                }
+                const form = document.getElementById('addRetailProductForm');
+                if (form) {
+                    form.setAttribute('action', '/Employee/Admin/ProductsListing/RetailUpdate/' + inventoryProductId);
+                    form.setAttribute('data-editing-product-id', String(inventoryProductId));
+                }
+                const title = addRetailProductModal?.querySelector('h3');
+                if (title) title.textContent = 'Edit Retail Product';
+                const submitBtn = document.getElementById('submitRetailProductBtn');
+                if (submitBtn) submitBtn.textContent = 'Save Changes';
+                document.getElementById('retailName').value = p.Name || '';
+                document.getElementById('retailProductPrice').value = formatLocalePrice(Number(p.Price) || 0);
+                document.getElementById('retailProductCostPrice').value = formatLocalePrice(Number(p.CostPrice) || 0);
+                document.getElementById('retailCategory').value = p.Category || '';
+                document.getElementById('retailDescription').value = p.Description || '';
+                setProductDimensionsOnForm('retail', p.Dimensions);
+                const list = document.getElementById('retailProductVariationsList');
+                if (list) list.innerHTML = '';
+                const delField = document.getElementById('retailDeletedVariationIds');
+                if (delField) delField.value = '[]';
+                (Array.isArray(p.Variations) ? p.Variations : []).forEach(function(v) {
+                    if (!list) return;
+                    const row = buildRetailProductVariationRow(v, { startCollapsed: true });
+                    const qtyEl = row.querySelector('.create-variation-quantity');
+                    const qty = Number(v.AvailableQuantity != null ? v.AvailableQuantity : v.Quantity) || 1;
+                    if (qtyEl) qtyEl.value = String(Math.max(1, qty));
+                    list.appendChild(row);
+                    syncVariationPanelImageState(row, 'retailProductVariationsList');
+                });
+                if (list && !list.children.length) {
+                    appendVariationToList('retailProductVariationsList', null, { startCollapsed: true });
+                }
+                bindCreateProductPriceInput();
+                const modal = document.getElementById('addRetailProductModal');
+                if (modal) modal.style.display = 'block';
+            } catch (err) {
+                showCustomPopup('Could not load retail product: ' + err.message, true);
+            }
+        }
+
         async function openEditPlannedProductModal(inventoryProductId) {
             if (!inventoryProductId) return;
             try {
@@ -2092,9 +2278,9 @@ let currentSelectedProductId = null;
                 const nameEl = document.getElementById('planName');
                 if (nameEl) nameEl.value = p.Name || '';
                 const priceEl = document.getElementById('planProductPrice');
-                if (priceEl) priceEl.value = (Number(p.Price) || 0).toFixed(2);
+                if (priceEl) priceEl.value = formatLocalePrice(Number(p.Price) || 0);
                 const costEl = document.getElementById('planProductCostPrice');
-                if (costEl) costEl.value = (Number(p.CostPrice) || 0).toFixed(2);
+                if (costEl) costEl.value = formatLocalePrice(Number(p.CostPrice) || 0);
                 const catEl = document.getElementById('planCategory');
                 if (catEl) catEl.value = p.Category || '';
                 const descEl = document.getElementById('planDescription');
@@ -2123,8 +2309,7 @@ let currentSelectedProductId = null;
                     updatePlanVariationPanelTitles();
                 }
 
-                bindProductPriceInput(document.getElementById('planProductPrice'));
-                bindProductPriceInput(document.getElementById('planProductCostPrice'));
+                bindCreateProductPriceInput();
                 if (addPlanProductModal) addPlanProductModal.style.display = 'block';
             } catch (err) {
                 showCustomPopup('Could not load planned product: ' + err.message, true);
@@ -2164,6 +2349,7 @@ let currentSelectedProductId = null;
                 applyBuildPlannedDraftOverlay(draft, product);
             }
 
+            bindCreateProductPriceInput();
             addProductModal.style.display = 'block';
         }
 
@@ -3092,6 +3278,144 @@ let currentSelectedProductId = null;
             if (qtyEl) qtyEl.addEventListener('input', updateCreateVariationTotalSummary);
         }
 
+        function toggleBuildPlannedParentRecipeBlock(show) {
+            const block = document.querySelector('#addProductModal .pi-build-recipe');
+            if (block) block.style.display = show ? '' : 'none';
+        }
+
+        function buildVariationMaterialsHtml() {
+            let bundleOptions = '<option value="">— Manual raw materials —</option>';
+            const masterSel = document.getElementById('createBomBundleSelect');
+            if (masterSel) {
+                masterSel.querySelectorAll('option').forEach(function(opt) {
+                    if (!opt.value) return;
+                    bundleOptions += '<option value="' + escapeHtml(opt.value) + '">' + escapeHtml(opt.textContent.trim()) + '</option>';
+                });
+            }
+            return `
+                <div class="pi-var-materials pi-section pi-section-tight">
+                    <label>Raw Materials Bundle</label>
+                    <select class="variation-bom-bundle-select">${bundleOptions}</select>
+                    <div class="variation-materials-manual" style="margin-top:8px;">
+                        <div class="variation-materials-container"></div>
+                        <button type="button" class="pi-btn pi-btn-sm variation-add-material-btn" style="margin-top:6px;">Add Raw Materials</button>
+                        <div class="variation-materials-summary" style="margin-top:6px;font-size:0.9em;color:#555;"><em>None yet</em></div>
+                    </div>
+                </div>`;
+        }
+
+        function updateVariationPanelMaterialsSummary(row) {
+            if (!row) return;
+            const summaryEl = row.querySelector('.variation-materials-summary');
+            const container = row.querySelector('.variation-materials-container');
+            if (!summaryEl || !container) return;
+            const selected = [];
+            container.querySelectorAll('.material-row').forEach(function(mrow) {
+                const materialId = mrow.querySelector('.material-select')?.value;
+                const quantity = parseInt(mrow.querySelector('.material-quantity')?.value, 10) || 0;
+                if (materialId && quantity > 0) {
+                    const material = allRawMaterials.find(function(m) { return String(m.id) === String(materialId); });
+                    if (material) selected.push({ name: material.name, quantity: quantity });
+                }
+            });
+            if (selected.length === 0) {
+                summaryEl.innerHTML = '<em>None yet</em>';
+            } else {
+                summaryEl.innerHTML = selected.map(function(m) {
+                    return '<div>' + escapeHtml(m.name) + ' — <strong>' + m.quantity + '</strong>/unit</div>';
+                }).join('');
+            }
+        }
+
+        function getVariationPanelRequiredMaterials(row) {
+            if (!row) return [];
+            const bundleSel = row.querySelector('.variation-bom-bundle-select');
+            if (bundleSel && bundleSel.value && row.dataset.variationMaterialsBundleCache) {
+                try {
+                    const cached = JSON.parse(row.dataset.variationMaterialsBundleCache);
+                    if (Array.isArray(cached) && cached.length) return cached;
+                } catch (cacheErr) {
+                    /* ignore */
+                }
+            }
+            const materials = [];
+            row.querySelectorAll('.variation-materials-container .material-row').forEach(function(mrow) {
+                const materialId = mrow.querySelector('.material-select')?.value;
+                const quantity = parseInt(mrow.querySelector('.material-quantity')?.value, 10);
+                if (materialId && quantity > 0) {
+                    materials.push({ materialId: materialId, quantityRequired: quantity });
+                }
+            });
+            return materials;
+        }
+
+        async function applyBomBundleToVariationPanel(row, bundleId) {
+            if (!row) return;
+            const container = row.querySelector('.variation-materials-container');
+            const manualBlock = row.querySelector('.variation-materials-manual');
+            if (!container) return;
+            container.innerHTML = '';
+            delete row.dataset.variationMaterialsBundleCache;
+            if (!bundleId) {
+                if (manualBlock) manualBlock.style.display = '';
+                container.appendChild(createCreateInventoryMaterialRow());
+                updateVariationPanelMaterialsSummary(row);
+                return;
+            }
+            try {
+                const res = await fetch('/api/admin/bom-bundles/' + bundleId, { credentials: 'include' });
+                const data = await res.json();
+                if (!data.success || !data.materials || !data.materials.length) {
+                    if (manualBlock) manualBlock.style.display = '';
+                    showCustomPopup(data.message || 'Bundle has no raw materials.', true);
+                    return;
+                }
+                const cache = data.materials.map(function(m) {
+                    return {
+                        materialId: m.materialId,
+                        quantityRequired: parseInt(m.quantityRequired, 10) || 0
+                    };
+                }).filter(function(m) { return m.materialId && m.quantityRequired > 0; });
+                row.dataset.variationMaterialsBundleCache = JSON.stringify(cache);
+                if (manualBlock) manualBlock.style.display = 'none';
+                updateVariationPanelMaterialsSummary(row);
+            } catch (err) {
+                if (manualBlock) manualBlock.style.display = '';
+                showCustomPopup('Failed to load raw materials bundle.', true);
+            }
+        }
+
+        function initVariationPanelMaterialsUI(row) {
+            if (!row || row.dataset.variationMaterialsInit === '1') return;
+            row.dataset.variationMaterialsInit = '1';
+            const bundleSel = row.querySelector('.variation-bom-bundle-select');
+            const addBtn = row.querySelector('.variation-add-material-btn');
+            const container = row.querySelector('.variation-materials-container');
+            if (container && !container.children.length) {
+                container.appendChild(createCreateInventoryMaterialRow());
+            }
+            if (bundleSel) {
+                bundleSel.addEventListener('change', function() {
+                    applyBomBundleToVariationPanel(row, this.value);
+                });
+            }
+            if (addBtn && container) {
+                addBtn.addEventListener('click', function() {
+                    if (bundleSel && bundleSel.value) {
+                        showCustomPopup('Clear the bundle selection to add materials manually.', true);
+                        return;
+                    }
+                    container.appendChild(createCreateInventoryMaterialRow());
+                    updateVariationPanelMaterialsSummary(row);
+                });
+            }
+            if (container) {
+                container.addEventListener('change', function() { updateVariationPanelMaterialsSummary(row); });
+                container.addEventListener('input', function() { updateVariationPanelMaterialsSummary(row); });
+            }
+            updateVariationPanelMaterialsSummary(row);
+        }
+
         function buildProductVariationPanel(plannedVar, options) {
             const opts = options || {};
             const listId = opts.listId || 'planProductVariationsList';
@@ -3100,7 +3424,12 @@ let currentSelectedProductId = null;
             const listEl = document.getElementById(listId);
             const panelIndex = listEl ? listEl.querySelectorAll('.pi-plan-var-panel').length + 1 : 1;
             const startCollapsed = opts.startCollapsed !== false
-                && (listId === 'planProductVariationsList' || listId === 'createProductVariationsList');
+                && (listId === 'planProductVariationsList'
+                    || listId === 'createProductVariationsList'
+                    || listId === 'retailProductVariationsList');
+
+            const isBuildFromPlanned = mode === 'build'
+                && document.getElementById('addProductForm')?.getAttribute('data-build-from-planned') === '1';
 
             const row = document.createElement('div');
             row.className = 'create-product-variation-row pi-plan-var-panel' + (startCollapsed ? ' is-collapsed' : '');
@@ -3128,15 +3457,19 @@ let currentSelectedProductId = null;
                 ? '<div class="pi-var-planned-preview">' + buildMediaImgHtml(plannedVarImg, { style: 'width:40px;height:40px;object-fit:cover;border-radius:4px;' }) + '<span>Current Image</span></div>'
                 : '';
 
-            const qtyBlock = mode === 'build'
+            const qtyVal = plannedVar && (plannedVar.Quantity != null || plannedVar.quantity != null)
+                ? (parseInt(plannedVar.Quantity != null ? plannedVar.Quantity : plannedVar.quantity, 10) || 1)
+                : 1;
+            const qtyBlock = (mode === 'build' || mode === 'retail')
                 ? `<div class="pi-plan-var-qty-row">
-                    <label>Build Qty <span style="color:#dc3545;">*</span></label>
-                    <input type="number" class="create-variation-quantity" min="1" value="1" required>
+                    <label>${mode === 'retail' ? 'Quantity' : 'Build Qty'} <span style="color:#dc3545;">*</span></label>
+                    <input type="number" class="create-variation-quantity" min="1" value="${qtyVal}" required>
                    </div>`
                 : '';
 
-            const imageRequired = mode === 'plan' ? '<span style="color:#dc3545;">*</span>' : '';
+            const imageRequired = (mode === 'plan' || mode === 'retail') ? '<span style="color:#dc3545;">*</span>' : '';
             const panelSaveLabel = 'Save';
+            const variationMaterialsBlock = (mode === 'build' && isBuildFromPlanned) ? buildVariationMaterialsHtml() : '';
 
             row.innerHTML = `
                 <button type="button" class="pi-plan-var-remove remove-create-variation-btn" title="Remove" aria-label="Remove variation">×</button>
@@ -3169,6 +3502,7 @@ let currentSelectedProductId = null;
                         </tbody>
                     </table>
                     ${qtyBlock}
+                    ${variationMaterialsBlock}
                     <div class="pi-var-media">
                         <div>
                             <label>Variation Main Image ${imageRequired}</label>
@@ -3201,8 +3535,16 @@ let currentSelectedProductId = null;
                 });
             }
             bindVariationPanelEvents(row, listId);
+            if (mode === 'build' && isBuildFromPlanned) {
+                initVariationPanelMaterialsUI(row);
+            }
             updateVariationPanelHeader(row, panelIndex - 1);
             return row;
+        }
+
+        function buildRetailProductVariationRow(plannedVar, options) {
+            const opts = Object.assign({ listId: 'retailProductVariationsList', mode: 'retail' }, options || {});
+            return buildProductVariationPanel(plannedVar, opts);
         }
 
         function buildPlanProductVariationRow(plannedVar, options) {
@@ -3225,8 +3567,11 @@ let currentSelectedProductId = null;
             collapseAllVariationPanels(listEl);
             const row = buildProductVariationPanel(plannedVar, Object.assign({
                 listId: listId,
-                mode: listId === 'planProductVariationsList' ? 'plan' : 'build',
-                startCollapsed: listId === 'planProductVariationsList' || listId === 'createProductVariationsList'
+                mode: listId === 'planProductVariationsList' ? 'plan'
+                    : (listId === 'retailProductVariationsList' ? 'retail' : 'build'),
+                startCollapsed: listId === 'planProductVariationsList'
+                    || listId === 'createProductVariationsList'
+                    || listId === 'retailProductVariationsList'
             }, panelOptions || {}));
             listEl.appendChild(row);
             updateVariationPanelsInList(listEl);
@@ -3254,12 +3599,25 @@ let currentSelectedProductId = null;
         async function commitVariationPanel(row, listEl) {
             if (!row) return false;
             const listId = (listEl && listEl.id) || row.closest('[id$="VariationsList"]')?.id || 'createProductVariationsList';
-            const mode = listId === 'planProductVariationsList' ? 'plan' : 'build';
+            const mode = listId === 'planProductVariationsList'
+                ? 'plan'
+                : (listId === 'retailProductVariationsList' ? 'retail' : 'build');
             const isBuildFromPlanned = document.getElementById('addProductForm')?.getAttribute('data-build-from-planned') === '1';
 
             if (mode === 'plan') {
                 if (!rowQualifiesForPlanVariationCommit(row)) {
                     showCustomPopup('Enter variation name or color/type, and add a main image.', true);
+                    return false;
+                }
+            } else if (mode === 'retail') {
+                const qtyEl = row.querySelector('.create-variation-quantity');
+                const quantity = qtyEl ? parseInt(qtyEl.value, 10) : 0;
+                const mainInput = row.querySelector('.create-variation-main-image');
+                const hasExistingImage = row.dataset.hasExistingImage === '1';
+                const hasNewImage = !!getVariationMainImageFile(listId, row, mainInput);
+                const name = resolvePlanVariationDisplayNameFromRow(row);
+                if (!name || !quantity || quantity <= 0 || !(hasExistingImage || hasNewImage)) {
+                    showCustomPopup('Enter color or type, quantity of at least 1, and a main image.', true);
                     return false;
                 }
             } else if (mode === 'build' && isBuildFromPlanned) {
@@ -3304,14 +3662,79 @@ let currentSelectedProductId = null;
         }
 
         function sanitizeCreateProductPriceRaw(str) {
-            let v = String(str || '').replace(/[^\d.]/g, '');
-            const dot = v.indexOf('.');
-            if (dot !== -1) {
-                v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, '');
-                const dec = v.slice(dot + 1);
-                if (dec.length > 2) v = v.slice(0, dot + 3);
+            // Comma = thousands separator, dot = decimal separator (e.g. 1,234.56).
+            let s = String(str || '').replace(/[^\d.,]/g, '');
+            if (!s) return s;
+
+            // Allow "1234,56" while typing — treat as decimal comma.
+            if (!s.includes('.') && s.includes(',')) {
+                const lastComma = s.lastIndexOf(',');
+                const after = s.slice(lastComma + 1);
+                const before = s.slice(0, lastComma);
+                if (/^\d{1,2}$/.test(after) && /^\d*$/.test(before.replace(/,/g, ''))) {
+                    s = before.replace(/,/g, '') + '.' + after;
+                }
             }
-            return v;
+
+            const dot = s.indexOf('.');
+            if (dot === -1) {
+                const digits = s.replace(/,/g, '').replace(/[^\d]/g, '');
+                if (!digits) return '';
+                return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            }
+
+            let intPart = s.slice(0, dot).replace(/,/g, '').replace(/[^\d]/g, '');
+            let decPart = s.slice(dot + 1).replace(/,/g, '').replace(/[^\d]/g, '');
+            if (decPart.length > 2) decPart = decPart.slice(0, 2);
+            intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            return intPart + '.' + decPart;
+        }
+
+        function parseLocalePrice(str) {
+            const raw = String(str || '').trim();
+            if (!raw) return NaN;
+            let s = raw.replace(/\s/g, '').replace(/[^\d.,-]/g, '');
+            if (!s) return NaN;
+
+            if (s.includes('.')) {
+                const n = parseFloat(s.replace(/,/g, ''));
+                return Number.isFinite(n) ? n : NaN;
+            }
+
+            const lastComma = s.lastIndexOf(',');
+            if (lastComma !== -1) {
+                const after = s.slice(lastComma + 1);
+                if (/^\d{1,2}$/.test(after)) {
+                    const n = parseFloat(s.slice(0, lastComma).replace(/,/g, '') + '.' + after);
+                    return Number.isFinite(n) ? n : NaN;
+                }
+            }
+
+            const n = parseFloat(s.replace(/,/g, ''));
+            return Number.isFinite(n) ? n : NaN;
+        }
+
+        function readPriceFromInput(el, allowZero) {
+            if (!el) return null;
+            const priceVal = parseLocalePrice(el.value);
+            if (!Number.isFinite(priceVal)) return null;
+            if (allowZero) return priceVal >= 0 ? priceVal : null;
+            return priceVal > 0 ? priceVal : null;
+        }
+
+        function normalizePriceFieldsBeforeSubmit(saleEl, costEl) {
+            if (saleEl) formatCreateProductPriceAuto(saleEl);
+            if (costEl) formatCreateProductPriceAuto(costEl);
+            const sale = readPriceFromInput(saleEl, false);
+            const cost = readPriceFromInput(costEl, true);
+            if (saleEl && Number.isFinite(sale)) setPriceInputSubmitValue(saleEl, sale);
+            if (costEl && Number.isFinite(cost)) setPriceInputSubmitValue(costEl, cost);
+            return { sale, cost };
+        }
+
+        function formatLocalePrice(num) {
+            if (!Number.isFinite(num)) return '';
+            return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
         function formatCreateProductPriceAuto(el) {
@@ -3322,13 +3745,18 @@ let currentSelectedProductId = null;
                 return;
             }
             if (v.endsWith('.')) v = v.slice(0, -1);
-            const num = parseFloat(v);
-            if (Number.isFinite(num)) el.value = num.toFixed(2);
+            const num = parseLocalePrice(v);
+            if (Number.isFinite(num)) el.value = formatLocalePrice(num);
+        }
+
+        function setPriceInputSubmitValue(el, num) {
+            if (el && Number.isFinite(num)) el.value = num.toFixed(2);
         }
 
         function bindProductPriceInput(el) {
             if (!el || el.dataset.priceBound === '1') return;
             el.dataset.priceBound = '1';
+            el.removeAttribute('data-auto-price');
             el.addEventListener('input', function () {
                 const v = sanitizeCreateProductPriceRaw(el.value);
                 if (el.value !== v) el.value = v;
@@ -3348,29 +3776,32 @@ let currentSelectedProductId = null;
             bindProductPriceInput(document.getElementById('createProductCostPrice'));
             bindProductPriceInput(document.getElementById('planProductPrice'));
             bindProductPriceInput(document.getElementById('planProductCostPrice'));
+            bindProductPriceInput(document.getElementById('retailProductPrice'));
+            bindProductPriceInput(document.getElementById('retailProductCostPrice'));
         }
 
         function formatPhpMoney(amount) {
             const n = Number(amount);
             if (!Number.isFinite(n)) return 'N/A';
-            return '₱' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return '₱' + formatLocalePrice(n);
         }
 
         function getProductUnitPriceFromEl(el, allowZero) {
             if (!el) return null;
             formatCreateProductPriceAuto(el);
-            const priceVal = parseFloat(el.value);
-            if (Number.isNaN(priceVal)) return null;
-            if (allowZero) return priceVal >= 0 ? priceVal : null;
-            return priceVal > 0 ? priceVal : null;
+            return readPriceFromInput(el, allowZero);
         }
 
         function validateSaleCostPair(saleEl, costEl) {
-            const sale = getProductUnitPriceFromEl(saleEl);
-            const cost = getProductUnitPriceFromEl(costEl, true);
+            if (saleEl) formatCreateProductPriceAuto(saleEl);
+            if (costEl) formatCreateProductPriceAuto(costEl);
+            const sale = readPriceFromInput(saleEl, false);
+            const cost = readPriceFromInput(costEl, true);
             if (sale == null) return 'Enter a sale price greater than zero.';
             if (cost == null) return 'Enter an item cost price of zero or greater.';
-            if (cost > sale) return 'Item cost price cannot be higher than the sale price.';
+            const saleCents = Math.round(sale * 100);
+            const costCents = Math.round(cost * 100);
+            if (costCents > saleCents) return 'Item cost price cannot be higher than the sale price.';
             return null;
         }
 
@@ -3449,6 +3880,48 @@ let currentSelectedProductId = null;
                     price: unitPrice,
                     thumbCount: 0,
                     hasMainImage: hasNewImage || hasExistingImage,
+                    hasNewMainImage: hasNewImage,
+                    hasModel3d: false
+                };
+                if (variationId) entry.variationId = variationId;
+                if (isBuildFromPlanned) {
+                    entry.requiredMaterials = getVariationPanelRequiredMaterials(row);
+                    const bundleSel = row.querySelector('.variation-bom-bundle-select');
+                    if (bundleSel && bundleSel.value) {
+                        entry.bomBundleId = parseInt(bundleSel.value, 10) || null;
+                    }
+                }
+                variations.push(entry);
+            });
+            return variations;
+        }
+
+        function collectRetailProductVariations() {
+            const unitPrice = getProductUnitPriceFromEl(document.getElementById('retailProductPrice'));
+            const rows = document.querySelectorAll('#retailProductVariationsList .pi-plan-var-panel');
+            const variations = [];
+            rows.forEach(function(row) {
+                const name = resolvePlanVariationDisplayNameFromRow(row);
+                const color = row.querySelector('.create-variation-color')?.value?.trim() || '';
+                const shape = row.querySelector('.create-variation-shape')?.value?.trim() || '';
+                const variationType = row.querySelector('.create-variation-type')?.value?.trim() || '';
+                const qtyEl = row.querySelector('.create-variation-quantity');
+                const quantity = qtyEl ? parseInt(qtyEl.value, 10) : 0;
+                const mainInput = row.querySelector('.create-variation-main-image');
+                const variationId = parseInt(row.dataset.variationId, 10) || 0;
+                const hasExistingImage = row.dataset.hasExistingImage === '1';
+                const hasNewImage = !!getVariationMainImageFile('retailProductVariationsList', row, mainInput);
+                if (!name || unitPrice == null || !quantity || quantity <= 0) return;
+                if (!(hasExistingImage || hasNewImage)) return;
+                const entry = {
+                    variationName: name,
+                    color: color,
+                    shape: shape,
+                    variationType: variationType,
+                    quantity: quantity,
+                    price: unitPrice,
+                    thumbCount: 0,
+                    hasMainImage: hasExistingImage || hasNewImage,
                     hasNewMainImage: hasNewImage,
                     hasModel3d: false
                 };
@@ -3877,6 +4350,15 @@ let currentSelectedProductId = null;
             syncCreateRequiredMaterialsHidden();
         }
 
+        function refreshMaterialRowSummary(materialRow) {
+            const panel = materialRow && materialRow.closest ? materialRow.closest('.pi-plan-var-panel') : null;
+            if (panel && panel.querySelector('.variation-materials-container')) {
+                updateVariationPanelMaterialsSummary(panel);
+            } else {
+                updateCreateInventoryMaterialsSummary();
+            }
+        }
+
         function createCreateInventoryMaterialRow(selectedMaterialId = null, quantityRequired = 1) {
             const materialRow = document.createElement('div');
             materialRow.className = 'material-row';
@@ -3887,14 +4369,14 @@ let currentSelectedProductId = null;
                 optionsHtml += '<option value="' + material.id + '"' + (selectedMaterialId == material.id ? ' selected' : '') + '>' + formatMaterialOptionLabel(material) + '</option>';
             });
             select.innerHTML = optionsHtml;
-            select.addEventListener('change', updateCreateInventoryMaterialsSummary);
+            select.addEventListener('change', function() { refreshMaterialRowSummary(materialRow); });
             const quantityInput = document.createElement('input');
             quantityInput.type = 'number';
             quantityInput.className = 'material-quantity';
             quantityInput.placeholder = 'Qty per unit';
             quantityInput.min = '1';
             quantityInput.value = quantityRequired;
-            quantityInput.addEventListener('input', updateCreateInventoryMaterialsSummary);
+            quantityInput.addEventListener('input', function() { refreshMaterialRowSummary(materialRow); });
             const removeButton = document.createElement('button');
             removeButton.type = 'button';
             removeButton.className = 'remove-material-btn';
@@ -3903,7 +4385,7 @@ let currentSelectedProductId = null;
             removeButton.setAttribute('aria-label', 'Remove material');
             removeButton.addEventListener('click', () => {
                 materialRow.remove();
-                updateCreateInventoryMaterialsSummary();
+                refreshMaterialRowSummary(materialRow);
             });
             materialRow.appendChild(select);
             materialRow.appendChild(quantityInput);
@@ -4144,15 +4626,14 @@ let currentSelectedProductId = null;
                 persistAllCreateVariationPanels();
                 const saleEl = document.getElementById('createProductPrice');
                 const costEl = document.getElementById('createProductCostPrice');
+                normalizePriceFieldsBeforeSubmit(saleEl, costEl);
                 const priceValidation = validateSaleCostPair(saleEl, costEl);
                 if (priceValidation) {
                     showCustomPopup(priceValidation, true);
                     return;
                 }
-                const unitPrice = getProductUnitPriceFromEl(saleEl);
-                const unitCost = getProductUnitPriceFromEl(costEl, true);
-                if (saleEl) saleEl.value = unitPrice.toFixed(2);
-                if (costEl) costEl.value = unitCost.toFixed(2);
+                const unitPrice = readPriceFromInput(saleEl, false);
+                const unitCost = readPriceFromInput(costEl, true);
                 const variations = collectCreateProductVariations();
                 const rowCount = document.querySelectorAll('#createProductVariationsList .pi-plan-var-panel').length;
                 const isBuildPlanned = document.getElementById('addProductForm')?.getAttribute('data-build-from-planned') === '1';
@@ -4169,18 +4650,33 @@ let currentSelectedProductId = null;
                 if (qtyField) qtyField.value = String(totalVariationQty);
                 if (jsonField) jsonField.value = JSON.stringify(variations);
 
-                const recipeMaterials = getCreateInventoryRequiredMaterials();
-                if (recipeMaterials.length === 0) {
-                    showCustomPopup('Select a raw materials bundle or add at least one raw material with quantity per unit.', true);
-                    return;
-                }
-                const materialsField = document.getElementById('requiredMaterials');
-                if (materialsField) materialsField.value = JSON.stringify(recipeMaterials);
-
-                const stockCheck = validateRecipeMaterialsStock(recipeMaterials, totalVariationQty);
-                if (!stockCheck.ok) {
-                    showCustomPopup(stockCheck.message, true);
-                    return;
+                if (isBuildPlanned) {
+                    for (let i = 0; i < variations.length; i += 1) {
+                        const v = variations[i];
+                        const mats = v.requiredMaterials || [];
+                        if (!mats.length) {
+                            showCustomPopup('Each variation needs its own raw materials recipe.', true);
+                            return;
+                        }
+                        const stockCheck = validateRecipeMaterialsStock(mats, v.quantity || 0);
+                        if (!stockCheck.ok) {
+                            showCustomPopup(stockCheck.message, true);
+                            return;
+                        }
+                    }
+                } else {
+                    const recipeMaterials = getCreateInventoryRequiredMaterials();
+                    if (recipeMaterials.length === 0) {
+                        showCustomPopup('Select a raw materials bundle or add at least one raw material with quantity per unit.', true);
+                        return;
+                    }
+                    const materialsField = document.getElementById('requiredMaterials');
+                    if (materialsField) materialsField.value = JSON.stringify(recipeMaterials);
+                    const stockCheck = validateRecipeMaterialsStock(recipeMaterials, totalVariationQty);
+                    if (!stockCheck.ok) {
+                        showCustomPopup(stockCheck.message, true);
+                        return;
+                    }
                 }
 
                 const formData = new FormData(this);
@@ -5285,7 +5781,7 @@ let currentSelectedProductId = null;
                 if (priceEl) {
                     const loadedPrice = variationData.Price != null ? parseFloat(variationData.Price) : NaN;
                     if (!Number.isNaN(loadedPrice) && loadedPrice > 0) {
-                        priceEl.value = loadedPrice.toFixed(2);
+                        priceEl.value = formatLocalePrice(loadedPrice);
                         priceEl.setAttribute('data-initial-price', loadedPrice.toFixed(2));
                     } else {
                         priceEl.value = '';
@@ -6631,9 +7127,21 @@ let currentSelectedProductId = null;
         });
 
         document.addEventListener('click', function(e) {
-            const btn = e.target.closest('.edit-plan-product-btn');
-            if (!btn) return;
-            const pid = parseInt(btn.getAttribute('data-product-id'), 10);
-            if (pid) openEditPlannedProductModal(pid);
+            if (e.target.closest('#addRetailProductBtn')) {
+                e.preventDefault();
+                openRetailProductModal();
+                return;
+            }
+            const planBtn = e.target.closest('.edit-plan-product-btn');
+            if (planBtn) {
+                const pid = parseInt(planBtn.getAttribute('data-product-id'), 10);
+                if (pid) openEditPlannedProductModal(pid);
+                return;
+            }
+            const retailBtn = e.target.closest('.edit-retail-product-btn');
+            if (retailBtn) {
+                const rid = parseInt(retailBtn.getAttribute('data-product-id'), 10);
+                if (rid) openEditRetailProductModal(rid);
+            }
         });
 })();

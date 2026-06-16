@@ -8,8 +8,8 @@
                 <input type="hidden" id="editVariationStatusInventoryProductID" name="inventoryProductID">
 
                 <div class="form-group variation-edit-name-row">
-                    <label for="editVariationStatusName">Variation Name</label>
-                    <input type="text" id="editVariationStatusName" name="variationName" readonly style="background-color: #f5f5f5;">
+                    <label for="editVariationStatusName">Variation</label>
+                    <input type="text" id="editVariationStatusName" name="variationName">
                 </div>
 
                 <div class="variation-status-edit-only">
@@ -51,10 +51,18 @@
                 <div class="variation-edit-inventory-details">
                     <div class="form-group pi-section">
                         <strong>Variation Details</strong>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:8px;">
                             <div>
-                                <label for="editVariationStatusSku">SKU</label>
-                                <input type="text" id="editVariationStatusSku" name="sku" placeholder="SKU">
+                                <label for="editVariationStatusColor">Color</label>
+                                <input type="text" id="editVariationStatusColor" name="color" placeholder="Color">
+                            </div>
+                            <div>
+                                <label for="editVariationStatusShape">Shape</label>
+                                <input type="text" id="editVariationStatusShape" name="shape" placeholder="Shape">
+                            </div>
+                            <div>
+                                <label for="editVariationStatusType">Type</label>
+                                <input type="text" id="editVariationStatusType" name="variationType" placeholder="Type">
                             </div>
                         </div>
                         <div class="variation-edit-main-image-wrap" style="margin-top:10px;">

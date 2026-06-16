@@ -198,11 +198,6 @@
             background: #f8f9fa;
         }
 
-        .review-id {
-            font-weight: 600;
-            color: #007bff;
-        }
-
         .customer-name {
             font-weight: 600;
             color: var(--text-dark);
@@ -404,7 +399,6 @@
                     <table class="reviews-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
                                 <th>Customer</th>
                                 <th>Product</th>
                                 <th>Rating</th>
@@ -416,7 +410,7 @@
                         </thead>
                         <tbody id="reviewsTableBody">
                             <tr>
-                                <td colspan="8" class="loading">Loading reviews...</td>
+                                <td colspan="7" class="loading">Loading reviews...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -493,11 +487,11 @@
                     updatePagination(data.pagination?.totalPages || 1);
                 } else {
                     console.error('Error loading reviews:', data.error);
-                    document.getElementById('reviewsTableBody').innerHTML = '<tr><td colspan="8" class="no-reviews">Error loading reviews</td></tr>';
+                    document.getElementById('reviewsTableBody').innerHTML = '<tr><td colspan="7" class="no-reviews">Error loading reviews</td></tr>';
                 }
             } catch (error) {
                 console.error('Error loading reviews:', error);
-                document.getElementById('reviewsTableBody').innerHTML = '<tr><td colspan="8" class="no-reviews">Error loading reviews</td></tr>';
+                document.getElementById('reviewsTableBody').innerHTML = '<tr><td colspan="7" class="no-reviews">Error loading reviews</td></tr>';
             }
         }
 
@@ -505,13 +499,12 @@
             const tbody = document.getElementById('reviewsTableBody');
             
             if (reviews.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="no-reviews">No reviews found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="no-reviews">No reviews found</td></tr>';
                 return;
             }
             
             tbody.innerHTML = reviews.map(review => `
                 <tr>
-                    <td class="review-id">${review.ReviewID}</td>
                     <td class="customer-name">${review.ReviewerName || 'Anonymous'}</td>
                     <td class="product-name">${review.ProductName}</td>
                     <td>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { getModel3dUrl } from '../../../shared/utils/imageUtils';
+import { getModel3dUrl, isLocalDevHost, resolveModelUrlForViewer } from '../../../shared/utils/imageUtils';
 import './ARViewer.css';
 
 // AR Viewer Modal Component using model-viewer
@@ -127,7 +127,9 @@ const ARViewer = ({ isOpen, onClose, product, modelPath }) => {
 
   if (!isOpen) return null;
 
-  const finalModelPath = modelPath || (product ? getModel3dUrl(product) : null);
+  const rawModelPath = modelPath || (product ? getModel3dUrl(product) : null);
+  const finalModelPath = rawModelPath ? resolveModelUrlForViewer(rawModelPath) : null;
+  const isLocalDev = isLocalDevHost();
 
   return (
     <div className="ar-viewer-overlay" onClick={onClose}>
@@ -157,7 +159,11 @@ const ARViewer = ({ isOpen, onClose, product, modelPath }) => {
               <circle cx="12" cy="12" r="10"/>
               <path d="M12 16v-4M12 8h.01"/>
             </svg>
-            <span>Point your camera at a flat surface to place the product</span>
+            <span>
+              {isLocalDev
+                ? 'On localhost: use the 3D viewer below, or click View in AR (Chrome WebXR on desktop).'
+                : 'Point your camera at a flat surface to place the product'}
+            </span>
           </div>
         </div>
 
@@ -180,8 +186,9 @@ const ARViewer = ({ isOpen, onClose, product, modelPath }) => {
               <h3>AR Unavailable</h3>
               <p>{arError}</p>
               <p className="ar-error-hint">
-                AR works best on mobile devices with ARCore (Android) or ARKit (iOS). 
-                Try opening this page on your phone for the best experience.
+                {isLocalDev
+                  ? 'Ensure the backend is running on port 5000 and this product has a .glb model. Refresh and try again.'
+                  : 'AR works best on mobile devices with ARCore (Android) or ARKit (iOS). Try opening this page on your phone for the best experience.'}
               </p>
             </div>
           )}

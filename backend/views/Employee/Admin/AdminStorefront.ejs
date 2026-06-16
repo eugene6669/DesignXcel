@@ -1251,6 +1251,13 @@
                             hasInventory: (product.TotalQuantity || 0) > 0
                         }))
                         : [];
+                    const retailStorefrontList = allProductsList.filter(function(p) {
+                        return String(p.ListingStage || '').toLowerCase() === 'retail';
+                    });
+                    const manufacturedStorefrontList = allProductsList.filter(function(p) {
+                        const stage = String(p.ListingStage || 'built').toLowerCase();
+                        return stage === 'built' || stage === '';
+                    });
                     const invPag = typeof pagination !== 'undefined' ? pagination : { page: 1, limit: 25, totalCount: 0, totalPages: 1 };
                     const invFilters = typeof listFilters !== 'undefined' ? listFilters : { search: '', category: '' };
                     const invCategories = typeof categories !== 'undefined' ? categories : [];
@@ -1318,8 +1325,9 @@
                     <div class="success-message"><%= success %></div>
                 <% } %>
 
+                <h2 class="pi-section-table-title" style="margin-top:16px;">Retail Products</h2>
                 <%- include('partials/product-listing-expandable', {
-                    allProductsList: allProductsList,
+                    allProductsList: retailStorefrontList,
                     invFilters: invFilters,
                     stockQtyClass: stockQtyClass,
                     formatListDate: formatListDate,
@@ -1340,7 +1348,35 @@
                     showSkuColumn: false,
                     qtyParentLabel: 'Available Stock',
                     variationQtyLabel: 'Available Stock',
-                    showStockLegend: false
+                    showStockLegend: false,
+                    emptyListMessage: 'No retail products on storefront.'
+                }) %>
+
+                <h2 class="pi-section-table-title" style="margin-top:32px;">Manufactured Products</h2>
+                <%- include('partials/product-listing-expandable', {
+                    allProductsList: manufacturedStorefrontList,
+                    invFilters: invFilters,
+                    stockQtyClass: stockQtyClass,
+                    formatListDate: formatListDate,
+                    showReturnColumns: false,
+                    showActions: true,
+                    showVariationActions: true,
+                    showAddVariationButton: false,
+                    showStorefront: true,
+                    showStorefrontInActions: true,
+                    showDiscount: true,
+                    showParentQty: false,
+                    showListingStage: false,
+                    showStorefrontStockSplit: true,
+                    parentSalePriceHeader: 'Item Total Sale Price',
+                    showParentPriceColumns: false,
+                    showParentItemCostColumn: false,
+                    showVariationItemCost: false,
+                    showSkuColumn: false,
+                    qtyParentLabel: 'Available Stock',
+                    variationQtyLabel: 'Available Stock',
+                    showStockLegend: false,
+                    emptyListMessage: 'No manufactured products on storefront.'
                 }) %>
 
                 <% if (invPag.totalPages > 1) { %>
@@ -1577,7 +1613,7 @@
     </script>
 
     <script src="/js/Employee/Admin/admin-modals.js?v=20260541" defer></script>
-    <script src="/js/Employee/Admin/product-inventory.js?v=20260573" defer></script>
+    <script src="/js/Employee/Admin/product-inventory.js?v=20260623" defer></script>
     <% if (locals.error && locals.error.length > 0) { %>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -1592,57 +1628,5 @@
         });
     </script>
     <% } %>
-    <script>
-    (function () {
-        function sanitizeCreatePrice(v) {
-            v = String(v || '').replace(/,/g, '').replace(/[^\d.]/g, '');
-            var dot = v.indexOf('.');
-            if (dot !== -1) {
-                v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, '');
-                if (v.length - dot - 1 > 2) v = v.slice(0, dot + 3);
-            }
-            return v;
-        }
-        function formatCreatePrice(el) {
-            if (!el) return;
-            var v = sanitizeCreatePrice(el.value);
-            if (!v || v === '.') { el.value = v; return; }
-            if (v.endsWith('.')) v = v.slice(0, -1);
-            var n = parseFloat(v);
-            if (isFinite(n)) el.value = n.toFixed(2);
-        }
-        function wireCreateProductPriceField(el) {
-            if (!el || el.getAttribute('data-auto-price') === '1') return;
-            el.setAttribute('data-auto-price', '1');
-            el.addEventListener('input', function () {
-                var v = sanitizeCreatePrice(el.value);
-                if (el.value !== v) el.value = v;
-            });
-            el.addEventListener('focusout', function () { formatCreatePrice(el); });
-            el.addEventListener('change', function () { formatCreatePrice(el); });
-            el.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') { formatCreatePrice(el); }
-            });
-        }
-        function wireCreateProductPrices() {
-            wireCreateProductPriceField(document.getElementById('createProductPrice'));
-            wireCreateProductPriceField(document.getElementById('createProductCostPrice'));
-        }
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', wireCreateProductPrices);
-        } else {
-            wireCreateProductPrices();
-        }
-        var addBtn = document.getElementById('addInventoryItemBtn');
-        if (addBtn) addBtn.addEventListener('click', function () { setTimeout(wireCreateProductPrices, 0); });
-        var form = document.getElementById('addProductForm');
-        if (form) {
-            form.addEventListener('submit', function () {
-                formatCreatePrice(document.getElementById('createProductPrice'));
-                formatCreatePrice(document.getElementById('createProductCostPrice'));
-            }, true);
-        }
-    })();
-    </script>
 </body>
 </html>

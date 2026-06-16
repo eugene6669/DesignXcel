@@ -34,13 +34,13 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1rem;
             flex-wrap: wrap;
-            gap: 1rem;
+            gap: 0.75rem;
         }
 
         .reports-header h2 {
-            font-size: 2rem;
+            font-size: 1.5rem;
             font-weight: 700;
             color: var(--text-dark);
             margin: 0;
@@ -57,19 +57,19 @@
         /* Tabs */
         .reports-tabs {
             display: flex;
-            gap: 0.5rem;
-            margin-bottom: 2rem;
+            gap: 0.25rem;
+            margin-bottom: 1rem;
             border-bottom: 2px solid var(--border-color);
             overflow-x: auto;
         }
 
         .tab-button {
-            padding: 0.875rem 1.5rem;
+            padding: 0.5rem 1rem;
             border: none;
             background: transparent;
             color: var(--text-light);
             font-weight: 600;
-            font-size: 0.95rem;
+            font-size: 0.8125rem;
             cursor: pointer;
             transition: all 0.2s ease;
             border-bottom: 3px solid transparent;
@@ -96,41 +96,45 @@
             stroke-width: 2;
         }
 
-        /* Filters Section */
+        /* Filters Section — compact for laptop 16:10 */
         .filters-section {
             background: #ffffff;
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1rem;
             box-shadow: var(--shadow-sm);
             border: 1px solid var(--border-color);
         }
 
         .filters-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1rem;
+            grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+            gap: 0.5rem 0.625rem;
+            margin-bottom: 0.5rem;
         }
 
         .filter-group {
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 0.2rem;
+            min-width: 0;
         }
 
         .filter-group label {
-            font-size: 0.875rem;
+            font-size: 0.6875rem;
             font-weight: 600;
             color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            line-height: 1.2;
         }
 
         .filter-group input,
         .filter-group select {
-            padding: 0.625rem 0.875rem;
+            padding: 0.375rem 0.5rem;
             border: 1px solid var(--border-color);
-            border-radius: 8px;
-            font-size: 0.875rem;
+            border-radius: 6px;
+            font-size: 0.8125rem;
             transition: all 0.2s ease;
             background: #ffffff;
             color: var(--text-dark);
@@ -146,17 +150,17 @@
 
         .filter-actions {
             display: flex;
-            gap: 0.75rem;
-            align-items: flex-end;
+            gap: 0.5rem;
+            align-items: center;
             flex-wrap: wrap;
         }
 
         .btn-filter {
-            padding: 0.625rem 1.25rem;
+            padding: 0.4rem 0.75rem;
             border: none;
-            border-radius: 8px;
+            border-radius: 6px;
             font-weight: 600;
-            font-size: 0.875rem;
+            font-size: 0.75rem;
             cursor: pointer;
             transition: all 0.2s ease;
             display: inline-flex;
@@ -315,8 +319,8 @@
         /* Reports Table */
         .reports-table-section {
             background: #ffffff;
-            border-radius: 12px;
-            padding: 1.5rem;
+            border-radius: 8px;
+            padding: 1rem;
             box-shadow: var(--shadow-sm);
             border: 1px solid var(--border-color);
             overflow-x: auto;
@@ -351,15 +355,219 @@
             background: var(--primary-dark);
         }
 
-        /* Sales Table Container - Horizontal Scroll */
+        /* Sales summary — separate section + Excel-style detail table */
+        .reports-stats-section {
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 0.875rem 1rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+        }
+
+        .stats-section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin: 0 0 0.625rem 0;
+            font-family: var(--font-display);
+            letter-spacing: -0.01em;
+        }
+
+        .stats-detail-table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            margin-top: 0.75rem;
+        }
+
+        .excel-stats-table {
+            width: max-content;
+            min-width: 100%;
+            max-width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8125rem;
+            table-layout: auto;
+            font-family: 'Segoe UI', var(--font-primary), sans-serif;
+        }
+
+        .excel-stats-table th,
+        .excel-stats-table td {
+            border: 1px solid #d1d5db;
+            padding: 0.3rem 0.55rem;
+            vertical-align: middle;
+        }
+
+        .excel-stats-table thead th {
+            background: #f3f4f6;
+            font-weight: 600;
+            color: #374151;
+            text-transform: none;
+            letter-spacing: 0;
+            font-size: 0.75rem;
+            white-space: nowrap;
+        }
+
+        .excel-stats-table tbody tr:nth-child(even) {
+            background: #f9fafb;
+        }
+
+        .excel-stats-table tbody tr:hover {
+            background: #f3f4f6;
+        }
+
+        .excel-stats-table .col-metric {
+            font-weight: 500;
+            color: #374151;
+            white-space: nowrap;
+        }
+
+        .excel-stats-table .col-formula {
+            color: #6b7280;
+            font-size: 0.75rem;
+            font-weight: 400;
+            line-height: 1.4;
+            white-space: normal;
+            word-wrap: break-word;
+            max-width: 16rem;
+        }
+
+        .excel-stats-table .col-status {
+            color: #374151;
+            font-size: 0.75rem;
+            font-weight: 500;
+            line-height: 1.4;
+            white-space: normal;
+            word-wrap: break-word;
+            max-width: 18rem;
+        }
+
+        .excel-stats-table .col-value {
+            text-align: right;
+            font-weight: 600;
+            color: #111827;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        /* Sales orders table — compact, wrapped (matches export layout) */
         #sales-table-container {
             width: 100%;
             overflow-x: auto;
             overflow-y: visible;
-            margin-top: 1.5rem;
+            margin-top: 1rem;
             -webkit-overflow-scrolling: touch;
             scrollbar-width: thin;
             scrollbar-color: var(--primary-color) var(--bg-light);
+        }
+
+        #sales-table-container #sales-table.excel-report-table {
+            width: 100%;
+            min-width: 0;
+            border-collapse: collapse;
+            table-layout: auto;
+            font-size: 0.8125rem;
+            font-family: 'Segoe UI', var(--font-primary), sans-serif;
+        }
+
+        #sales-table-container #sales-table.excel-report-table th,
+        #sales-table-container #sales-table.excel-report-table td {
+            border: 1px solid #d1d5db;
+            padding: 0.4rem 0.55rem;
+            vertical-align: top;
+            line-height: 1.4;
+            white-space: normal;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        #sales-table-container #sales-table.excel-report-table thead th {
+            background: #f3f4f6;
+            font-weight: 600;
+            color: #374151;
+            text-transform: none;
+            letter-spacing: 0;
+            font-size: 0.75rem;
+            white-space: nowrap;
+        }
+
+        #sales-table-container #sales-table.excel-report-table tbody tr:nth-child(even) {
+            background: #f9fafb;
+        }
+
+        #sales-table-container #sales-table.excel-report-table tbody tr:hover {
+            background: #f3f4f6;
+        }
+
+        #sales-table-container #sales-table.excel-report-table .col-num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        #sales-table-container #sales-table.excel-report-table .col-products {
+            min-width: 10rem;
+            max-width: 14rem;
+        }
+
+        #sales-table-container #sales-table.excel-report-table .col-customer {
+            min-width: 6rem;
+            max-width: 9rem;
+        }
+
+        #sales-table-container #sales-table.excel-report-table .col-email {
+            min-width: 7rem;
+            max-width: 11rem;
+            font-size: 0.75rem;
+        }
+
+        .sales-table-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.5rem 0.75rem;
+            margin-top: 0.625rem;
+            padding: 0.375rem 0;
+            font-size: 0.8125rem;
+            color: var(--text-light);
+        }
+
+        .sales-table-pagination-info {
+            font-weight: 500;
+        }
+
+        .sales-table-pagination-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .sales-page-btn {
+            padding: 0.35rem 0.65rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: #fff;
+            color: var(--text-dark);
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: var(--font-primary);
+        }
+
+        .sales-page-btn:hover:not(:disabled) {
+            border-color: var(--primary-color);
+            color: var(--primary-dark);
+        }
+
+        .sales-page-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .sales-page-btn.is-active {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: #fff;
         }
 
         /* Custom scrollbar for Webkit browsers (Chrome, Safari, Edge) */
@@ -382,45 +590,73 @@
             background: var(--primary-dark);
         }
 
-        #sales-table-container #sales-table {
-            min-width: 1200px; /* Ensure table has minimum width to trigger scroll */
-        }
-
         .reports-stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 0.875rem;
-            margin-bottom: 1.5rem;
+            grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+            gap: 0.5rem;
+            margin-bottom: 0;
+        }
+
+        .reports-stats-section #sales-stats.reports-stats {
+            grid-template-columns: repeat(auto-fill, minmax(152px, 1fr));
+            gap: 0.625rem;
         }
 
         .stat-card {
             background: linear-gradient(135deg, rgba(240, 178, 27, 0.1) 0%, rgba(240, 178, 27, 0.05) 100%);
             border: 1px solid rgba(240, 178, 27, 0.2);
-            border-radius: 10px;
-            padding: 1rem;
+            border-radius: 8px;
+            padding: 0.5rem 0.625rem;
             display: flex;
             flex-direction: column;
-            gap: 0.375rem;
+            gap: 0.15rem;
+            min-width: 0;
+        }
+
+        .reports-stats-section #sales-stats .stat-card {
+            padding: 0.75rem 0.875rem;
+            min-height: 4.25rem;
+            border-radius: 10px;
+        }
+
+        .reports-stats-section #sales-stats .stat-label {
+            font-size: 0.75rem;
+        }
+
+        .reports-stats-section #sales-stats .stat-value {
+            font-size: 1.25rem;
+        }
+
+        .stat-card .stat-formula-hint {
+            font-size: 0.65rem;
+            color: #6b7280;
+            line-height: 1.35;
+            margin-top: 0.2rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
 
         .stat-label {
-            font-size: 0.8125rem;
+            font-size: 0.6875rem;
             font-weight: 600;
             color: var(--text-light);
-            line-height: 1.3;
+            line-height: 1.25;
         }
 
         .stat-value {
-            font-size: 1.5rem;
+            font-size: 1.0625rem;
             font-weight: 700;
             color: var(--text-dark);
             font-family: var(--font-display);
             line-height: 1.2;
+            font-variant-numeric: tabular-nums;
         }
 
         .stat-icon {
-            width: 36px;
-            height: 36px;
+            width: 28px;
+            height: 28px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -430,8 +666,31 @@
         }
         
         .stat-icon svg {
-            width: 18px;
-            height: 18px;
+            width: 14px;
+            height: 14px;
+        }
+
+        .reports-stats-section .stat-icon {
+            display: none;
+        }
+
+        .reports-stats-section .stat-card {
+            padding: 0.45rem 0.55rem;
+        }
+
+        @media (max-height: 920px) {
+            .reports-page .charts-section {
+                padding: 0.875rem;
+                margin-bottom: 1rem;
+            }
+            .reports-page .inventory-section {
+                padding: 0.875rem;
+                margin-bottom: 1rem;
+            }
+            .reports-page #inventory-chart,
+            .reports-page #sales-revenue-chart {
+                height: 200px;
+            }
         }
 
         table {
@@ -755,13 +1014,13 @@
                 -webkit-overflow-scrolling: touch;
             }
 
-            #sales-table-container #sales-table {
-                min-width: 1000px; /* Slightly smaller min-width for mobile */
+            #sales-table-container {
+                overflow-x: auto;
             }
         }
     </style>
 </head>
-<body>
+<body class="reports-page">
     <div class="dashboard-container">
         <div class="sidebar">
             <%- include('partials/sidebar', { activePage: 'reports' }) %>
@@ -873,9 +1132,11 @@
                         </button>
                     </div>
                 </div>
-                <div class="reports-table-section">
+                <div class="reports-stats-section">
+                    <h3 class="stats-section-title">Inventory summary</h3>
                     <div class="reports-stats" id="inventory-stats"></div>
-                    
+                </div>
+                <div class="reports-table-section">
                     <!-- Charts Section -->
                     <div class="charts-section">
                         <div class="chart-container">
@@ -905,7 +1166,6 @@
                             <table id="inventory-table">
                                 <thead>
                                     <tr>
-                                        <th>Type</th>
                                         <th>Product Name</th>
                                         <th>SKU</th>
                                         <th>Category</th>
@@ -918,7 +1178,7 @@
                                 </thead>
                                 <tbody id="inventory-tbody">
                                     <tr>
-                                        <td colspan="9" class="loading">Loading inventory data...</td>
+                                        <td colspan="8" class="loading">Loading inventory data...</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1029,61 +1289,51 @@
                                 <polyline points="7 10 12 15 17 10"/>
                                 <line x1="12" y1="15" x2="12" y2="3"/>
                             </svg>
-                            Export CSV
+                            Export Excel
                         </button>
                     </div>
                 </div>
+                <div class="reports-stats-section" id="sales-stats-section">
+                    <h3 class="stats-section-title">Sales summary</h3>
+                    <div class="reports-stats" id="sales-stats"></div>
+                    <div id="stats-table-container" class="stats-detail-table-wrap">
+                        <table id="stats-table" class="excel-stats-table sales-summary-stats-table">
+                            <thead id="stats-thead">
+                                <tr>
+                                    <th class="col-metric">Metric</th>
+                                    <th class="col-formula">Formula</th>
+                                    <th class="col-status">Order Status</th>
+                                    <th class="col-value">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stats-tbody">
+                                <tr>
+                                    <td colspan="4" style="padding: 0.75rem; text-align: center; color: #6b7280;">Loading statistics…</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
                 <div class="reports-table-section">
-                    <details style="background: #ffffff; border-radius: 12px; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e5e7eb;">
-                        <summary class="section-title" style="display: flex; align-items: center; gap: 0.5rem; padding: 1.5rem; cursor: pointer; list-style: none;">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                <polyline points="14 2 14 8 20 8"/>
-                                <line x1="16" y1="13" x2="8" y2="13"/>
-                                <line x1="16" y1="17" x2="8" y2="17"/>
-                                <polyline points="10 9 9 9 8 9"/>
-                            </svg>
-                            Sales Report Statistics
-                        </summary>
-                        <div style="padding: 0 1.5rem 1.5rem;">
-                            <div class="reports-stats" id="sales-stats"></div>
-                            <div id="stats-table-container" style="width: 100%; overflow-x: auto; margin-top: 1rem;">
-                                <table id="stats-table" class="sales-summary-stats-table" style="width: 100%; border-collapse: collapse; min-width: 360px;">
-                                    <thead id="stats-thead">
-                                        <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
-                                            <th style="padding: 0.75rem; text-align: left;">Metric</th>
-                                            <th style="padding: 0.75rem; text-align: right;">Value</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="stats-tbody">
-                                        <tr>
-                                            <td colspan="2" style="padding: 1rem; text-align: center; color: #6b7280;">Loading statistics…</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </details>
-                    
-                    <!-- Sales Table Container - moved above charts -->
-                    <div id="sales-table-container">
-                        <table id="sales-table">
+                    <!-- Sales Table Container -->
+                    <div id="sales-table-container" class="sales-orders-table-wrap">
+                        <table id="sales-table" class="excel-report-table">
                             <thead>
                                 <tr>
                                     <th>Order ID</th>
                                     <th>Reference</th>
-                                    <th>Customer</th>
-                                    <th>Email</th>
+                                    <th class="col-customer">Customer</th>
+                                    <th class="col-email">Email</th>
                                     <th>Order Date</th>
                                     <th>Status</th>
-                                    <th>Order Items</th>
-                                    <th>Products and Qty</th>
-                                    <th>Subtotal</th>
-                                    <th>Extra Delivery</th>
-                                    <th>Delivery</th>
-                                    <th>Total Amount</th>
-                                    <th>Discounts</th>
-                                    <th>Payment Method</th>
+                                    <th>Items</th>
+                                    <th class="col-products">Products and Qty</th>
+                                    <th class="col-num">Subtotal</th>
+                                    <th class="col-num">Extra Del.</th>
+                                    <th class="col-num">Delivery</th>
+                                    <th class="col-num">Total</th>
+                                    <th class="col-num">Discounts</th>
+                                    <th>Payment</th>
                                 </tr>
                             </thead>
                             <tbody id="sales-tbody">
@@ -1093,6 +1343,7 @@
                             </tbody>
                         </table>
                     </div>
+                    <div id="sales-table-pagination" class="sales-table-pagination" aria-label="Sales orders pagination"></div>
                     
                     <!-- Sales Statistics Charts -->
                     <div class="charts-section" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
@@ -1191,9 +1442,11 @@
                         </button>
                     </div>
                 </div>
-                <div class="reports-table-section">
+                <div class="reports-stats-section">
+                    <h3 class="stats-section-title">Masterlist summary</h3>
                     <div class="reports-stats" id="masterlist-stats"></div>
-                    
+                </div>
+                <div class="reports-table-section">
                     <!-- Users Table (Employees/Admins) -->
                     <div class="inventory-section">
                         <h3 class="section-title">
@@ -1322,6 +1575,31 @@
     </div>
 
     <script>
+        const SALES_METRIC_FORMULAS = <%- JSON.stringify(typeof salesReportMetricFormulas !== 'undefined' ? salesReportMetricFormulas : {}) %>;
+        const SALES_METRIC_DEFINITIONS = <%- JSON.stringify(typeof salesReportMetricDefinitions !== 'undefined' ? salesReportMetricDefinitions : {}) %>;
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function metricFormulaForLabel(label) {
+            if (SALES_METRIC_DEFINITIONS[label] && SALES_METRIC_DEFINITIONS[label].formula) {
+                return SALES_METRIC_DEFINITIONS[label].formula;
+            }
+            return SALES_METRIC_FORMULAS[label] || '';
+        }
+
+        function metricStatusesForLabel(label) {
+            if (SALES_METRIC_DEFINITIONS[label] && SALES_METRIC_DEFINITIONS[label].statuses) {
+                return SALES_METRIC_DEFINITIONS[label].statuses;
+            }
+            return '';
+        }
+
         // Tab switching
         function switchTab(tabName) {
             // Update tab buttons
@@ -1371,12 +1649,12 @@
                     renderInventoryChart(data.stats);
                 } else {
                     document.getElementById('inventory-tbody').innerHTML = 
-                        `<tr><td colspan="9" class="empty-state">${data.error || 'Error loading inventory data'}</td></tr>`;
+                        `<tr><td colspan="8" class="empty-state">${data.error || 'Error loading inventory data'}</td></tr>`;
                 }
             } catch (error) {
                 console.error('Error loading inventory:', error);
                 document.getElementById('inventory-tbody').innerHTML = 
-                    `<tr><td colspan="9" class="empty-state">Error loading inventory data</td></tr>`;
+                    `<tr><td colspan="8" class="empty-state">Error loading inventory data</td></tr>`;
             }
         }
 
@@ -1407,7 +1685,7 @@
         function renderInventoryTable(data) {
             const tbody = document.getElementById('inventory-tbody');
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No inventory data found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No inventory data found</td></tr>';
                 return;
             }
 
@@ -1429,7 +1707,6 @@
                     : '<span style="display:inline-block;width:18px;"></span>';
                 rowsHtml.push(`
                     <tr class="inv-parent-row" data-parent-id="${pid}">
-                        <td><span class="badge badge-success">Parent</span></td>
                         <td>${toggleBtn}<strong>${parent.Name || 'N/A'}</strong>${hasChildren ? ` <span style="color:#6b7280;font-size:0.85em;">(${variations.length} variation${variations.length === 1 ? '' : 's'})</span>` : ''}</td>
                         <td>—</td>
                         <td>${parent.CategoryName || 'N/A'}</td>
@@ -1444,7 +1721,6 @@
                     variations.forEach(v => {
                         rowsHtml.push(`
                             <tr class="inv-var-row" data-parent-id="${pid}" style="display:none;">
-                                <td><span class="badge badge-info">Variation</span></td>
                                 <td><span style="padding-left:28px;color:#555;">↳ ${v.Name || 'N/A'}</span></td>
                                 <td>${v.SKU || '—'}</td>
                                 <td>${v.CategoryName || parent.CategoryName || 'N/A'}</td>
@@ -1791,6 +2067,10 @@
 
         // Sales Report Functions
         let salesFilters = {};
+        const SALES_ORDERS_PAGE_SIZE = 10;
+        let salesOrdersCache = [];
+        let salesOrdersPage = 1;
+
         async function loadSalesData() {
             try {
                 const params = new URLSearchParams(salesFilters);
@@ -1798,7 +2078,9 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    renderSalesTable(data.data);
+                    salesOrdersCache = data.data || [];
+                    salesOrdersPage = 1;
+                    renderSalesTablePage();
                     renderSalesStats(data.stats);
                     const salesMeta = document.getElementById('stats-table-container');
                     if (salesMeta) {
@@ -1807,14 +2089,22 @@
                     }
                     renderSalesCharts(data.stats, data.revenueComposition);
                 } else {
+                    salesOrdersCache = [];
+                    salesOrdersPage = 1;
                     document.getElementById('sales-tbody').innerHTML = 
                         `<tr><td colspan="14" class="empty-state">${data.error || 'Error loading sales data'}</td></tr>`;
+                    const paginationEl = document.getElementById('sales-table-pagination');
+                    if (paginationEl) paginationEl.innerHTML = '';
                 }
                 return data;
             } catch (error) {
                 console.error('Error loading sales:', error);
+                salesOrdersCache = [];
+                salesOrdersPage = 1;
                 document.getElementById('sales-tbody').innerHTML = 
                     `<tr><td colspan="14" class="empty-state">Error loading sales data</td></tr>`;
+                const paginationEl = document.getElementById('sales-table-pagination');
+                if (paginationEl) paginationEl.innerHTML = '';
                 return { success: false };
             }
         }
@@ -1863,18 +2153,8 @@
                     + Number(stats.deliveryRevenueGross || stats.deliveryRevenue || 0);
             }},
             { key: 'deliveryRevenueGross', alt: 'deliveryRevenue', currency: true, label: 'Delivery Revenue' },
-            { key: 'originalDeliveryCost', currency: true, label: 'Original Delivery Cost' },
-            { key: 'returnPickupCost', currency: true, label: 'Return Pick-Up Cost' },
-            { key: 'replacementDeliveryCost', currency: true, label: 'Replacement Delivery Cost' },
-            { label: 'Total Delivery Expense', currency: true, compute: function(stats) {
-                if (stats.totalDeliveryExpense != null) return Number(stats.totalDeliveryExpense);
-                if (stats.deliveryExpense != null) return Number(stats.deliveryExpense);
-                return Number(stats.originalDeliveryCost || 0)
-                    + Number(stats.returnPickupCost || 0)
-                    + Number(stats.replacementDeliveryCost || 0);
-            }},
             { label: 'Refunds', currency: true, compute: function(stats) {
-                return Number(stats.productRefunds || 0) + Number(stats.deliveryRefunds || 0);
+                return Number(stats.productRefunds || stats.salesReturns || 0) + Number(stats.deliveryRefunds || 0);
             }},
             { key: 'netRevenue', currency: true, label: 'Net Revenue' },
             { key: 'cogs', currency: true, label: 'COGS' },
@@ -1894,17 +2174,109 @@
         function buildSalesSummaryTableRows(stats) {
             return SALES_SUMMARY_ROWS.map(function(row) {
                 const val = resolveSalesSummaryValue(stats, row);
+                const formula = row.formula || metricFormulaForLabel(row.label) || '';
+                const statuses = row.statuses || metricStatusesForLabel(row.label) || '';
                 return [
                     row.label,
+                    formula,
+                    statuses,
                     formatSalesSummaryRowValue(val, { currency: row.currency, percent: row.percent })
                 ];
             });
         }
 
+        function autofitExcelStatsTable() {
+            const table = document.getElementById('stats-table');
+            if (!table || !table.tBodies[0]) return;
+            const rows = table.tBodies[0].rows;
+            if (!rows.length) return;
+            const colMax = [0, 0, 0, 0];
+            const probe = document.createElement('span');
+            probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font:400 0.8125rem Segoe UI, Inter, sans-serif';
+            document.body.appendChild(probe);
+            for (let i = 0; i < rows.length; i++) {
+                const cells = rows[i].cells;
+                if (cells.length < 4 || rows[i].querySelector('[colspan]')) continue;
+                for (let c = 0; c < 4; c++) {
+                    probe.style.fontWeight = c === 0 ? '600' : '400';
+                    probe.textContent = cells[c].textContent;
+                    colMax[c] = Math.max(colMax[c], probe.offsetWidth);
+                }
+            }
+            document.body.removeChild(probe);
+            const pad = [24, 16, 16, 24];
+            table.style.width = 'max-content';
+            table.style.minWidth = '100%';
+            const selectors = [
+                '.col-metric, tbody td:nth-child(1)',
+                '.col-formula, tbody td:nth-child(2)',
+                '.col-status, tbody td:nth-child(3)',
+                '.col-value, tbody td:nth-child(4)'
+            ];
+            selectors.forEach(function(sel, idx) {
+                if (colMax[idx] > 0) {
+                    table.querySelectorAll(sel).forEach(function(el) {
+                        el.style.minWidth = (colMax[idx] + pad[idx]) + 'px';
+                    });
+                }
+            });
+        }
+
+        function renderSalesTablePage() {
+            const total = salesOrdersCache.length;
+            const totalPages = Math.max(1, Math.ceil(total / SALES_ORDERS_PAGE_SIZE));
+            if (salesOrdersPage > totalPages) salesOrdersPage = totalPages;
+            if (salesOrdersPage < 1) salesOrdersPage = 1;
+            const start = (salesOrdersPage - 1) * SALES_ORDERS_PAGE_SIZE;
+            const pageData = salesOrdersCache.slice(start, start + SALES_ORDERS_PAGE_SIZE);
+            renderSalesTable(pageData);
+            renderSalesTablePagination(total, totalPages, start);
+        }
+
+        function renderSalesTablePagination(total, totalPages, startIndex) {
+            const el = document.getElementById('sales-table-pagination');
+            if (!el) return;
+            if (total === 0) {
+                el.innerHTML = '';
+                return;
+            }
+            const end = Math.min(startIndex + SALES_ORDERS_PAGE_SIZE, total);
+            const from = startIndex + 1;
+            let pageButtons = '';
+            const maxButtons = 7;
+            let pageStart = Math.max(1, salesOrdersPage - Math.floor(maxButtons / 2));
+            let pageEnd = Math.min(totalPages, pageStart + maxButtons - 1);
+            pageStart = Math.max(1, pageEnd - maxButtons + 1);
+            for (let p = pageStart; p <= pageEnd; p++) {
+                pageButtons += '<button type="button" class="sales-page-btn' + (p === salesOrdersPage ? ' is-active' : '') +
+                    '" data-page="' + p + '" aria-label="Page ' + p + '"' + (p === salesOrdersPage ? ' aria-current="page"' : '') + '>' + p + '</button>';
+            }
+            el.innerHTML =
+                '<span class="sales-table-pagination-info">Showing ' + from + '–' + end + ' of ' + total + ' orders</span>' +
+                '<div class="sales-table-pagination-controls">' +
+                '<button type="button" class="sales-page-btn" data-page="prev" ' + (salesOrdersPage <= 1 ? 'disabled' : '') + '>Prev</button>' +
+                pageButtons +
+                '<button type="button" class="sales-page-btn" data-page="next" ' + (salesOrdersPage >= totalPages ? 'disabled' : '') + '>Next</button>' +
+                '</div>';
+            el.querySelectorAll('.sales-page-btn[data-page]').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const raw = btn.getAttribute('data-page');
+                    if (raw === 'prev') salesOrdersPage = Math.max(1, salesOrdersPage - 1);
+                    else if (raw === 'next') salesOrdersPage = Math.min(totalPages, salesOrdersPage + 1);
+                    else salesOrdersPage = parseInt(raw, 10) || 1;
+                    renderSalesTablePage();
+                    const wrap = document.getElementById('sales-table-container');
+                    if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                });
+            });
+        }
+
         function renderSalesTable(data) {
             const tbody = document.getElementById('sales-tbody');
+            const paginationEl = document.getElementById('sales-table-pagination');
             if (!data || data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="14" class="empty-state">No sales data found</td></tr>';
+                if (paginationEl && salesOrdersCache.length === 0) paginationEl.innerHTML = '';
                 return;
             }
 
@@ -1943,21 +2315,25 @@
                     <tr>
                         <td>${item.OrderID || 'N/A'}</td>
                         <td>${item.ReferenceNumber || 'N/A'}</td>
-                        <td>${item.CustomerName || 'N/A'}</td>
-                        <td>${item.CustomerEmail || 'N/A'}</td>
+                        <td class="col-customer">${item.CustomerName || 'N/A'}</td>
+                        <td class="col-email">${item.CustomerEmail || 'N/A'}</td>
                         <td>${item.OrderDate ? new Date(item.OrderDate).toLocaleDateString() : 'N/A'}</td>
                         <td><span class="badge ${statusClass}">${formatSalesOrderStatus(item.Status)}</span></td>
                         <td>${orderItemsCount}</td>
-                        <td style="max-width: 300px; word-wrap: break-word; line-height: 1.5;">${productNamesQuantitiesHtml}</td>
-                        <td>₱${Number(item.Subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                        <td>₱${Number(item.ExtraDeliveryFee || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                        <td>₱${Number(item.DeliveryCost || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                        <td>₱${Number(item.TotalAmount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
-                        <td>₱${Number(discount).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td class="col-products">${productNamesQuantitiesHtml}</td>
+                        <td class="col-num">₱${Number(item.Subtotal || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td class="col-num">₱${Number(item.ExtraDeliveryFee || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td class="col-num">₱${Number(item.DeliveryCost || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td class="col-num">₱${Number(item.TotalAmount || 0).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                        <td class="col-num">₱${Number(discount).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
                         <td>${item.PaymentMethod || 'N/A'}</td>
                     </tr>
                 `;
             }).join('');
+            requestAnimationFrame(function() {
+                const salesTable = document.getElementById('sales-table');
+                if (salesTable) salesTable.style.tableLayout = 'auto';
+            });
         }
 
         function renderSalesStats(stats) {
@@ -1965,38 +2341,37 @@
 
             const salesCards = document.getElementById('sales-stats');
             if (salesCards) {
-                const cardDefs = [
-                    { label: 'Gross Sales', key: 'grossProductSales', alt: 'grossSales', currency: true },
-                    { label: 'Net Sales', key: 'netSales', alt: 'netProductSales', currency: true },
-                    { label: 'Gross Revenue', key: 'grossRevenue', currency: true, compute: function(s) {
-                        if (s.grossRevenue != null) return s.grossRevenue;
-                        return Number(s.grossProductSales || s.grossSales || 0)
-                            + Number(s.deliveryRevenueGross || s.deliveryRevenue || 0);
-                    }},
-                    { label: 'Net Revenue', key: 'netRevenue', currency: true }
-                ];
-                salesCards.innerHTML = cardDefs.map(function(def) {
-                    const raw = typeof def.compute === 'function'
-                        ? def.compute(stats)
-                        : (stats[def.key] != null ? stats[def.key] : (def.alt ? stats[def.alt] : 0));
-                    const value = formatSalesSummaryRowValue(raw, { currency: def.currency, percent: def.percent });
-                    return '<div class="stat-card">' +
-                        '<div class="stat-label">' + def.label + '</div>' +
+                salesCards.innerHTML = SALES_SUMMARY_ROWS.map(function(row) {
+                    const raw = resolveSalesSummaryValue(stats, row);
+                    const value = formatSalesSummaryRowValue(raw, { currency: row.currency, percent: row.percent });
+                    const formula = row.formula || metricFormulaForLabel(row.label) || '';
+                    const statuses = row.statuses || metricStatusesForLabel(row.label) || '';
+                    const titleParts = [formula, statuses].filter(Boolean).join(' — ');
+                    const titleAttr = titleParts ? ' title="' + escapeHtml(titleParts) + '"' : '';
+                    return '<div class="stat-card"' + titleAttr + '>' +
+                        '<div class="stat-label">' + escapeHtml(row.label) + '</div>' +
                         '<div class="stat-value">' + value + '</div>' +
                         '</div>';
                 }).join('');
             }
 
             const statsTableBody = document.getElementById('stats-tbody');
-            if (!statsTableBody) return;
-
-            const rows = buildSalesSummaryTableRows(stats);
-            statsTableBody.innerHTML = rows.map(function(cells) {
-                return '<tr>' +
-                    '<td style="padding:0.75rem;font-weight:600;color:#374151;">' + cells[0] + '</td>' +
-                    '<td style="padding:0.75rem;text-align:right;font-weight:600;white-space:nowrap;">' + cells[1] + '</td>' +
-                    '</tr>';
-            }).join('');
+            if (statsTableBody) {
+                const rows = buildSalesSummaryTableRows(stats);
+                if (!rows.length) {
+                    statsTableBody.innerHTML = '<tr><td colspan="4" style="padding:0.75rem;text-align:center;color:#6b7280;">No statistics for current filters.</td></tr>';
+                } else {
+                    statsTableBody.innerHTML = rows.map(function(cells) {
+                        return '<tr>' +
+                            '<td class="col-metric">' + escapeHtml(cells[0]) + '</td>' +
+                            '<td class="col-formula">' + escapeHtml(cells[1] || '—') + '</td>' +
+                            '<td class="col-status">' + escapeHtml(cells[2] || '—') + '</td>' +
+                            '<td class="col-value">' + cells[3] + '</td>' +
+                            '</tr>';
+                    }).join('');
+                    requestAnimationFrame(autofitExcelStatsTable);
+                }
+            }
 
             const chartCanvas = document.getElementById('sales-revenue-chart');
             if (chartCanvas) {
@@ -2257,9 +2632,7 @@
         }
 
         function countSalesTableRows() {
-            const table = document.getElementById('sales-tbody');
-            if (!table) return 0;
-            return Array.from(table.querySelectorAll('tr')).filter(tr => !tr.querySelector('.empty-state')).length;
+            return salesOrdersCache.length;
         }
 
         function refreshCSVPreviewData() {
@@ -2319,7 +2692,7 @@
                         </div>
                         <div class="csv-preview-footer">
                             <button type="button" class="btn-filter btn-filter-secondary" onclick="closeCSVPreview()">Cancel</button>
-                            <button type="button" class="btn-filter btn-export" onclick="downloadCSV()">Download CSV</button>
+                            <button type="button" class="btn-filter btn-export" onclick="downloadCSV()">Download Excel</button>
                         </div>
                     </div>
                 </div>
@@ -2337,24 +2710,27 @@
                 const stats = csvPreviewData.stats;
                 const summaryRowsHtml = buildSalesSummaryTableRows(stats)
                     .map(function(cells) {
-                        return '<tr><td>' + cells[0] + '</td><td style="text-align:right">' + cells[1] + '</td></tr>';
+                        return '<tr><td class="col-metric">' + escapeHtml(cells[0]) + '</td>' +
+                            '<td class="col-formula">' + escapeHtml(cells[1] || '—') + '</td>' +
+                            '<td class="col-status">' + escapeHtml(cells[2] || '—') + '</td>' +
+                            '<td class="col-value">' + cells[3] + '</td></tr>';
                     })
                     .join('');
                 previewBody.innerHTML = `
                     <div class="csv-preview-section">
                         <h3>Summary (included in file)</h3>
-                        <table class="csv-preview-table">
-                            <thead><tr><th>Metric</th><th style="text-align:right">Value</th></tr></thead>
+                        <table class="csv-preview-table excel-stats-table">
+                            <thead><tr><th class="col-metric">Metric</th><th class="col-formula">Formula</th><th class="col-status">Order Status</th><th class="col-value">Value</th></tr></thead>
                             <tbody>${summaryRowsHtml}</tbody>
                         </table>
                     </div>
                     <div class="csv-preview-section">
-                        <h3>Orders sheet</h3>
+                        <h3>Orders</h3>
                         <p style="margin: 0 0 0.5rem 0; color: var(--text-light); font-size: 0.9rem;">
                             ${csvPreviewData.rowCount || 0} order(s): Order #, Reference, Date, Customer, Email, Status, Products, Subtotal, Discount, Extra Delivery, Delivery, Total, Payment, In Gross Sales, In Net Revenue
                         </p>
                         <p style="margin: 0; font-size: 0.85rem; color: var(--text-light);">
-                            <strong>Format:</strong> CSV (UTF-8, opens in Excel) &nbsp;•&nbsp;
+                            <strong>Format:</strong> Excel (.xlsx) with autofit columns &nbsp;•&nbsp;
                             <strong>Filters:</strong> ${filterSummary}
                         </p>
                     </div>
@@ -2376,7 +2752,7 @@
         function downloadCSV() {
             closeCSVPreview();
             const params = new URLSearchParams(salesFilters);
-            params.set('format', 'csv');
+            params.set('format', 'xlsx');
             window.location.href = `/Employee/Admin/Reports/Sales/Export?${params}`;
         }
 
@@ -2620,6 +2996,7 @@
                             revenueComposition = null;
                         }
                         renderSalesCharts(stats, revenueComposition);
+                        autofitExcelStatsTable();
                     } else {
                         loadSalesData();
                     }

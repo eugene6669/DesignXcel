@@ -3,7 +3,7 @@
     <div class="modal-content">
         <span class="close-button" id="closeAddModal">&times;</span>
         <h3 id="addProductModalTitle"><%= buildFromId ? 'Build Planned Product' : 'Build New Product' %></h3>
-        <p id="addProductModalHint" class="pi-build-modal-hint">Raw materials bundle, raw materials, and opening stock for this planned product.</p>
+        <p id="addProductModalHint" class="pi-build-modal-hint"><%= buildFromId ? 'Add raw materials and opening stock for each variation (recipes can differ per variation).' : 'Raw materials bundle, raw materials, and opening stock for this product.' %></p>
         <form id="addProductForm" class="pi-create-form" action="/Employee/InventoryManager/ProductInventory/Add" method="POST" enctype="multipart/form-data">
             <input type="hidden" id="buildFromInventoryProductId" name="buildFromInventoryProductId" value="<%= buildFromId %>">
             <input type="hidden" id="quantity" name="quantity" value="0">
@@ -77,7 +77,6 @@
                 <div class="pi-build-col pi-build-col-right">
                     <div class="form-group pi-section pi-section-tight">
                         <h4>Product Variation <span class="req">*</span></h4>
-                        <p id="buildVariationsHint" class="pi-section-note">Set opening stock (qty) per variation.</p>
                         <p id="createVariationTotalSummary" class="pi-var-total">Total quantity: 0</p>
                         <div id="createProductVariationsList"></div>
                         <button type="button" id="addCreateProductVariationBtn" class="pi-btn pi-btn-info pi-btn-sm pi-add-var-btn">+ Add Variation</button>
@@ -102,12 +101,15 @@
                                 <span class="pi-raw-materials-sub">Qty per unit when stocked</span>
                             </div>
                             <div id="createInventoryRecipeStatus" class="pi-recipe-status"><em>Select a bundle or add raw materials</em></div>
-                            <div class="materials-section">
+                            <div id="createInventoryBundleMaterialsReadonly" class="pi-bundle-materials-readonly" style="display:none;" aria-live="polite"></div>
+                            <div class="materials-section pi-raw-materials-manual">
                                 <div id="createInventoryMaterialsContainer"></div>
-                                <button type="button" id="addCreateInventoryMaterialBtn" class="add-material-btn">+ Add Raw Material</button>
-                                <div id="createInventoryMaterialsSummary" class="pi-materials-summary">
-                                    <strong>Selected:</strong>
-                                    <div id="createInventoryMaterialsSummaryList"><em>None yet</em></div>
+                                <div class="pi-raw-materials-footer">
+                                    <div id="createInventoryMaterialsSummary" class="pi-materials-summary">
+                                        <strong>Selected:</strong>
+                                        <div id="createInventoryMaterialsSummaryList"><em>None yet</em></div>
+                                    </div>
+                                    <button type="button" id="addCreateInventoryMaterialBtn" class="pi-btn pi-btn-sm pi-add-raw-btn">Add Raw Materials</button>
                                 </div>
                             </div>
                             <input type="hidden" id="requiredMaterials" name="requiredMaterials" value="">

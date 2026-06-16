@@ -1,53 +1,66 @@
-<!-- Variations Management Modal (Products Listing) -->
+<!-- Add Variation modal (Product Inventory) -->
 <div id="variationsModal" class="modal pi-modal-compact pi-modal-wide">
     <div class="modal-content" style="position: relative;">
         <span class="close-button" id="closeVariationsModal" onclick="if(window.closeVariationsModalFunc) window.closeVariationsModalFunc(); else { const modal = document.getElementById('variationsModal'); if(modal) modal.style.display = 'none'; }">&times;</span>
-        <h3 id="variationsModalTitle">Add Variations</h3>
+        <h3 id="variationsModalTitle">Add Variation</h3>
 
-        <div id="variationModalNotification" class="modal-notification" style="display: none; position: absolute; top: 20px; right: 20px; background-color: #4CAF50; color: white; padding: 15px 25px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 10001; animation: slideIn 0.5s ease-out; max-width: 300px;">
-            <div class="modal-notification-content" style="display: flex; align-items: center; gap: 12px;">
+        <div id="variationModalNotification" class="modal-notification" style="display: none; position: absolute; top: 12px; right: 12px; background-color: #4CAF50; color: white; padding: 10px 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 10001; animation: slideIn 0.5s ease-out; max-width: 280px;">
+            <div class="modal-notification-content" style="display: flex; align-items: center; gap: 10px;">
                 <span class="modal-notification-icon">✓</span>
                 <span class="modal-notification-message"></span>
             </div>
         </div>
 
-        <div class="pi-section">
-            <h4>Add New Variation</h4>
-            <form id="addVariationForm">
-                <input type="hidden" id="variationProductID" name="productID">
-                <input type="hidden" id="variationInventoryProductID" name="inventoryProductID">
-                <input type="hidden" name="isActive" value="1">
-                <div class="pi-form-grid">
-                    <div>
-                        <label for="variationName">Variation Name</label>
-                        <input type="text" id="variationName" name="variationName" required>
-                    </div>
-                    <div>
-                        <label for="variationQuantity">Quantity</label>
-                        <input type="number" id="variationQuantity" name="quantity" min="1" required>
-                        <small id="availableStockInfo" style="display: block; margin-top: 5px; color: #666; font-size: 0.85em;"></small>
-                    </div>
-                </div>
-                <div class="form-group pi-section" style="margin-top:10px;">
-                    <h4 style="margin:0 0 8px;font-size:0.95em;">Raw Materials</h4>
-                    <p style="font-size:0.82em;color:#666;margin:0 0 8px;">Stocking this variation deducts raw materials from the parent product raw materials.</p>
-                    <div id="addVariationBomBundleDisplay" class="pi-recipe-bom-label" style="font-size:0.88em;margin-bottom:6px;color:#444;"><em>Loading raw materials…</em></div>
-                    <div id="addVariationRecipeMaterialsList" class="pi-recipe-materials-list" style="font-size:0.88em;color:#333;"></div>
-                    <div id="addVariationRecipeStatus" style="margin-top: 8px; font-size: 0.85em; color: #555; display:none;"></div>
-                </div>
-                <div class="pi-form-grid" style="margin-top:10px;">
-                    <div class="pi-span-2">
-                        <label for="variationMainImage">Variation Main Image</label>
-                        <input type="file" id="variationMainImage" name="variationMainImage" class="variation-main-image" accept="image/*">
-                    </div>
-                </div>
-                <button type="submit" class="pi-btn pi-btn-primary" style="margin-top:10px;">Add Variation</button>
-            </form>
-        </div>
+        <form id="addVariationForm">
+            <input type="hidden" id="variationProductID" name="productID">
+            <input type="hidden" id="variationInventoryProductID" name="inventoryProductID">
+            <input type="hidden" name="isActive" value="1">
 
-        <div id="variationsList" class="pi-section" style="margin-top:12px;">
-            <h4 style="margin:0 0 10px;">Existing Variations</h4>
-            <div id="variationsContainer"></div>
-        </div>
+            <div class="pi-form-grid">
+                <div>
+                    <label for="variationName">Variation</label>
+                    <input type="text" id="variationName" name="variationName" required>
+                </div>
+                <div>
+                    <label for="variationQuantity">Quantity</label>
+                    <input type="number" id="variationQuantity" name="quantity" min="1" required>
+                    <small id="availableStockInfo" style="display: none; margin-top: 4px; color: #666;"></small>
+                </div>
+            </div>
+
+            <div class="pi-form-grid pi-form-grid-3" style="margin-top:8px;">
+                <div>
+                    <label for="variationColor">Color</label>
+                    <input type="text" id="variationColor" name="color" placeholder="Optional">
+                </div>
+                <div>
+                    <label for="variationShape">Shape</label>
+                    <input type="text" id="variationShape" name="shape" placeholder="Optional">
+                </div>
+                <div>
+                    <label for="variationType">Type</label>
+                    <input type="text" id="variationType" name="variationType" placeholder="Optional">
+                </div>
+            </div>
+
+            <div class="pi-section pi-section--raw-materials" style="margin-top:8px;">
+                <h4 style="margin:0 0 6px;font-size:0.9em;">Raw Materials</h4>
+                <p style="font-size:0.78em;color:#666;margin:0 0 6px;">Stocking this variation deducts raw materials from the parent product.</p>
+                <div id="addVariationBomBundleDisplay" class="pi-recipe-bom-label" style="font-size:0.85em;margin-bottom:4px;color:#444;"><em>Loading…</em></div>
+                <div id="addVariationRecipeMaterialsList" class="pi-recipe-materials-list" style="font-size:0.85em;color:#333;"></div>
+                <div id="addVariationRecipeStatus" style="margin-top: 6px; font-size: 0.8em; color: #555; display:none;"></div>
+            </div>
+
+            <div class="pi-form-grid" style="margin-top:8px;">
+                <div class="pi-span-2">
+                    <label for="variationMainImage">Variation Main Image</label>
+                    <input type="file" id="variationMainImage" name="variationMainImage" class="variation-main-image" accept="image/*">
+                </div>
+            </div>
+
+            <div class="add-variation-submit-row">
+                <button type="submit" class="pi-btn pi-btn-primary">Add Variation</button>
+            </div>
+        </form>
     </div>
 </div>

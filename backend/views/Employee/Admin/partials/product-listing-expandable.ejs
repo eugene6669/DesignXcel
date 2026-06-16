@@ -195,6 +195,7 @@
                 const lastAddedDisplay = item.LastDateAddedLabel || fmtDate(item.LastDateAdded);
                 const listingStage = (item.ListingStage || 'built').toLowerCase();
                 const isPlanned = listingStage === 'planned';
+                const isRetail = listingStage === 'retail';
                 const sku = item.InventoryProductSKU || 'N/A';
                 const parentDescription = item.InventoryProductDescription || item.Description || item.Notes || '—';
                 const parentQtyDisplay = parentQtyFieldMode === 'total'
@@ -394,6 +395,10 @@
                         <% } else if (actionStyleMode === 'listing') { %>
                         <% if (isPlanned) { %>
                         <button type="button" class="edit-plan-product-btn pi-icon-edit-btn" data-product-id="<%= productId %>" title="Edit planned product" aria-label="Edit planned product">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                        </button>
+                        <% } else if (isRetail) { %>
+                        <button type="button" class="edit-retail-product-btn pi-icon-edit-btn" data-product-id="<%= productId %>" title="Edit retail product" aria-label="Edit retail product">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                         </button>
                         <% } %>

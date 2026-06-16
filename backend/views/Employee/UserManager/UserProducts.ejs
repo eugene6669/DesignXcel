@@ -852,42 +852,184 @@
         }
         /* Plan / create product modals — horizontal layout (reduce scroll) */
         #addPlanProductModal.pi-create-product-modal .modal-content,
+        #addRetailProductModal.pi-create-product-modal .modal-content,
         #addProductModal.pi-create-product-modal .modal-content {
             max-width: min(980px, calc(100vw - 24px));
             padding: 14px 16px;
             margin: 12px auto;
         }
-        #addPlanProductModal .pi-plan-layout {
+        #addPlanProductModal .pi-plan-layout,
+        #addRetailProductModal .pi-plan-layout {
             display: grid;
             grid-template-columns: minmax(340px, 1fr) minmax(340px, 1fr);
             gap: 10px 12px;
             align-items: start;
         }
-        #addPlanProductModal .pi-plan-layout .pi-plan-col { min-width: 0; }
-        #addPlanProductModal .pi-plan-layout .pi-section { margin-top: 0; }
-        #addPlanProductModal .pi-create-form .pi-create-top {
+        #addPlanProductModal .pi-plan-layout .pi-plan-col,
+        #addRetailProductModal .pi-plan-layout .pi-plan-col { min-width: 0; }
+        #addPlanProductModal .pi-plan-layout .pi-section,
+        #addRetailProductModal .pi-plan-layout .pi-section { margin-top: 0; }
+        #addPlanProductModal .pi-create-form .pi-create-top,
+        #addRetailProductModal .pi-create-form .pi-create-top {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 8px 10px;
         }
-        #addPlanProductModal .pi-create-form .pi-create-top .form-group { margin-bottom: 0; }
+        #addPlanProductModal .pi-create-form .pi-create-top .form-group,
+        #addRetailProductModal .pi-create-form .pi-create-top .form-group { margin-bottom: 0; }
         #addPlanProductModal #planProductPrice,
-        #addPlanProductModal #planProductCostPrice { text-align: left; }
-        #addPlanProductModal .pi-section { margin-top: 8px; padding: 10px; }
-        #addPlanProductModal .pi-variation-row {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 8px;
-            margin-bottom: 10px;
-            padding: 10px;
-            border: 1px solid #e9ecef;
-            border-radius: 6px;
-            background: #fff;
+        #addPlanProductModal #planProductCostPrice,
+        #addRetailProductModal #retailProductPrice,
+        #addRetailProductModal #retailProductCostPrice { text-align: left; }
+        #addPlanProductModal .pi-section,
+        #addRetailProductModal .pi-section { margin-top: 8px; padding: 10px; }
+        #addPlanProductModal .pi-plan-var-panel,
+        #addRetailProductModal .pi-plan-var-panel,
+        #addProductModal .pi-plan-var-panel {
             position: relative;
-            padding-top: 34px;
+            margin-bottom: 8px;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            background: #fff;
+            overflow: hidden;
         }
-        #addPlanProductModal .pi-variation-row input[type="text"],
-        #addPlanProductModal .pi-variation-row input[type="file"] {
+        #addPlanProductModal .pi-plan-var-remove,
+        #addRetailProductModal .pi-plan-var-remove,
+        #addProductModal .pi-plan-var-remove {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            z-index: 3;
+            background: #dc3545;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            height: 26px;
+            width: 26px;
+            cursor: pointer;
+            font-size: 1.15em;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+        #addPlanProductModal .pi-plan-var-header,
+        #addRetailProductModal .pi-plan-var-header,
+        #addProductModal .pi-plan-var-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 8px 40px 8px 10px;
+            border: none;
+            border-bottom: 1px solid #e9ecef;
+            background: #f8f9fa;
+            cursor: pointer;
+            text-align: left;
+        }
+        #addPlanProductModal .pi-plan-var-panel.is-collapsed .pi-plan-var-header,
+        #addRetailProductModal .pi-plan-var-panel.is-collapsed .pi-plan-var-header,
+        #addProductModal .pi-plan-var-panel.is-collapsed .pi-plan-var-header {
+            border-bottom: none;
+        }
+        #addPlanProductModal .pi-plan-var-thumb,
+        #addRetailProductModal .pi-plan-var-thumb,
+        #addProductModal .pi-plan-var-thumb {
+            flex-shrink: 0;
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #dee2e6;
+            background: #fff;
+        }
+        #addPlanProductModal .pi-plan-var-thumb img,
+        #addRetailProductModal .pi-plan-var-thumb img,
+        #addProductModal .pi-plan-var-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        #addPlanProductModal .pi-plan-var-header-text,
+        #addRetailProductModal .pi-plan-var-header-text,
+        #addProductModal .pi-plan-var-header-text {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        #addPlanProductModal .pi-plan-var-title,
+        #addRetailProductModal .pi-plan-var-title,
+        #addProductModal .pi-plan-var-title {
+            font-size: 0.9em;
+            font-weight: 700;
+            color: #333;
+        }
+        #addPlanProductModal .pi-plan-var-subtitle,
+        #addRetailProductModal .pi-plan-var-subtitle,
+        #addProductModal .pi-plan-var-subtitle {
+            font-size: 0.8em;
+            color: #666;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #addPlanProductModal .pi-plan-var-panel.is-collapsed .pi-plan-var-body,
+        #addRetailProductModal .pi-plan-var-panel.is-collapsed .pi-plan-var-body,
+        #addProductModal .pi-plan-var-panel.is-collapsed .pi-plan-var-body {
+            display: none;
+        }
+        #addPlanProductModal .pi-plan-var-body,
+        #addRetailProductModal .pi-plan-var-body,
+        #addProductModal .pi-plan-var-body {
+            padding: 10px;
+        }
+        #addPlanProductModal .pi-plan-var-attrs-table,
+        #addRetailProductModal .pi-plan-var-attrs-table,
+        #addProductModal .pi-plan-var-attrs-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+            font-size: 0.85em;
+        }
+        #addPlanProductModal .pi-plan-var-attrs-table th,
+        #addPlanProductModal .pi-plan-var-attrs-table td,
+        #addRetailProductModal .pi-plan-var-attrs-table th,
+        #addRetailProductModal .pi-plan-var-attrs-table td,
+        #addProductModal .pi-plan-var-attrs-table th,
+        #addProductModal .pi-plan-var-attrs-table td {
+            border: 1px solid #dee2e6;
+            padding: 6px 8px;
+            text-align: left;
+        }
+        #addPlanProductModal .pi-plan-var-attrs-table th,
+        #addRetailProductModal .pi-plan-var-attrs-table th,
+        #addProductModal .pi-plan-var-attrs-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        #addPlanProductModal .pi-plan-var-attrs-table input,
+        #addRetailProductModal .pi-plan-var-attrs-table input,
+        #addProductModal .pi-plan-var-attrs-table input {
+            width: 100%;
+            padding: 5px 6px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 0.95em;
+        }
+        #addPlanProductModal .pi-plan-var-body input[type="text"],
+        #addPlanProductModal .pi-plan-var-body input[type="number"],
+        #addPlanProductModal .pi-plan-var-body input[type="file"],
+        #addRetailProductModal .pi-plan-var-body input[type="text"],
+        #addRetailProductModal .pi-plan-var-body input[type="number"],
+        #addRetailProductModal .pi-plan-var-body input[type="file"],
+        #addProductModal .pi-plan-var-body input[type="text"],
+        #addProductModal .pi-plan-var-body input[type="number"],
+        #addProductModal .pi-plan-var-body input[type="file"] {
             width: 100%;
             padding: 5px 6px;
             font-size: 0.85em;
@@ -895,26 +1037,48 @@
             border-radius: 4px;
             box-sizing: border-box;
         }
-        #addPlanProductModal .pi-variation-remove {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            margin: 0;
+        #addPlanProductModal .pi-plan-var-name-row,
+        #addRetailProductModal .pi-plan-var-name-row,
+        #addProductModal .pi-plan-var-name-row,
+        #addPlanProductModal .pi-plan-var-qty-row,
+        #addRetailProductModal .pi-plan-var-qty-row,
+        #addProductModal .pi-plan-var-qty-row {
+            margin-bottom: 8px;
         }
-        #addPlanProductModal .pi-variation-remove button {
-            background: #dc3545;
-            color: #fff;
+        #addPlanProductModal .pi-plan-var-name-row label,
+        #addRetailProductModal .pi-plan-var-name-row label,
+        #addProductModal .pi-plan-var-name-row label,
+        #addPlanProductModal .pi-plan-var-qty-row label,
+        #addRetailProductModal .pi-plan-var-qty-row label,
+        #addProductModal .pi-plan-var-qty-row label {
+            display: block;
+            font-size: 0.82em;
+            margin-bottom: 4px;
+            color: #555;
+        }
+        #addPlanProductModal .pi-plan-var-done-row,
+        #addRetailProductModal .pi-plan-var-done-row,
+        #addProductModal .pi-plan-var-done-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 8px;
+        }
+        #addPlanProductModal .pi-plan-var-done-btn,
+        #addRetailProductModal .pi-plan-var-done-btn,
+        #addProductModal .pi-plan-var-done-btn {
+            background: #F0B21B;
+            color: #1a1a1a;
             border: none;
-            border-radius: 4px;
-            height: 30px;
-            width: 30px;
+            font-weight: 600;
+            padding: 6px 16px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 1.1em;
-            line-height: 1;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
+        }
+        #addPlanProductModal .pi-plan-var-done-btn:hover,
+        #addRetailProductModal .pi-plan-var-done-btn:hover,
+        #addProductModal .pi-plan-var-done-btn:hover {
+            background: #d9a019;
+            color: #1a1a1a;
         }
         #addProductModal .pi-create-form .pi-create-top {
             display: grid;
@@ -1013,35 +1177,41 @@
             font-size: 1.1em;
             line-height: 1;
         }
-        #addPlanProductModal .pi-section h4 {
+        #addPlanProductModal .pi-section h4,
+        #addRetailProductModal .pi-section h4 {
             text-align: left;
         }
-        #addPlanProductModal .pi-plan-col-group-title {
+        #addPlanProductModal .pi-plan-col-group-title,
+        #addRetailProductModal .pi-plan-col-group-title {
             margin: 0 0 8px;
             text-align: left;
             font-size: 0.95em;
             font-weight: 700;
             color: #334155;
         }
-        #addPlanProductModal .pi-plan-col-left {
+        #addPlanProductModal .pi-plan-col-left,
+        #addRetailProductModal .pi-plan-col-left {
             background: #ffffff;
             border: 1px solid #e2e8f0;
             border-radius: 10px;
             padding: 10px;
         }
-        #addPlanProductModal .pi-plan-col-right {
+        #addPlanProductModal .pi-plan-col-right,
+        #addRetailProductModal .pi-plan-col-right {
             background: #ffffff;
             border: 1px solid #e2e8f0;
             border-radius: 10px;
             padding: 10px;
         }
-        #addPlanProductModal #addPlanProductVariationBtn {
+        #addPlanProductModal #addPlanProductVariationBtn,
+        #addRetailProductModal #addRetailProductVariationBtn {
             background: #FFC107;
             color: #333;
             border: 1px solid #e0ac06;
             font-weight: 600;
         }
-        #addPlanProductModal #addPlanProductVariationBtn:hover {
+        #addPlanProductModal #addPlanProductVariationBtn:hover,
+        #addRetailProductModal #addRetailProductVariationBtn:hover {
             background: #e0ac06;
             color: #333;
         }
@@ -1060,14 +1230,17 @@
         .pi-modal-categories .pi-form-actions { margin-top: 8px; padding-top: 8px; }
         @media (max-width: 640px) {
             #addPlanProductModal.pi-create-product-modal .modal-content,
+            #addRetailProductModal.pi-create-product-modal .modal-content,
             #addProductModal.pi-create-product-modal .modal-content {
                 max-width: calc(100vw - 16px);
                 padding: 12px 14px;
                 margin: 8px auto;
                 max-height: 92vh;
             }
-            #addPlanProductModal .pi-plan-layout { grid-template-columns: 1fr; }
+            #addPlanProductModal .pi-plan-layout,
+            #addRetailProductModal .pi-plan-layout { grid-template-columns: 1fr; }
             #addPlanProductModal .pi-create-form .pi-create-top,
+            #addRetailProductModal .pi-create-form .pi-create-top,
             #addProductModal .pi-create-form .pi-create-top {
                 grid-template-columns: 1fr;
             }
@@ -1215,11 +1388,20 @@
         .products-listing-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9em; }
         .products-listing-table th, .products-listing-table td { padding: 10px; border: 1px solid #dee2e6; vertical-align: middle; }
         .products-listing-table thead th { background: #f2f2f2; font-weight: 600; }
+        .page-products-listing .variations-nested-table .var-col-name strong,
         .page-products-listing .variations-nested-table .var-col-sku .variation-sku-value,
         .page-products-listing .variation-flat-row .variation-sku-value {
-            font-size: 1.3em !important;
-            line-height: 1.3;
-            font-weight: 800;
+            font-size: inherit;
+            line-height: inherit;
+            font-weight: 600;
+        }
+        .page-products-listing .variations-nested-table .var-col-sku .variation-sku-value {
+            font-family: inherit;
+        }
+        .page-products-listing .variations-nested-table .var-col-attr {
+            font-size: inherit;
+            color: #333;
+            white-space: nowrap;
         }
         .last-added-cell { white-space: nowrap; font-size: 0.9em; color: #444; }
         .pi-icon-storefront-btn {
@@ -1308,6 +1490,7 @@
             stroke: #111 !important;
         }
     </style>
+    <link rel="stylesheet" href="/css/Employee/Admin/admin-pi-modals-compact.css?v=20260603a">
 </head>
 <body class="page-products-listing">
     <div id="customPopup" class="custom-popup">
@@ -1377,6 +1560,16 @@
                             hasInventory: (product.TotalQuantity || 0) > 0
                         }))
                         : [];
+                    const plannedProductsList = allProductsList.filter(function(p) {
+                        return String(p.ListingStage || '').toLowerCase() === 'planned';
+                    });
+                    const retailProductsList = allProductsList.filter(function(p) {
+                        return String(p.ListingStage || '').toLowerCase() === 'retail';
+                    });
+                    const manufacturedProductsList = allProductsList.filter(function(p) {
+                        const stage = String(p.ListingStage || 'built').toLowerCase();
+                        return stage === 'built' || stage === '';
+                    });
                     const invPag = typeof pagination !== 'undefined' ? pagination : { page: 1, limit: 25, totalCount: 0, totalPages: 1 };
                     const invFilters = typeof listFilters !== 'undefined' ? listFilters : { search: '', category: '' };
                     const invCategories = typeof categories !== 'undefined' ? categories : [];
@@ -1454,6 +1647,7 @@
                 <div class="pi-toolbar">
                     <button type="button" id="manageCategoriesBtn" class="add-inventory-btn">Manage Categories</button>
                     <button type="button" id="addPlanProductBtn" class="add-inventory-btn">Plan Product</button>
+                    <button type="button" id="addRetailProductBtn" class="add-inventory-btn">Retail Product</button>
                 </div>
 
                 <% if (locals.error && locals.error.length > 0) { %>
@@ -1464,6 +1658,7 @@
                 <% } %>
 
                 <%- include('partials/plan-product-modal', { categories: typeof categories !== 'undefined' ? categories : [] }) %>
+                <%- include('partials/retail-product-modal', { categories: typeof categories !== 'undefined' ? categories : [] }) %>
 
                 <!-- Manage Categories Modal -->
                 <div id="piManageCategoriesModal" class="modal pi-modal-compact pi-modal-categories">
@@ -1482,8 +1677,9 @@
                     </div>
                 </div>
 
+                <h2 class="pi-section-table-title" style="margin-top:24px;">Planned Products</h2>
                 <%- include('partials/product-listing-expandable', {
-                    allProductsList: allProductsList,
+                    allProductsList: plannedProductsList,
                     invFilters: invFilters,
                     stockQtyClass: stockQtyClass,
                     formatListDate: formatListDate,
@@ -1504,9 +1700,71 @@
                     showStatusColumn: false,
                     formatDimensionsCompact: formatDimensionsCompact,
                     showVariationQtyColumn: false,
+                    showVariationAttributes: true,
                     variationItemCostMode: 'unit',
                     variationQtyLabel: 'Available Stock',
-                    showStockLegend: false
+                    showStockLegend: false,
+                    emptyListMessage: 'No planned products yet. Use Plan Product to add one.'
+                }) %>
+
+                <h2 class="pi-section-table-title" style="margin-top:32px;">Retail Products</h2>
+                <%- include('partials/product-listing-expandable', {
+                    allProductsList: retailProductsList,
+                    invFilters: invFilters,
+                    stockQtyClass: stockQtyClass,
+                    formatListDate: formatListDate,
+                    showReturnColumns: false,
+                    showActions: true,
+                    showVariationActions: false,
+                    showStorefront: false,
+                    showDiscount: false,
+                    showListingStage: false,
+                    actionStyle: 'listing',
+                    parentSalePriceHeader: 'Item Sale Price Total',
+                    showParentPriceColumns: false,
+                    showParentItemCostColumn: false,
+                    showParentQty: true,
+                    showParentDimensions: true,
+                    showParentDescription: true,
+                    showSkuColumn: false,
+                    showStatusColumn: false,
+                    formatDimensionsCompact: formatDimensionsCompact,
+                    showVariationQtyColumn: true,
+                    showVariationAttributes: true,
+                    variationItemCostMode: 'unit',
+                    variationQtyLabel: 'Quantity',
+                    showStockLegend: false,
+                    emptyListMessage: 'No retail products yet. Use Retail Product to add one.'
+                }) %>
+
+                <h2 class="pi-section-table-title" style="margin-top:32px;">Manufactured Products</h2>
+                <%- include('partials/product-listing-expandable', {
+                    allProductsList: manufacturedProductsList,
+                    invFilters: invFilters,
+                    stockQtyClass: stockQtyClass,
+                    formatListDate: formatListDate,
+                    showReturnColumns: false,
+                    showActions: false,
+                    showVariationActions: false,
+                    showStorefront: false,
+                    showDiscount: false,
+                    showListingStage: false,
+                    actionStyle: 'listing',
+                    parentSalePriceHeader: 'Item Sale Price Total',
+                    showParentPriceColumns: false,
+                    showParentItemCostColumn: false,
+                    showParentQty: true,
+                    showParentDimensions: true,
+                    showParentDescription: true,
+                    showSkuColumn: false,
+                    showStatusColumn: false,
+                    formatDimensionsCompact: formatDimensionsCompact,
+                    showVariationQtyColumn: true,
+                    showVariationAttributes: true,
+                    variationItemCostMode: 'unit',
+                    variationQtyLabel: 'Quantity',
+                    showStockLegend: false,
+                    emptyListMessage: 'No manufactured products yet. Build planned products in Inventory.'
                 }) %>
 
                 <% if (invPag.totalPages > 1) { %>
@@ -1751,7 +2009,7 @@
     </script>
 
     <script src="/js/Employee/UserManager/admin-modals.js?v=20260541" defer></script>
-    <script src="/js/Employee/UserManager/product-inventory.js?v=20260573" defer></script>
+    <script src="/js/Employee/UserManager/product-inventory.js?v=20260623" defer></script>
     <% if (locals.error && locals.error.length > 0) { %>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -1773,57 +2031,5 @@
         });
     </script>
     <% } %>
-    <script>
-    (function () {
-        function sanitizeCreatePrice(v) {
-            v = String(v || '').replace(/,/g, '').replace(/[^\d.]/g, '');
-            var dot = v.indexOf('.');
-            if (dot !== -1) {
-                v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, '');
-                if (v.length - dot - 1 > 2) v = v.slice(0, dot + 3);
-            }
-            return v;
-        }
-        function formatCreatePrice(el) {
-            if (!el) return;
-            var v = sanitizeCreatePrice(el.value);
-            if (!v || v === '.') { el.value = v; return; }
-            if (v.endsWith('.')) v = v.slice(0, -1);
-            var n = parseFloat(v);
-            if (isFinite(n)) el.value = n.toFixed(2);
-        }
-        function wireCreateProductPriceField(el) {
-            if (!el || el.getAttribute('data-auto-price') === '1') return;
-            el.setAttribute('data-auto-price', '1');
-            el.addEventListener('input', function () {
-                var v = sanitizeCreatePrice(el.value);
-                if (el.value !== v) el.value = v;
-            });
-            el.addEventListener('focusout', function () { formatCreatePrice(el); });
-            el.addEventListener('change', function () { formatCreatePrice(el); });
-            el.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') { formatCreatePrice(el); }
-            });
-        }
-        function wireCreateProductPrices() {
-            wireCreateProductPriceField(document.getElementById('createProductPrice'));
-            wireCreateProductPriceField(document.getElementById('createProductCostPrice'));
-        }
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', wireCreateProductPrices);
-        } else {
-            wireCreateProductPrices();
-        }
-        var addBtn = document.getElementById('addInventoryItemBtn');
-        if (addBtn) addBtn.addEventListener('click', function () { setTimeout(wireCreateProductPrices, 0); });
-        var form = document.getElementById('addProductForm');
-        if (form) {
-            form.addEventListener('submit', function () {
-                formatCreatePrice(document.getElementById('createProductPrice'));
-                formatCreatePrice(document.getElementById('createProductCostPrice'));
-            }, true);
-        }
-    })();
-    </script>
 </body>
 </html>

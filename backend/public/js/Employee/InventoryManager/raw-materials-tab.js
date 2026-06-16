@@ -109,6 +109,70 @@
         list.innerHTML = html.replace(/TAG/g, 'div');
     }
 
+    function showRmAdjustConfirm(message, onConfirm) {
+        if (typeof window.showAdjustStockConfirmModal === 'function') {
+            return window.showAdjustStockConfirmModal(message, onConfirm);
+        }
+        if (window.confirm(message)) return onConfirm();
+    }
+
+    async function executeAdjustRawMaterialStock(materialId, delta, notes, buttonEl) {
+        if (buttonEl) {
+            buttonEl.disabled = true;
+            const prev = buttonEl.textContent;
+            buttonEl.textContent = '…';
+            try {
+                const res = await fetch('/api/admin/raw-materials/' + materialId + '/adjust', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ delta: delta, notes: notes })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    popup(data.message || 'Stock adjusted.');
+                    const qtyEl = document.getElementById('rmEditCurrentQty');
+                    if (qtyEl && data.quantityAvailable != null) qtyEl.textContent = String(data.quantityAvailable);
+                    const adjQty = document.getElementById('rmEditAdjustQty');
+                    if (adjQty) adjQty.value = '1';
+                    const adjNotes = document.getElementById('rmEditAdjustNotes');
+                    if (adjNotes) adjNotes.value = '';
+                    await refreshRawMaterialsTable();
+                    if (typeof window.loadStockMovementHistory === 'function') {
+                        window.loadStockMovementHistory();
+                    }
+                } else {
+                    popup(data.message || 'Adjust stock failed.', true);
+                }
+            } catch (err) {
+                popup('Adjust stock failed: ' + err.message, true);
+            } finally {
+                buttonEl.disabled = false;
+                buttonEl.textContent = prev;
+            }
+        }
+    }
+
+    function initEditMaterialAdjust() {
+        const adjustBtn = document.getElementById('rmEditAdjustBtn');
+        if (!adjustBtn || adjustBtn.getAttribute('data-rm-adjust-bound') === '1') return;
+        adjustBtn.setAttribute('data-rm-adjust-bound', '1');
+        adjustBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            const materialId = parseInt(document.getElementById('rmEditMaterialID')?.value, 10);
+            const deductQty = parseInt(document.getElementById('rmEditAdjustQty')?.value, 10);
+            const notes = (document.getElementById('rmEditAdjustNotes')?.value || '').trim();
+            if (!materialId || !deductQty || deductQty <= 0) {
+                popup('Enter a positive quantity to deduct.', true);
+                return;
+            }
+            const delta = -Math.abs(deductQty);
+            showRmAdjustConfirm('Deduct stock by ' + Math.abs(delta) + ' unit(s)?', function () {
+                return executeAdjustRawMaterialStock(materialId, delta, notes, adjustBtn);
+            });
+        });
+    }
+
     function initAddEditModals() {
         const tab = document.getElementById('rawMaterialsTab');
         const addBtn = document.getElementById('rmAddMaterialBtn');
@@ -122,19 +186,24 @@
                 const btn = e.target.closest('.edit-raw-material-btn');
                 if (!btn) return;
                 document.getElementById('rmEditMaterialID').value = btn.getAttribute('data-id');
-                const skuEl = document.getElementById('rmEditSku');
-                if (skuEl) skuEl.value = btn.getAttribute('data-sku') || '';
                 document.getElementById('rmEditMaterialName').value = btn.getAttribute('data-name');
-                document.getElementById('rmEditQuantity').value = btn.getAttribute('data-quantity');
                 document.getElementById('rmEditUnit').value = btn.getAttribute('data-unit');
-                const supplierEl = document.getElementById('rmEditSupplier');
-                if (supplierEl) supplierEl.value = btn.getAttribute('data-supplier') || '';
+                const qty = btn.getAttribute('data-quantity');
+                const unit = btn.getAttribute('data-unit') || '';
+                const qtyEl = document.getElementById('rmEditCurrentQty');
+                const unitEl = document.getElementById('rmEditCurrentUnit');
+                if (qtyEl) qtyEl.textContent = qty != null ? String(qty) : '0';
+                if (unitEl) unitEl.textContent = unit;
+                const adjQty = document.getElementById('rmEditAdjustQty');
+                if (adjQty) adjQty.value = '1';
+                const adjNotes = document.getElementById('rmEditAdjustNotes');
+                if (adjNotes) adjNotes.value = '';
                 openModal('rmEditMaterialModal');
             });
         }
 
         wireClose(['rmCloseEditMaterial', 'rmCancelEditMaterial'], 'rmEditMaterialModal');
-
+        initEditMaterialAdjust();
     }
 
     function initQuickAdd() {
@@ -292,10 +361,9 @@
                 const submitBtn = addForm.querySelector('button[type="submit"]');
                 if (submitBtn) submitBtn.disabled = true;
                 try {
-                    const formData = new URLSearchParams(new FormData(addForm));
+                    const formData = new FormData(addForm);
                     const res = await fetch('/Employee/InventoryManager/RawMaterials/Add', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                         credentials: 'include',
                         body: formData
                     });
@@ -349,6 +417,15 @@
         return 'stock-qty-normal';
     }
 
+    function stockStatusFor(n) {
+        const num = Number(n) || 0;
+        if (num < 0) return { label: 'Negative', className: 'rm-stock-status-negative' };
+        if (num === 0) return { label: 'Out of stock', className: 'rm-stock-status-out' };
+        if (num <= 10) return { label: 'Critical', className: 'rm-stock-status-critical' };
+        if (num <= 20) return { label: 'Low', className: 'rm-stock-status-low' };
+        return { label: 'In stock', className: 'rm-stock-status-ok' };
+    }
+
     function escapeHtml(value) {
         return String(value == null ? '' : value)
             .replace(/&/g, '&amp;')
@@ -373,8 +450,344 @@
             stockQuantity: Number(item && (item.stockQuantity != null ? item.stockQuantity : item.QuantityAvailable)) || 0,
             unit: item && (item.unit != null ? item.unit : item.Unit),
             supplier: item && (item.supplier != null ? item.supplier : item.Supplier),
+            purchaseOrderNumber: item && (item.purchaseOrderNumber != null ? item.purchaseOrderNumber : item.PurchaseOrderNumber),
+            purchaseOrderImageUrl: item && (item.purchaseOrderImageUrl != null ? item.purchaseOrderImageUrl : item.PurchaseOrderImageURL),
             createdAt: item && (item.createdAt != null ? item.createdAt : item.LastUpdated)
         };
+    }
+
+    function stockLevelClassForDetails(n) {
+        const num = Number(n) || 0;
+        if (num < 0) return 'stock-level-negative';
+        if (num === 0) return 'stock-level-out';
+        if (num <= 10) return 'stock-level-critical';
+        if (num <= 20) return 'stock-level-low';
+        return 'stock-level-ok';
+    }
+
+    function resolvePoImageUrl(url) {
+        if (!url) return '/images/placeholder-no-image.svg';
+        const s = String(url).trim();
+        if (/^https?:\/\//i.test(s)) return s;
+        if (s.startsWith('/')) return s;
+        return '/' + s.replace(/^\/+/, '');
+    }
+
+    function materialDataFromButton(btn) {
+        if (!btn) return null;
+        return {
+            id: btn.getAttribute('data-material-id') || btn.getAttribute('data-id'),
+            sku: btn.getAttribute('data-sku') || '',
+            name: btn.getAttribute('data-name') || btn.getAttribute('data-material-name') || '',
+            stockQuantity: parseInt(btn.getAttribute('data-quantity'), 10) || 0,
+            unit: btn.getAttribute('data-unit') || '',
+            supplier: btn.getAttribute('data-supplier') || '',
+            purchaseOrderNumber: btn.getAttribute('data-purchase-order-number') || '',
+            purchaseOrderImageUrl: btn.getAttribute('data-purchase-order-image') || ''
+        };
+    }
+
+    function isRealPoImage(url) {
+        if (!url) return false;
+        const s = String(url).trim();
+        return s.length > 0 && !/\/placeholder-no-image\.svg$/i.test(s);
+    }
+
+    function applyPoPreviewImage(imageUrl) {
+        const imgEl = document.getElementById('rmDetailsPoImage');
+        const hintEl = document.getElementById('rmDetailsPoImageHint');
+        if (!imgEl) return;
+        const hasImage = isRealPoImage(imageUrl);
+        const src = resolvePoImageUrl(hasImage ? imageUrl : null);
+        imgEl.src = src;
+        imgEl.dataset.fullSrc = hasImage ? src : '';
+        imgEl.classList.toggle('rm-po-no-image', !hasImage);
+        imgEl.setAttribute('aria-disabled', hasImage ? 'false' : 'true');
+        if (hintEl) {
+            hintEl.textContent = hasImage ? 'Click image to view full size' : 'No image for this receipt order';
+        }
+        imgEl.onerror = function () {
+            imgEl.onerror = null;
+            imgEl.src = '/images/placeholder-no-image.svg';
+            imgEl.dataset.fullSrc = '';
+            imgEl.classList.add('rm-po-no-image');
+            if (hintEl) hintEl.textContent = 'No image for this receipt order';
+        };
+    }
+
+    function formatRmPoDate(createdAt) {
+        if (!createdAt) return '—';
+        const d = new Date(createdAt);
+        if (Number.isNaN(d.getTime())) return '—';
+        return d.toLocaleDateString();
+    }
+
+    function formatRmPoQty(quantity) {
+        const n = parseInt(quantity, 10);
+        if (!n || Number.isNaN(n)) return '—';
+        return String(n);
+    }
+
+    function rmPoRowId(item, idx) {
+        return String(item && item.id != null ? item.id : idx);
+    }
+
+    function buildRmReceiptRows(purchaseOrders, fallbackSupplier) {
+        const items = Array.isArray(purchaseOrders) ? purchaseOrders : [];
+        return items.map(function (item, idx) {
+            const supplier = (item.supplier || fallbackSupplier || '').trim();
+            const poNum = (item.purchaseOrderNumber || '').trim() || '—';
+            const date = formatRmPoDate(item.createdAt);
+            const qty = formatRmPoQty(item.quantity);
+            return {
+                id: rmPoRowId(item, idx),
+                supplier: supplier,
+                purchaseOrderNumber: poNum,
+                createdAt: item.createdAt,
+                quantity: item.quantity,
+                purchaseOrderImageUrl: item.purchaseOrderImageUrl || null,
+                supplierLabel: supplier || '—',
+                poLabel: poNum,
+                dateLabel: date,
+                qtyLabel: qty
+            };
+        });
+    }
+
+    function formatRmSupplierOptionLabel(row) {
+        return [
+            row.supplierLabel,
+            'RO ' + row.poLabel,
+            row.dateLabel,
+            'Qty ' + row.qtyLabel
+        ].join(' · ');
+    }
+
+    function formatRmPoOptionLabel(row) {
+        return [
+            'RO ' + row.poLabel,
+            row.dateLabel,
+            'Qty ' + row.qtyLabel,
+            row.supplierLabel
+        ].join(' · ');
+    }
+
+    function findRmReceiptRow(receiptId) {
+        const rows = window.__rmDetailsReceiptRows || [];
+        return rows.find(function (row) {
+            return String(row.id) === String(receiptId);
+        }) || null;
+    }
+
+    function syncRmDetailsSelectsFromReceiptId(receiptId, options) {
+        const opts = options || {};
+        const row = findRmReceiptRow(receiptId);
+        const supplierSelect = document.getElementById('rmDetailsSupplier');
+        const poSelect = document.getElementById('rmDetailsPoSelect');
+        if (!row) {
+            if (!opts.skipImage) applyPoPreviewImage(null);
+            return;
+        }
+        if (supplierSelect && !opts.skipSupplier) {
+            supplierSelect.value = row.id;
+        }
+        if (poSelect && !opts.skipPo) {
+            poSelect.value = row.id;
+        }
+        if (!opts.skipImage) {
+            applyPoPreviewImage(row.purchaseOrderImageUrl);
+        }
+    }
+
+    function populateRmReceiptSelects(purchaseOrders, fallbackSupplier, preferredReceiptId) {
+        const supplierSelect = document.getElementById('rmDetailsSupplier');
+        const poSelect = document.getElementById('rmDetailsPoSelect');
+        const rows = buildRmReceiptRows(purchaseOrders, fallbackSupplier);
+        window.__rmDetailsReceiptRows = rows;
+        window.__rmDetailsPoOptions = Array.isArray(purchaseOrders) ? purchaseOrders : [];
+
+        function fillSelect(select, formatter, emptyText) {
+            if (!select) return;
+            select.innerHTML = '';
+            if (!rows.length) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = emptyText || '—';
+                select.appendChild(opt);
+                select.disabled = true;
+                return;
+            }
+            select.disabled = false;
+            rows.forEach(function (row) {
+                const opt = document.createElement('option');
+                opt.value = row.id;
+                opt.textContent = formatter(row);
+                select.appendChild(opt);
+            });
+        }
+
+        fillSelect(supplierSelect, formatRmSupplierOptionLabel, (fallbackSupplier || '').trim() || '—');
+        fillSelect(poSelect, formatRmPoOptionLabel, '— No receipt orders —');
+
+        if (!rows.length) {
+            applyPoPreviewImage(null);
+            return;
+        }
+
+        let pickId = preferredReceiptId != null ? String(preferredReceiptId) : '';
+        if (!pickId && fallbackSupplier) {
+            const match = rows.find(function (row) {
+                return row.supplier && row.supplier.toLowerCase() === String(fallbackSupplier).toLowerCase();
+            });
+            if (match) pickId = match.id;
+        }
+        if (!pickId) pickId = rows[0].id;
+        syncRmDetailsSelectsFromReceiptId(pickId);
+    }
+
+    function applyPoPreviewFromSelect() {
+        const select = document.getElementById('rmDetailsPoSelect');
+        if (!select || !select.value) {
+            applyPoPreviewImage(null);
+            return;
+        }
+        syncRmDetailsSelectsFromReceiptId(select.value, { skipPo: true });
+    }
+
+    function openPoLightbox(src) {
+        if (!src) return;
+        const box = document.getElementById('rmPoImageLightbox');
+        const img = document.getElementById('rmPoImageLightboxImg');
+        if (!box || !img) return;
+        img.src = src;
+        box.style.display = 'flex';
+        box.setAttribute('aria-hidden', 'false');
+    }
+
+    function closePoLightbox() {
+        const box = document.getElementById('rmPoImageLightbox');
+        const img = document.getElementById('rmPoImageLightboxImg');
+        if (box) {
+            box.style.display = 'none';
+            box.setAttribute('aria-hidden', 'true');
+        }
+        if (img) img.src = '';
+    }
+
+    function initPoDetailsUi() {
+        if (document.body.getAttribute('data-rm-po-ui-init')) return;
+        document.body.setAttribute('data-rm-po-ui-init', '1');
+
+        const poSelect = document.getElementById('rmDetailsPoSelect');
+        if (poSelect) {
+            poSelect.addEventListener('change', function () {
+                syncRmDetailsSelectsFromReceiptId(poSelect.value, { skipPo: true });
+            });
+        }
+
+        const supplierSelect = document.getElementById('rmDetailsSupplier');
+        if (supplierSelect) {
+            supplierSelect.addEventListener('change', function () {
+                syncRmDetailsSelectsFromReceiptId(supplierSelect.value, { skipSupplier: true });
+            });
+        }
+
+        const thumb = document.getElementById('rmDetailsPoImage');
+        if (thumb) {
+            thumb.addEventListener('click', function () {
+                const full = thumb.dataset.fullSrc;
+                if (full) openPoLightbox(full);
+            });
+            thumb.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    const full = thumb.dataset.fullSrc;
+                    if (full) openPoLightbox(full);
+                }
+            });
+        }
+
+        const closeBtn = document.getElementById('rmPoLightboxClose');
+        const backdrop = document.getElementById('rmPoLightboxBackdrop');
+        if (closeBtn) closeBtn.addEventListener('click', closePoLightbox);
+        if (backdrop) backdrop.addEventListener('click', closePoLightbox);
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') closePoLightbox();
+        });
+    }
+
+    function openRawMaterialDetailsModal(data, purchaseOrders) {
+        const modal = document.getElementById('rawMaterialDetailsModal');
+        if (!modal || !data) return;
+        if (modal.parentNode !== document.body) {
+            document.body.appendChild(modal);
+        }
+        initPoDetailsUi();
+        const skuEl = document.getElementById('rmDetailsSku');
+        const nameEl = document.getElementById('rmDetailsName');
+        const unitEl = document.getElementById('rmDetailsUnit');
+        const qtyEl = document.getElementById('rmDetailsStockQty');
+        if (skuEl) skuEl.textContent = data.sku || '—';
+        if (nameEl) nameEl.textContent = data.name || '—';
+        if (unitEl) unitEl.textContent = data.unit || '—';
+        if (qtyEl) {
+            qtyEl.textContent = String(data.stockQuantity != null ? data.stockQuantity : 0);
+            qtyEl.className = 'inventory-stock-card-value ' + stockLevelClassForDetails(data.stockQuantity);
+        }
+        let poList = purchaseOrders;
+        if (poList == null && (data.purchaseOrderNumber || data.purchaseOrderImageUrl || data.supplier)) {
+            poList = [{
+                id: 'material-initial',
+                purchaseOrderNumber: data.purchaseOrderNumber || null,
+                purchaseOrderImageUrl: data.purchaseOrderImageUrl || null,
+                quantity: data.stockQuantity,
+                createdAt: data.createdAt || null,
+                supplier: data.supplier || null
+            }];
+        }
+        populateRmReceiptSelects(poList || [], data.supplier);
+        modal.style.display = 'block';
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function initDetailsModal() {
+        if (document.body.getAttribute('data-rm-details-delegation')) return;
+        document.body.setAttribute('data-rm-details-delegation', '1');
+        document.addEventListener('click', async function (e) {
+            const btn = e.target.closest('.raw-material-details-btn');
+            if (!btn || !document.getElementById('rawMaterialsTab')) return;
+            const local = materialDataFromButton(btn);
+            openRawMaterialDetailsModal(local);
+            const materialId = local && local.id;
+            if (!materialId) return;
+            try {
+                const res = await fetch('/api/admin/raw-materials/' + materialId, { credentials: 'include' });
+                const data = await res.json();
+                if (data.success && data.material) {
+                    openRawMaterialDetailsModal(
+                        normalizeMaterial(data.material),
+                        data.purchaseOrders || data.recentReceipts || []
+                    );
+                }
+            } catch (err) {
+                /* keep local row data */
+            }
+        });
+        wireClose(['rmCloseDetailsModal'], 'rawMaterialDetailsModal');
+        const detailsModal = document.getElementById('rawMaterialDetailsModal');
+        if (detailsModal) {
+            detailsModal.addEventListener('click', function (ev) {
+                if (ev.target === detailsModal) {
+                    closeModal('rawMaterialDetailsModal');
+                    closePoLightbox();
+                }
+            });
+        }
+        const closeDetailsBtn = document.getElementById('rmCloseDetailsModal');
+        if (closeDetailsBtn && !closeDetailsBtn.getAttribute('data-rm-po-close')) {
+            closeDetailsBtn.setAttribute('data-rm-po-close', '1');
+            closeDetailsBtn.addEventListener('click', closePoLightbox);
+        }
     }
 
     function renderRawMaterialsTable(materials) {
@@ -404,7 +817,7 @@
         table.id = 'rawMaterialsTable';
         table.innerHTML =
             '<thead><tr>' +
-            '<th>SKU</th><th>Name</th><th class="qty-col">Qty</th><th>Unit</th><th>Supplier</th><th>Updated</th><th class="pi-actions-col">Actions</th>' +
+            '<th>SKU</th><th>Name</th><th class="qty-col">Qty</th><th>Stock Status</th><th>Unit</th><th>Supplier</th><th>Updated</th><th class="pi-actions-col">Actions</th>' +
             '</tr></thead><tbody></tbody>';
         const tbody = table.querySelector('tbody');
 
@@ -412,16 +825,21 @@
             const item = normalizeMaterial(rawItem);
             const tr = document.createElement('tr');
             tr.setAttribute('data-material-id', String(item.id));
+            const status = stockStatusFor(item.stockQuantity);
             tr.innerHTML =
-                '<td><code style="font-size:0.85em;">' + escapeHtml(item.sku || '—') + '</code></td>' +
+                '<td><code class="inventory-code-text">' + escapeHtml(item.sku || '—') + '</code></td>' +
                 '<td>' + escapeHtml(item.name || '') + '</td>' +
                 '<td class="qty-col"><span class="stock-qty rm-qty-display ' + stockQtyClassFor(item.stockQuantity) + '" data-material-id="' + escapeHtml(item.id) + '">' + escapeHtml(item.stockQuantity) + '</span></td>' +
+                '<td><span class="rm-stock-status ' + status.className + '">' + escapeHtml(status.label) + '</span></td>' +
                 '<td>' + escapeHtml(item.unit || '') + '</td>' +
                 '<td>' + escapeHtml(item.supplier || '—') + '</td>' +
                 '<td class="rm-updated-cell">' + escapeHtml(formatUpdatedDate(item.createdAt)) + '</td>' +
                 '<td class="pi-actions-col">' +
                 '<div class="pi-actions-cell">' +
-                '<button type="button" class="restock-raw-material-btn pi-icon-restock-btn" data-material-id="' + escapeHtml(item.id) + '" data-material-name="' + escapeHtml(item.name || 'Material') + '" data-quantity="' + escapeHtml(item.stockQuantity) + '" data-unit="' + escapeHtml(item.unit || '') + '" title="Restock" aria-label="Restock">' +
+                '<button type="button" class="raw-material-details-btn pi-icon-details-btn" data-material-id="' + escapeHtml(item.id) + '" data-sku="' + escapeHtml(item.sku || '') + '" data-name="' + escapeHtml(item.name || '') + '" data-quantity="' + escapeHtml(item.stockQuantity) + '" data-unit="' + escapeHtml(item.unit || '') + '" data-supplier="' + escapeHtml(item.supplier || '') + '" data-purchase-order-number="' + escapeHtml(item.purchaseOrderNumber || '') + '" data-purchase-order-image="' + escapeHtml(item.purchaseOrderImageUrl || '') + '" title="View details" aria-label="View details" data-pi-menu-label="View details">' +
+                '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 4.5V3a3 3 0 016 0v1.5M9 10h6M9 14h6M9 18h6"/></svg>' +
+                '</button>' +
+                '<button type="button" class="restock-raw-material-btn pi-icon-restock-btn" data-material-id="' + escapeHtml(item.id) + '" data-material-name="' + escapeHtml(item.name || 'Material') + '" data-quantity="' + escapeHtml(item.stockQuantity) + '" data-unit="' + escapeHtml(item.unit || '') + '" data-supplier="' + escapeHtml(item.supplier || '') + '" title="Restock" aria-label="Restock">' +
                 '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>' +
                 '</button>' +
                 '<button type="button" class="edit-raw-material-btn pi-icon-edit-btn" title="Edit" aria-label="Edit" data-id="' + escapeHtml(item.id) + '" data-sku="' + escapeHtml(item.sku || '') + '" data-name="' + escapeHtml(item.name || '') + '" data-quantity="' + escapeHtml(item.stockQuantity) + '" data-unit="' + escapeHtml(item.unit || '') + '" data-supplier="' + escapeHtml(item.supplier || '') + '">' +
@@ -473,6 +891,16 @@
             window.setTimeout(function () { span.classList.remove('rm-qty-updated'); }, 1200);
         });
 
+        const status = stockStatusFor(n);
+        document.querySelectorAll('#rawMaterialsTab tr[data-material-id="' + mid + '"] .rm-stock-status').forEach(function (badge) {
+            badge.textContent = status.label;
+            badge.className = 'rm-stock-status ' + status.className;
+        });
+
+        document.querySelectorAll('#rawMaterialsTab .raw-material-details-btn[data-material-id="' + mid + '"]').forEach(function (btn) {
+            btn.setAttribute('data-quantity', String(n));
+        });
+
         document.querySelectorAll('#rawMaterialsTab .restock-raw-material-btn[data-material-id="' + mid + '"]').forEach(function (btn) {
             btn.setAttribute('data-quantity', String(n));
         });
@@ -516,6 +944,10 @@
         function closeRestockModal() {
             closeModal('rawMaterialRestockModal');
             if (qtyInput) qtyInput.value = '1';
+            const poNumEl = document.getElementById('rawMaterialRestockPoNumber');
+            const poImgEl = document.getElementById('rawMaterialRestockPoImage');
+            if (poNumEl) poNumEl.value = '';
+            if (poImgEl) poImgEl.value = '';
         }
 
         function closeConfirmModal() {
@@ -545,9 +977,32 @@
                 document.getElementById('rawMaterialRestockCurrentQty').textContent = String(qty);
                 const unitEl = document.getElementById('rawMaterialRestockUnit');
                 if (unitEl) unitEl.textContent = unit ? ' ' + unit : '';
+                const supplierEl = document.getElementById('rawMaterialRestockSupplier');
+                const poNumEl = document.getElementById('rawMaterialRestockPoNumber');
+                const poImgEl = document.getElementById('rawMaterialRestockPoImage');
+                if (supplierEl) supplierEl.value = btn.getAttribute('data-supplier') || '';
+                if (poNumEl) poNumEl.value = '';
+                if (poImgEl) poImgEl.value = '';
                 if (qtyInput) qtyInput.value = '1';
                 openModal('rawMaterialRestockModal');
             });
+        }
+
+        function validateRestockPoFields() {
+            const poNumEl = document.getElementById('rawMaterialRestockPoNumber');
+            const poImgEl = document.getElementById('rawMaterialRestockPoImage');
+            const poNum = poNumEl ? poNumEl.value.trim() : '';
+            if (!poNum) {
+                popup('Receipt order number is required.', true);
+                if (poNumEl) poNumEl.focus();
+                return false;
+            }
+            if (!poImgEl || !poImgEl.files || !poImgEl.files[0]) {
+                popup('Receipt order image is required.', true);
+                if (poImgEl) poImgEl.focus();
+                return false;
+            }
+            return true;
         }
 
         if (!continueBtn.getAttribute('data-listener-attached')) {
@@ -565,6 +1020,7 @@
                 popup('Enter a quantity of at least 1.', true);
                 return;
             }
+            if (!validateRestockPoFields()) return;
             if (confirmModal && confirmText) {
                 confirmText.textContent = 'Add ' + quantityToAdd + ' to "' + materialName + '"?';
                 closeModal('rawMaterialRestockModal');
@@ -583,6 +1039,11 @@
         finalConfirmBtn.addEventListener('click', async function () {
             const materialId = document.getElementById('rawMaterialRestockId').value;
             const quantityToAdd = parseInt(qtyInput && qtyInput.value, 10);
+            if (!validateRestockPoFields()) {
+                closeConfirmModal();
+                openModal('rawMaterialRestockModal');
+                return;
+            }
             closeConfirmModal();
             await performRawMaterialRestock(materialId, quantityToAdd, closeRestockModal);
         });
@@ -596,11 +1057,24 @@
         if (!materialId || !quantityToAdd || quantityToAdd < 1) return;
         if (btn) btn.disabled = true;
         try {
+            const formData = new FormData();
+            formData.append('quantityToAdd', String(quantityToAdd));
+            const supplierEl = document.getElementById('rawMaterialRestockSupplier');
+            const poNumEl = document.getElementById('rawMaterialRestockPoNumber');
+            const poImgEl = document.getElementById('rawMaterialRestockPoImage');
+            if (supplierEl && supplierEl.value.trim()) {
+                formData.append('supplier', supplierEl.value.trim());
+            }
+            if (poNumEl && poNumEl.value.trim()) {
+                formData.append('purchaseOrderNumber', poNumEl.value.trim());
+            }
+            if (poImgEl && poImgEl.files && poImgEl.files[0]) {
+                formData.append('purchaseOrderImage', poImgEl.files[0]);
+            }
             const res = await fetch('/api/admin/raw-materials/' + materialId + '/restock', {
                 method: 'POST',
                 credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ quantityToAdd: quantityToAdd })
+                body: formData
             });
             let data = {};
             try {
@@ -716,6 +1190,7 @@
         initManageUnits();
         initArchiveButtons();
         initRestock();
+        initDetailsModal();
         focusRawMaterialFromUrl();
     }
 

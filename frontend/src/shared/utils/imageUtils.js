@@ -193,3 +193,38 @@ const getBackendUrl = () => {
       return false;
     }
   };
+
+  /** True when the app is served from localhost (CRA dev / local testing). */
+  export const isLocalDevHost = () => {
+    if (typeof window === 'undefined') return false;
+    const host = window.location.hostname;
+    return host === 'localhost' || host === '127.0.0.1';
+  };
+
+  /**
+   * Resolve a model URL for model-viewer / AR.
+   * On localhost, rewrites API-origin URLs to same-origin paths so CRA's proxy serves GLB files.
+   */
+  export const resolveModelUrlForViewer = (modelUrl, apiBaseUrl = getBackendUrl()) => {
+    if (!modelUrl) return null;
+    try {
+      const parsed = new URL(modelUrl);
+      const apiRoot = apiBaseUrl.replace(/\/+$/, '');
+      const apiOrigin = new URL(apiRoot).origin;
+      const isOurAsset =
+        parsed.origin === window.location.origin ||
+        parsed.origin === apiOrigin;
+
+      if (!isOurAsset) {
+        return `${apiRoot}/api/model-file?url=${encodeURIComponent(modelUrl)}`;
+      }
+
+      if (isLocalDevHost() && parsed.origin === apiOrigin && parsed.origin !== window.location.origin) {
+        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+      }
+
+      return modelUrl;
+    } catch {
+      return modelUrl;
+    }
+  };

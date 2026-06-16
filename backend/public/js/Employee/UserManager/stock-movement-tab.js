@@ -50,7 +50,8 @@
         if (t === 'returned_to_damaged') return 'stock-mv-badge-damaged';
         if (t === 'damaged_to_repaired') return 'stock-mv-badge-repaired';
         if (t === 'repaired_to_available') return 'stock-mv-badge-available';
-        if (t === 'restock_available' || t === 'restock_variation' || t === 'restock_product' || t === 'restock_raw_material') return 'stock-mv-badge-restock';
+        if (t === 'restock_available' || t === 'restock_variation' || t === 'restock_product' || t === 'restock_raw_material' || t === 'add_raw_material') return 'stock-mv-badge-restock';
+        if (t === 'adjust_variation_stock' || t === 'adjust_raw_material') return 'stock-mv-badge-adjust';
         return 'stock-mv-badge-default';
     }
 

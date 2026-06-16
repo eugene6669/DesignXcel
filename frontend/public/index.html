@@ -10,6 +10,9 @@
       content="Web site created using create-react-app"
     />
     
+    <!-- Allow camera / WebXR on localhost for AR testing -->
+    <meta http-equiv="Permissions-Policy" content="camera=(self), xr-spatial-tracking=(self)" />
+
     <!-- Content Security Policy for Stripe integration and 3D models -->
     <!-- Development mode: Very permissive CSP for development and testing -->
     <!-- For production, this should be more restrictive -->
@@ -37,6 +40,7 @@
       user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
     -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.1.0/model-viewer.min.js"></script>
     
     <!-- Modern Typography - Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">

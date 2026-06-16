@@ -20,7 +20,7 @@
                 <tbody>
                     <% bundles.forEach(function(b) { %>
                         <tr data-bundle-id="<%= b.BomBundleID %>">
-                            <td><code style="font-size:0.85em;"><%= b.BundleCode || '—' %></code></td>
+                            <td><code class="inventory-code-text"><%= b.BundleCode || '—' %></code></td>
                             <td><%= b.Name %></td>
                             <td class="qty-col"><%= b.MaterialCount || 0 %></td>
                             <td><%= b.DateAdded ? new Date(b.DateAdded).toLocaleDateString() : '—' %></td>
