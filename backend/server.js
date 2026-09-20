@@ -1897,11 +1897,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads'), {
         }
     }
 }));
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
-if (process.env.NODE_ENV === 'production') {
-    app.set('view cache', true);
-}
+const { installRenderMiddleware } = require('./views/render/renderView');
+installRenderMiddleware(app);
 
 // Trust proxy for Railway/Heroku/etc (important for HTTPS and correct IP detection)
 // Must be set before session configuration
@@ -3808,7 +3805,7 @@ app.post('/logout', (req, res) => {
 });
 
 // Enhanced Role-Based Authentication System
-// All routes are now consolidated in routes.js
+// All routes are now modular and organized in /routes
 
 // Make database connection available to middleware
 app.locals.pool = pool;
@@ -3818,21 +3815,28 @@ app.locals.getOrderStatusLabel = getOrderStatusLabel;
 app.locals.SALES_REPORT_STATUS_RULES = SALES_REPORT_STATUS_RULES;
 
 // Lazy load routes - only load when first request comes in (faster startup)
-let employeeRoutes, apiRoutes;
+let mainRouter, apiRoutes;
 let routesLoaded = false;
 
 const loadRoutes = () => {
     if (!routesLoaded) {
         const startTime = Date.now();
         try {
-            employeeRoutes = require('./routes')(sql, pool, getStripe);
+            // Load new modular router system
+            const createMainRouter = require('./routes/index');
+            mainRouter = createMainRouter(sql, pool, getStripe);
+            
+            // Load API routes (still separate)
             apiRoutes = require('./api-routes')(sql, pool);
-            app.use('/', employeeRoutes);
+            
+            // Mount routers
+            app.use('/', mainRouter);
             app.use('/', apiRoutes);
+            
             routesLoaded = true;
             const loadTime = Date.now() - startTime;
             if (process.env.NODE_ENV === 'development') {
-                console.log(`[ROUTES] Loaded in ${loadTime}ms`);
+                console.log(`[ROUTES] Modular routes loaded in ${loadTime}ms`);
             }
         } catch (error) {
             console.error('[ROUTES] Error loading routes:', error);

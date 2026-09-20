@@ -1,0 +1,65 @@
+'use strict';
+
+/**
+ * Shared dependency bundle for employee role routes that manage products/inventory.
+ */
+function buildEmployeeProductRouteContext(deps) {
+    return {
+        pool: deps.pool,
+        sql: deps.sql,
+        path: deps.path,
+        fs: deps.fs,
+        isAuthenticated: deps.isAuthenticated,
+        checkPermission: deps.checkPermission,
+        EMPLOYEE_SYNC_ROLES: deps.EMPLOYEE_SYNC_ROLES,
+        registerEmployeeRoleProductRoutes: deps.registerEmployeeRoleProductRoutes,
+        productUpload: deps.productUpload,
+        variationUpload: deps.variationUpload,
+        logActivity: deps.logActivity,
+        captureChanges: deps.captureChanges,
+        sendActivityLogsData: deps.sendActivityLogsData,
+        buildInventoryAlertsPayload: deps.buildInventoryAlertsPayload,
+        getRoleViewPath: deps.getRoleViewPath,
+        formatInventoryDate: deps.formatInventoryDate,
+        loadProductInventoryPageData: deps.loadProductInventoryPageData,
+        ensureListingStageColumn: deps.ensureListingStageColumn,
+        ensureStorefrontDisplayQuantityColumn: deps.ensureStorefrontDisplayQuantityColumn,
+        ensureVariationMediaColumns: deps.ensureVariationMediaColumns,
+        ensureBomBundleSchema: deps.ensureBomBundleSchema,
+        ensureInventoryStockMovementSchema: deps.ensureInventoryStockMovementSchema,
+        makeRenderRoleActivityLogsPage: deps.makeRenderRoleActivityLogsPage,
+        syncInventoryVariationToProductsVariation: deps.syncInventoryVariationToProductsVariation,
+        syncInventoryProductCatalogToProducts: deps.syncInventoryProductCatalogToProducts,
+        cascadeArchiveCmsFromInventoryProductArchived: deps.cascadeArchiveCmsFromInventoryProductArchived,
+        publicUrlFromMulterProductFile: deps.publicUrlFromMulterProductFile,
+        publicUrlFromMulterVariationFile: deps.publicUrlFromMulterVariationFile,
+        deleteProductAssetFile: deps.deleteProductAssetFile,
+        assignVariationSku: deps.assignVariationSku,
+        upsertProductVariationWithId: deps.upsertProductVariationWithId,
+        buildVariationDimensionsJson: deps.buildVariationDimensionsJson,
+        parseSingleVariationMediaFiles: deps.parseSingleVariationMediaFiles,
+        resolveVariationMediaUrls: deps.resolveVariationMediaUrls,
+        mapVariationMediaFiles: deps.mapVariationMediaFiles,
+        invalidateAdminPageCache: deps.invalidateAdminPageCache,
+        insertStockMovement: deps.insertStockMovement,
+        logInventoryStockMovementFromVariationUpdate: deps.logInventoryStockMovementFromVariationUpdate,
+        logRestockVariationMovement: deps.logRestockVariationMovement,
+        logRestockProductMovement: deps.logRestockProductMovement,
+        logRestockRawMaterialMovement: deps.logRestockRawMaterialMovement,
+        logAdjustRawMaterialMovement: deps.logAdjustRawMaterialMovement,
+        logAddRawMaterialMovement: deps.logAddRawMaterialMovement,
+        archiveStockMovement: deps.archiveStockMovement,
+        archiveStockMovementsForProduct: deps.archiveStockMovementsForProduct,
+        parseMoneyInput: deps.parseMoneyInput,
+        generateProductIdentifiers: deps.generateProductIdentifiers,
+        generateReferenceNumber: deps.generateReferenceNumber,
+        normalizeProductAssetUrl: deps.normalizeProductAssetUrl,
+        normalizeThumbnailList: deps.normalizeThumbnailList,
+        deleteOldImageFile: deps.deleteOldImageFile,
+        generateGuid: deps.generateGuid,
+        decreaseMaterialsForProduct: deps.decreaseMaterialsForProduct,
+        restoreMaterialsForProduct: deps.restoreMaterialsForProduct
+    };
+}
+
+module.exports = { buildEmployeeProductRouteContext };
