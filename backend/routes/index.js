@@ -16,7 +16,7 @@ module.exports = function createMainRouter(sql, pool, getStripe) {
     const { isAuthenticated, hasEmployeeAccess } = require('../middleware/employeeAuth');
     const { errorHandler, notFoundHandler } = require('../middleware/errorHandler');
     const jwtAuth = require('../middleware/jwtAuth');
-    const permissionCheck = require('../middleware/permissionCheck');
+    const { checkPermission, checkAnyPermission } = require('../middleware/permissionCheck');
 
     // Import utilities (will be passed to sub-routers as context)
     const sendgridHelper = require('../utils/sendgridHelper');
@@ -167,7 +167,8 @@ module.exports = function createMainRouter(sql, pool, getStripe) {
         isAuthenticated,
         hasEmployeeAccess,
         jwtAuth,
-        checkPermission: permissionCheck,
+        checkPermission,
+        checkAnyPermission,
         // Uploads
         productUpload,
         variationUpload,
