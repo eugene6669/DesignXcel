@@ -269,6 +269,9 @@ module.exports = function createMainRouter(sql, pool, getStripe) {
     // Mount sub-routers
     try {
         // Authentication routes - returns function that takes router
+        const registerLoginRoutes = require('./auth/loginRoutes');
+        registerLoginRoutes(router, sharedContext);
+        
         const registerOtpRoutes = require('./auth/otpRoutes');
         registerOtpRoutes(router, sharedContext);
 
