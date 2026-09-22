@@ -294,6 +294,9 @@ module.exports = function createMainRouter(sql, pool, getStripe) {
         const registerOrderSupportRoutes = require('./employee/orderSupportRoutes');
         registerOrderSupportRoutes(router, sharedContext);
 
+        const registerAdminRoutes = require('./employee/adminRoutes');
+        registerAdminRoutes(router, sharedContext);
+
         console.log('[ROUTES] All route modules loaded successfully');
     } catch (error) {
         console.error('[ROUTES] Error loading route modules:', error);
