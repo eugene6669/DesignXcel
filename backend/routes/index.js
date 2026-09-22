@@ -101,6 +101,22 @@ module.exports = function createMainRouter(sql, pool, getStripe) {
     const { isAzureBlobConfigured, uploadBufferToAzureBlob, getBlobPublicUrl } = require('../utils/azureBlobStorage');
     const { serializeActivityLogChanges, fetchActivityLogs } = require('../utils/activityLogHelpers');
 
+    // Helper functions that need to be shared across routes
+    async function sendActivityLogsData(req, res) {
+        try {
+            await pool.connect();
+            const logs = await fetchActivityLogs(pool, req.query);
+            res.json({ success: true, logs });
+        } catch (err) {
+            console.error('Error fetching activity logs data:', err);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to retrieve activity logs data.',
+                error: err.message
+            });
+        }
+    }
+
     // Multer configuration for file uploads
     const multer = require('multer');
     
@@ -186,6 +202,7 @@ module.exports = function createMainRouter(sql, pool, getStripe) {
         renderRoleProductsListing,
         renderRoleProductInventory,
         registerEmployeeRoleProductRoutes,
+        sendActivityLogsData,
         generateProductIdentifiers,
         generateTemporaryPublicId,
         generateGuid,
