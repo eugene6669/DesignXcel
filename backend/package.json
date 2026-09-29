@@ -17,7 +17,10 @@
     "encrypt:migrate-data": "node scripts/encrypt-database-migration.js",
     "encrypt:compact-test": "node scripts/test-compact-encryption.js",
     "encrypt:in-place": "node scripts/in-place-encryption-migration.js",
-    "encrypt:convert-format": "node scripts/convert-encryption-format.js"
+    "encrypt:convert-format": "node scripts/convert-encryption-format.js",
+    "convert-views": "node scripts/convert-ejs-to-js.js",
+    "verify-views": "node scripts/verify-view-output.js",
+    "verify-all-views": "node scripts/verify-all-views.js"
   },
   "keywords": [
     "api",
@@ -39,7 +42,6 @@
     "connect-mssql-v2": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
-    "ejs": "^3.1.10",
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
     "express-rate-limit": "^8.1.0",
@@ -58,6 +60,7 @@
     "stripe": "^18.3.0"
   },
   "devDependencies": {
+    "ejs": "^3.1.10",
     "nodemon": "^3.1.0"
   },
   "engines": {

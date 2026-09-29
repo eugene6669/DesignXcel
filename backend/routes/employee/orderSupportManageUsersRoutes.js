@@ -441,4 +441,5 @@ module.exports = function registerOrderSupportManageUsersRoutes(router, ctx) {
             console.error('Error toggling user status:', error);
             res.status(500).json({ success: false, message: 'Failed to update user status' });
         }
+    });
 };

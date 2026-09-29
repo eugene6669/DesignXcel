@@ -100,6 +100,7 @@ module.exports = function createMainRouter(sql, pool, getStripe) {
     } = require('../utils/productAssetUrls');
     const { isAzureBlobConfigured, uploadBufferToAzureBlob, getBlobPublicUrl } = require('../utils/azureBlobStorage');
     const { serializeActivityLogChanges, fetchActivityLogs } = require('../utils/activityLogHelpers');
+    const { ensureBomBundleSchema, loadArchivedBomBundles } = require('../utils/bomBundleSchema');
 
     // Helper functions that need to be shared across routes
     async function sendActivityLogsData(req, res) {
@@ -172,6 +173,33 @@ module.exports = function createMainRouter(sql, pool, getStripe) {
         }
     });
 
+    // Raw Material Purchase Order Upload
+    const rawMaterialPoStorage = multer.diskStorage({
+        destination: (req, file, cb) => {
+            const dest = path.join(__dirname, '../public/uploads/raw-materials');
+            if (!fs.existsSync(dest)) {
+                fs.mkdirSync(dest, { recursive: true });
+            }
+            cb(null, dest);
+        },
+        filename: (req, file, cb) => {
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+            cb(null, 'po-' + uniqueSuffix + path.extname(file.originalname));
+        }
+    });
+
+    const rawMaterialPoUpload = multer({
+        storage: rawMaterialPoStorage,
+        limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+        fileFilter: (req, file, cb) => {
+            if (file.mimetype.startsWith('image/')) {
+                cb(null, true);
+            } else {
+                cb(new Error('Only image files are allowed!'), false);
+            }
+        }
+    });
+
     // Create shared context object to pass to all route modules
     const sharedContext = {
         sql,
@@ -186,8 +214,10 @@ module.exports = function createMainRouter(sql, pool, getStripe) {
         checkPermission,
         checkAnyPermission,
         // Uploads
+        multer,
         productUpload,
         variationUpload,
+        rawMaterialPoUpload,
         // Utilities
         sendgridHelper,
         generateReferenceNumber,
@@ -263,8 +293,34 @@ module.exports = function createMainRouter(sql, pool, getStripe) {
         uploadBufferToAzureBlob,
         getBlobPublicUrl,
         serializeActivityLogChanges,
-        fetchActivityLogs
+        fetchActivityLogs,
+        ensureBomBundleSchema,
+        loadArchivedBomBundles
     };
+
+    // logActivity helper function for the shared context
+    async function logActivity(userId, action, tableName, recordId, description, changes) {
+        try {
+            await pool.connect();
+            const changesStr = typeof changes === 'string' ? changes : JSON.stringify(changes || {});
+            await pool.request()
+                .input('userId', sql.Int, userId)
+                .input('action', sql.NVarChar, action)
+                .input('tableName', sql.NVarChar, tableName)
+                .input('recordId', sql.NVarChar, String(recordId))
+                .input('description', sql.NVarChar, description)
+                .input('changes', sql.NVarChar, changesStr)
+                .query(`
+                    INSERT INTO ActivityLogs (UserID, Action, TableName, RecordID, Description, Changes, Timestamp)
+                    VALUES (@userId, @action, @tableName, @recordId, @description, @changes, GETDATE())
+                `);
+        } catch (err) {
+            console.error('Error logging activity:', err);
+        }
+    }
+
+    // Add logActivity to shared context
+    sharedContext.logActivity = logActivity;
 
     // Mount sub-routers
     try {
@@ -297,7 +353,39 @@ module.exports = function createMainRouter(sql, pool, getStripe) {
         const registerAdminRoutes = require('./employee/adminRoutes');
         registerAdminRoutes(router, sharedContext);
 
-        console.log('[ROUTES] All route modules loaded successfully');
+        // Load Admin modular routes
+        const registerAdminMiscRoutes = require('./employee/adminMiscRoutes');
+        registerAdminMiscRoutes(router, sharedContext);
+
+        const registerAdminWalkInRoutes = require('./employee/adminWalkInRoutes');
+        registerAdminWalkInRoutes(router, sharedContext);
+
+        const registerAdminApiRoutes = require('./employee/adminApiRoutes');
+        registerAdminApiRoutes(router, sharedContext);
+
+        const registerAdminUsersRoutes = require('./employee/adminUsersRoutes');
+        registerAdminUsersRoutes(router, sharedContext);
+
+        const registerAdminOrdersRoutes = require('./employee/adminOrdersRoutes');
+        registerAdminOrdersRoutes(router, sharedContext);
+
+        const registerAdminProductsRoutes = require('./employee/adminProductsRoutes');
+        registerAdminProductsRoutes(router, sharedContext);
+
+        const registerAdminReportsRoutes = require('./employee/adminReportsRoutes');
+        registerAdminReportsRoutes(router, sharedContext);
+
+        const registerAdminExtrasRoutes = require('./employee/adminExtrasRoutes');
+        registerAdminExtrasRoutes(router, sharedContext);
+
+        // =====================================================================
+        // MODULARIZATION COMPLETE - Legacy routes.js removed
+        // All routes now loaded from modular files in routes/ directory
+        // Backup available: routes.js.MONOLITH_ARCHIVE_* 
+        // =====================================================================
+        console.log('[ROUTES] ✅ All route modules loaded successfully - 100% modular');
+        console.log('[ROUTES] 📁 19 modular route files registered (~230 routes)');
+        console.log('[ROUTES] 🎉 Monolithic routes.js successfully retired');
     } catch (error) {
         console.error('[ROUTES] Error loading route modules:', error);
         throw error;

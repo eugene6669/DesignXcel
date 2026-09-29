@@ -24,4 +24,9 @@ execSync('node backend/scripts/fix-role-css-paths.js', {
     stdio: 'inherit'
 });
 
+execSync('node scripts/convert-ejs-to-js.js', {
+    cwd: path.join(__dirname, '..'),
+    stdio: 'inherit'
+});
+
 console.log('Done. Skipped: AdminManager, AdminManageUsers (views); AdminManageUsers.js, role-manager.js (JS).');

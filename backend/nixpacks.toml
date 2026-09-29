@@ -1,11 +1,12 @@
 [phases.setup]
 nixPkgs = ["nodejs-18_x"]
 
+# Install production deps in a separate layer from source copy for better Railway cache hits.
 [phases.install]
-    cmds = ["npm ci --legacy-peer-deps"]
+cmds = ["npm ci --omit=dev --legacy-peer-deps --prefer-offline"]
 
 [phases.build]
-cmds = ["echo 'Backend build complete - no build step needed'"]
+cmds = ["echo 'Backend build complete — views precompiled in views-js/'"]
 
 [start]
 cmd = "npm start"
