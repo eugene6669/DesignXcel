@@ -3157,7 +3157,7 @@
                     }
                     // --- Products Tab Logic ---
                     async function fetchProducts() {
-                        const res = await fetch('/api/admin/products');
+                        const res = await fetch('/api/admin/products', { credentials: 'same-origin' });
                         const data = await res.json();
                         if (Array.isArray(data)) return data;
                         if (data && Array.isArray(data.products)) return data.products;
@@ -3297,7 +3297,7 @@
                     // --- Header Banner Tab Logic ---
                     async function fetchHeaderBannerSettings() {
                         try {
-                            const res = await fetch('/api/admin/header-banner');
+                            const res = await fetch('/api/admin/header-banner', { credentials: 'same-origin' });
                             if (!res.ok) throw new Error('Failed to fetch header banner settings');
                             return res.json();
                         } catch (err) {
@@ -3311,7 +3311,8 @@
                             const res = await fetch('/api/admin/header-banner', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(formData)
+                                body: JSON.stringify(formData),
+                                credentials: 'same-origin'
                             });
                             if (!res.ok) throw new Error('Failed to save header banner settings');
                             return res.json();
@@ -3454,9 +3455,10 @@
                                 const uploadFormData = new FormData();
                                 uploadFormData.append('logoUpload', logoFile);
 
-                                const uploadResponse = await fetch('/api/admin/logo-upload', {
+                                const uploadResponse = await fetch('/api/admin/header-banner/upload-logo', {
                                     method: 'POST',
-                                    body: uploadFormData
+                                    body: uploadFormData,
+                                    credentials: 'same-origin'
                                 });
 
                                 const uploadResult = await uploadResponse.json();
@@ -3573,7 +3575,7 @@
                     // --- Terms and Conditions Tab Logic ---
                     async function fetchTermsAndConditions() {
                         try {
-                            const res = await fetch('/api/admin/terms');
+                            const res = await fetch('/api/admin/terms', { credentials: 'same-origin' });
                             if (!res.ok) throw new Error('Failed to fetch terms and conditions');
                             return res.json();
                         } catch (err) {
@@ -3587,6 +3589,7 @@
                             const res = await fetch('/api/admin/terms', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
+                                credentials: 'same-origin',
                                 body: JSON.stringify(formData)
                             });
                             if (!res.ok) throw new Error('Failed to save terms and conditions');
@@ -3826,7 +3829,7 @@
 
                     async function loadMessages() {
                         try {
-                            const response = await fetch('/api/admin/contact-messages');
+                            const response = await fetch('/api/admin/contact-messages', { credentials: 'same-origin' });
                             const data = await response.json();
 
                             if (data.success) {
@@ -3976,7 +3979,7 @@
                     }
                 </script>
             </div>
-            <script src="/js/Employee/Admin/AdminCMS.js"></script>
+            <script src="/js/Employee/Admin/AdminCMS-v2.js?v=20261020115307"></script>
             <script>
                 // Initialize header offer bar functionality
                 document.addEventListener('DOMContentLoaded', function () {
@@ -4024,16 +4027,16 @@
 
                 // Load header offer settings function
                 function loadHeaderOfferBarSettings() {
-                    fetch('/api/cms/header-offer')
+                    fetch('/api/admin/offer-bar', { credentials: 'same-origin' })
                         .then(response => response.json())
                         .then(data => {
                             if (data.success && data.settings) {
                                 const settings = data.settings;
                                 document.getElementById('header-offer-text').value = settings.offerText || '';
                                 document.getElementById('header-offer-link').value = settings.offerLink || '';
-                                document.getElementById('header-offer-background-color').value = settings.backgroundColor || '#ffc107';
+                                document.getElementById('header-offer-background-color').value = settings.backgroundColor || '#F0B21B';
                                 document.getElementById('header-offer-text-color').value = settings.textColor || '#ffffff';
-                                document.getElementById('header-offer-status').checked = settings.isActive || false;
+                                document.getElementById('header-offer-status').checked = settings.isActive !== false;
 
                                 // Update preview
                                 updateHeaderOfferPreview();

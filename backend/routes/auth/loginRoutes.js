@@ -232,4 +232,123 @@ module.exports = function registerLoginRoutes(router, deps) {
             res.redirect('/login');
         }
     });
+
+    // POST /api/auth/customer/login - Customer login API endpoint (for React frontend)
+    router.post('/api/auth/customer/login', async (req, res) => {
+        try {
+            const { email, password, rememberMe } = req.body;
+            const loginIdentifier = typeof email === 'string' ? email.trim() : '';
+
+            console.log('=== CUSTOMER API LOGIN ATTEMPT ===');
+            console.log('Login identifier:', loginIdentifier);
+            console.log('Password provided:', password ? 'Yes' : 'No');
+
+            if (!loginIdentifier || !password) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Email and password are required'
+                });
+            }
+
+            await pool.connect();
+
+            // Find customer by email - only select columns that exist in the table
+            const customerResult = await pool.request()
+                .input('email', sql.NVarChar, loginIdentifier)
+                .query(`
+                    SELECT TOP 1 CustomerID, Email, FullName, PasswordHash, IsActive
+                    FROM Customers
+                    WHERE LOWER(LTRIM(RTRIM(Email))) = LOWER(@email)
+                `);
+
+            const customer = customerResult.recordset[0];
+
+            if (!customer) {
+                console.log('Customer not found:', loginIdentifier);
+                return res.status(401).json({
+                    success: false,
+                    error: 'Invalid email or password'
+                });
+            }
+
+            // Check if account is active
+            if (customer.IsActive === false || customer.IsActive === 0) {
+                console.log('Customer account is inactive:', loginIdentifier);
+                return res.status(401).json({
+                    success: false,
+                    error: 'Your account has been deactivated. Please contact support.'
+                });
+            }
+
+            console.log('Customer found:', customer.CustomerID);
+
+            // Verify password
+            let isPasswordValid = false;
+            try {
+                isPasswordValid = await bcrypt.compare(password, customer.PasswordHash);
+            } catch (bcryptError) {
+                console.error('Bcrypt comparison error:', bcryptError);
+                return res.status(500).json({
+                    success: false,
+                    error: 'Password verification failed'
+                });
+            }
+
+            if (!isPasswordValid) {
+                console.log('Invalid password for customer:', loginIdentifier);
+                return res.status(401).json({
+                    success: false,
+                    error: 'Invalid email or password'
+                });
+            }
+
+            console.log('Password verified successfully');
+
+            // Parse FullName into first and last name
+            const nameParts = (customer.FullName || '').trim().split(' ');
+            const firstName = nameParts[0] || '';
+            const lastName = nameParts.slice(1).join(' ') || '';
+
+            // Create session
+            req.session.user = {
+                id: customer.CustomerID,
+                email: customer.Email,
+                firstName: firstName,
+                lastName: lastName,
+                fullName: customer.FullName || `${firstName} ${lastName}`.trim(),
+                type: 'customer',
+                role: 'Customer'
+            };
+
+            // Set remember me cookie if requested
+            if (rememberMe) {
+                req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+                console.log('Remember me enabled - session will last 30 days');
+            }
+
+            console.log('Customer login successful:', customer.Email);
+
+            // Return JSON response
+            return res.json({
+                success: true,
+                message: 'Login successful',
+                user: {
+                    id: customer.CustomerID,
+                    email: customer.Email,
+                    firstName: firstName,
+                    lastName: lastName,
+                    fullName: customer.FullName || `${firstName} ${lastName}`.trim(),
+                    role: 'Customer'
+                }
+            });
+
+        } catch (err) {
+            console.error('Customer API login error:', err);
+            console.error('Error stack:', err.stack);
+            return res.status(500).json({
+                success: false,
+                error: 'An error occurred during login. Please try again.'
+            });
+        }
+    });
 };

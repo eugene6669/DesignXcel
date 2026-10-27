@@ -1,0 +1,16 @@
+{
+  "logoUrl": "/uploads/logos/logo-1792497579666-772269579.png",
+  "logoText": "DESIGN EXCELLENCE",
+  "contactEmail": "designexcellence1@gmail.com",
+  "contactPhone": "(02) 413-6682",
+  "contactAddress": "#1 Binmaka Street Cor. Biak na Bato Brgy. Manresa, Quezon City",
+  "navBgColor": "#f0b21b",
+  "navTextColor": "#333333",
+  "navHoverColor": "#d69e16",
+  "showContactInfo": true,
+  "updatedAt": "2026-10-20T11:59:39.668Z",
+  "mainBgColor": "#ffffff",
+  "searchPlaceholder": "Search",
+  "searchBorderColor": "#ffc107",
+  "iconColor": "#f0b21b"
+}

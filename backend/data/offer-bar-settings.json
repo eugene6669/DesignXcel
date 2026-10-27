@@ -1,0 +1,11 @@
+{
+  "isActive": true,
+  "offerText": "SPECIAL OFFER Get 25% off premium office furniture collections - Limited time offer ending soon!",
+  "buttonText": "Shop Now",
+  "offerLink": "http://localhost:3000/products",
+  "backgroundColor": "#f0b21b",
+  "textColor": "#ffffff",
+  "showContent": true,
+  "showInactive": false,
+  "updatedAt": "2026-09-29T10:10:45.744Z"
+}

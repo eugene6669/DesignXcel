@@ -465,6 +465,33 @@ function setupEventListeners() {
     setTimeout(() => {
         setupAboutPreview();
     }, 100);
+    
+    // Setup header banner form and preview
+    setTimeout(() => {
+        const headerBannerForm = document.getElementById('header-banner-form');
+        if (headerBannerForm) {
+            headerBannerForm.addEventListener('submit', handleHeaderBannerFormSubmit);
+            setupHeaderBannerPreviewListeners();
+            loadHeaderBannerSettings();
+        }
+        
+        // Setup logo upload
+        const logoUploadInput = document.getElementById('logo-upload');
+        if (logoUploadInput) {
+            logoUploadInput.addEventListener('change', function(e) {
+                handleLogoUpload(e.target);
+            });
+        }
+    }, 100);
+    
+    // Setup offer bar form and preview
+    setTimeout(() => {
+        const offerBarForm = document.getElementById('header-offer-form');
+        if (offerBarForm) {
+            setupOfferBarPreviewListeners();
+            loadHeaderOfferBarSettings();
+        }
+    }, 100);
 }
 
 function setupContentTypeActions() {
@@ -1290,7 +1317,7 @@ function loadProjects() {
             container.innerHTML = projects.map(item => `
                 <div class="project-item" style="border: 1px solid #ddd; padding: 1rem; margin-bottom: 1rem; border-radius: 6px; background: white;">
                     <div style="display: flex; gap: 1rem; align-items: flex-start;">
-                        <img src="${item.imageUrl}" alt="${item.title}" style="width: 100px; height: 100px; object-fit: cover; border-radius: 4px;">
+                        <img src="${item.mainImageUrl || item.imageUrl || '/uploads/projects/default.jpg'}" alt="${item.title}" style="width: 100px; height: 100px; object-fit: cover; border-radius: 4px;">
                         <div style="flex: 1;">
                             <h4 style="margin: 0 0 0.5rem 0; color: #333;">${item.title}</h4>
                             <p style="margin: 0 0 1rem 0; color: #666; line-height: 1.5;">${item.description}</p>
@@ -1995,11 +2022,14 @@ function renderAutoMessagesList() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                displayAutoMessages(data.messages);
+                displayAutoMessages(data.faqs || []);
+            } else {
+                displayAutoMessages([]);
             }
         })
         .catch(error => {
             console.error('Error loading auto messages:', error);
+            displayAutoMessages([]);
         });
 }
 
@@ -2007,7 +2037,7 @@ function displayAutoMessages(messages) {
     const container = document.getElementById('auto-messages-list');
     if (!container) return;
     
-    if (messages.length === 0) {
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
         container.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">No FAQs found. Create your first FAQ above.</div>';
         return;
     }
@@ -2154,11 +2184,12 @@ function deleteAutoMessage(id) {
 }
 
 function loadHeaderOfferBarSettings() {
-    fetch('/api/cms/header-offer')
+    fetch('/api/admin/offer-bar')
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
+            if (data.success && data.settings) {
                 displayHeaderOfferSettings(data.settings);
+                updateOfferBarPreview(data.settings);
             }
         })
         .catch(error => {
@@ -2172,12 +2203,332 @@ function displayHeaderOfferSettings(settings) {
     // Populate form fields with existing settings
     const form = document.getElementById('header-offer-form');
     if (form) {
-        Object.keys(settings).forEach(key => {
-            const field = form.querySelector(`[name="${key}"]`);
-            if (field) {
-                field.value = settings[key];
+        // Text fields
+        const offerText = form.querySelector('[name="offerText"]');
+        if (offerText) offerText.value = settings.offerText || '';
+        
+        const offerLink = form.querySelector('[name="offerLink"]');
+        if (offerLink) offerLink.value = settings.offerLink || '/products';
+        
+        // Color fields
+        const backgroundColor = form.querySelector('[name="backgroundColor"]');
+        if (backgroundColor) backgroundColor.value = settings.backgroundColor || '#F0B21B';
+        
+        const textColor = form.querySelector('[name="textColor"]');
+        if (textColor) textColor.value = settings.textColor || '#ffffff';
+        
+        // Checkbox
+        const isActive = form.querySelector('[name="isActive"]');
+        if (isActive) isActive.checked = settings.isActive !== false;
+    }
+}
+
+// Update offer bar preview in real-time
+function updateOfferBarPreview(settings) {
+    const preview = document.getElementById('header-offer-preview');
+    if (!preview) return;
+    
+    // Update background color
+    preview.style.backgroundColor = settings.backgroundColor || '#F0B21B';
+    preview.style.color = settings.textColor || '#ffffff';
+    
+    // Update text content
+    const previewText = document.getElementById('preview-offer-text');
+    if (previewText) {
+        previewText.textContent = settings.offerText || 'SPECIAL OFFER Get 25% off premium office furniture collections';
+        previewText.style.color = settings.textColor || '#ffffff';
+    }
+    
+    // Update link
+    const previewLink = document.getElementById('preview-offer-link');
+    if (previewLink) {
+        previewLink.href = settings.offerLink || '/products';
+        // Button should have contrasting color
+        previewLink.style.background = 'white';
+        previewLink.style.color = settings.backgroundColor || '#F0B21B';
+    }
+}
+
+// Setup real-time preview for offer bar form
+function setupOfferBarPreviewListeners() {
+    const form = document.getElementById('header-offer-form');
+    if (!form) return;
+    
+    const inputs = form.querySelectorAll('input[type="text"], input[type="url"], input[type="color"], input[type="checkbox"]');
+    
+    inputs.forEach(input => {
+        input.addEventListener('input', updateOfferBarPreviewFromForm);
+        input.addEventListener('change', updateOfferBarPreviewFromForm);
+    });
+}
+
+function updateOfferBarPreviewFromForm() {
+    const form = document.getElementById('header-offer-form');
+    if (!form) return;
+    
+    const settings = {
+        offerText: form.querySelector('[name="offerText"]')?.value || '',
+        offerLink: form.querySelector('[name="offerLink"]')?.value || '/products',
+        backgroundColor: form.querySelector('[name="backgroundColor"]')?.value || '#F0B21B',
+        textColor: form.querySelector('[name="textColor"]')?.value || '#ffffff',
+        isActive: form.querySelector('[name="isActive"]')?.checked || false
+    };
+    
+    updateOfferBarPreview(settings);
+}
+
+// Load and setup header banner settings
+function loadHeaderBannerSettings() {
+    fetch('/api/admin/header-banner')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.settings) {
+                displayHeaderBannerSettings(data.settings);
+                updateHeaderBannerPreview(data.settings);
             }
+        })
+        .catch(error => {
+            console.error('Error loading header banner settings:', error);
         });
+}
+
+function displayHeaderBannerSettings(settings) {
+    if (!settings) return;
+    
+    const form = document.getElementById('header-banner-form');
+    if (!form) return;
+    
+    // Logo URL
+    const logoUrl = form.querySelector('[name="logoUrl"]');
+    if (logoUrl) logoUrl.value = settings.logoUrl || '';
+    
+    // Logo preview
+    const logoPreview = document.getElementById('logo-preview-image');
+    if (logoPreview && settings.logoUrl) {
+        logoPreview.src = settings.logoUrl;
+    }
+    
+    // Colors
+    const mainBgColor = form.querySelector('[name="mainBgColor"]');
+    if (mainBgColor) mainBgColor.value = settings.mainBgColor || '#ffffff';
+    
+    const navBgColor = form.querySelector('[name="navBgColor"]');
+    if (navBgColor) navBgColor.value = settings.navBgColor || '#F0B21B';
+    
+    const navHoverColor = form.querySelector('[name="navHoverColor"]');
+    if (navHoverColor) navHoverColor.value = settings.navHoverColor || '#d69e16';
+    
+    const searchBorderColor = form.querySelector('[name="searchBorderColor"]');
+    if (searchBorderColor) searchBorderColor.value = settings.searchBorderColor || '#ffc107';
+    
+    const iconColor = form.querySelector('[name="iconColor"]');
+    if (iconColor) iconColor.value = settings.iconColor || '#F0B21B';
+    
+    const searchPlaceholder = form.querySelector('[name="searchPlaceholder"]');
+    if (searchPlaceholder) searchPlaceholder.value = settings.searchPlaceholder || 'Search';
+}
+
+function updateHeaderBannerPreview(settings) {
+    // Update main row background
+    const mainRow = document.getElementById('preview-main-row');
+    if (mainRow) {
+        mainRow.style.backgroundColor = settings.mainBgColor || '#ffffff';
+    }
+    
+    // Update logo
+    const logo = document.getElementById('preview-logo');
+    if (logo && settings.logoUrl) {
+        logo.src = settings.logoUrl;
+    }
+    
+    // Update search border and icon color
+    const searchContainer = document.getElementById('preview-search-container');
+    if (searchContainer) {
+        searchContainer.style.borderColor = settings.searchBorderColor || '#ffc107';
+    }
+    
+    const searchIcon = document.getElementById('preview-search-icon');
+    if (searchIcon) {
+        searchIcon.style.color = settings.iconColor || '#F0B21B';
+    }
+    
+    const searchInput = document.getElementById('preview-search-input');
+    if (searchInput) {
+        searchInput.placeholder = settings.searchPlaceholder || 'Search';
+    }
+    
+    // Update all icon colors
+    const iconColor = settings.iconColor || '#F0B21B';
+    const icons = document.querySelectorAll('#preview-main-left svg');
+    icons.forEach(icon => {
+        icon.style.color = iconColor;
+    });
+    
+    // Update nav bar
+    const navBar = document.getElementById('preview-nav-bar');
+    if (navBar) {
+        navBar.style.backgroundColor = settings.navBgColor || '#F0B21B';
+    }
+}
+
+function setupHeaderBannerPreviewListeners() {
+    const form = document.getElementById('header-banner-form');
+    if (!form) return;
+    
+    const inputs = form.querySelectorAll('input[type="text"], input[type="url"], input[type="color"]');
+    
+    inputs.forEach(input => {
+        input.addEventListener('input', updateHeaderBannerPreviewFromForm);
+        input.addEventListener('change', updateHeaderBannerPreviewFromForm);
+    });
+}
+
+function updateHeaderBannerPreviewFromForm() {
+    const form = document.getElementById('header-banner-form');
+    if (!form) return;
+    
+    const settings = {
+        logoUrl: form.querySelector('[name="logoUrl"]')?.value || '/design-excellence-logo.png',
+        mainBgColor: form.querySelector('[name="mainBgColor"]')?.value || '#ffffff',
+        navBgColor: form.querySelector('[name="navBgColor"]')?.value || '#F0B21B',
+        navHoverColor: form.querySelector('[name="navHoverColor"]')?.value || '#d69e16',
+        searchBorderColor: form.querySelector('[name="searchBorderColor"]')?.value || '#ffc107',
+        iconColor: form.querySelector('[name="iconColor"]')?.value || '#F0B21B',
+        searchPlaceholder: form.querySelector('[name="searchPlaceholder"]')?.value || 'Search'
+    };
+    
+    updateHeaderBannerPreview(settings);
+}
+
+// Handle header banner form submission
+function handleHeaderBannerFormSubmit(event) {
+    event.preventDefault();
+    console.log('Header banner form submitted');
+    
+    const formData = new FormData(event.target);
+    const bannerData = Object.fromEntries(formData);
+    
+    const statusDiv = document.getElementById('header-banner-status-message');
+    if (statusDiv) {
+        statusDiv.innerHTML = '<p style="color: #007bff;">Saving header banner settings...</p>';
+    }
+    
+    fetch('/api/admin/header-banner', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(bannerData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            if (statusDiv) {
+                statusDiv.innerHTML = '<p style="color: #28a745;">✅ Header banner saved successfully!</p>';
+            }
+            if (window.EmployeeUtils) {
+                window.EmployeeUtils.showNotification('Header banner saved successfully!');
+            }
+            setTimeout(() => {
+                loadHeaderBannerSettings();
+            }, 1000);
+        } else {
+            if (statusDiv) {
+                statusDiv.innerHTML = `<p style="color: #dc3545;">❌ Failed to save: ${data.message}</p>`;
+            }
+            if (window.EmployeeUtils) {
+                window.EmployeeUtils.showNotification('Failed to save header banner: ' + data.message, 'error');
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error saving header banner:', error);
+        if (statusDiv) {
+            statusDiv.innerHTML = '<p style="color: #dc3545;">❌ Error saving header banner. Please try again.</p>';
+        }
+        if (window.EmployeeUtils) {
+            window.EmployeeUtils.showNotification('Error saving header banner', 'error');
+        }
+    });
+}
+
+// Handle logo upload
+function handleLogoUpload(fileInput) {
+    const file = fileInput.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('logoUpload', file);
+    
+    const statusDiv = document.getElementById('header-banner-status-message');
+    if (statusDiv) {
+        statusDiv.innerHTML = '<p style="color: #007bff;">Uploading logo...</p>';
+    }
+    
+    fetch('/api/admin/header-banner/upload-logo', {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            if (statusDiv) {
+                statusDiv.innerHTML = '<p style="color: #28a745;">✅ Logo uploaded successfully!</p>';
+            }
+            
+            // Update logo preview
+            const logoPreview = document.getElementById('logo-preview-image');
+            const previewLogo = document.getElementById('preview-logo');
+            const logoUrlInput = document.getElementById('logo-url');
+            
+            if (logoPreview) logoPreview.src = data.logoUrl;
+            if (previewLogo) previewLogo.src = data.logoUrl;
+            if (logoUrlInput) logoUrlInput.value = data.logoUrl;
+            
+            if (window.EmployeeUtils) {
+                window.EmployeeUtils.showNotification('Logo uploaded successfully!');
+            }
+        } else {
+            if (statusDiv) {
+                statusDiv.innerHTML = `<p style="color: #dc3545;">❌ Upload failed: ${data.message}</p>`;
+            }
+            if (window.EmployeeUtils) {
+                window.EmployeeUtils.showNotification('Failed to upload logo: ' + data.message, 'error');
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error uploading logo:', error);
+        if (statusDiv) {
+            statusDiv.innerHTML = '<p style="color: #dc3545;">❌ Error uploading logo. Please try again.</p>';
+        }
+        if (window.EmployeeUtils) {
+            window.EmployeeUtils.showNotification('Error uploading logo', 'error');
+        }
+    });
+}
+
+function restoreDefaultHeaderSettings() {
+    if (confirm('Are you sure you want to restore default header settings? This cannot be undone.')) {
+        const defaultSettings = {
+            logoUrl: '/design-excellence-logo.png',
+            mainBgColor: '#ffffff',
+            navBgColor: '#F0B21B',
+            navHoverColor: '#d69e16',
+            searchBorderColor: '#ffc107',
+            iconColor: '#F0B21B',
+            searchPlaceholder: 'Search'
+        };
+        
+        displayHeaderBannerSettings(defaultSettings);
+        updateHeaderBannerPreview(defaultSettings);
+        
+        if (window.EmployeeUtils) {
+            window.EmployeeUtils.showNotification('Default settings restored. Click Save to apply.');
+        } else {
+            alert('Default settings restored. Click Save to apply.');
+        }
     }
 }
 
@@ -3144,6 +3495,18 @@ window.AdminCMS = {
     closeEditModal,
     handleEditFormSubmit,
     loadHeaderOfferBarSettings,
+    displayHeaderOfferSettings,
+    updateOfferBarPreview,
+    setupOfferBarPreviewListeners,
+    updateOfferBarPreviewFromForm,
+    loadHeaderBannerSettings,
+    displayHeaderBannerSettings,
+    updateHeaderBannerPreview,
+    setupHeaderBannerPreviewListeners,
+    updateHeaderBannerPreviewFromForm,
+    handleHeaderBannerFormSubmit,
+    handleLogoUpload,
+    restoreDefaultHeaderSettings,
     // Tab Navigation
     showTab,
     // Products Management
@@ -3211,6 +3574,8 @@ window.cancelEdit = cancelEdit;
 window.saveProjectItem = saveProjectItem;
 window.closeProjectEditModal = closeProjectEditModal;
 window.switchCarouselImage = switchCarouselImage; // For carousel navigation
+window.loadHeaderBannerSettings = loadHeaderBannerSettings; // For reload button
+window.restoreDefaultHeaderSettings = restoreDefaultHeaderSettings; // For restore button
 
 // Debug: Log that functions are available
 console.log('Project functions made globally available:', {

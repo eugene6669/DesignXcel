@@ -1,0 +1,20 @@
+{
+  "projects": [
+    {
+      "id": 4,
+      "title": "Natural Plus",
+      "description": "sdf",
+      "category": "General",
+      "mainImageUrl": "/uploads/projects/project-1-1792489229085-733193209.png",
+      "thumbnailUrls": [
+        "/uploads/projects/project-1-1792489229087-924812260.png",
+        "/uploads/projects/project-2-1792489229090-992848356.png",
+        "/uploads/projects/project-3-1792489229091-165836599.png"
+      ],
+      "tags": [],
+      "isActive": true,
+      "createdAt": "2026-10-20T09:40:29.093Z"
+    }
+  ],
+  "updatedAt": "2026-10-20T10:17:23.265Z"
+}

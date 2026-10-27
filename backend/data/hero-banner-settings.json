@@ -1,0 +1,26 @@
+{
+  "mainHeading": "Premium Office Furniture Solutions",
+  "descriptionLine1": "Transform your workspace with our premium collection of office furniture",
+  "descriptionLine2": "Discover our premium collection of office furniture designed for modern professionals",
+  "buttonText": "SHOP NOW",
+  "buttonLink": "/products",
+  "textColor": "#ffffff",
+  "buttonBgColor": "#ffc107",
+  "buttonTextColor": "#333333",
+  "button2Text": "",
+  "button2Link": "",
+  "button2BgColor": "#007bff",
+  "button2TextColor": "#ffffff",
+  "heroBannerImages": [
+    {
+      "filename": "heroBannerImages-1780143760145-527349955.jpg"
+    },
+    {
+      "filename": "heroBannerImages-1780143760146-628282785.webp"
+    },
+    {
+      "filename": "heroBannerImages-1780143760149-57255407.jpg"
+    }
+  ],
+  "updatedAt": "2026-09-29T09:12:00.000Z"
+}

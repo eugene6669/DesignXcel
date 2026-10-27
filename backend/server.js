@@ -3815,7 +3815,7 @@ app.locals.getOrderStatusLabel = getOrderStatusLabel;
 app.locals.SALES_REPORT_STATUS_RULES = SALES_REPORT_STATUS_RULES;
 
 // Lazy load routes - only load when first request comes in (faster startup)
-let mainRouter, apiRoutes;
+let mainRouter, apiRoutes, heroBannerRoutes, headerBannerRoutes, offerBarRoutes, projectsRoutes, faqRoutes;
 let routesLoaded = false;
 
 const loadRoutes = () => {
@@ -3829,9 +3829,21 @@ const loadRoutes = () => {
             // Load API routes (still separate)
             apiRoutes = require('./api-routes')(sql, pool);
             
+            // Load CMS routes
+            heroBannerRoutes = require('./routes/heroBannerRoutes');
+            headerBannerRoutes = require('./routes/headerBannerRoutes');
+            offerBarRoutes = require('./routes/offerBarRoutes');
+            projectsRoutes = require('./routes/projectsRoutes');
+            faqRoutes = require('./routes/faqRoutes');
+            
             // Mount routers
             app.use('/', mainRouter);
             app.use('/', apiRoutes);
+            app.use('/', heroBannerRoutes);
+            app.use('/', headerBannerRoutes);
+            app.use('/', offerBarRoutes);
+            app.use('/', projectsRoutes);
+            app.use('/', faqRoutes);
             
             routesLoaded = true;
             const loadTime = Date.now() - startTime;

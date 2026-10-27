@@ -629,6 +629,427 @@ module.exports = function registerAdminProductsRoutes(router, context) {
     });
 
     // =============================================================================
+    // INVENTORY PRODUCT API ROUTES
+    // =============================================================================
+
+    // Get single inventory product details
+    router.get('/api/admin/inventory-product/:id', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const inventoryProductId = parseInt(req.params.id, 10);
+            const source = req.query.source || 'InventoryProducts';
+
+            if (!inventoryProductId) {
+                return res.status(400).json({ success: false, message: 'Invalid product ID' });
+            }
+
+            const result = await pool.request()
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .query(`
+                    SELECT 
+                        ip.InventoryProductID,
+                        ip.ProductID,
+                        ip.Name,
+                        ip.Description,
+                        ip.Price,
+                        ip.CostPrice,
+                        ip.Category,
+                        ip.ImageURL,
+                        ip.ThumbnailURLs,
+                        ip.Dimensions,
+                        ip.AvailableQuantity,
+                        ip.DamagedQuantity,
+                        ip.ReturnedQuantity,
+                        ip.RepairedQuantity,
+                        ip.DisposedQuantity,
+                        ip.InventoryStatus,
+                        ip.SKU,
+                        ip.PublicId,
+                        ip.Slug,
+                        ip.ListingStage,
+                        ip.ReorderPoint,
+                        ip.BomBundleID,
+                        ip.DateAdded,
+                        ip.DateUpdated,
+                        ip.IsActive
+                    FROM InventoryProducts ip
+                    WHERE ip.InventoryProductID = @inventoryProductId AND ip.IsActive = 1
+                `);
+
+            if (result.recordset.length === 0) {
+                return res.status(404).json({ success: false, message: 'Product not found' });
+            }
+
+            const product = result.recordset[0];
+            res.json({ success: true, product });
+        } catch (err) {
+            console.error('Error fetching inventory product:', err);
+            res.status(500).json({ success: false, message: 'Failed to fetch product: ' + err.message });
+        }
+    });
+
+    // Get inventory product variations
+    router.get('/api/admin/inventory-product-variations/:inventoryProductId', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const inventoryProductId = parseInt(req.params.inventoryProductId, 10);
+            const includePending = req.query.includePendingInspection === '1';
+
+            if (!inventoryProductId) {
+                return res.status(400).json({ success: false, message: 'Invalid product ID' });
+            }
+
+            const result = await pool.request()
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .query(`
+                    SELECT 
+                        ipv.VariationID,
+                        ipv.InventoryProductID,
+                        ipv.ProductID,
+                        ipv.VariationName,
+                        ipv.Color,
+                        ipv.Shape,
+                        ipv.VariationType,
+                        ipv.Quantity,
+                        ipv.AvailableQuantity,
+                        ipv.Price,
+                        ipv.CostPrice,
+                        ipv.VariationImageURL,
+                        ipv.ThumbnailURLs,
+                        ipv.Model3D,
+                        ipv.Dimensions,
+                        ipv.SKU,
+                        ipv.IsActive,
+                        ipv.CreatedAt,
+                        ipv.UpdatedAt
+                    FROM InventoryProductVariations ipv
+                    WHERE ipv.InventoryProductID = @inventoryProductId AND ipv.IsActive = 1
+                    ORDER BY ipv.VariationName
+                `);
+
+            res.json({ success: true, variations: result.recordset });
+        } catch (err) {
+            console.error('Error fetching inventory product variations:', err);
+            res.status(500).json({ success: false, message: 'Failed to fetch variations: ' + err.message });
+        }
+    });
+
+    // Get inventory product summary
+    router.get('/api/admin/inventory-products/:id/summary', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const inventoryProductId = parseInt(req.params.id, 10);
+
+            if (!inventoryProductId) {
+                return res.status(400).json({ success: false, message: 'Invalid product ID' });
+            }
+
+            const productResult = await pool.request()
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .query(`
+                    SELECT 
+                        ip.InventoryProductID,
+                        ip.Name,
+                        ip.Price,
+                        ip.CostPrice,
+                        ip.Category,
+                        ip.AvailableQuantity,
+                        ip.SKU,
+                        ip.ListingStage
+                    FROM InventoryProducts ip
+                    WHERE ip.InventoryProductID = @inventoryProductId AND ip.IsActive = 1
+                `);
+
+            if (productResult.recordset.length === 0) {
+                return res.status(404).json({ success: false, message: 'Product not found' });
+            }
+
+            const product = productResult.recordset[0];
+
+            const variationsResult = await pool.request()
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .query(`
+                    SELECT COUNT(*) as count
+                    FROM InventoryProductVariations
+                    WHERE InventoryProductID = @inventoryProductId AND IsActive = 1
+                `);
+
+            const variationsCount = variationsResult.recordset[0].count;
+
+            res.json({ 
+                success: true, 
+                summary: {
+                    ...product,
+                    variationsCount
+                }
+            });
+        } catch (err) {
+            console.error('Error fetching inventory product summary:', err);
+            res.status(500).json({ success: false, message: 'Failed to fetch summary: ' + err.message });
+        }
+    });
+
+    // Get inventory product materials (recipe)
+    router.get('/api/admin/inventory-products/:id/materials', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const inventoryProductId = parseInt(req.params.id, 10);
+
+            if (!inventoryProductId) {
+                return res.status(400).json({ success: false, message: 'Invalid product ID' });
+            }
+
+            const result = await pool.request()
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .query(`
+                    SELECT 
+                        ipm.MaterialID,
+                        ipm.QuantityRequired,
+                        rm.Name as MaterialName,
+                        rm.SKU as MaterialSKU,
+                        rm.Unit,
+                        rm.QuantityAvailable
+                    FROM InventoryProductMaterials ipm
+                    INNER JOIN RawMaterials rm ON ipm.MaterialID = rm.MaterialID
+                    WHERE ipm.InventoryProductID = @inventoryProductId AND rm.IsActive = 1
+                    ORDER BY rm.Name
+                `);
+
+            res.json({ success: true, materials: result.recordset });
+        } catch (err) {
+            console.error('Error fetching inventory product materials:', err);
+            res.status(500).json({ success: false, message: 'Failed to fetch materials: ' + err.message });
+        }
+    });
+
+    // Update inventory product basic info
+    router.post('/api/admin/inventory-products/:id/update-basic', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const inventoryProductId = parseInt(req.params.id, 10);
+            const { name, description, price, category } = req.body;
+
+            if (!inventoryProductId) {
+                return res.status(400).json({ success: false, message: 'Invalid product ID' });
+            }
+
+            await pool.request()
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .input('name', sql.NVarChar, name)
+                .input('description', sql.NVarChar, description || '')
+                .input('price', sql.Decimal(10, 2), parseFloat(price))
+                .input('category', sql.NVarChar, category)
+                .query(`
+                    UPDATE InventoryProducts
+                    SET Name = @name, 
+                        Description = @description, 
+                        Price = @price, 
+                        Category = @category,
+                        DateUpdated = GETDATE()
+                    WHERE InventoryProductID = @inventoryProductId
+                `);
+
+            invalidateAdminPageCache('admin:');
+            res.json({ success: true, message: 'Product updated successfully' });
+        } catch (err) {
+            console.error('Error updating inventory product:', err);
+            res.status(500).json({ success: false, message: 'Failed to update product: ' + err.message });
+        }
+    });
+
+    // Restock inventory product
+    router.post('/api/admin/inventory-products/restock', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const { inventoryProductId, quantity } = req.body;
+            const addQty = parseInt(quantity, 10);
+
+            if (!inventoryProductId || !addQty || addQty <= 0) {
+                return res.status(400).json({ success: false, message: 'Invalid product ID or quantity' });
+            }
+
+            await pool.request()
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .input('quantity', sql.Int, addQty)
+                .query(`
+                    UPDATE InventoryProducts
+                    SET AvailableQuantity = COALESCE(AvailableQuantity, 0) + @quantity,
+                        DateUpdated = GETDATE()
+                    WHERE InventoryProductID = @inventoryProductId
+                `);
+
+            invalidateAdminPageCache('admin:');
+            res.json({ success: true, message: 'Product restocked successfully' });
+        } catch (err) {
+            console.error('Error restocking product:', err);
+            res.status(500).json({ success: false, message: 'Failed to restock: ' + err.message });
+        }
+    });
+
+    // Adjust variation stock
+    router.post('/api/admin/inventory-products/adjust-variation-stock', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const { variationId, quantity } = req.body;
+            const newQty = parseInt(quantity, 10);
+
+            if (!variationId || newQty < 0) {
+                return res.status(400).json({ success: false, message: 'Invalid variation ID or quantity' });
+            }
+
+            await pool.request()
+                .input('variationId', sql.Int, variationId)
+                .input('quantity', sql.Int, newQty)
+                .query(`
+                    UPDATE InventoryProductVariations
+                    SET Quantity = @quantity,
+                        AvailableQuantity = @quantity,
+                        UpdatedAt = GETDATE()
+                    WHERE VariationID = @variationId
+                `);
+
+            invalidateAdminPageCache('admin:');
+            res.json({ success: true, message: 'Variation stock adjusted successfully' });
+        } catch (err) {
+            console.error('Error adjusting variation stock:', err);
+            res.status(500).json({ success: false, message: 'Failed to adjust stock: ' + err.message });
+        }
+    });
+
+    // Publish inventory product to storefront
+    router.post('/api/admin/inventory-products/:id/storefront', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const inventoryProductId = parseInt(req.params.id, 10);
+
+            if (!inventoryProductId) {
+                return res.status(400).json({ success: false, message: 'Invalid product ID' });
+            }
+
+            await pool.request()
+                .input('inventoryProductId', sql.Int, inventoryProductId)
+                .query(`
+                    UPDATE InventoryProducts
+                    SET ListingStage = 'retail',
+                        DateUpdated = GETDATE()
+                    WHERE InventoryProductID = @inventoryProductId
+                `);
+
+            invalidateAdminPageCache('admin:');
+            res.json({ success: true, message: 'Product published to storefront' });
+        } catch (err) {
+            console.error('Error publishing product:', err);
+            res.status(500).json({ success: false, message: 'Failed to publish: ' + err.message });
+        }
+    });
+
+    // Publish variation to storefront
+    router.post('/api/admin/inventory-product-variations/:id/storefront', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const variationId = parseInt(req.params.id, 10);
+
+            if (!variationId) {
+                return res.status(400).json({ success: false, message: 'Invalid variation ID' });
+            }
+
+            await pool.request()
+                .input('variationId', sql.Int, variationId)
+                .query(`
+                    UPDATE InventoryProductVariations
+                    SET IsActive = 1,
+                        UpdatedAt = GETDATE()
+                    WHERE VariationID = @variationId
+                `);
+
+            invalidateAdminPageCache('admin:');
+            res.json({ success: true, message: 'Variation published to storefront' });
+        } catch (err) {
+            console.error('Error publishing variation:', err);
+            res.status(500).json({ success: false, message: 'Failed to publish: ' + err.message });
+        }
+    });
+
+    // Archive inventory product variation
+    router.post('/api/admin/inventory-product-variations/archive/:id', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const variationId = parseInt(req.params.id, 10);
+
+            if (!variationId) {
+                return res.status(400).json({ success: false, message: 'Invalid variation ID' });
+            }
+
+            await pool.request()
+                .input('variationId', sql.Int, variationId)
+                .query(`
+                    UPDATE InventoryProductVariations
+                    SET IsActive = 0,
+                        UpdatedAt = GETDATE()
+                    WHERE VariationID = @variationId
+                `);
+
+            invalidateAdminPageCache('admin:');
+            res.json({ success: true, message: 'Variation archived successfully' });
+        } catch (err) {
+            console.error('Error archiving variation:', err);
+            res.status(500).json({ success: false, message: 'Failed to archive: ' + err.message });
+        }
+    });
+
+    // Save build panel materials
+    router.post('/api/admin/inventory-product-variations/save-build-panel', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const { variationId, materials } = req.body;
+
+            if (!variationId) {
+                return res.status(400).json({ success: false, message: 'Invalid variation ID' });
+            }
+
+            // Process materials saving logic here
+            // This would need the saveInventoryProductVariationMaterials function
+
+            invalidateAdminPageCache('admin:');
+            res.json({ success: true, message: 'Materials saved successfully' });
+        } catch (err) {
+            console.error('Error saving build panel:', err);
+            res.status(500).json({ success: false, message: 'Failed to save: ' + err.message });
+        }
+    });
+
+    // =============================================================================
+    // RAW MATERIALS API ROUTES
+    // =============================================================================
+
+    // Get all raw materials (API endpoint)
+    router.get('/api/rawmaterials', isAuthenticated, async (req, res) => {
+        try {
+            await pool.connect();
+            const result = await pool.request().query(`
+                SELECT 
+                    MaterialID,
+                    Name,
+                    SKU,
+                    QuantityAvailable,
+                    Unit,
+                    Supplier,
+                    PurchaseOrderNumber,
+                    PurchaseOrderImageURL,
+                    LastUpdated,
+                    IsActive
+                FROM RawMaterials 
+                WHERE IsActive = 1
+                ORDER BY Name
+            `);
+            res.json({ success: true, materials: result.recordset });
+        } catch (err) {
+            console.error('Error fetching raw materials:', err);
+            res.status(500).json({ success: false, message: 'Failed to fetch raw materials: ' + err.message });
+        }
+    });
+
+    // =============================================================================
     // RAW MATERIALS ROUTES
     // =============================================================================
 

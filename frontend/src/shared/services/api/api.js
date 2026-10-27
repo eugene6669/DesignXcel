@@ -78,8 +78,8 @@ const api = {
       }
       const data = await response.json();
       return {
-        success: true,
-        data: data
+        success: data.success,
+        data: data.projects || []
       };
     } catch (error) {
       console.error('Error fetching projects:', error);

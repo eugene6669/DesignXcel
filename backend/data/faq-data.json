@@ -1,0 +1,341 @@
+{
+  "faqs": [
+    {
+      "id": 1,
+      "question": "What are your delivery times?",
+      "answer": "We typically deliver within 3-5 business days for standard orders. Express delivery is available for an additional fee.",
+      "keywords": "delivery, shipping, time, express",
+      "isActive": true,
+      "createdAt": "2026-10-20T10:11:00.000Z"
+    },
+    {
+      "id": 2,
+      "question": "Do you offer installation services?",
+      "answer": "Yes! We provide professional installation services for all furniture purchases. Our team will handle everything from delivery to setup.",
+      "keywords": "installation, setup, service, assembly",
+      "isActive": true,
+      "createdAt": "2026-10-20T10:11:00.000Z"
+    },
+    {
+      "id": 3,
+      "question": "What is your return policy?",
+      "answer": "We offer a 30-day return policy for unused items in original packaging. Please contact us to initiate a return.",
+      "keywords": "return, refund, policy, exchange",
+      "isActive": true,
+      "createdAt": "2026-10-20T10:11:00.000Z"
+    },
+    {
+      "id": 4,
+      "question": "What is your return policy?",
+      "answer": "adsd",
+      "keywords": "",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:16:40.849Z"
+    },
+    {
+      "id": 5,
+      "question": "What is your return policy?",
+      "answer": "adsd",
+      "keywords": "",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:16:42.159Z"
+    },
+    {
+      "id": 6,
+      "question": "What is your return policy?",
+      "answer": "adsd",
+      "keywords": "",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:16:43.094Z"
+    },
+    {
+      "id": 7,
+      "question": "What is your return policy?",
+      "answer": "adsd",
+      "keywords": "",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:16:43.275Z"
+    },
+    {
+      "id": 8,
+      "question": "What is your return policy?",
+      "answer": "adsd",
+      "keywords": "",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:16:43.468Z"
+    },
+    {
+      "id": 9,
+      "question": "What is your return policy?",
+      "answer": "adsd",
+      "keywords": "sdfds",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:16:45.435Z"
+    },
+    {
+      "id": 10,
+      "question": "What is your return policy?",
+      "answer": "adsd",
+      "keywords": "sdfds",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:16:45.810Z"
+    },
+    {
+      "id": 11,
+      "question": "What is your return policy?",
+      "answer": "adsd",
+      "keywords": "sdfds",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:16:45.995Z"
+    },
+    {
+      "id": 12,
+      "question": "What is your return policy?",
+      "answer": "adsdsdf",
+      "keywords": "sdfds",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:16:48.814Z"
+    },
+    {
+      "id": 13,
+      "question": "What is your return policy?",
+      "answer": "adsdsdf",
+      "keywords": "sdfds",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:16:48.996Z"
+    },
+    {
+      "id": 14,
+      "question": "What is your return policy?",
+      "answer": "adsdsdf",
+      "keywords": "sdfds",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:17:29.034Z"
+    },
+    {
+      "id": 15,
+      "question": "What is your return policy?",
+      "answer": "adsdsdf",
+      "keywords": "sdfds",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:17:29.203Z"
+    },
+    {
+      "id": 16,
+      "question": "What is your return policy?",
+      "answer": "adsdsdf",
+      "keywords": "sdfds",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:17:34.763Z"
+    },
+    {
+      "id": 17,
+      "question": "What is your return policy?",
+      "answer": "adsdsdf",
+      "keywords": "sdfds",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:17:40.052Z"
+    },
+    {
+      "id": 18,
+      "question": "What is your return policy?",
+      "answer": "adsdsdfsdfsa",
+      "keywords": "sdfdssdfsad",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:17:52.879Z"
+    },
+    {
+      "id": 19,
+      "question": "What is your return policy?",
+      "answer": "asdfdas",
+      "keywords": "asdfsa",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:21:00.306Z"
+    },
+    {
+      "id": 20,
+      "question": "What is your return policy?",
+      "answer": "asdfdas",
+      "keywords": "asdfsa",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:21:00.665Z"
+    },
+    {
+      "id": 21,
+      "question": "What is your return policy?",
+      "answer": "asdfdas",
+      "keywords": "asdfsa",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:21:00.872Z"
+    },
+    {
+      "id": 22,
+      "question": "What is your return policy?",
+      "answer": "asdfdas",
+      "keywords": "asdfsa",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:21:22.616Z"
+    },
+    {
+      "id": 23,
+      "question": "What is your return policy?",
+      "answer": "sdfads",
+      "keywords": "asdfdsa",
+      "isActive": "on",
+      "createdAt": "2026-10-20T10:22:15.694Z"
+    },
+    {
+      "id": 24,
+      "question": "Do you Have A Chair",
+      "answer": "dsfsadf",
+      "keywords": "sadfasd",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:02:53.844Z"
+    },
+    {
+      "id": 25,
+      "question": "Do you Have A Chair",
+      "answer": "dsfsadf",
+      "keywords": "sadfasd",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:02:54.343Z"
+    },
+    {
+      "id": 26,
+      "question": "Do you Have A Chair",
+      "answer": "dsfsadf",
+      "keywords": "sadfasd",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:02:54.530Z"
+    },
+    {
+      "id": 27,
+      "question": "What is your return policy?",
+      "answer": "adfads",
+      "keywords": "asdfsda",
+      "isActive": true,
+      "createdAt": "2026-10-20T11:51:28.385Z"
+    },
+    {
+      "id": 28,
+      "question": "What is your return policy?",
+      "answer": "adfads",
+      "keywords": "asdfsda",
+      "isActive": true,
+      "createdAt": "2026-10-20T11:51:34.171Z"
+    },
+    {
+      "id": 29,
+      "question": "What is your return policy?",
+      "answer": "adfads",
+      "keywords": "asdfsda",
+      "isActive": true,
+      "createdAt": "2026-10-20T11:51:45.238Z"
+    },
+    {
+      "id": 30,
+      "question": "What is your return policy?",
+      "answer": "sdfdssadf",
+      "keywords": "sdfadsf",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:55:01.144Z"
+    },
+    {
+      "id": 31,
+      "question": "What is your return policy?",
+      "answer": "sdfdssadf",
+      "keywords": "sdfadsf",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:55:01.572Z"
+    },
+    {
+      "id": 32,
+      "question": "What is your return policy?",
+      "answer": "sdfdssadf",
+      "keywords": "sdfadsf",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:55:01.765Z"
+    },
+    {
+      "id": 33,
+      "question": "What is your return policy?",
+      "answer": "sdfdssadf",
+      "keywords": "sdfadsf",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:55:01.952Z"
+    },
+    {
+      "id": 34,
+      "question": "What is your return policy?",
+      "answer": "sdfdssadf",
+      "keywords": "sdfadsf",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:55:02.135Z"
+    },
+    {
+      "id": 35,
+      "question": "What is your return policy?",
+      "answer": "sdfdssadf",
+      "keywords": "sdfadsf",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:55:05.397Z"
+    },
+    {
+      "id": 36,
+      "question": "What is your return policy?",
+      "answer": "sdfdssadf",
+      "keywords": "sdfadsf",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:55:05.615Z"
+    },
+    {
+      "id": 37,
+      "question": "What is your return policy?",
+      "answer": "sdfdssadf",
+      "keywords": "sdfadsf",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:55:05.831Z"
+    },
+    {
+      "id": 38,
+      "question": "What is your return policy?",
+      "answer": "sdfdssadf",
+      "keywords": "sdfadsf",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:55:20.729Z"
+    },
+    {
+      "id": 39,
+      "question": "Do you Have A Chair",
+      "answer": "sdfadsf",
+      "keywords": "asdfsda",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:55:47.725Z"
+    },
+    {
+      "id": 40,
+      "question": "What is your return policy?",
+      "answer": "asdfadsfads",
+      "keywords": "sdfasd",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:56:05.227Z"
+    },
+    {
+      "id": 41,
+      "question": "dsfasdf",
+      "answer": "adfadsfas",
+      "keywords": "asdfads",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:56:15.542Z"
+    },
+    {
+      "id": 42,
+      "question": "dsfasdf",
+      "answer": "adfadsfas",
+      "keywords": "asdfads",
+      "isActive": "on",
+      "createdAt": "2026-10-20T11:56:15.875Z"
+    }
+  ],
+  "updatedAt": "2026-10-20T11:56:15.875Z"
+}

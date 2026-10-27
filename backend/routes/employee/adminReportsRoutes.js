@@ -10,7 +10,10 @@ module.exports = function registerAdminReportsRoutes(router, context) {
         sql,
         pool,
         isAuthenticated,
-        checkPermission
+        checkPermission,
+        fetchInventoryReportProducts: fetchInventoryReportProductsUtil,
+        fetchInventoryReportRawMaterials: fetchInventoryReportRawMaterialsUtil,
+        fetchProductCategoriesList: fetchProductCategoriesListUtil
     } = context;
 
     // Import required utilities
@@ -62,86 +65,82 @@ module.exports = function registerAdminReportsRoutes(router, context) {
         headerRow.height = 20;
     }
 
-    // Helper functions for inventory reports
+    // Helper functions for inventory reports - use functions from context
     async function fetchInventoryReportProducts(pool, filters) {
-        const { search, category, status, stockMin, stockMax } = filters;
-        const { fetchInventoryReportProducts } = require('../../utils/inventoryReportHelpers');
-        return fetchInventoryReportProducts(pool, filters);
+        return fetchInventoryReportProductsUtil(pool, filters);
     }
 
     async function fetchInventoryReportRawMaterials(pool, filters) {
-        const { fetchInventoryReportRawMaterials } = require('../../utils/inventoryReportHelpers');
-        return fetchInventoryReportRawMaterials(pool, filters);
+        return fetchInventoryReportRawMaterialsUtil(pool, filters);
     }
 
     async function fetchProductCategoriesList(pool) {
-        const { fetchProductCategoriesList } = require('../../utils/inventoryReportHelpers');
-        return fetchProductCategoriesList(pool);
+        return fetchProductCategoriesListUtil(pool);
     }
 
     // Helper functions for sales reports
     async function detectSalesReportSchema(pool) {
-        const { detectSalesReportSchema } = require('../../utils/salesReportHelpers');
+        const { detectSalesReportSchema } = require('../../utils/salesReportMetrics');
         return detectSalesReportSchema(pool);
     }
 
     function sumRefundMerchandise(orders) {
-        const { sumRefundMerchandise } = require('../../utils/salesReportHelpers');
+        const { sumRefundMerchandise } = require('../../utils/salesReportMetrics');
         return sumRefundMerchandise(orders);
     }
 
     function countRefundMerchandiseOrders(orders) {
-        const { countRefundMerchandiseOrders } = require('../../utils/salesReportHelpers');
+        const { countRefundMerchandiseOrders } = require('../../utils/salesReportMetrics');
         return countRefundMerchandiseOrders(orders);
     }
 
     function isRefundMerchandiseOrder(order) {
-        const { isRefundMerchandiseOrder } = require('../../utils/salesReportHelpers');
+        const { isRefundMerchandiseOrder } = require('../../utils/salesReportMetrics');
         return isRefundMerchandiseOrder(order);
     }
 
     async function computeInventoryLossAtCost(pool, sql, returnedOrders, hasReturnItemsColumn, hasCostPrice) {
-        const { computeInventoryLossAtCost } = require('../../utils/salesReportHelpers');
+        const { computeInventoryLossAtCost } = require('../../utils/salesReportMetrics');
         return computeInventoryLossAtCost(pool, sql, returnedOrders, hasReturnItemsColumn, hasCostPrice);
     }
 
     async function computeMerchandiseCostMetrics(pool, sql, orderIds, hasCostPrice) {
-        const { computeMerchandiseCostMetrics } = require('../../utils/salesReportHelpers');
+        const { computeMerchandiseCostMetrics } = require('../../utils/salesReportMetrics');
         return computeMerchandiseCostMetrics(pool, sql, orderIds, hasCostPrice);
     }
 
     function aggregateSalesReportFromOrders(orders, metrics) {
-        const { aggregateSalesReportFromOrders } = require('../../utils/salesReportHelpers');
+        const { aggregateSalesReportFromOrders } = require('../../utils/salesReportMetrics');
         return aggregateSalesReportFromOrders(orders, metrics);
     }
 
     function countsTowardGrossSales(order) {
-        const { countsTowardGrossSales } = require('../../utils/salesReportHelpers');
+        const { countsTowardGrossSales } = require('../../utils/salesReportMetrics');
         return countsTowardGrossSales(order);
     }
 
     function countsTowardNetRevenue(order) {
-        const { countsTowardNetRevenue } = require('../../utils/salesReportHelpers');
+        const { countsTowardNetRevenue } = require('../../utils/salesReportMetrics');
         return countsTowardNetRevenue(order);
     }
 
     function countReturnedOrders(orders) {
-        const { countReturnedOrders } = require('../../utils/salesReportHelpers');
+        const { countReturnedOrders } = require('../../utils/salesReportMetrics');
         return countReturnedOrders(orders);
     }
 
     function applySalesReportOrderRowDisplay(order, items) {
-        const { applySalesReportOrderRowDisplay } = require('../../utils/salesReportHelpers');
+        const { applySalesReportOrderRowDisplay } = require('../../utils/salesReportMetrics');
         return applySalesReportOrderRowDisplay(order, items);
     }
 
     function buildSalesReportExportSummaryRows(stats) {
-        const { buildSalesReportExportSummaryRows } = require('../../utils/salesReportHelpers');
+        const { buildSalesReportExportSummaryRows } = require('../../utils/salesReportMetrics');
         return buildSalesReportExportSummaryRows(stats);
     }
 
     function getOrderStatusLabel(status) {
-        const { getOrderStatusLabel } = require('../../utils/salesReportHelpers');
+        const { getOrderStatusLabel } = require('../../utils/orderStatusDisplay');
         return getOrderStatusLabel(status);
     }
 
